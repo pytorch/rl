@@ -2,8 +2,9 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
-from omegaconf import MISSING
 import torch
+
+from omegaconf import MISSING
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
@@ -79,7 +80,9 @@ class MLPConfig(NetworkConfig):
 
     def __post_init__(self):
         if isinstance(self.activation_class, str):
-            self.activation_class = ActivationConfig(_target_=self.activation_class, _partial_=True)
+            self.activation_class = ActivationConfig(
+                _target_=self.activation_class, _partial_=True
+            )
         if isinstance(self.layer_class, str):
             self.layer_class = LayerConfig(_target_=self.layer_class, _partial_=True)
 
@@ -180,7 +183,7 @@ class ModelConfig(ConfigBase):
 
 
 @dataclass
-class TensorDictModuleConfig(ConfigBase):
+class TensorDictModuleConfig(ModelConfig):
     """A class to configure a TensorDictModule.
 
     Example:
@@ -192,7 +195,7 @@ class TensorDictModuleConfig(ConfigBase):
     .. seealso:: :class:`tensordict.nn.TensorDictModule`
     """
 
-    module: MLPConfig = field(default_factory=lambda: MLPConfig())
+    module: MLPConfig = MISSING
     _target_: str = "tensordict.nn.TensorDictModule"
     _partial_: bool = False
 
@@ -253,13 +256,13 @@ class ValueModelConfig(ModelConfig):
 
 def _make_tanh_normal_model(*args, **kwargs):
     """Helper function to create a TanhNormal model with ProbabilisticTensorDictSequential."""
+    from hydra.utils import instantiate
     from tensordict.nn import (
         ProbabilisticTensorDictModule,
         ProbabilisticTensorDictSequential,
         TensorDictModule,
     )
     from torchrl.modules import NormalParamExtractor, TanhNormal
-    from hydra.utils import instantiate
 
     # Extract parameters
     network = kwargs.pop("network")
@@ -272,9 +275,9 @@ def _make_tanh_normal_model(*args, **kwargs):
     exploration_type = kwargs.pop("exploration_type", "RANDOM")
 
     # Now instantiate the network
-    if hasattr(network, '_target_'):
+    if hasattr(network, "_target_"):
         network = instantiate(network)
-    elif hasattr(network, '__call__') and hasattr(network, 'func'):  # partial function
+    elif hasattr(network, "__call__") and hasattr(network, "func"):  # partial function
         network = network()
 
     # Create the sequential

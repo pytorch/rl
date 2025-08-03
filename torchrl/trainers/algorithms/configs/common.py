@@ -35,4 +35,3 @@ class Config:
     logger: Any = None
     networks: Any = None
     models: Any = None
-

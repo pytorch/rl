@@ -47,7 +47,6 @@ class PPOTrainerConfig(TrainerConfig):
 def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     from torchrl.trainers.algorithms.ppo import PPOTrainer
     from torchrl.trainers.trainers import Logger
-    from hydra.utils import instantiate
 
     collector = kwargs.pop("collector")
     total_frames = kwargs.pop("total_frames")
@@ -85,8 +84,10 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
             actor_network=actor_network, critic_network=critic_network
         )
     if not isinstance(optimizer, torch.optim.Optimizer):
+        assert callable(optimizer)
         # then it's a partial config
         optimizer = optimizer(params=loss_module.parameters())
+
     # Quick instance checks
     if not isinstance(collector, DataCollectorBase):
         raise ValueError("collector must be a DataCollectorBase")

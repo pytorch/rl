@@ -8,7 +8,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 

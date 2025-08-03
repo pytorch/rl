@@ -16,14 +16,6 @@ from torchrl.collectors.collectors import DataCollectorBase
 
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
-from torchrl.trainers.algorithms.configs.data import (
-    LazyTensorStorageConfig,
-    ReplayBufferConfig,
-)
-from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
-from torchrl.trainers.algorithms.configs.modules import MLPConfig, TanhNormalModelConfig
-from torchrl.trainers.algorithms.configs.objectives import PPOLossConfig
-from torchrl.trainers.algorithms.configs.utils import AdamConfig
 from torchrl.trainers.trainers import Trainer
 
 try:

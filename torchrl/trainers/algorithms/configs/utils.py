@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from typing import Any
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
-from dataclasses import dataclass
+
 
 @dataclass
 class AdamConfig(ConfigBase):
@@ -21,3 +23,4 @@ class AdamConfig(ConfigBase):
     weight_decay: float = 0.0
     amsgrad: bool = False
     _target_: str = "torch.optim.Adam"
+    _partial_: bool = True

@@ -8,10 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi.middleware import Middleware
 from omegaconf import MISSING
 
-from torchrl import data
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
@@ -34,7 +32,6 @@ class SamplerConfig(ConfigBase):
 @dataclass
 class RandomSamplerConfig(SamplerConfig):
     _target_: str = "torchrl.data.replay_buffers.RandomSampler"
-
 
 
 @dataclass
@@ -147,6 +144,7 @@ class StorageConfig(ConfigBase):
     _partial_: bool = False
     _target_: str = "torchrl.data.replay_buffers.Storage"
 
+
 @dataclass
 class TensorStorageConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.TensorStorage"
@@ -162,7 +160,6 @@ class ListStorageConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.ListStorage"
     max_size: int | None = None
     compilable: bool = False
-
 
 
 @dataclass
@@ -209,6 +206,7 @@ class LazyTensorStorageConfig(StorageConfig):
 class ReplayBufferBaseConfig(ConfigBase):
     _partial_: bool = False
 
+
 @dataclass
 class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
@@ -227,4 +225,3 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     writer: Any = MISSING
     transform: Any = None
     batch_size: int | None = None
-

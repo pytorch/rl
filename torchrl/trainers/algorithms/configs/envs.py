@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,16 +48,16 @@ def make_env(*args, **kwargs):
 
     backend = kwargs.pop("backend", None)
     double_to_float = kwargs.pop("double_to_float", False)
-    
+
     if backend is not None:
         with set_gym_backend(backend):
             env = GymEnv(*args, **kwargs)
     else:
         env = GymEnv(*args, **kwargs)
-    
+
     if double_to_float:
         env = env.append_transform(DoubleToFloat(in_keys=["observation"]))
-    
+
     return env
 
 

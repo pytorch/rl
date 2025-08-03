@@ -15,7 +15,6 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.configs.envs import EnvConfig
 
 
-
 @dataclass
 class DataCollectorConfig(ConfigBase):
     """Parent class to configure a data collector."""

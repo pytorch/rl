@@ -6,30 +6,29 @@
 from __future__ import annotations
 
 import argparse
-from re import L
+import importlib.util
+import os
 
-from omegaconf import OmegaConf, SCMode
 import pytest
 import torch
 
-from hydra import initialize_config_dir
 from hydra.utils import instantiate
+
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules.models.models import MLP
-from torchrl.trainers.algorithms.configs.modules import (
-    ActivationConfig,
-    LayerConfig,
-)
-import importlib.util
+from torchrl.objectives.ppo import PPOLoss
+from torchrl.trainers.algorithms.configs.modules import ActivationConfig, LayerConfig
 
 from torchrl.trainers.algorithms.ppo import PPOTrainer
-_has_gym = (importlib.util.find_spec("gym") is not None) or (importlib.util.find_spec("gymnasium") is not None)
+
+_has_gym = (importlib.util.find_spec("gym") is not None) or (
+    importlib.util.find_spec("gymnasium") is not None
+)
 _has_hydra = importlib.util.find_spec("hydra") is not None
 
-class TestEnvConfigs:
 
+class TestEnvConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_gym_env_config(self):
         from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
@@ -827,9 +826,7 @@ class TestModuleConfigs:
 
 class TestCollectorsConfig:
     @pytest.mark.parametrize("factory", [True, False])
-    @pytest.mark.parametrize(
-        "collector", ["async", "multi_sync", "multi_async"]
-    )
+    @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_collector_config(self, factory, collector):
         from torchrl.collectors.collectors import (
@@ -855,7 +852,7 @@ class TestCollectorsConfig:
             in_keys=["observation"],
             out_keys=["action"],
         )
-        
+
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
             cfg_cls = AsyncDataCollectorConfig
@@ -873,18 +870,18 @@ class TestCollectorsConfig:
             cfg = cfg_cls(policy_factory=policy_cfg, **kwargs)
         else:
             cfg = cfg_cls(policy=policy_cfg, **kwargs)
-        
+
         # Check create_env_fn
         if collector in ["multi_sync", "multi_async"]:
             assert cfg.create_env_fn == [env_cfg]
         else:
             assert cfg.create_env_fn == env_cfg
-        
+
         if factory:
             assert cfg.policy_factory._partial_
         else:
             assert not cfg.policy._partial_
-        
+
         collector_instance = instantiate(cfg)
         try:
             if collector == "async":
@@ -898,7 +895,7 @@ class TestCollectorsConfig:
                 break
         finally:
             # Only call shutdown if the collector has that method
-            if hasattr(collector_instance, 'shutdown'):
+            if hasattr(collector_instance, "shutdown"):
                 collector_instance.shutdown(timeout=10)
 
 
@@ -993,9 +990,9 @@ class TestHydraParsing:
         from hydra.core.global_hydra import GlobalHydra
 
         GlobalHydra.instance().clear()
-        # from hydra import initialize_config_module
+        from hydra import initialize_config_module
 
-        # initialize_config_module("torchrl.trainers.algorithms.configs")
+        initialize_config_module("torchrl.trainers.algorithms.configs")
 
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_simple_config_instantiation(self):
@@ -1016,7 +1013,11 @@ class TestHydraParsing:
         # Test network config
         network_cfg = compose(
             config_name="config",
-            overrides=["+network=mlp", "+network.in_features=10", "+network.out_features=5"],
+            overrides=[
+                "+network=mlp",
+                "+network.in_features=10",
+                "+network.out_features=5",
+            ],
         )
         network = instantiate(network_cfg.network)
         assert isinstance(network, MLP)
@@ -1039,14 +1040,16 @@ class TestHydraParsing:
         print(f"Instantiated env (override): {env}")
         assert isinstance(env, GymEnv)
 
-
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_env_parsing_with_file(self, tmpdir):
-        from hydra import compose
+        from hydra import compose, initialize_config_dir
+        from hydra.core.global_hydra import GlobalHydra
         from hydra.utils import instantiate
         from torchrl.envs import GymEnv
 
+        GlobalHydra.instance().clear()
         initialize_config_dir(config_dir=str(tmpdir), version_base=None)
+
         yaml_config = """
 defaults:
   - env: gym
@@ -1069,14 +1072,13 @@ env:
         print(f"Instantiated env (from file): {env_from_file}")
         assert isinstance(env_from_file, GymEnv)
 
-
     def test_collector_parsing_with_file(self, tmpdir):
-        from hydra import compose, initialize
+        from hydra import compose, initialize_config_dir
+        from hydra.core.global_hydra import GlobalHydra
         from hydra.utils import instantiate
-        from hydra.core.config_store import ConfigStore
-        from tensordict.nn import TensorDictModule
         from tensordict import TensorDict
 
+        GlobalHydra.instance().clear()
         initialize_config_dir(config_dir=str(tmpdir), version_base=None)
         yaml_config = r"""
 defaults:
@@ -1115,9 +1117,7 @@ collector:
             f.write(yaml_config)
 
         # Use Hydra's compose to resolve config groups
-        cfg_from_file = compose(
-            config_name="config"
-        )
+        cfg_from_file = compose(config_name="config")
 
         collector = instantiate(cfg_from_file.collector)
         print(f"Instantiated collector (from file): {collector}")
@@ -1128,14 +1128,13 @@ collector:
             break
 
     def test_trainer_parsing_with_file(self, tmpdir):
-        from hydra import compose, initialize
+        from hydra import compose, initialize_config_dir
+        from hydra.core.global_hydra import GlobalHydra
         from hydra.utils import instantiate
-        from hydra.core.config_store import ConfigStore
-        from tensordict.nn import TensorDictModule
-        from tensordict import TensorDict
 
+        GlobalHydra.instance().clear()
         initialize_config_dir(config_dir=str(tmpdir), version_base=None)
-        yaml_config = r"""
+        yaml_config = rf"""
 defaults:
   - env: gym
   - model: tanh_normal
@@ -1147,9 +1146,12 @@ defaults:
   - collector: sync
   - replay_buffer: base
   - storage: tensor
+  - sampler: random
+  - writer: round_robin
   - trainer: ppo
   - optimizer: adam
   - loss: ppo
+  - logger: wandb
   - _self_
 
 networks:
@@ -1167,49 +1169,65 @@ models:
     in_keys: ["observation"]
     param_keys: ["loc", "scale"]
     out_keys: ["action"]
-    network: ${networks.policy_network}
+    network: ${{networks.policy_network}}
 
   value_model:
     in_keys: ["observation"]
     out_keys: ["state_value"]
-    network: ${networks.value_network}
+    network: ${{networks.value_network}}
 
 env:
   env_name: CartPole-v1
 
 storage:
   max_size: 1000
+  device: cpu # should be optional
+  ndim: 1 # should be optional
 
 replay_buffer:
-  storage: storage
-
+  storage: ${{storage}} # should be optional
+  sampler: ${{sampler}} # should be optional
+  writer: ${{writer}} # should be optional
+  
 loss:
-  actor_network: ${models.policy_model}
-  critic_network: ${models.value_model}
+  actor_network: ${{models.policy_model}}
+  critic_network: ${{models.value_model}}
   
 collector:
-  create_env_fn: ${env}
-  policy: ${models.policy_model}
+  create_env_fn: ${{env}}
+  policy: ${{models.policy_model}}
   total_frames: 1000
   frames_per_batch: 100
 
+optimizer:
+  lr: 0.001
+
 trainer:
-  optimizer: adam
-  collector: collector
+  collector: ${{collector}}
+  optimizer: ${{optimizer}}
+  replay_buffer: ${{replay_buffer}}
+  loss_module: ${{loss}}
+  logger: ${{logger}}
   total_frames: 1000
-  frame_skip: 1
+  frame_skip: 1 # should be optional
+  clip_grad_norm: 100 # should be optional and None if not provided
+  clip_norm: null # should be optional
+  progress_bar: true # should be optional
+  seed: 0
+  save_trainer_interval: 100 # should be optional
+  log_interval: 100 # should be optional
+  save_trainer_file: {tmpdir}/save/ckpt.pt
   optim_steps_per_batch: 1
-  loss_module: loss_module
 """
 
         file = tmpdir / "config.yaml"
         with open(file, "w") as f:
             f.write(yaml_config)
 
+        os.makedirs(tmpdir / "save", exist_ok=True)
+
         # Use Hydra's compose to resolve config groups
-        cfg_from_file = compose(
-            config_name="config"
-        )
+        cfg_from_file = compose(config_name="config")
 
         networks = instantiate(cfg_from_file.networks)
         print(f"Instantiated networks (from file): {networks}")
@@ -1217,10 +1235,17 @@ trainer:
         models = instantiate(cfg_from_file.models)
         print(f"Instantiated models (from file): {models}")
 
+        loss = instantiate(cfg_from_file.loss)
+        assert isinstance(loss, PPOLoss)
+
+        collector = instantiate(cfg_from_file.collector)
+        assert isinstance(collector, SyncDataCollector)
+
         trainer = instantiate(cfg_from_file.trainer)
         print(f"Instantiated trainer (from file): {trainer}")
         assert isinstance(trainer, PPOTrainer)
         trainer.train()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
