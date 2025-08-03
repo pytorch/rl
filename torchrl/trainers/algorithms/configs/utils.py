@@ -7,20 +7,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from typing import Any
-
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
 @dataclass
 class AdamConfig(ConfigBase):
-    """A class to configure an Adam optimizer."""
+    """Configuration for Adam optimizer."""
 
-    params: Any = None
-    lr: float = 3e-4
+    lr: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-4
     weight_decay: float = 0.0
     amsgrad: bool = False
     _target_: str = "torch.optim.Adam"
     _partial_: bool = True
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for Adam optimizer configurations."""
+        pass

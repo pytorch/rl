@@ -13,39 +13,53 @@ import torch
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.objectives.common import LossModule
 from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers.algorithms.ppo import PPOTrainer
 
 
 @dataclass
 class TrainerConfig(ConfigBase):
-    pass
+    """Base configuration class for trainers."""
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for trainer configurations."""
+        pass
 
 
 @dataclass
 class PPOTrainerConfig(TrainerConfig):
+    """Configuration class for PPO (Proximal Policy Optimization) trainer.
+
+    This class defines the configuration parameters for creating a PPO trainer,
+    including both required and optional fields with sensible defaults.
+    """
+
     collector: Any
     total_frames: int
-    frame_skip: int
     optim_steps_per_batch: int
     loss_module: Any
     optimizer: Any
     logger: Any
-    clip_grad_norm: bool
-    clip_norm: float | None
-    progress_bar: bool
-    seed: int | None
-    save_trainer_interval: int
-    log_interval: int
     save_trainer_file: Any
     replay_buffer: Any
+    frame_skip: int = 1  # should be optional
+    clip_grad_norm: bool = True  # should be optional
+    clip_norm: float | None = None  # should be optional
+    progress_bar: bool = True  # should be optional
+    seed: int | None = None
+    save_trainer_interval: int = 10000  # should be optional
+    log_interval: int = 10000  # should be optional
     create_env_fn: Any = None
     actor_network: Any = None
     critic_network: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for PPO trainer configuration."""
+        super().__post_init__()
+
 
 def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
-    from torchrl.trainers.algorithms.ppo import PPOTrainer
     from torchrl.trainers.trainers import Logger
 
     collector = kwargs.pop("collector")

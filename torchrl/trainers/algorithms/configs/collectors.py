@@ -60,7 +60,8 @@ class SyncDataCollectorConfig(DataCollectorConfig):
 
 @dataclass
 class AsyncDataCollectorConfig(DataCollectorConfig):
-    # Copy the args of aSyncDataCollector here
+    """Configuration for asynchronous data collector."""
+
     create_env_fn: ConfigBase = field(
         default_factory=partial(EnvConfig, _partial_=True)
     )
@@ -96,7 +97,8 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
 
 @dataclass
 class MultiSyncDataCollectorConfig(DataCollectorConfig):
-    # Copy the args of _MultiDataCollector here
+    """Configuration for multi-synchronous data collector."""
+
     create_env_fn: list[ConfigBase] | None = None
     policy: Any = None
     policy_factory: Any = None
@@ -131,6 +133,8 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
 
 @dataclass
 class MultiaSyncDataCollectorConfig(DataCollectorConfig):
+    """Configuration for multi-asynchronous data collector."""
+
     create_env_fn: list[ConfigBase] | None = None
     policy: Any = None
     policy_factory: Any = None

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import abc
 
+from collections.abc import Mapping
 import multiprocessing
 from concurrent.futures import as_completed, ThreadPoolExecutor
 
@@ -74,6 +75,8 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             The backend to use for parallel execution. Defaults to `"threading"`.
         stack (Literal["dense", "maybe_dense", "lazy"], optional):
             The method to use for stacking environment outputs. Defaults to `"dense"`.
+        create_env_kwargs (dict, optional):
+            Keyword arguments to pass to the environment maker. Defaults to `{}`.
 
     Attributes:
         min_get (int): Minimum number of environments to process in a batch.
@@ -199,6 +202,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         *,
         backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
         stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
+        create_env_kwargs: dict | list[dict] | None = None,
     ) -> None:
         if not isinstance(env_makers, Sequence):
             env_makers = [env_makers]
@@ -206,6 +210,15 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self.env_makers = env_makers
         self.num_envs = len(env_makers)
         self.backend = backend
+        if create_env_kwargs is None:
+            create_env_kwargs = {}
+        if isinstance(create_env_kwargs, Mapping):
+            create_env_kwargs = [create_env_kwargs] * self.num_envs
+        if len(create_env_kwargs) != self.num_envs:
+            raise ValueError(
+                f"create_env_kwargs must be a dict or a list of dicts with length {self.num_envs}"
+            )
+        self.create_env_kwargs = create_env_kwargs
 
         self.stack = stack
         if stack == "dense":
@@ -470,6 +483,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 kwargs={
                     "i": i,
                     "env_or_factory": self.env_makers[i],
+                    "create_env_kwargs": self.create_env_kwargs[i],
                     "input_queue": self.input_queue[i],
                     "output_queue": self.output_queue[i],
                     "step_reset_queue": self.step_reset_queue,
@@ -663,6 +677,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         cls,
         i,
         env_or_factory,
+        create_env_kwargs,
         input_queue,
         output_queue,
         step_queue,
@@ -670,7 +685,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         reset_queue,
     ):
         if not isinstance(env_or_factory, EnvBase):
-            env = env_or_factory()
+            env = env_or_factory(**create_env_kwargs)
         else:
             env = env_or_factory
 
@@ -735,8 +750,8 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
     def _setup(self) -> None:
         self._pool = ThreadPoolExecutor(max_workers=self.num_envs)
         self.envs = [
-            env_factory() if not isinstance(env_factory, EnvBase) else env_factory
-            for env_factory in self.env_makers
+            env_factory(**create_env_kwargs) if not isinstance(env_factory, EnvBase) else env_factory
+            for env_factory, create_env_kwargs in zip(self.env_makers, self.create_env_kwargs)
         ]
         self._reset_futures = []
         self._private_reset_futures = []

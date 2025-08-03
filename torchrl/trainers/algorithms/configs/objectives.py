@@ -22,14 +22,14 @@ class LossConfig(ConfigBase):
 
     _partial_: bool = False
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for loss configurations."""
+        pass
+
 
 @dataclass
 class PPOLossConfig(LossConfig):
-    """A class to configure a PPO loss.
-
-    Args:
-        loss_type: The type of loss to use.
-    """
+    """Configuration for PPO loss."""
 
     actor_network: Any = None
     critic_network: Any = None
@@ -54,6 +54,10 @@ class PPOLossConfig(LossConfig):
     clip_value: float | None = None
     device: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for PPO loss configurations."""
+        super().__post_init__()
 
 
 def _make_ppo_loss(*args, **kwargs) -> PPOLoss:

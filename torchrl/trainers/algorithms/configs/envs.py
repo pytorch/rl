@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from torchrl.envs.libs.gym import set_gym_backend
@@ -15,45 +15,72 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 @dataclass
 class EnvConfig(ConfigBase):
+    """Base configuration class for environments."""
+
     _partial_: bool = False
 
-    # def __post_init__(self):
-    #     self._partial_ = False
+    def __post_init__(self) -> None:
+        """Post-initialization hook for environment configurations."""
+        self._partial_ = False
 
 
 @dataclass
 class GymEnvConfig(EnvConfig):
-    env_name: Any = None
+    """Configuration for Gym/Gymnasium environments."""
+
+    env_name: str | None = None
     backend: str = "gymnasium"  # Changed from Literal to str
     from_pixels: bool = False
     double_to_float: bool = False
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_env"
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for Gym environment configurations."""
+        super().__post_init__()
+
 
 @dataclass
 class BatchedEnvConfig(EnvConfig):
-    create_env_fn: EnvConfig | None = None
-    num_workers: int | None = None
+    """Configuration for batched environments."""
+
+    create_env_fn: Any = None
+    num_workers: int = 1
+    create_env_kwargs: dict = field(default_factory=dict)
     batched_env_type: str = "parallel"
     # batched_env_type: Literal["parallel", "serial", "async"] = "parallel"
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_batched_env"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Post-initialization hook for batched environment configurations."""
+        super().__post_init__()
         if self.create_env_fn is not None:
             self.create_env_fn._partial_ = True
 
 
-def make_env(*args, **kwargs):
-    from torchrl.envs.libs.gym import GymEnv
+def make_env(
+    env_name: str,
+    backend: str = "gymnasium",
+    from_pixels: bool = False,
+    double_to_float: bool = False,
+):
+    """Create a Gym/Gymnasium environment.
 
-    backend = kwargs.pop("backend", None)
-    double_to_float = kwargs.pop("double_to_float", False)
+    Args:
+        env_name: Name of the environment to create.
+        backend: Backend to use (gym or gymnasium).
+        from_pixels: Whether to use pixel observations.
+        double_to_float: Whether to convert double to float.
+
+    Returns:
+        The created environment instance.
+    """
+    from torchrl.envs.libs.gym import GymEnv
 
     if backend is not None:
         with set_gym_backend(backend):
-            env = GymEnv(*args, **kwargs)
+            env = GymEnv(env_name, from_pixels=from_pixels)
     else:
-        env = GymEnv(*args, **kwargs)
+        env = GymEnv(env_name, from_pixels=from_pixels)
 
     if double_to_float:
         env = env.append_transform(DoubleToFloat(in_keys=["observation"]))
@@ -62,6 +89,17 @@ def make_env(*args, **kwargs):
 
 
 def make_batched_env(create_env_fn, num_workers, batched_env_type="parallel", **kwargs):
+    """Create a batched environment.
+
+    Args:
+        create_env_fn: Function to create individual environments.
+        num_workers: Number of worker environments.
+        batched_env_type: Type of batched environment (parallel, serial, async).
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        The created batched environment instance.
+    """
     from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 
     if create_env_fn is None:

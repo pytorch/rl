@@ -34,6 +34,13 @@ except ImportError:
 
 
 class PPOTrainer(Trainer):
+    """PPO (Proximal Policy Optimization) trainer implementation.
+
+    This trainer implements the PPO algorithm for training reinforcement learning agents.
+    It extends the base Trainer class with PPO-specific functionality including
+    policy optimization, value function learning, and entropy regularization.
+    """
+
     def __init__(
         self,
         *,

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
@@ -15,7 +14,6 @@ class LoggerConfig(ConfigBase):
     Args:
         logger: The logger to use.
     """
-
 
 
 class WandbLoggerConfig(LoggerConfig):

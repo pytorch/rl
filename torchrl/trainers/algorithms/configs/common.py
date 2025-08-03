@@ -5,15 +5,23 @@
 
 from __future__ import annotations
 
-from abc import ABC
-
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
 
 @dataclass
 class ConfigBase(ABC):
-    pass
+    """Abstract base class for all configuration classes.
+
+    This class serves as the foundation for all configuration classes in the
+    configurable configuration system, providing a common interface and structure.
+    """
+
+    @abstractmethod
+    def __post_init__(self) -> None:
+        """Post-initialization hook for configuration classes."""
+        pass
 
 
 # Main configuration class that can be instantiated from YAML

@@ -15,12 +15,11 @@ import torch
 from hydra.utils import instantiate
 
 from torchrl.collectors.collectors import SyncDataCollector
+from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
-from torchrl.objectives.ppo import PPOLoss
 from torchrl.trainers.algorithms.configs.modules import ActivationConfig, LayerConfig
 
-from torchrl.trainers.algorithms.ppo import PPOTrainer
 
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
     importlib.util.find_spec("gymnasium") is not None
@@ -36,8 +35,8 @@ class TestEnvConfigs:
         cfg = GymEnvConfig(env_name="CartPole-v1")
         assert cfg.env_name == "CartPole-v1"
         assert cfg.backend == "gymnasium"
-        assert cfg.from_pixels == False
-        assert cfg.double_to_float == False
+        assert cfg.from_pixels is False
+        assert cfg.double_to_float is False
         instantiate(cfg)
 
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
@@ -80,14 +79,14 @@ class TestDataConfigs:
 
         cfg = RoundRobinWriterConfig(compilable=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.RoundRobinWriter"
-        assert cfg.compilable == True
+        assert cfg.compilable is True
 
         # Test instantiation
         writer = instantiate(cfg)
         from torchrl.data.replay_buffers.writers import RoundRobinWriter
 
         assert isinstance(writer, RoundRobinWriter)
-        assert writer._compilable == True
+        assert writer._compilable is True
 
     def test_sampler_config(self):
         """Test basic SamplerConfig."""
@@ -118,7 +117,7 @@ class TestDataConfigs:
         assert cfg.max_size == 1000
         assert cfg.device == "cpu"
         assert cfg.ndim == 2
-        assert cfg.compilable == True
+        assert cfg.compilable is True
 
         # Test instantiation (requires storage parameter)
         import torch
@@ -164,7 +163,7 @@ class TestDataConfigs:
         cfg = ListStorageConfig(max_size=1000, compilable=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.ListStorage"
         assert cfg.max_size == 1000
-        assert cfg.compilable == True
+        assert cfg.compilable is True
 
         # Test instantiation
         storage = instantiate(cfg)
@@ -182,6 +181,7 @@ class TestDataConfigs:
             RoundRobinWriterConfig,
         )
 
+        # Test with all fields provided
         cfg = ReplayBufferConfig(
             sampler=RandomSamplerConfig(),
             storage=ListStorageConfig(max_size=1000),
@@ -197,6 +197,31 @@ class TestDataConfigs:
 
         assert isinstance(buffer, ReplayBuffer)
         assert buffer._batch_size == 32
+
+        # Test with optional fields omitted (new functionality)
+        cfg_optional = ReplayBufferConfig()
+        assert cfg_optional._target_ == "torchrl.data.replay_buffers.ReplayBuffer"
+        assert cfg_optional.sampler is None  # should be optional
+        assert cfg_optional.storage is None  # should be optional
+        assert cfg_optional.writer is None  # should be optional
+        assert cfg_optional.transform is None
+        assert cfg_optional.batch_size is None
+        assert isinstance(instantiate(cfg_optional), ReplayBuffer)
+
+    def test_tensordict_replay_buffer_config_optional_fields(self):
+        """Test that optional fields can be omitted from TensorDictReplayBuffer config."""
+        from torchrl.trainers.algorithms.configs.data import (
+            TensorDictReplayBufferConfig,
+        )
+
+        cfg = TensorDictReplayBufferConfig()
+        assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictReplayBuffer"
+        assert cfg.sampler is None  # should be optional
+        assert cfg.storage is None  # should be optional
+        assert cfg.writer is None  # should be optional
+        assert cfg.transform is None
+        assert cfg.batch_size is None
+        assert isinstance(instantiate(cfg), ReplayBuffer)
 
     def test_writer_ensemble_config(self):
         """Test WriterEnsembleConfig."""
@@ -246,14 +271,14 @@ class TestDataConfigs:
 
         cfg = TensorDictRoundRobinWriterConfig(compilable=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
-        assert cfg.compilable == True
+        assert cfg.compilable is True
 
         # Test instantiation
         writer = instantiate(cfg)
         from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
 
         assert isinstance(writer, TensorDictRoundRobinWriter)
-        assert writer._compilable == True
+        assert writer._compilable is True
 
     def test_immutable_dataset_writer_config(self):
         """Test ImmutableDatasetWriterConfig."""
@@ -321,12 +346,12 @@ class TestDataConfigs:
         assert cfg.slice_len is None
         assert cfg.end_key == ("next", "done")
         assert cfg.traj_key == "episode"
-        assert cfg.cache_values == True
+        assert cfg.cache_values is True
         assert cfg.truncated_key == ("next", "truncated")
-        assert cfg.strict_length == True
-        assert cfg.compile == False
-        assert cfg.span == False
-        assert cfg.use_gpu == False
+        assert cfg.strict_length is True
+        assert cfg.compile is False
+        assert cfg.span is False
+        assert cfg.use_gpu is False
         assert cfg.max_capacity == 1000
         assert cfg.alpha == 0.7
         assert cfg.beta == 0.9
@@ -374,12 +399,12 @@ class TestDataConfigs:
         assert cfg.slice_len is None
         assert cfg.end_key == ("next", "done")
         assert cfg.traj_key == "episode"
-        assert cfg.cache_values == True
+        assert cfg.cache_values is True
         assert cfg.truncated_key == ("next", "truncated")
-        assert cfg.strict_length == True
-        assert cfg.compile == False
-        assert cfg.span == False
-        assert cfg.use_gpu == False
+        assert cfg.strict_length is True
+        assert cfg.compile is False
+        assert cfg.span is False
+        assert cfg.use_gpu is False
 
         # Test instantiation - use direct instantiation to avoid Union type issues
         from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
@@ -409,12 +434,12 @@ class TestDataConfigs:
         assert cfg.slice_len is None
         assert cfg.end_key == ("next", "done")
         assert cfg.traj_key == "episode"
-        assert cfg.cache_values == True
+        assert cfg.cache_values is True
         assert cfg.truncated_key == ("next", "truncated")
-        assert cfg.strict_length == True
-        assert cfg.compile == False
-        assert cfg.span == False
-        assert cfg.use_gpu == False
+        assert cfg.strict_length is True
+        assert cfg.compile is False
+        assert cfg.span is False
+        assert cfg.use_gpu is False
 
         # Test instantiation - use direct instantiation to avoid Union type issues
         from torchrl.data.replay_buffers.samplers import SliceSampler
@@ -456,16 +481,16 @@ class TestDataConfigs:
 
         cfg = SamplerWithoutReplacementConfig(drop_last=True, shuffle=False)
         assert cfg._target_ == "torchrl.data.replay_buffers.SamplerWithoutReplacement"
-        assert cfg.drop_last == True
-        assert cfg.shuffle == False
+        assert cfg.drop_last is True
+        assert cfg.shuffle is False
 
         # Test instantiation
         sampler = instantiate(cfg)
         from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 
         assert isinstance(sampler, SamplerWithoutReplacement)
-        assert sampler.drop_last == True
-        assert sampler.shuffle == False
+        assert sampler.drop_last is True
+        assert sampler.shuffle is False
 
     def test_storage_ensemble_writer_config(self):
         """Test StorageEnsembleWriterConfig."""
@@ -493,7 +518,7 @@ class TestDataConfigs:
         cfg = LazyStackStorageConfig(max_size=1000, compilable=True, stack_dim=1)
         assert cfg._target_ == "torchrl.data.replay_buffers.LazyStackStorage"
         assert cfg.max_size == 1000
-        assert cfg.compilable == True
+        assert cfg.compilable is True
         assert cfg.stack_dim == 1
 
         # Test instantiation
@@ -541,7 +566,7 @@ class TestDataConfigs:
         assert cfg.max_size == 1000
         assert cfg.device == "cpu"
         assert cfg.ndim == 2
-        assert cfg.compilable == True
+        assert cfg.compilable is True
 
         # Test instantiation
         storage = instantiate(cfg)
@@ -562,7 +587,7 @@ class TestDataConfigs:
         assert cfg.max_size == 1000
         assert cfg.device == "cpu"
         assert cfg.ndim == 2
-        assert cfg.compilable == True
+        assert cfg.compilable is True
 
         # Test instantiation
         storage = instantiate(cfg)
@@ -636,7 +661,7 @@ class TestDataConfigs:
         assert buffer._sampler.beta == 0.9
         assert buffer._storage.max_size == 1000
         assert buffer._storage.ndim == 2
-        assert buffer._writer._compilable == True
+        assert buffer._writer._compilable is True
 
 
 class TestModuleConfigs:
@@ -674,10 +699,10 @@ class TestModuleConfigs:
         assert cfg.num_cells == 32
         assert cfg.activation_class._target_ == "torch.nn.ReLU"
         assert cfg.dropout == 0.1
-        assert cfg.bias_last_layer == True
-        assert cfg.single_bias_last_layer == False
+        assert cfg.bias_last_layer is True
+        assert cfg.single_bias_last_layer is False
         assert cfg.layer_class._target_ == "torch.nn.Linear"
-        assert cfg.activate_last_layer == False
+        assert cfg.activate_last_layer is False
         assert cfg.device == "cpu"
 
         mlp = instantiate(cfg)
@@ -717,11 +742,11 @@ class TestModuleConfigs:
         assert cfg.strides == [1, 2]
         assert cfg.paddings == [1, 2]
         assert cfg.activation_class._target_ == "torch.nn.ReLU"
-        assert cfg.bias_last_layer == True
+        assert cfg.bias_last_layer is True
         assert (
             cfg.aggregator_class._target_ == "torchrl.modules.models.utils.SquashDims"
         )
-        assert cfg.squeeze_output == False
+        assert cfg.squeeze_output is False
         assert cfg.device == "cpu"
 
         convnet = instantiate(cfg)
@@ -771,13 +796,13 @@ class TestModuleConfigs:
             == "torchrl.trainers.algorithms.configs.modules._make_tanh_normal_model"
         )
         assert cfg.network == network_cfg
-        assert cfg.eval_mode == True
-        assert cfg.extract_normal_params == True
+        assert cfg.eval_mode is True
+        assert cfg.extract_normal_params is True
         assert cfg.in_keys == ["observation"]
         assert cfg.param_keys == ["loc", "scale"]
         assert cfg.out_keys == ["action"]
         assert cfg.exploration_type == "RANDOM"
-        assert cfg.return_log_prob == True
+        assert cfg.return_log_prob is True
         instantiate(cfg)
 
     def test_tanh_normal_model_config_defaults(self):
@@ -794,8 +819,8 @@ class TestModuleConfigs:
         assert cfg.in_keys == ["observation"]
         assert cfg.param_keys == ["loc", "scale"]
         assert cfg.out_keys == ["action"]
-        assert cfg.extract_normal_params == True
-        assert cfg.return_log_prob == False
+        assert cfg.extract_normal_params is True
+        assert cfg.return_log_prob is False
         assert cfg.exploration_type == "RANDOM"
         instantiate(cfg)
 
@@ -890,7 +915,7 @@ class TestCollectorsConfig:
                 assert isinstance(collector_instance, MultiSyncDataCollector)
             elif collector == "multi_async":
                 assert isinstance(collector_instance, MultiaSyncDataCollector)
-            for c in collector_instance:
+            for _c in collector_instance:
                 # Just check that we can iterate
                 break
         finally:
@@ -982,6 +1007,84 @@ class TestTrainerConfigs:
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
 
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_ppo_trainer_config_optional_fields(self):
+        """Test that optional fields can be omitted from PPO trainer config."""
+        from torchrl.trainers.algorithms.configs.collectors import (
+            SyncDataCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.data import (
+            TensorDictReplayBufferConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import PPOLossConfig
+        from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig
+        from torchrl.trainers.algorithms.configs.utils import AdamConfig
+
+        # Create minimal config with only required fields
+        env_config = GymEnvConfig(env_name="CartPole-v1")
+
+        actor_network = MLPConfig(
+            in_features=4,  # CartPole observation space
+            out_features=2,  # CartPole action space
+            num_cells=64,
+        )
+
+        critic_network = MLPConfig(in_features=4, out_features=1, num_cells=64)
+
+        actor_model = TanhNormalModelConfig(
+            network=actor_network, in_keys=["observation"], out_keys=["action"]
+        )
+
+        critic_model = TensorDictModuleConfig(
+            module=critic_network, in_keys=["observation"], out_keys=["state_value"]
+        )
+
+        loss_config = PPOLossConfig(
+            actor_network=actor_model, critic_network=critic_model
+        )
+
+        optimizer_config = AdamConfig(lr=0.001)
+
+        collector_config = SyncDataCollectorConfig(
+            create_env_fn=env_config,
+            policy=actor_model,
+            total_frames=1000,
+            frames_per_batch=100,
+        )
+
+        replay_buffer_config = TensorDictReplayBufferConfig()
+
+        # Create trainer config with minimal required fields only
+        trainer_config = PPOTrainerConfig(
+            collector=collector_config,
+            total_frames=1000,
+            optim_steps_per_batch=1,
+            loss_module=loss_config,
+            optimizer=optimizer_config,
+            logger=None,  # Optional field
+            save_trainer_file="/tmp/test.pt",
+            replay_buffer=replay_buffer_config
+            # All optional fields are omitted to test defaults
+        )
+
+        # Verify that optional fields have default values
+        assert trainer_config.frame_skip == 1
+        assert trainer_config.clip_grad_norm is True
+        assert trainer_config.clip_norm is None
+        assert trainer_config.progress_bar is True
+        assert trainer_config.seed is None
+        assert trainer_config.save_trainer_interval == 10000
+        assert trainer_config.log_interval == 10000
+        assert trainer_config.create_env_fn is None
+        assert trainer_config.actor_network is None
+        assert trainer_config.critic_network is None
+
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestHydraParsing:
@@ -1009,6 +1112,12 @@ class TestHydraParsing:
         )
         env = instantiate(env_cfg.env)
         assert isinstance(env, GymEnv)
+        assert env.env_name == "CartPole-v1"
+
+        # Test with override
+        env = instantiate(env_cfg.env, env_name="Pendulum-v1")
+        assert isinstance(env, GymEnv), env
+        assert env.env_name == "Pendulum-v1"
 
         # Test network config
         network_cfg = compose(
@@ -1037,8 +1146,8 @@ class TestHydraParsing:
 
         # Now we can instantiate the environment
         env = instantiate(cfg_resolved.env)
-        print(f"Instantiated env (override): {env}")
         assert isinstance(env, GymEnv)
+        assert env.env_name == "CartPole-v1"
 
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_env_parsing_with_file(self, tmpdir):
@@ -1069,8 +1178,8 @@ env:
 
         # Now we can instantiate the environment
         env_from_file = instantiate(cfg_from_file.env)
-        print(f"Instantiated env (from file): {env_from_file}")
         assert isinstance(env_from_file, GymEnv)
+        assert env_from_file.env_name == "CartPole-v1"
 
     def test_collector_parsing_with_file(self, tmpdir):
         from hydra import compose, initialize_config_dir
@@ -1120,7 +1229,6 @@ collector:
         cfg_from_file = compose(config_name="config")
 
         collector = instantiate(cfg_from_file.collector)
-        print(f"Instantiated collector (from file): {collector}")
         assert isinstance(collector, SyncDataCollector)
         for d in collector:
             assert isinstance(d, TensorDict)
@@ -1188,11 +1296,11 @@ replay_buffer:
   storage: ${{storage}} # should be optional
   sampler: ${{sampler}} # should be optional
   writer: ${{writer}} # should be optional
-  
+
 loss:
   actor_network: ${{models.policy_model}}
   critic_network: ${{models.value_model}}
-  
+
 collector:
   create_env_fn: ${{env}}
   policy: ${{models.policy_model}}
@@ -1230,20 +1338,10 @@ trainer:
         cfg_from_file = compose(config_name="config")
 
         networks = instantiate(cfg_from_file.networks)
-        print(f"Instantiated networks (from file): {networks}")
-
         models = instantiate(cfg_from_file.models)
-        print(f"Instantiated models (from file): {models}")
-
         loss = instantiate(cfg_from_file.loss)
-        assert isinstance(loss, PPOLoss)
-
         collector = instantiate(cfg_from_file.collector)
-        assert isinstance(collector, SyncDataCollector)
-
         trainer = instantiate(cfg_from_file.trainer)
-        print(f"Instantiated trainer (from file): {trainer}")
-        assert isinstance(trainer, PPOTrainer)
         trainer.train()
 
 

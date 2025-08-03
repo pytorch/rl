@@ -21,6 +21,10 @@ class ActivationConfig(ConfigBase):
     _target_: str = "torch.nn.Tanh"
     _partial_: bool = False
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for activation configurations."""
+        pass
+
 
 @dataclass
 class LayerConfig(ConfigBase):
@@ -34,12 +38,20 @@ class LayerConfig(ConfigBase):
     _target_: str = "torch.nn.Linear"
     _partial_: bool = False
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for layer configurations."""
+        pass
+
 
 @dataclass
 class NetworkConfig(ConfigBase):
     """Parent class to configure a network."""
 
     _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for network configurations."""
+        pass
 
 
 @dataclass
@@ -99,6 +111,10 @@ class NormConfig(ConfigBase):
     _target_: str = "torch.nn.BatchNorm1d"
     _partial_: bool = False
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for normalization configurations."""
+        pass
+
 
 @dataclass
 class AggregatorConfig(ConfigBase):
@@ -111,6 +127,10 @@ class AggregatorConfig(ConfigBase):
 
     _target_: str = "torchrl.modules.models.utils.SquashDims"
     _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for aggregator configurations."""
+        pass
 
 
 @dataclass
@@ -181,6 +201,10 @@ class ModelConfig(ConfigBase):
     in_keys: Any = None
     out_keys: Any = None
 
+    def __post_init__(self) -> None:
+        """Post-initialization hook for model configurations."""
+        pass
+
 
 @dataclass
 class TensorDictModuleConfig(ModelConfig):
@@ -198,6 +222,10 @@ class TensorDictModuleConfig(ModelConfig):
     module: MLPConfig = MISSING
     _target_: str = "tensordict.nn.TensorDictModule"
     _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for TensorDict module configurations."""
+        super().__post_init__()
 
 
 @dataclass
@@ -229,6 +257,8 @@ class TanhNormalModelConfig(ModelConfig):
     )
 
     def __post_init__(self):
+        """Post-initialization hook for TanhNormal model configurations."""
+        super().__post_init__()
         if self.in_keys is None:
             self.in_keys = ["observation"]
         if self.param_keys is None:
@@ -252,6 +282,10 @@ class ValueModelConfig(ModelConfig):
 
     _target_: str = "torchrl.trainers.algorithms.configs.modules._make_value_model"
     network: NetworkConfig = MISSING
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for value model configurations."""
+        super().__post_init__()
 
 
 def _make_tanh_normal_model(*args, **kwargs):
@@ -277,7 +311,7 @@ def _make_tanh_normal_model(*args, **kwargs):
     # Now instantiate the network
     if hasattr(network, "_target_"):
         network = instantiate(network)
-    elif hasattr(network, "__call__") and hasattr(network, "func"):  # partial function
+    elif callable(network) and hasattr(network, "func"):  # partial function
         network = network()
 
     # Create the sequential
