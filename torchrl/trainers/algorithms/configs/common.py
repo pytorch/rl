@@ -23,3 +23,13 @@ class Config:
 
     trainer: Any = None
     env: Any = None
+    network: Any = None
+    model: Any = None
+    loss: Any = None
+    replay_buffer: Any = None
+    sampler: Any = None
+    storage: Any = None
+    writer: Any = None
+    collector: Any = None
+    optimizer: Any = None
+    logger: Any = None

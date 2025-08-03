@@ -201,30 +201,6 @@ class LazyTensorStorageConfig(StorageConfig):
     ndim: int = 1
     compilable: bool = False
 
-    @classmethod
-    def default_config(cls, **kwargs) -> "LazyTensorStorageConfig":
-        """Creates a default lazy tensor storage configuration.
-        
-        Args:
-            **kwargs: Override default values
-            
-        Returns:
-            LazyTensorStorageConfig with default values, overridden by kwargs
-        """
-        defaults = {
-            "max_size": 100_000,
-            "device": "cpu",
-            "ndim": 1,
-            "compilable": False,
-            "_partial_": True,
-        }
-        defaults.update(kwargs)
-        return cls(**defaults)
-
-
-@dataclass
-class StorageConfig(ConfigBase):
-    pass
 
 @dataclass
 class ReplayBufferBaseConfig(ConfigBase):
@@ -248,41 +224,4 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     writer: Any = field(default_factory=RoundRobinWriterConfig)
     transform: Any = None
     batch_size: int | None = None
-
-    @classmethod
-    def default_config(cls, **kwargs) -> "ReplayBufferConfig":
-        """Creates a default replay buffer configuration.
-        
-        Args:
-            **kwargs: Override default values. Supports nested overrides using double underscore notation
-                     (e.g., "storage__max_size": 200_000)
-            
-        Returns:
-            ReplayBufferConfig with default values, overridden by kwargs
-        """
-        from tensordict import TensorDict
-        
-        # Unflatten the kwargs using TensorDict to understand what the user wants
-        kwargs_td = TensorDict(kwargs)
-        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
-        
-        # Create configs with nested overrides applied
-        sampler_overrides = unflattened_kwargs.get("sampler", {})
-        storage_overrides = unflattened_kwargs.get("storage", {})
-        writer_overrides = unflattened_kwargs.get("writer", {})
-        
-        sampler_cfg = RandomSamplerConfig(**sampler_overrides) if sampler_overrides else RandomSamplerConfig()
-        storage_cfg = LazyTensorStorageConfig.default_config(**storage_overrides)
-        writer_cfg = RoundRobinWriterConfig(**writer_overrides) if writer_overrides else RoundRobinWriterConfig()
-        
-        defaults = {
-            "sampler": sampler_cfg,
-            "storage": storage_cfg,
-            "writer": writer_cfg,
-            "transform": unflattened_kwargs.get("transform", None),
-            "batch_size": unflattened_kwargs.get("batch_size", 256),
-            "_partial_": True,
-        }
-        
-        return cls(**defaults)
 

@@ -30,26 +30,6 @@ class GymEnvConfig(EnvConfig):
     double_to_float: bool = False
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_env"
 
-    @classmethod
-    def default_config(cls, **kwargs) -> "GymEnvConfig":
-        """Creates a default Gym environment configuration.
-        
-        Args:
-            **kwargs: Override default values
-            
-        Returns:
-            GymEnvConfig with default values, overridden by kwargs
-        """
-        defaults = {
-            "env_name": "Pendulum-v1",
-            "backend": "gymnasium",
-            "from_pixels": False,
-            "double_to_float": False,
-            "_partial_": True,
-        }
-        defaults.update(kwargs)
-        return cls(**defaults)
-
 
 @dataclass
 class BatchedEnvConfig(EnvConfig):
@@ -63,57 +43,39 @@ class BatchedEnvConfig(EnvConfig):
         if self.create_env_fn is not None:
             self.create_env_fn._partial_ = True
 
-    @classmethod
-    def default_config(cls, **kwargs) -> "BatchedEnvConfig":
-        """Creates a default batched environment configuration.
-        
-        Args:
-            **kwargs: Override default values. Supports nested overrides using double underscore notation
-                     (e.g., "create_env_fn__env_name": "CartPole-v1")
-            
-        Returns:
-            BatchedEnvConfig with default values, overridden by kwargs
-        """
-        from tensordict import TensorDict
-
-        # Unflatten the kwargs using TensorDict to understand what the user wants
-        kwargs_td = TensorDict(kwargs)
-        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
-
-        # Create configs with nested overrides applied
-        env_overrides = unflattened_kwargs.get("create_env_fn", {})
-        env_cfg = GymEnvConfig.default_config(**env_overrides)
-
-        defaults = {
-            "create_env_fn": env_cfg,
-            "num_workers": unflattened_kwargs.get("num_workers", 4),
-            "batched_env_type": unflattened_kwargs.get("batched_env_type", "parallel"),
-            "_partial_": True,
-        }
-        
-        return cls(**defaults)
-
 
 def make_env(*args, **kwargs):
     from torchrl.envs.libs.gym import GymEnv
 
     backend = kwargs.pop("backend", None)
     double_to_float = kwargs.pop("double_to_float", False)
-    with set_gym_backend(backend) if backend is not None else nullcontext():
+    
+    if backend is not None:
+        with set_gym_backend(backend):
+            env = GymEnv(*args, **kwargs)
+    else:
         env = GymEnv(*args, **kwargs)
+    
     if double_to_float:
-        env = env.append_transform(DoubleToFloat(env))
+        env = env.append_transform(DoubleToFloat(in_keys=["observation"]))
+    
     return env
 
 
-def make_batched_env(*args, **kwargs):
+def make_batched_env(create_env_fn, num_workers, batched_env_type="parallel", **kwargs):
     from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 
-    batched_env_type = kwargs.pop("batched_env_type", "parallel")
+    if create_env_fn is None:
+        raise ValueError("create_env_fn must be provided")
+
+    if num_workers is None:
+        raise ValueError("num_workers must be provided")
+
     if batched_env_type == "parallel":
-        return ParallelEnv(*args, **kwargs)
+        return ParallelEnv(num_workers, create_env_fn, **kwargs)
     elif batched_env_type == "serial":
-        return SerialEnv(*args, **kwargs)
+        return SerialEnv(num_workers, create_env_fn, **kwargs)
     elif batched_env_type == "async":
-        kwargs["env_makers"] = [kwargs.pop("create_env_fn")] * kwargs.pop("num_workers")
-        return AsyncEnvPool(*args, **kwargs)
+        return AsyncEnvPool([create_env_fn] * num_workers, **kwargs)
+    else:
+        raise ValueError(f"Unknown batched_env_type: {batched_env_type}")
