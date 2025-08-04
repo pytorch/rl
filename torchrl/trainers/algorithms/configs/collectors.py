@@ -29,6 +29,7 @@ class SyncDataCollectorConfig(DataCollectorConfig):
     policy_factory: Any = None
     frames_per_batch: int | None = None
     total_frames: int = -1
+    init_random_frames: int | None = 0
     device: str | None = None
     storing_device: str | None = None
     policy_device: str | None = None
@@ -68,6 +69,7 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     policy: Any = None
     policy_factory: Any = None
     frames_per_batch: int | None = None
+    init_random_frames: int | None = 0
     total_frames: int = -1
     device: str | None = None
     storing_device: str | None = None
@@ -99,10 +101,12 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
 class MultiSyncDataCollectorConfig(DataCollectorConfig):
     """Configuration for multi-synchronous data collector."""
 
-    create_env_fn: list[ConfigBase] | None = None
+    create_env_fn: Any = MISSING
+    num_workers: int | None = None
     policy: Any = None
     policy_factory: Any = None
     frames_per_batch: int | None = None
+    init_random_frames: int | None = 0
     total_frames: int = -1
     device: str | None = None
     storing_device: str | None = None
@@ -135,10 +139,12 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
 class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     """Configuration for multi-asynchronous data collector."""
 
-    create_env_fn: list[ConfigBase] | None = None
+    create_env_fn: Any = MISSING
+    num_workers: int | None = None
     policy: Any = None
     policy_factory: Any = None
     frames_per_batch: int | None = None
+    init_random_frames: int | None = 0
     total_frames: int = -1
     device: str | None = None
     storing_device: str | None = None

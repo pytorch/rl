@@ -18,7 +18,9 @@ from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
+from torchrl.objectives.ppo import PPOLoss
 from torchrl.trainers.algorithms.configs.modules import ActivationConfig, LayerConfig
+from torchrl.trainers.algorithms.ppo import PPOTrainer
 
 
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
@@ -201,9 +203,9 @@ class TestDataConfigs:
         # Test with optional fields omitted (new functionality)
         cfg_optional = ReplayBufferConfig()
         assert cfg_optional._target_ == "torchrl.data.replay_buffers.ReplayBuffer"
-        assert cfg_optional.sampler is None  # should be optional
-        assert cfg_optional.storage is None  # should be optional
-        assert cfg_optional.writer is None  # should be optional
+        assert cfg_optional.sampler is None
+        assert cfg_optional.storage is None
+        assert cfg_optional.writer is None
         assert cfg_optional.transform is None
         assert cfg_optional.batch_size is None
         assert isinstance(instantiate(cfg_optional), ReplayBuffer)
@@ -216,9 +218,9 @@ class TestDataConfigs:
 
         cfg = TensorDictReplayBufferConfig()
         assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictReplayBuffer"
-        assert cfg.sampler is None  # should be optional
-        assert cfg.storage is None  # should be optional
-        assert cfg.writer is None  # should be optional
+        assert cfg.sampler is None
+        assert cfg.storage is None
+        assert cfg.writer is None
         assert cfg.transform is None
         assert cfg.batch_size is None
         assert isinstance(instantiate(cfg), ReplayBuffer)
@@ -1338,10 +1340,17 @@ trainer:
         cfg_from_file = compose(config_name="config")
 
         networks = instantiate(cfg_from_file.networks)
+
         models = instantiate(cfg_from_file.models)
+
         loss = instantiate(cfg_from_file.loss)
+        assert isinstance(loss, PPOLoss)
+
         collector = instantiate(cfg_from_file.collector)
+        assert isinstance(collector, SyncDataCollector)
+
         trainer = instantiate(cfg_from_file.trainer)
+        assert isinstance(trainer, PPOTrainer)
         trainer.train()
 
 

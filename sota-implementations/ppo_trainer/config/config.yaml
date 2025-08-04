@@ -2,22 +2,28 @@
 # This configuration uses the new configurable trainer system
 
 defaults:
-  - env: gym
+  
+  - env@training_env: transformed_env
+  - env@batched_env: batched_env
+  
   - model: tanh_normal
   - model@models.policy_model: tanh_normal
   - model@models.value_model: value
+  
   - network: mlp
   - network@networks.policy_network: mlp
   - network@networks.value_network: mlp
-  - collector: sync
+  
+  - collector: multi_async
+
   - replay_buffer: base
-  - storage: tensor
-  - sampler: random
+  - storage: lazy_tensor
+  - sampler: without_replacement
   - writer: round_robin
   - trainer: ppo
   - optimizer: adam
   - loss: ppo
-  - logger: null
+  - logger: wandb
   - _self_
 
 # Network configurations
@@ -25,10 +31,12 @@ networks:
   policy_network:
     out_features: 2  # Pendulum action space is 1-dimensional
     in_features: 3   # Pendulum observation space is 3-dimensional
+    num_cells: [128, 128]
 
   value_network:
     out_features: 1  # Value output
     in_features: 3   # Pendulum observation space
+    num_cells: [128, 128]
 
 # Model configurations
 models:
@@ -45,25 +53,27 @@ models:
     network: ${networks.value_network}
 
 # Environment configuration
-env:
-  env_name: Pendulum-v1
+training_env:
+  base_env:
+    env_name: Pendulum-v1
+    _target_: torchrl.trainers.algorithms.configs.envs.make_env
+    _partial_: true
+  transform:
+    noops: 30
+    random: true
+    _target_: torchrl.trainers.algorithms.configs.transforms.make_noop_reset_env
+  _partial_: true
 
-# Storage configuration
-storage:
-  max_size: 1000
+batched_env:
+  num_workers: 16
+  create_env_fn: ${training_env}
   device: cpu
-  ndim: 1
-
-# Replay buffer configuration
-replay_buffer:
-  storage: ${storage}
-  sampler: ${sampler}
-  writer: ${writer}
 
 # Loss configuration
 loss:
   actor_network: ${models.policy_model}
   critic_network: ${models.value_model}
+  entropy_coeff: 0.01
 
 # Optimizer configuration
 optimizer:
@@ -71,10 +81,33 @@ optimizer:
 
 # Collector configuration
 collector:
-  create_env_fn: ${env}
+  create_env_fn: ${training_env}
   policy: ${models.policy_model}
-  total_frames: 100_000
+  total_frames: 1_000_000
   frames_per_batch: 1024
+  num_workers: 2
+
+# Storage configuration
+storage:
+  max_size: 1024
+  device: cpu
+  ndim: 1
+
+sampler:
+  drop_last: true
+  shuffle: true
+
+# Replay buffer configuration
+replay_buffer:
+  storage: ${storage}
+  sampler: ${sampler}
+  writer: ${writer}
+  batch_size: 128
+
+logger:
+  exp_name: ppo_pendulum_v1
+  offline: false
+  project: torchrl-sota-implementations
 
 # Trainer configuration
 trainer:
@@ -83,7 +116,7 @@ trainer:
   replay_buffer: ${replay_buffer}
   loss_module: ${loss}
   logger: ${logger}
-  total_frames: 1000
+  total_frames: 1_000_000
   frame_skip: 1
   clip_grad_norm: true
   clip_norm: 100.0
@@ -92,4 +125,5 @@ trainer:
   save_trainer_interval: 100
   log_interval: 100
   save_trainer_file: null
-  optim_steps_per_batch: 1 
+  optim_steps_per_batch: null
+  num_epochs: 2

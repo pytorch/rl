@@ -23,7 +23,6 @@ class ActivationConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for activation configurations."""
-        pass
 
 
 @dataclass
@@ -40,7 +39,6 @@ class LayerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for layer configurations."""
-        pass
 
 
 @dataclass
@@ -51,7 +49,6 @@ class NetworkConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for network configurations."""
-        pass
 
 
 @dataclass
@@ -113,7 +110,6 @@ class NormConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for normalization configurations."""
-        pass
 
 
 @dataclass
@@ -130,7 +126,6 @@ class AggregatorConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for aggregator configurations."""
-        pass
 
 
 @dataclass
@@ -203,7 +198,6 @@ class ModelConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for model configurations."""
-        pass
 
 
 @dataclass

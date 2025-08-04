@@ -24,4 +24,3 @@ class AdamConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for Adam optimizer configurations."""
-        pass

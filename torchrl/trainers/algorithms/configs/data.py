@@ -21,7 +21,6 @@ class WriterConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for writer configurations."""
-        pass
 
 
 @dataclass
@@ -44,7 +43,6 @@ class SamplerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for sampler configurations."""
-        pass
 
 
 @dataclass
@@ -192,7 +190,6 @@ class StorageConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for storage configurations."""
-        pass
 
 
 @dataclass
@@ -278,7 +275,6 @@ class ReplayBufferBaseConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for replay buffer configurations."""
-        pass
 
 
 @dataclass
@@ -286,9 +282,9 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     """Configuration for TensorDict-based replay buffer."""
 
     _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
-    sampler: Any = None  # should be optional
-    storage: Any = None  # should be optional
-    writer: Any = None  # should be optional
+    sampler: Any = None
+    storage: Any = None
+    writer: Any = None
     transform: Any = None
     batch_size: int | None = None
 
@@ -302,8 +298,8 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     """Configuration for generic replay buffer."""
 
     _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
-    sampler: Any = None  # should be optional
-    storage: Any = None  # should be optional
-    writer: Any = None  # should be optional
+    sampler: Any = None
+    storage: Any = None
+    writer: Any = None
     transform: Any = None
     batch_size: int | None = None

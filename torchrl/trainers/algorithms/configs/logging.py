@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
+@dataclass
 class LoggerConfig(ConfigBase):
     """A class to configure a logger.
 
@@ -15,32 +18,63 @@ class LoggerConfig(ConfigBase):
         logger: The logger to use.
     """
 
+    def __post_init__(self) -> None:
+        pass
 
+
+@dataclass
 class WandbLoggerConfig(LoggerConfig):
     """A class to configure a Wandb logger.
 
-    Args:
-        logger: The logger to use.
+    .. seealso::
+        :class:`~torchrl.record.loggers.wandb.WandbLogger`
     """
 
-    _target_: str = "torchrl.trainers.algorithms.configs.logging.WandbLogger"
+    exp_name: str
+    offline: bool = False
+    save_dir: str | None = None
+    id: str | None = None
+    project: str | None = None
+    video_fps: int = 32
+    log_dir: str | None = None
+
+    _target_: str = "torchrl.record.loggers.wandb.WandbLogger"
+
+    def __post_init__(self) -> None:
+        pass
 
 
+@dataclass
 class TensorboardLoggerConfig(LoggerConfig):
     """A class to configure a Tensorboard logger.
 
-    Args:
-        logger: The logger to use.
+    .. seealso::
+        :class:`~torchrl.record.loggers.tensorboard.TensorboardLogger`
     """
 
-    _target_: str = "torchrl.trainers.algorithms.configs.logging.TensorboardLogger"
+    exp_name: str
+    log_dir: str = "tb_logs"
+
+    _target_: str = "torchrl.record.loggers.tensorboard.TensorboardLogger"
+
+    def __post_init__(self) -> None:
+        pass
 
 
+@dataclass
 class CSVLoggerConfig(LoggerConfig):
     """A class to configure a CSV logger.
 
-    Args:
-        logger: The logger to use.
+    .. seealso::
+        :class:`~torchrl.record.loggers.csv.CSVLogger`
     """
 
-    _target_: str = "torchrl.trainers.algorithms.configs.logging.CSVLogger"
+    exp_name: str
+    log_dir: str | None = None
+    video_format: str = "pt"
+    video_fps: int = 30
+
+    _target_: str = "torchrl.record.loggers.csv.CSVLogger"
+
+    def __post_init__(self) -> None:
+        pass

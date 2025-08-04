@@ -22,7 +22,6 @@ class TrainerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for trainer configurations."""
-        pass
 
 
 @dataclass
@@ -35,22 +34,23 @@ class PPOTrainerConfig(TrainerConfig):
 
     collector: Any
     total_frames: int
-    optim_steps_per_batch: int
+    optim_steps_per_batch: int | None
     loss_module: Any
     optimizer: Any
     logger: Any
     save_trainer_file: Any
     replay_buffer: Any
-    frame_skip: int = 1  # should be optional
-    clip_grad_norm: bool = True  # should be optional
-    clip_norm: float | None = None  # should be optional
-    progress_bar: bool = True  # should be optional
+    frame_skip: int = 1
+    clip_grad_norm: bool = True
+    clip_norm: float | None = None
+    progress_bar: bool = True
     seed: int | None = None
-    save_trainer_interval: int = 10000  # should be optional
-    log_interval: int = 10000  # should be optional
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
     create_env_fn: Any = None
     actor_network: Any = None
     critic_network: Any = None
+    num_epochs: int = 4
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
@@ -82,6 +82,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
     create_env_fn = kwargs.pop("create_env_fn")
+    num_epochs = kwargs.pop("num_epochs", 4)
 
     # Instantiate networks first
     if actor_network is not None:
@@ -98,19 +99,22 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
             actor_network=actor_network, critic_network=critic_network
         )
     if not isinstance(optimizer, torch.optim.Optimizer):
-        assert callable(optimizer)
         # then it's a partial config
         optimizer = optimizer(params=loss_module.parameters())
 
     # Quick instance checks
     if not isinstance(collector, DataCollectorBase):
-        raise ValueError("collector must be a DataCollectorBase")
+        raise ValueError(
+            f"collector must be a DataCollectorBase, got {type(collector)}"
+        )
     if not isinstance(loss_module, LossModule):
-        raise ValueError("loss_module must be a LossModule")
+        raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
     if not isinstance(optimizer, torch.optim.Optimizer):
-        raise ValueError("optimizer must be a torch.optim.Optimizer")
+        raise ValueError(
+            f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
     if not isinstance(logger, Logger) and logger is not None:
-        raise ValueError("logger must be a Logger")
+        raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
     return PPOTrainer(
         collector=collector,
@@ -128,4 +132,5 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        num_epochs=num_epochs,
     )

@@ -1783,6 +1783,8 @@ class _MultiDataCollector(DataCollectorBase):
             .. warning:: `policy_factory` is currently not compatible with multiprocessed data
                 collectors.
 
+        num_workers (int, optional): number of workers to use. If `create_env_fn` is a list, this will be ignored.
+            Defaults to `None` (workers determined by the `create_env_fn` length).
         frames_per_batch (int, Sequence[int]): A keyword-only argument representing the
             total number of elements in a batch. If a sequence is provided, represents the number of elements in a
             batch per worker. Total number of elements in a batch is then the sum over the sequence.
@@ -1939,6 +1941,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        num_workers: int | None = None,
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
@@ -1976,7 +1979,11 @@ class _MultiDataCollector(DataCollectorBase):
         | None = None,
     ):
         self.closed = True
-        self.num_workers = len(create_env_fn)
+        if isinstance(create_env_fn, Sequence):
+            self.num_workers = len(create_env_fn)
+        else:
+            self.num_workers = num_workers
+            create_env_fn = [create_env_fn] * self.num_workers
 
         if (
             isinstance(frames_per_batch, Sequence)

@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import abc
+import multiprocessing
 
 from collections.abc import Mapping
-import multiprocessing
 from concurrent.futures import as_completed, ThreadPoolExecutor
 
 # import queue
@@ -750,8 +750,12 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
     def _setup(self) -> None:
         self._pool = ThreadPoolExecutor(max_workers=self.num_envs)
         self.envs = [
-            env_factory(**create_env_kwargs) if not isinstance(env_factory, EnvBase) else env_factory
-            for env_factory, create_env_kwargs in zip(self.env_makers, self.create_env_kwargs)
+            env_factory(**create_env_kwargs)
+            if not isinstance(env_factory, EnvBase)
+            else env_factory
+            for env_factory, create_env_kwargs in zip(
+                self.env_makers, self.create_env_kwargs
+            )
         ]
         self._reset_futures = []
         self._private_reset_futures = []

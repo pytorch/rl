@@ -37,6 +37,7 @@ from torchrl.trainers.algorithms.configs.envs import (
     BatchedEnvConfig,
     EnvConfig,
     GymEnvConfig,
+    TransformedEnvConfig,
 )
 from torchrl.trainers.algorithms.configs.logging import (
     CSVLoggerConfig,
@@ -51,6 +52,11 @@ from torchrl.trainers.algorithms.configs.modules import (
     TanhNormalModelConfig,
     TensorDictModuleConfig,
     ValueModelConfig,
+)
+from torchrl.trainers.algorithms.configs.transforms import (
+    ComposeConfig,
+    NoopResetEnvConfig,
+    TransformConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import LossConfig, PPOLossConfig
 from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig, TrainerConfig
@@ -67,6 +73,7 @@ __all__ = [
     "SamplerWithoutReplacementConfig",
     "SliceSamplerWithoutReplacementConfig",
     "ConfigBase",
+    "ComposeConfig",
     "ConvNetConfig",
     "DataCollectorConfig",
     "EnvConfig",
@@ -80,6 +87,7 @@ __all__ = [
     "ModelConfig",
     "MultiSyncDataCollectorConfig",
     "MultiaSyncDataCollectorConfig",
+    "NoopResetEnvConfig",
     "PPOTrainerConfig",
     "PPOLossConfig",
     "PrioritizedSamplerConfig",
@@ -95,6 +103,8 @@ __all__ = [
     "TensorDictReplayBufferConfig",
     "TensorStorageConfig",
     "TrainerConfig",
+    "TransformConfig",
+    "TransformedEnvConfig",
     "ValueModelConfig",
     "ValueModelConfig",
 ]
@@ -108,6 +118,7 @@ cs.store(name="config", node=Config)
 # Environment configs
 cs.store(group="env", name="gym", node=GymEnvConfig)
 cs.store(group="env", name="batched_env", node=BatchedEnvConfig)
+cs.store(group="env", name="transformed_env", node=TransformedEnvConfig)
 
 # Network configs
 cs.store(group="network", name="mlp", node=MLPConfig)
@@ -117,6 +128,10 @@ cs.store(group="network", name="convnet", node=ConvNetConfig)
 cs.store(group="network", name="tensordict_module", node=TensorDictModuleConfig)
 cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 cs.store(group="model", name="value", node=ValueModelConfig)
+
+# Transform configs
+cs.store(group="transform", name="noop_reset", node=NoopResetEnvConfig)
+cs.store(group="transform", name="compose", node=ComposeConfig)
 
 # Loss configs
 cs.store(group="loss", name="base", node=LossConfig)

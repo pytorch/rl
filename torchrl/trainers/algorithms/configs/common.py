@@ -21,7 +21,6 @@ class ConfigBase(ABC):
     @abstractmethod
     def __post_init__(self) -> None:
         """Post-initialization hook for configuration classes."""
-        pass
 
 
 # Main configuration class that can be instantiated from YAML
@@ -43,3 +42,5 @@ class Config:
     logger: Any = None
     networks: Any = None
     models: Any = None
+    training_env: Any = None
+    batched_env: Any = None

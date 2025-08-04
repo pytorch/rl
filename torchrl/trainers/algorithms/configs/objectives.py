@@ -24,12 +24,15 @@ class LossConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for loss configurations."""
-        pass
 
 
 @dataclass
 class PPOLossConfig(LossConfig):
-    """Configuration for PPO loss."""
+    """A class to configure a PPO loss.
+
+    Args:
+        loss_type: The type of loss to use.
+    """
 
     actor_network: Any = None
     critic_network: Any = None
