@@ -12,3 +12,4 @@ API Reference
     objectives
     trainers
     utils
+    config

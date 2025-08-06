@@ -19,16 +19,16 @@ defaults:
   - network@networks.policy_network: mlp
   - network@networks.value_network: mlp
   
-  - collector: multi_async
+  - collector@collector: multi_async
 
-  - replay_buffer: base
-  - storage: lazy_tensor
-  - sampler: without_replacement
-  - writer: round_robin
-  - trainer: ppo
-  - optimizer: adam
-  - loss: ppo
-  - logger: wandb
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: without_replacement
+  - trainer@trainer: ppo
+  - optimizer@optimizer: adam
+  - loss@loss: ppo
+  - logger@logger: wandb
   - _self_
 
 # Network configurations
@@ -95,21 +95,17 @@ collector:
   frames_per_batch: 1024
   num_workers: 2
 
-# Storage configuration
-storage:
-  max_size: 1024
-  device: cpu
-  ndim: 1
-
-sampler:
-  drop_last: true
-  shuffle: true
-
 # Replay buffer configuration
 replay_buffer:
-  storage: ${storage}
-  sampler: ${sampler}
-  writer: ${writer}
+  storage:
+    max_size: 1024
+    device: cpu
+    ndim: 1
+  sampler:
+    drop_last: true
+    shuffle: true
+  writer:
+    compilable: false
   batch_size: 128
 
 logger:
