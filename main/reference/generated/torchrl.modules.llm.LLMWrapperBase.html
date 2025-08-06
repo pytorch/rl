@@ -469,12 +469,12 @@
 </ul>
 <p><strong>Parameter Conflict Resolution:</strong></p>
 <p>When both legacy (backend-specific) and standardized parameter names are provided,
-a <code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code> is raised to prevent confusion. For example:</p>
+the legacy names silently prevail. This ensures backward compatibility with existing code.</p>
 <ul>
-<li><p>If both <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> and <code class="docutils literal notranslate"><span class="pre">max_new_tokens</span></code> are passed, an error is raised</p></li>
-<li><p>If both <code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">num_return_sequences</span></code> are passed, an error is raised</p></li>
+<li><p>If both <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> and <code class="docutils literal notranslate"><span class="pre">max_new_tokens</span></code> are passed, <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> wins</p></li>
+<li><p>If both <code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">num_return_sequences</span></code> are passed, <code class="docutils literal notranslate"><span class="pre">n</span></code> wins</p></li>
 </ul>
-<p>This ensures clear parameter usage and prevents unexpected behavior.</p>
+<p>This behavior allows existing code to continue working without modification.</p>
 <p><strong>Parameter Validation:</strong></p>
 <p>The following validations are performed:</p>
 <ul>

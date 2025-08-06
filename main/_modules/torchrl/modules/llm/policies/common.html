@@ -806,12 +806,12 @@
 <span class="sd">            **Parameter Conflict Resolution:**</span>
 
 <span class="sd">            When both legacy (backend-specific) and standardized parameter names are provided,</span>
-<span class="sd">            a :exc:`ValueError` is raised to prevent confusion. For example:</span>
+<span class="sd">            the legacy names silently prevail. This ensures backward compatibility with existing code.</span>
 
-<span class="sd">            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised</span>
-<span class="sd">            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised</span>
+<span class="sd">            * If both ``max_tokens`` and ``max_new_tokens`` are passed, ``max_tokens`` wins</span>
+<span class="sd">            * If both ``n`` and ``num_return_sequences`` are passed, ``n`` wins</span>
 
-<span class="sd">            This ensures clear parameter usage and prevents unexpected behavior.</span>
+<span class="sd">            This behavior allows existing code to continue working without modification.</span>
 
 <span class="sd">            **Parameter Validation:**</span>
 
@@ -942,14 +942,16 @@
 <span class="sd">        * vLLM&#39;s ``max_tokens`` -&gt; ``max_new_tokens``</span>
 <span class="sd">        * vLLM&#39;s ``n`` -&gt; ``num_return_sequences``</span>
 
+<span class="sd">        **Parameter Conflict Resolution:**</span>
+
+<span class="sd">        When both legacy (backend-specific) and standardized parameter names are provided,</span>
+<span class="sd">        the legacy names silently prevail. This ensures backward compatibility with existing code.</span>
+
 <span class="sd">        Args:</span>
 <span class="sd">            generate_kwargs: The generation parameters to standardize</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            Standardized generation parameters</span>
-
-<span class="sd">        Raises:</span>
-<span class="sd">            ValueError: If conflicting parameter names are provided</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">generate_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">{}</span>
@@ -957,20 +959,17 @@
         <span class="n">standardized</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
 
         <span class="c1"># Convert vLLM parameter names to common names</span>
+        <span class="c1"># Legacy names prevail in conflicts (backward compatibility)</span>
         <span class="k">if</span> <span class="s2">&quot;max_tokens&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;max_new_tokens&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot specify both &#39;max_tokens&#39; (legacy vLLM) and &#39;max_new_tokens&#39; (standardized). &quot;</span>
-                    <span class="s2">&quot;Use &#39;max_new_tokens&#39; for cross-backend compatibility.&quot;</span>
-                <span class="p">)</span>
+                <span class="c1"># Legacy name wins - remove the standardized name</span>
+                <span class="n">standardized</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">)</span>
             <span class="n">standardized</span><span class="p">[</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">standardized</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="s2">&quot;n&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;num_return_sequences&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot specify both &#39;n&#39; (legacy vLLM) and &#39;num_return_sequences&#39; (standardized). &quot;</span>
-                    <span class="s2">&quot;Use &#39;num_return_sequences&#39; for cross-backend compatibility.&quot;</span>
-                <span class="p">)</span>
+                <span class="c1"># Legacy name wins - remove the standardized name</span>
+                <span class="n">standardized</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_return_sequences&quot;</span><span class="p">)</span>
             <span class="n">standardized</span><span class="p">[</span><span class="s2">&quot;num_return_sequences&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">standardized</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">)</span>
 
         <span class="c1"># Validate parameter combinations</span>
@@ -1681,7 +1680,9 @@
         <span class="n">max_batch_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_max_batch_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">min_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># put elements in a queue until the batch size is reached</span>
+            <span class="n">squeeze</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">if</span> <span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">squeeze</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">td_input</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -1761,7 +1762,10 @@
                         <span class="k">if</span> <span class="ow">not</span> <span class="n">future</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
                             <span class="n">future</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
                     <span class="k">raise</span>
-
+            <span class="k">if</span> <span class="n">squeeze</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;More results than expected&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">futures</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span> <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
