@@ -1259,7 +1259,9 @@ def _batching(func):
         max_batch_size = getattr(self, "_max_batch_size", None)
         if min_batch_size is not None or max_batch_size is not None:
             # put elements in a queue until the batch size is reached
+            squeeze = False
             if td_input.batch_dims == 0:
+                squeeze = True
                 inputs = [td_input]
             else:
                 if td_input.batch_dims > 1:
@@ -1339,7 +1341,10 @@ def _batching(func):
                         if not future.done():
                             future.set_exception(e)
                     raise
-
+            if squeeze:
+                if len(futures) > 1:
+                    raise RuntimeError("More results than expected")
+                return futures[0].result()
             return lazy_stack([future.result() for future in futures])
         return func(self, td_input, **kwargs)
 
