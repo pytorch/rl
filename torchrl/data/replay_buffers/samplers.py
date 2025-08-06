@@ -20,7 +20,7 @@ from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
-from torchrl._utils import _replace_last, logger
+from torchrl._utils import _replace_last, logger, RL_WARNINGS
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _auto_device, _is_int, unravel_index
 
@@ -32,7 +32,11 @@ try:
         SumSegmentTreeFp64,
     )
 except ImportError:
-    logger.warning(EXTENSION_WARNING)
+    # Make default values
+    MinSegmentTreeFp32 = None
+    MinSegmentTreeFp64 = None
+    SumSegmentTreeFp32 = None
+    SumSegmentTreeFp64 = None
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -418,6 +422,8 @@ class PrioritizedSampler(Sampler):
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
+        if RL_WARNINGS and SumSegmentTreeFp32 is None:
+            logger.warning(EXTENSION_WARNING)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(alpha={self._alpha}, beta={self._beta}, eps={self._eps}, reduction={self.reduction})"
@@ -450,6 +456,22 @@ class PrioritizedSampler(Sampler):
         return super().__getstate__()
 
     def _init(self) -> None:
+        if SumSegmentTreeFp32 is None:
+            raise RuntimeError(
+                "SumSegmentTreeFp32 is not available. See warning above."
+            )
+        if MinSegmentTreeFp32 is None:
+            raise RuntimeError(
+                "MinSegmentTreeFp32 is not available. See warning above."
+            )
+        if SumSegmentTreeFp64 is None:
+            raise RuntimeError(
+                "SumSegmentTreeFp64 is not available. See warning above."
+            )
+        if MinSegmentTreeFp64 is None:
+            raise RuntimeError(
+                "MinSegmentTreeFp64 is not available. See warning above."
+            )
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
