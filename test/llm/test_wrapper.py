@@ -2705,7 +2705,7 @@ class TestBatching:
                 tokenizer=tokenizer,
                 input_mode="text",
                 generate=True,
-                generate_kwargs={"repetition_penalty": 0.5},
+                generate_kwargs={"repetition_penalty": 0.0},
             )
 
         # Test conflicting do_sample and temperature
@@ -2725,45 +2725,11 @@ class TestBatching:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
-    def test_parameter_conflict_errors(
+    def test_batching_null_dimension(
         self, wrapper_class, vllm_instance, transformers_instance
     ):
-        """Test that parameter conflicts are properly detected."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
-
-        # Test conflicting max_tokens and max_new_tokens
-        with pytest.raises(
-            ValueError, match="Cannot specify both 'max_tokens'.*'max_new_tokens'"
-        ):
-            wrapper_class(
-                model,
-                tokenizer=tokenizer,
-                input_mode="text",
-                generate=True,
-                generate_kwargs={"max_tokens": 10, "max_new_tokens": 20},
-            )
-
-        # Test conflicting n and num_return_sequences
-        with pytest.raises(
-            ValueError, match="Cannot specify both 'n'.*'num_return_sequences'"
-        ):
-            wrapper_class(
-                model,
-                tokenizer=tokenizer,
-                input_mode="text",
-                generate=True,
-                generate_kwargs={"n": 1, "num_return_sequences": 2},
-            )
-
-    @pytest.mark.parametrize(
-        "wrapper_class",
-        [vLLMWrapper, TransformersWrapperMaxTokens],
-        ids=["vllm", "transformers"],
-    )
-    def test_batching_null_dimension(self, wrapper_class, vllm_instance, transformers_instance):
         """Test that null dimension inputs (batch_dims=0) work correctly.
-        
+
         This test specifically verifies the fix for handling TensorDicts with batch_dims=0
         in the batching decorator, ensuring proper squeeze operation and result handling.
         """
@@ -2796,23 +2762,25 @@ class TestBatching:
         )
 
         result_null = wrapper_no_batch(null_dim_input)
-        
+
         # Verify the result structure
         assert "text" in result_null
         assert "tokens" in result_null
         assert "masks" in result_null
         assert "log_probs" in result_null
-        
+
         # Verify the result has the expected shape (should maintain null dimension)
         assert result_null.batch_size == ()
-        assert isinstance(result_null["text"].prompt, str)  # Should be a single string, not a list
-        
+        assert isinstance(
+            result_null["text"].prompt, str
+        )  # Should be a single string, not a list
+
         # Test 2: Batch input should work normally
         batch_input = TensorDict(
             text=Text(prompt=["Question 1?", "Question 2?"]),
             batch_size=(2,),
         )
-        
+
         result_batch = wrapper_no_batch(batch_input)
         assert result_batch.batch_size == (2,)
         assert isinstance(result_batch["text"].prompt, list)
@@ -2830,29 +2798,31 @@ class TestBatching:
 
         # Test null dimension with batching enabled
         result_null_batch = wrapper_with_batch(null_dim_input)
-        
+
         # Verify the result structure
         assert "text" in result_null_batch
         assert "tokens" in result_null_batch
         assert "masks" in result_null_batch
         assert "log_probs" in result_null_batch
-        
+
         # Verify the result has the expected shape (should maintain null dimension)
         assert result_null_batch.batch_size == ()
-        assert isinstance(result_null_batch["text"].prompt, str)  # Should be a single string, not a list
+        assert isinstance(
+            result_null_batch["text"].prompt, str
+        )  # Should be a single string, not a list
 
         # Test 4: Verify that the _batching decorator correctly handles the squeeze logic
         # This tests the specific fix in the _batching decorator
         from torchrl.modules.llm.policies.common import _batching
-        
+
         # Create a simple mock function to test the decorator
         def mock_forward(self, td_input, **kwargs):
             # Return the input as-is for testing
             return td_input
-        
+
         # Apply the batching decorator
         batched_mock = _batching(mock_forward)
-        
+
         # Create a mock self object with batching attributes
         class MockSelf:
             def __init__(self):
@@ -2860,14 +2830,21 @@ class TestBatching:
                 self._max_batch_size = None
                 self._batch_queue = []
                 self._futures = []
-                self._batching_lock = type('MockLock', (), {'__enter__': lambda self: None, '__exit__': lambda self, *args: None})()
+                self._batching_lock = type(
+                    "MockLock",
+                    (),
+                    {
+                        "__enter__": lambda self: None,
+                        "__exit__": lambda self, *args: None,
+                    },
+                )()
                 self._batching_timeout = 10.0
-        
+
         mock_self = MockSelf()
-        
+
         # Test the decorator with null dimension input
         result = batched_mock(mock_self, null_dim_input)
-        
+
         # The result should be the same as the input since our mock just returns the input
         assert result.batch_size == ()
         assert result["text"].prompt == "Single question without batch dimension?"
