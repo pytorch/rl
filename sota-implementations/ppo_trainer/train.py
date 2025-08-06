@@ -4,12 +4,10 @@
 
 import hydra
 import torchrl
-from torchrl.trainers.algorithms.configs.common import Config
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.1")
-def main(cfg: Config):
-
+def main(cfg):
     def print_reward(td):
         torchrl.logger.info(f"reward: {td['next', 'reward'].mean(): 4.4f}")
 

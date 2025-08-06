@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+
+from omegaconf import DictConfig
 
 
 @dataclass
@@ -23,24 +24,18 @@ class ConfigBase(ABC):
         """Post-initialization hook for configuration classes."""
 
 
-# Main configuration class that can be instantiated from YAML
 @dataclass
 class Config:
-    """Main configuration class that can be instantiated from YAML."""
+    """A flexible config that allows arbitrary fields."""
 
-    trainer: Any = None
-    env: Any = None
-    network: Any = None
-    model: Any = None
-    loss: Any = None
-    replay_buffer: Any = None
-    sampler: Any = None
-    storage: Any = None
-    writer: Any = None
-    collector: Any = None
-    optimizer: Any = None
-    logger: Any = None
-    networks: Any = None
-    models: Any = None
-    training_env: Any = None
-    batched_env: Any = None
+    def __init__(self, **kwargs):
+        self._config = DictConfig(kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._config, name)
+
+    def __setattr__(self, name, value):
+        if name == "_config":
+            super().__setattr__(name, value)
+        else:
+            setattr(self._config, name, value)

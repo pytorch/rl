@@ -3,8 +3,13 @@
 
 defaults:
   
-  - env@training_env: transformed_env
-  - env@batched_env: batched_env
+  - transform@transform0: noop_reset
+  - transform@transform1: step_counter
+  
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
   
   - model: tanh_normal
   - model@models.policy_model: tanh_normal
@@ -53,21 +58,24 @@ models:
     network: ${networks.value_network}
 
 # Environment configuration
-training_env:
-  base_env:
-    env_name: Pendulum-v1
-    _target_: torchrl.trainers.algorithms.configs.envs.make_env
-    _partial_: true
-  transform:
-    noops: 30
-    random: true
-    _target_: torchrl.trainers.algorithms.configs.transforms.make_noop_reset_env
-  _partial_: true
+transform0:
+  noops: 30
+  random: true
 
-batched_env:
-  num_workers: 16
-  create_env_fn: ${training_env}
-  device: cpu
+transform1:
+  max_steps: 200
+  step_count_key: "step_count"
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
 
 # Loss configuration
 loss:

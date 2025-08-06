@@ -23,6 +23,7 @@ from typing import (
     Callable,
     Mapping,
     OrderedDict,
+    overload,
     Sequence,
     TYPE_CHECKING,
     TypeVar,
@@ -835,12 +836,12 @@ class _TEnvPostInit(_EnvPostInit):
 
 
 class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
-    """A transformed_in environment.
+    """A transformed environment.
 
     Args:
-        env (EnvBase): original environment to be transformed_in.
+        base_env (EnvBase): original environment to be transformed.
         transform (Transform or callable, optional): transform to apply to the tensordict resulting
-            from :obj:`env.step(td)`. If none is provided, an empty Compose
+            from :obj:`base_env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
 
             .. note:: If ``transform`` is a callable, it must receive as input a single tensordict
@@ -857,7 +858,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
         cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
-            transformed_in only once). If the transform changes during
+            transformed only once). If the transform changes during
             training, the original spec transform may not be valid anymore,
             in which case this value should be set  to `False`. Default is
             `True`.
@@ -880,28 +881,97 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         >>> # The inner env has been unwrapped
         >>> assert isinstance(transformed_env.base_env, GymEnv)
 
+    .. note::
+        The first argument was renamed from ``env`` to ``base_env`` for clarity.
+        The old ``env`` argument is still supported for backward compatibility
+        but will be removed in v0.12. A deprecation warning will be shown when
+        using the old argument name.
+
     """
 
+    @overload
     def __init__(
         self,
-        env: EnvBase,
+        base_env: EnvBase,
         transform: Transform | None = None,
         cache_specs: bool = True,
         *,
         auto_unwrap: bool | None = None,
         **kwargs,
+    ) -> None:
+        """Initialize with base_env as first positional argument."""
+        ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        base_env: EnvBase,
+        transform: Transform | None = None,
+        cache_specs: bool = True,
+        auto_unwrap: bool | None = None,
+        **kwargs,
+    ) -> None:
+        """Initialize with base_env as keyword argument."""
+        ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        env: EnvBase,  # type: ignore[misc]  # deprecated
+        transform: Transform | None = None,
+        cache_specs: bool = True,
+        auto_unwrap: bool | None = None,
+        **kwargs,
+    ) -> None:
+        """Initialize with env as keyword argument (deprecated)."""
+        ...
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
     ):
+        # Backward compatibility: handle both old and new syntax
+        if len(args) > 0:
+            # New syntax: TransformedEnv(base_env, transform, ...)
+            base_env = args[0]
+            transform = args[1] if len(args) > 1 else None
+            cache_specs = args[2] if len(args) > 2 else True
+            auto_unwrap = kwargs.pop("auto_unwrap", None)
+        elif "env" in kwargs:
+            # Old syntax: TransformedEnv(env=..., transform=...)
+            warnings.warn(
+                "The 'env' argument is deprecated and will be removed in v0.12. "
+                "Use 'base_env' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            base_env = kwargs.pop("env")
+            transform = kwargs.pop("transform", None)
+            cache_specs = kwargs.pop("cache_specs", True)
+            auto_unwrap = kwargs.pop("auto_unwrap", None)
+        elif "base_env" in kwargs:
+            # New syntax with keyword arguments: TransformedEnv(base_env=..., transform=...)
+            base_env = kwargs.pop("base_env")
+            transform = kwargs.pop("transform", None)
+            cache_specs = kwargs.pop("cache_specs", True)
+            auto_unwrap = kwargs.pop("auto_unwrap", None)
+        else:
+            raise TypeError("TransformedEnv requires a base_env argument")
+
         self._transform = None
         device = kwargs.pop("device", None)
         if device is not None:
-            env = env.to(device)
+            base_env = base_env.to(device)
         else:
-            device = env.device
+            device = base_env.device
         super().__init__(device=None, allow_done_after_reset=None, **kwargs)
 
         # Type matching must be exact here, because subtyping could introduce differences in behavior that must
         # be contained within the subclass.
-        if type(env) is TransformedEnv and type(self) is TransformedEnv:
+        if type(base_env) is TransformedEnv and type(self) is TransformedEnv:
             if auto_unwrap is None:
                 auto_unwrap = auto_unwrap_transformed_env(allow_none=True)
                 if auto_unwrap is None:
@@ -919,7 +989,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             auto_unwrap = False
 
         if auto_unwrap:
-            self._set_env(env.base_env, device)
+            self._set_env(base_env.base_env, device)
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to lose.
@@ -938,7 +1008,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             else:
                 for t in transform:
                     t.reset_parent()
-            env_transform = env.transform.clone()
+            env_transform = base_env.transform.clone()
             if type(env_transform) is not Compose:
                 env_transform = [env_transform]
             else:
@@ -946,7 +1016,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                     t.reset_parent()
             transform = Compose(*env_transform, *transform).to(device)
         else:
-            self._set_env(env, device)
+            self._set_env(base_env, device)
             if transform is None:
                 transform = Compose()
 
@@ -1437,15 +1507,44 @@ class Compose(Transform):
 
     :class:`~torchrl.envs.transforms.Transform` or ``callable``s are accepted.
 
+    The class can be instantiated in several ways:
+
+    Args:
+        *transforms (Transform): Variable number of transforms to compose.
+        transforms (list[Transform], optional): A list of transforms to compose.
+            This can be passed as a keyword argument.
+
     Examples:
         >>> env = GymEnv("Pendulum-v0")
-        >>> transforms = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]
-        >>> transforms = Compose(*transforms)
+        >>>
+        >>> # Method 1: Using positional arguments
+        >>> transforms = Compose(RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0))
+        >>> transformed_env = TransformedEnv(env, transforms)
+        >>>
+        >>> # Method 2: Using a list with positional argument
+        >>> transform_list = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]
+        >>> transforms = Compose(transform_list)
+        >>> transformed_env = TransformedEnv(env, transforms)
+        >>>
+        >>> # Method 3: Using keyword argument
+        >>> transforms = Compose(transforms=[RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)])
         >>> transformed_env = TransformedEnv(env, transforms)
 
     """
 
-    def __init__(self, *transforms: Transform):
+    @overload
+    def __init__(self, transforms: list[Transform]):
+        ...
+
+    def __init__(self, *trsfs: Transform, **kwargs):
+        if len(trsfs) == 0 and "transforms" in kwargs:
+            transforms = kwargs.pop("transforms")
+        elif len(trsfs) == 1 and isinstance(trsfs[0], list):
+            transforms = trsfs[0]
+        else:
+            transforms = trsfs
+        if kwargs:
+            raise ValueError(f"Unexpected keyword arguments: {kwargs}")
         super().__init__()
 
         def map_transform(trsf):

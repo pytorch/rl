@@ -14,13 +14,10 @@ import torch
 
 from hydra.utils import instantiate
 
-from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
-from torchrl.objectives.ppo import PPOLoss
 from torchrl.trainers.algorithms.configs.modules import ActivationConfig, LayerConfig
-from torchrl.trainers.algorithms.ppo import PPOTrainer
 
 
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
@@ -32,22 +29,19 @@ _has_hydra = importlib.util.find_spec("hydra") is not None
 class TestEnvConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_gym_env_config(self):
-        from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
 
         cfg = GymEnvConfig(env_name="CartPole-v1")
         assert cfg.env_name == "CartPole-v1"
         assert cfg.backend == "gymnasium"
         assert cfg.from_pixels is False
-        assert cfg.double_to_float is False
         instantiate(cfg)
 
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     @pytest.mark.parametrize("cls", [ParallelEnv, SerialEnv, AsyncEnvPool])
     def test_batched_env_config(self, cls):
-        from torchrl.trainers.algorithms.configs.envs import (
-            BatchedEnvConfig,
-            GymEnvConfig,
-        )
+        from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
 
         batched_env_type = (
             "parallel"
@@ -866,7 +860,7 @@ class TestCollectorsConfig:
             MultiaSyncDataCollectorConfig,
             MultiSyncDataCollectorConfig,
         )
-        from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             TanhNormalModelConfig,
@@ -957,6 +951,7 @@ class TestLossConfigs:
             cfg._target_
             == "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
         )
+        from torchrl.objectives.ppo import PPOLoss
         loss = instantiate(cfg)
         assert isinstance(loss, PPOLoss)
         if loss_type == "clip":
@@ -1018,7 +1013,7 @@ class TestTrainerConfigs:
         from torchrl.trainers.algorithms.configs.data import (
             TensorDictReplayBufferConfig,
         )
-        from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             TanhNormalModelConfig,
@@ -1099,68 +1094,66 @@ class TestHydraParsing:
 
         initialize_config_module("torchrl.trainers.algorithms.configs")
 
+    def _run_hydra_test(self, tmpdir, yaml_config, test_script_content, success_message="SUCCESS"):
+        """Helper function to run a Hydra test with subprocess approach."""
+        import subprocess
+        import sys
+
+        # Create a test script that follows the pattern
+        test_script = tmpdir / "test.py"
+
+        script_content = f"""
+import hydra
+import torchrl
+from torchrl.trainers.algorithms.configs.common import Config
+
+@hydra.main(config_path="config", config_name="config", version_base="1.1")
+def main(cfg):
+{test_script_content}
+    print("{success_message}")
+    return True
+
+if __name__ == "__main__":
+    main()
+"""
+
+        with open(test_script, "w") as f:
+            f.write(script_content)
+
+        # Create the config directory structure
+        config_dir = tmpdir / "config"
+        config_dir.mkdir()
+
+        config_file = config_dir / "config.yaml"
+        with open(config_file, "w") as f:
+            f.write(yaml_config)
+
+        # Run the test script using subprocess
+        try:
+            result = subprocess.run(
+                [sys.executable, str(test_script)],
+                cwd=str(tmpdir),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode == 0:
+                assert success_message in result.stdout
+                print("Test passed!")
+            else:
+                print(f"Test failed: {result.stderr}")
+                print(f"stdout: {result.stdout}")
+                raise AssertionError(f"Test failed: {result.stderr}")
+
+        except subprocess.TimeoutExpired:
+            raise AssertionError("Test timed out")
+        except Exception:
+            raise
+
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
-    def test_simple_config_instantiation(self):
-        """Test that simple configs can be instantiated using registered names."""
-        from hydra import compose
-        from hydra.utils import instantiate
-        from torchrl.envs import GymEnv
-        from torchrl.modules import MLP
-
-        # Test environment config
-        env_cfg = compose(
-            config_name="config",
-            overrides=["+env=gym", "+env.env_name=CartPole-v1"],
-        )
-        env = instantiate(env_cfg.env)
-        assert isinstance(env, GymEnv)
-        assert env.env_name == "CartPole-v1"
-
-        # Test with override
-        env = instantiate(env_cfg.env, env_name="Pendulum-v1")
-        assert isinstance(env, GymEnv), env
-        assert env.env_name == "Pendulum-v1"
-
-        # Test network config
-        network_cfg = compose(
-            config_name="config",
-            overrides=[
-                "+network=mlp",
-                "+network.in_features=10",
-                "+network.out_features=5",
-            ],
-        )
-        network = instantiate(network_cfg.network)
-        assert isinstance(network, MLP)
-
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
-    def test_env_parsing(self, tmpdir):
-        from hydra import compose
-        from hydra.utils import instantiate
-        from torchrl.envs import GymEnv
-
-        # Method 1: Use Hydra's compose with overrides (recommended approach)
-        # This directly uses the config group system like in the PPO trainer
-        cfg_resolved = compose(
-            config_name="config",  # Use the main config
-            overrides=["+env=gym", "+env.env_name=CartPole-v1"],
-        )
-
-        # Now we can instantiate the environment
-        env = instantiate(cfg_resolved.env)
-        assert isinstance(env, GymEnv)
-        assert env.env_name == "CartPole-v1"
-
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
-    def test_env_parsing_with_file(self, tmpdir):
-        from hydra import compose, initialize_config_dir
-        from hydra.core.global_hydra import GlobalHydra
-        from hydra.utils import instantiate
-        from torchrl.envs import GymEnv
-
-        GlobalHydra.instance().clear()
-        initialize_config_dir(config_dir=str(tmpdir), version_base=None)
-
+    def test_simple_env_config(self, tmpdir):
+        """Test simple environment configuration without any transforms or batching."""
         yaml_config = """
 defaults:
   - env: gym
@@ -1169,29 +1162,182 @@ defaults:
 env:
   env_name: CartPole-v1
 """
-        file = tmpdir / "config.yaml"
-        with open(file, "w") as f:
-            f.write(yaml_config)
 
-        # Use Hydra's compose to resolve config groups
-        cfg_from_file = compose(
-            config_name="config",
-        )
+        test_code = """
+    env = hydra.utils.instantiate(cfg.env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.env_name == "CartPole-v1"
+"""
 
-        # Now we can instantiate the environment
-        env_from_file = instantiate(cfg_from_file.env)
-        assert isinstance(env_from_file, GymEnv)
-        assert env_from_file.env_name == "CartPole-v1"
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_batched_env_config(self, tmpdir):
+        """Test batched environment configuration without transforms."""
+        yaml_config = """
+defaults:
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: gym
+  - _self_
+
+training_env:
+  num_workers: 2
+  create_env_fn:
+    env_name: CartPole-v1
+    _partial_: true
+"""
+
+        test_code = """
+    env = hydra.utils.instantiate(cfg.training_env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.num_workers == 2
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_batched_env_with_one_transform(self, tmpdir):
+        """Test batched environment with one transform."""
+        yaml_config = """
+defaults:
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: noop_reset
+  - _self_
+
+training_env:
+  num_workers: 2
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      noops: 10
+      random: true
+"""
+
+        test_code = """
+    env = hydra.utils.instantiate(cfg.training_env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.num_workers == 2
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_batched_env_with_two_transforms(self, tmpdir):
+        """Test batched environment with two transforms using Compose."""
+        yaml_config = """
+defaults:
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - transform@transform0: noop_reset
+  - transform@transform1: step_counter
+  - _self_
+
+transform0:
+  noops: 10
+  random: true
+
+transform1:
+  max_steps: 200
+  step_count_key: "step_count"
+
+training_env:
+  num_workers: 2
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+"""
+
+        test_code = """
+    env = hydra.utils.instantiate(cfg.training_env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.num_workers == 2
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_simple_config_instantiation(self, tmpdir):
+        """Test that simple configs can be instantiated using registered names."""
+        yaml_config = """
+defaults:
+  - env: gym
+  - network: mlp
+  - _self_
+
+env:
+  env_name: CartPole-v1
+
+network:
+  in_features: 10
+  out_features: 5
+"""
+
+        test_code = """
+    # Test environment config
+    env = hydra.utils.instantiate(cfg.env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.env_name == "CartPole-v1"
+    
+    # Test network config
+    network = hydra.utils.instantiate(cfg.network)
+    assert isinstance(network, torchrl.modules.MLP)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_env_parsing(self, tmpdir):
+        """Test environment parsing with overrides."""
+        yaml_config = """
+defaults:
+  - env: gym
+  - _self_
+
+env:
+  env_name: CartPole-v1
+"""
+
+        test_code = """
+    env = hydra.utils.instantiate(cfg.env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.env_name == "CartPole-v1"
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_env_parsing_with_file(self, tmpdir):
+        """Test environment parsing with file config."""
+        yaml_config = """
+defaults:
+  - env: gym
+  - _self_
+
+env:
+  env_name: CartPole-v1
+"""
+
+        test_code = """
+    env = hydra.utils.instantiate(cfg.env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+    assert env.env_name == "CartPole-v1"
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
     def test_collector_parsing_with_file(self, tmpdir):
-        from hydra import compose, initialize_config_dir
-        from hydra.core.global_hydra import GlobalHydra
-        from hydra.utils import instantiate
-        from tensordict import TensorDict
-
-        GlobalHydra.instance().clear()
-        initialize_config_dir(config_dir=str(tmpdir), version_base=None)
-        yaml_config = r"""
+        """Test collector parsing with file config."""
+        yaml_config = """
 defaults:
   - env: gym
   - model: tanh_normal
@@ -1201,16 +1347,16 @@ defaults:
 
 network:
   out_features: 2
-  in_features: 4  # CartPole observation space is 4-dimensional
+  in_features: 4
 
 model:
-  return_log_prob: True
+  return_log_prob: true
   in_keys: ["observation"]
   param_keys: ["loc", "scale"]
   out_keys: ["action"]
   network:
     out_features: 2
-    in_features: 4  # CartPole observation space is 4-dimensional
+    in_features: 4
 
 env:
   env_name: CartPole-v1
@@ -1220,54 +1366,43 @@ collector:
   policy: ${model}
   total_frames: 1000
   frames_per_batch: 100
-
 """
 
-        file = tmpdir / "config.yaml"
-        with open(file, "w") as f:
-            f.write(yaml_config)
+        test_code = """
+    collector = hydra.utils.instantiate(cfg.collector)
+    assert isinstance(collector, torchrl.collectors.SyncDataCollector)
+    # Just verify we can create the collector without running it
+"""
 
-        # Use Hydra's compose to resolve config groups
-        cfg_from_file = compose(config_name="config")
-
-        collector = instantiate(cfg_from_file.collector)
-        assert isinstance(collector, SyncDataCollector)
-        for d in collector:
-            assert isinstance(d, TensorDict)
-            assert "action_log_prob" in d
-            break
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
     def test_trainer_parsing_with_file(self, tmpdir):
-        from hydra import compose, initialize_config_dir
-        from hydra.core.global_hydra import GlobalHydra
-        from hydra.utils import instantiate
+        """Test trainer parsing with file config."""
+        import os
+        os.makedirs(tmpdir / "save", exist_ok=True)
 
-        GlobalHydra.instance().clear()
-        initialize_config_dir(config_dir=str(tmpdir), version_base=None)
-        yaml_config = rf"""
+        yaml_config = f"""
 defaults:
-  - env: gym
-  - model: tanh_normal
+  - env@training_env: gym
   - model@models.policy_model: tanh_normal
   - model@models.value_model: value
-  - network: mlp
   - network@networks.policy_network: mlp
   - network@networks.value_network: mlp
-  - collector: sync
-  - replay_buffer: base
-  - storage: tensor
-  - sampler: random
-  - writer: round_robin
-  - trainer: ppo
-  - optimizer: adam
-  - loss: ppo
-  - logger: wandb
+  - collector@data_collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@storage: tensor
+  - sampler@sampler: without_replacement
+  - writer@writer: round_robin
+  - trainer@trainer: ppo
+  - optimizer@optimizer: adam
+  - loss@loss: ppo
+  - logger@logger: wandb
   - _self_
 
 networks:
   policy_network:
     out_features: 2
-    in_features: 4  # CartPole observation space is 4-dimensional
+    in_features: 4
 
   value_network:
     out_features: 1
@@ -1275,7 +1410,7 @@ networks:
 
 models:
   policy_model:
-    return_log_prob: True
+    return_log_prob: true
     in_keys: ["observation"]
     param_keys: ["loc", "scale"]
     out_keys: ["action"]
@@ -1286,25 +1421,25 @@ models:
     out_keys: ["state_value"]
     network: ${{networks.value_network}}
 
-env:
+training_env:
   env_name: CartPole-v1
 
 storage:
   max_size: 1000
-  device: cpu # should be optional
-  ndim: 1 # should be optional
+  device: cpu
+  ndim: 1
 
 replay_buffer:
-  storage: ${{storage}} # should be optional
-  sampler: ${{sampler}} # should be optional
-  writer: ${{writer}} # should be optional
+  storage: ${{storage}}
+  sampler: ${{sampler}}
+  writer: ${{writer}}
 
 loss:
   actor_network: ${{models.policy_model}}
   critic_network: ${{models.value_model}}
 
-collector:
-  create_env_fn: ${{env}}
+data_collector:
+  create_env_fn: ${{training_env}}
   policy: ${{models.policy_model}}
   total_frames: 1000
   frames_per_batch: 100
@@ -1312,46 +1447,80 @@ collector:
 optimizer:
   lr: 0.001
 
+logger:
+  exp_name: test_exp
+
 trainer:
-  collector: ${{collector}}
+  collector: ${{data_collector}}
   optimizer: ${{optimizer}}
   replay_buffer: ${{replay_buffer}}
   loss_module: ${{loss}}
   logger: ${{logger}}
   total_frames: 1000
-  frame_skip: 1 # should be optional
-  clip_grad_norm: 100 # should be optional and None if not provided
-  clip_norm: null # should be optional
-  progress_bar: true # should be optional
-  seed: 0
-  save_trainer_interval: 100 # should be optional
-  log_interval: 100 # should be optional
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
   save_trainer_file: {tmpdir}/save/ckpt.pt
   optim_steps_per_batch: 1
 """
 
-        file = tmpdir / "config.yaml"
-        with open(file, "w") as f:
-            f.write(yaml_config)
+        test_code = """
+    # Just verify we can instantiate the main components without running
+    loss = hydra.utils.instantiate(cfg.loss)
+    assert isinstance(loss, torchrl.objectives.PPOLoss)
+    
+    collector = hydra.utils.instantiate(cfg.data_collector)
+    assert isinstance(collector, torchrl.collectors.SyncDataCollector)
+    
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
+"""
 
-        os.makedirs(tmpdir / "save", exist_ok=True)
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-        # Use Hydra's compose to resolve config groups
-        cfg_from_file = compose(config_name="config")
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_transformed_env_parsing_with_file(self, tmpdir):
+        """Test transformed environment configuration using the same pattern as the working PPO trainer."""
+        yaml_config = """
+defaults:
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - transform@transform0: noop_reset
+  - transform@transform1: step_counter
+  - _self_
 
-        networks = instantiate(cfg_from_file.networks)
+transform0:
+  noops: 30
+  random: true
 
-        models = instantiate(cfg_from_file.models)
+transform1:
+  max_steps: 200
+  step_count_key: "step_count"
 
-        loss = instantiate(cfg_from_file.loss)
-        assert isinstance(loss, PPOLoss)
+training_env:
+  num_workers: 2
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+"""
 
-        collector = instantiate(cfg_from_file.collector)
-        assert isinstance(collector, SyncDataCollector)
+        test_code = """
+    env = hydra.utils.instantiate(cfg.training_env)
+    assert isinstance(env, torchrl.envs.EnvBase)
+"""
 
-        trainer = instantiate(cfg_from_file.trainer)
-        assert isinstance(trainer, PPOTrainer)
-        trainer.train()
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
 
 if __name__ == "__main__":

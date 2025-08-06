@@ -6,12 +6,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 from omegaconf import MISSING
 
-from torchrl.envs.libs.gym import set_gym_backend
-from torchrl.envs.transforms.transforms import DoubleToFloat
+from torchrl.envs.common import EnvBase
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
@@ -24,21 +23,6 @@ class EnvConfig(ConfigBase):
     def __post_init__(self) -> None:
         """Post-initialization hook for environment configurations."""
         self._partial_ = False
-
-
-@dataclass
-class GymEnvConfig(EnvConfig):
-    """Configuration for Gym/Gymnasium environments."""
-
-    env_name: str | None = None
-    backend: str = "gymnasium"  # Changed from Literal to str
-    from_pixels: bool = False
-    double_to_float: bool = False
-    _target_: str = "torchrl.trainers.algorithms.configs.envs.make_env"
-
-    def __post_init__(self) -> None:
-        """Post-initialization hook for Gym environment configurations."""
-        super().__post_init__()
 
 
 @dataclass
@@ -56,7 +40,8 @@ class BatchedEnvConfig(EnvConfig):
     def __post_init__(self) -> None:
         """Post-initialization hook for batched environment configurations."""
         super().__post_init__()
-        self.create_env_fn._partial_ = True
+        if hasattr(self.create_env_fn, "_partial_"):
+            self.create_env_fn._partial_ = True
 
 
 @dataclass
@@ -67,53 +52,16 @@ class TransformedEnvConfig(EnvConfig):
     transform: Any = None
     cache_specs: bool = True
     auto_unwrap: bool | None = None
-    _target_: str = "torchrl.trainers.algorithms.configs.envs.make_transformed_env"
-
-    def __post_init__(self) -> None:
-        """Post-initialization hook for transformed environment configurations."""
-        super().__post_init__()
-        if self.base_env is not None:
-            self.base_env._partial_ = True
-        if self.transform is not None:
-            self.transform._partial_ = True
+    _target_: str = "torchrl.envs.TransformedEnv"
 
 
-def make_env(
-    env_name: str,
-    backend: str = "gymnasium",
-    from_pixels: bool = False,
-    double_to_float: bool = False,
+def make_batched_env(
+    create_env_fn, num_workers, batched_env_type="parallel", device=None, **kwargs
 ):
-    """Create a Gym/Gymnasium environment.
-
-    Args:
-        env_name: Name of the environment to create.
-        backend: Backend to use (gym or gymnasium).
-        from_pixels: Whether to use pixel observations.
-        double_to_float: Whether to convert double to float.
-
-    Returns:
-        The created environment instance.
-    """
-    from torchrl.envs.libs.gym import GymEnv
-
-    if backend is not None:
-        with set_gym_backend(backend):
-            env = GymEnv(env_name, from_pixels=from_pixels)
-    else:
-        env = GymEnv(env_name, from_pixels=from_pixels)
-
-    if double_to_float:
-        env = env.append_transform(DoubleToFloat(in_keys=["observation"]))
-
-    return env
-
-
-def make_batched_env(create_env_fn, num_workers, batched_env_type="parallel", device=None, **kwargs):
     """Create a batched environment.
 
     Args:
-        create_env_fn: Function to create individual environments.
+        create_env_fn: Function to create individual environments or environment instance.
         num_workers: Number of worker environments.
         batched_env_type: Type of batched environment (parallel, serial, async).
         device: Device to place the batched environment on.
@@ -122,8 +70,8 @@ def make_batched_env(create_env_fn, num_workers, batched_env_type="parallel", de
     Returns:
         The created batched environment instance.
     """
-    from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
     from omegaconf import OmegaConf
+    from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 
     if create_env_fn is None:
         raise ValueError("create_env_fn must be provided")
@@ -131,54 +79,24 @@ def make_batched_env(create_env_fn, num_workers, batched_env_type="parallel", de
     if num_workers is None:
         raise ValueError("num_workers must be provided")
 
-    # Instantiate the create_env_fn if it's a config
-    if hasattr(create_env_fn, '_target_'):
-        create_env_fn = OmegaConf.to_object(create_env_fn)
+    # If create_env_fn is a config object, create a lambda that instantiates it each time
+    if isinstance(create_env_fn, EnvBase):
+        # Already an instance (either instantiated config or actual env), wrap in lambda
+        env_instance = create_env_fn
+        env_fn = lambda env_instance=env_instance: env_instance
+    else:
+        env_fn = create_env_fn
+    assert callable(env_fn), env_fn
 
     # Add device to kwargs if provided
     if device is not None:
         kwargs["device"] = device
 
     if batched_env_type == "parallel":
-        return ParallelEnv(num_workers, create_env_fn, **kwargs)
+        return ParallelEnv(num_workers, env_fn, **kwargs)
     elif batched_env_type == "serial":
-        return SerialEnv(num_workers, create_env_fn, **kwargs)
+        return SerialEnv(num_workers, env_fn, **kwargs)
     elif batched_env_type == "async":
-        return AsyncEnvPool([create_env_fn] * num_workers, **kwargs)
+        return AsyncEnvPool([env_fn] * num_workers, **kwargs)
     else:
         raise ValueError(f"Unknown batched_env_type: {batched_env_type}")
-
-
-def make_transformed_env(base_env, transform=None, cache_specs=True, auto_unwrap=None):
-    """Create a transformed environment.
-
-    Args:
-        base_env: Base environment to transform.
-        transform: Transform to apply to the environment.
-        cache_specs: Whether to cache the specs.
-        auto_unwrap: Whether to auto-unwrap transforms.
-
-    Returns:
-        The created transformed environment instance.
-    """
-    from torchrl.envs import TransformedEnv
-    from omegaconf import OmegaConf
-
-    # Instantiate the base environment if it's a config
-    if hasattr(base_env, '_target_'):
-        base_env = OmegaConf.to_object(base_env)
-    
-    # If base_env is a callable (like a partial function), call it to get the actual env
-    if callable(base_env):
-        base_env = base_env()
-    
-    # Instantiate the transform if it's a config
-    if transform is not None and hasattr(transform, '_target_'):
-        transform = OmegaConf.to_object(transform)
-
-    return TransformedEnv(
-        env=base_env,
-        transform=transform,
-        cache_specs=cache_specs,
-        auto_unwrap=auto_unwrap,
-    )
