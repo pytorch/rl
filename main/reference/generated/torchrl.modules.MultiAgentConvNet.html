@@ -456,7 +456,7 @@ its input (heterogeneous policies).</p></li>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>in_features</strong> (<em>int</em><em>, </em><em>optional</em>) – the input feature dimension. If left to <code class="docutils literal notranslate"><span class="pre">None</span></code>,
 a lazy module is used.</p></li>
-<li><p><strong>device</strong> (<em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device to create the module on.</p></li>
+<li><p><strong>device</strong> (<em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device to create the module on.</p></li>
 <li><p><strong>num_cells</strong> (<em>int</em><em> or </em><em>Sequence</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – number of cells of every layer in between the input and output. If
 an integer is provided, every layer will have the same number of cells. If an iterable is provided,
 the linear layers <code class="docutils literal notranslate"><span class="pre">out_features</span></code> will match the content of <code class="docutils literal notranslate"><span class="pre">num_cells</span></code>.</p></li>
@@ -466,7 +466,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">5</span
 depth, defined by the num_cells or depth arguments.
 Defaults to <code class="docutils literal notranslate"><span class="pre">2</span></code>.</p></li>
 <li><p><strong>activation_class</strong> (<em>Type</em><em>[</em><em>nn.Module</em><em>]</em>) – activation class to be used.
-Default to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ELU.html#torch.nn.ELU" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.ELU</span></code></a>.</p></li>
+Default to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ELU.html#torch.nn.ELU" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.ELU</span></code></a>.</p></li>
 <li><p><strong>use_td_params</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the parameters can be found in <cite>self.params</cite> which is a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> object (which inherits both from <cite>TensorDict</cite> and <cite>nn.Module</cite>).
 If <code class="docutils literal notranslate"><span class="pre">False</span></code>, parameters are contained in <cite>self._empty_net</cite>. All things considered, these two approaches

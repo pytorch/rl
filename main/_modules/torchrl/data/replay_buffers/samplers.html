@@ -442,7 +442,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._extension</span><span class="w"> </span><span class="kn">import</span> <span class="n">EXTENSION_WARNING</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_replace_last</span><span class="p">,</span> <span class="n">logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_replace_last</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">RL_WARNINGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.storages</span><span class="w"> </span><span class="kn">import</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">StorageEnsemble</span><span class="p">,</span> <span class="n">TensorStorage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_auto_device</span><span class="p">,</span> <span class="n">_is_int</span><span class="p">,</span> <span class="n">unravel_index</span>
 
@@ -454,7 +454,11 @@
         <span class="n">SumSegmentTreeFp64</span><span class="p">,</span>
     <span class="p">)</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">EXTENSION_WARNING</span><span class="p">)</span>
+    <span class="c1"># Make default values</span>
+    <span class="n">MinSegmentTreeFp32</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">MinSegmentTreeFp64</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">SumSegmentTreeFp32</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">SumSegmentTreeFp64</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="n">_EMPTY_STORAGE_ERROR</span> <span class="o">=</span> <span class="s2">&quot;Cannot sample from an empty storage.&quot;</span>
 
@@ -840,6 +844,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_max_priority_within_buffer</span> <span class="o">=</span> <span class="n">max_priority_within_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">RL_WARNINGS</span> <span class="ow">and</span> <span class="n">SumSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">EXTENSION_WARNING</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(alpha=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span><span class="si">}</span><span class="s2">, beta=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_beta</span><span class="si">}</span><span class="s2">, eps=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_eps</span><span class="si">}</span><span class="s2">, reduction=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="si">}</span><span class="s2">)&quot;</span>
@@ -872,6 +878,22 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">SumSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;SumSegmentTreeFp32 is not available. See warning above.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">MinSegmentTreeFp32</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;MinSegmentTreeFp32 is not available. See warning above.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">SumSegmentTreeFp64</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;SumSegmentTreeFp64 is not available. See warning above.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">MinSegmentTreeFp64</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;MinSegmentTreeFp64 is not available. See warning above.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">FloatType</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sum_tree</span> <span class="o">=</span> <span class="n">SumSegmentTreeFp32</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_min_tree</span> <span class="o">=</span> <span class="n">MinSegmentTreeFp32</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_capacity</span><span class="p">)</span>

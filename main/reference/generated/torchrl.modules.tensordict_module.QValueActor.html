@@ -438,7 +438,7 @@
 such that the action values are used to select an action.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>module</strong> (<em>nn.Module</em>) – a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> used to map the input to
+<dd class="field-odd"><p><strong>module</strong> (<em>nn.Module</em>) – a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> used to map the input to
 the output parameter space. If the class provided is not compatible
 with <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModuleBase</span></code>, it will be
 wrapped in a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code> with
@@ -479,7 +479,7 @@ representing the action mask. Defaults to <code class="docutils literal notransl
 <p class="admonition-title">Note</p>
 <p><code class="docutils literal notranslate"><span class="pre">out_keys</span></code> cannot be passed. If the module is a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictModule</span></code>
 instance, the out_keys will be updated accordingly. For regular
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> instance, the triplet <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;,</span> <span class="pre">action_value_key,</span> <span class="pre">&quot;chosen_action_value&quot;]</span></code>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> instance, the triplet <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;,</span> <span class="pre">action_value_key,</span> <span class="pre">&quot;chosen_action_value&quot;]</span></code>
 will be used.</p>
 </div>
 <p class="rubric">Examples</p>
