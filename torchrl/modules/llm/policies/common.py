@@ -7,7 +7,6 @@ from __future__ import annotations
 import threading
 import warnings
 import weakref
-
 from functools import wraps
 from typing import Any, Literal, overload
 
@@ -1334,6 +1333,13 @@ def _batching(func):
                         ).unbind(0)
                         for i, future in enumerate(not_done):
                             future.set_result(results[i])
+                        # remove not done futures from the queue
+                        self._batch_queue = [
+                            q
+                            for q, f in zip(self._batch_queue, futures)
+                            if f not in not_done
+                        ]
+                        self._futures = [f for f in self._futures if f not in not_done]
                 except Exception as e:
                     # Set exception for remaining futures that haven't been completed yet
                     for future in not_done:

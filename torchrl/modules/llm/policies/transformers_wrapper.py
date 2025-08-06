@@ -2405,3 +2405,298 @@ class TransformersWrapper(LLMWrapperBase):
         position_ids = global_positions - sequence_starts
 
         return position_ids.unsqueeze(0)  # (1, total_length)
+
+
+class RemoteTransformersWrapper:
+    """A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.
+
+    This class wraps a TransformersWrapper instance as a Ray actor, allowing remote execution
+    while providing a clean interface that doesn't require explicit `remote()` and `get()` calls.
+
+    Args:
+        model (str): The Hugging Face Transformers model to wrap.
+            Must be a string (model name or path) that will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
+            Transformers models are not serializable, so only model names/paths are supported.
+        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
+        **kwargs: All other arguments are passed directly to TransformersWrapper.
+
+    Example:
+        >>> import ray
+        >>> from torchrl.modules.llm.policies import RemoteTransformersWrapper
+        >>>
+        >>> # Initialize Ray if not already done
+        >>> if not ray.is_initialized():
+        ...     ray.init()
+        >>>
+        >>> # Create remote wrapper
+        >>> remote_wrapper = RemoteTransformersWrapper(
+        ...     model="gpt2",
+        ...     input_mode="history",
+        ...     generate=True,
+        ...     generate_kwargs={"max_new_tokens": 50}
+        ... )
+        >>>
+        >>> # Use like a regular wrapper (no remote/get calls needed)
+        >>> result = remote_wrapper(tensordict_input)
+        >>> print(result["text"].response)
+    """
+
+    def __init__(self, model, max_concurrency: int = 16, **kwargs):
+        import ray
+
+        # Validate model parameter - only strings are allowed for Transformers
+        if not isinstance(model, str):
+            raise ValueError(
+                "For RemoteTransformersWrapper, the model parameter must be a string "
+                f"(model name or path). Got type: {type(model)}. "
+                "Transformers models are not serializable, so only model names/paths are supported."
+            )
+
+        if not ray.is_initialized():
+            ray.init()
+        # Create the remote actor
+        self._remote_wrapper = (
+            ray.remote(TransformersWrapper)
+            .options(max_concurrency=max_concurrency)
+            .remote(model, **kwargs)
+        )
+
+    def __call__(self, tensordict, **kwargs):
+        """Forward pass that automatically handles remote execution."""
+        import ray
+
+        return ray.get(self._remote_wrapper.forward.remote(tensordict, **kwargs))
+
+    def get_new_version(self, **kwargs):
+        """Get a new version of the wrapper with altered parameters."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_new_version.remote(**kwargs))
+
+    def get_dist(self, tensordict, **kwargs):
+        """Get distribution from logits/log-probs with optional masking."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_dist.remote(tensordict, **kwargs))
+
+    def get_dist_with_prompt_mask(self, tensordict, **kwargs):
+        """Get distribution masked to only include response tokens (exclude prompt)."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper.get_dist_with_prompt_mask.remote(tensordict, **kwargs)
+        )
+
+    def _get_dist_with_assistant_mask(self, tensordict, **kwargs):
+        """Get distribution masked to only include assistant tokens."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_assistant_mask.remote(
+                tensordict, **kwargs
+            )
+        )
+
+    def _get_dist_with_attention_mask(self, tensordict, **kwargs):
+        """Get distribution masked using attention mask."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_attention_mask.remote(
+                tensordict, **kwargs
+            )
+        )
+
+    def _get_dist_with_custom_mask(self, tensordict, **kwargs):
+        """Get distribution with custom mask."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_custom_mask.remote(tensordict, **kwargs)
+        )
+
+    def _get_sft_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for SFT loss (response tokens only)."""
+        import ray
+
+        return ray.get(self._remote_wrapper._get_sft_dist.remote(tensordict, **kwargs))
+
+    def _get_rlhf_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for RLHF loss (assistant tokens only)."""
+        import ray
+
+        return ray.get(self._remote_wrapper._get_rlhf_dist.remote(tensordict, **kwargs))
+
+    def _get_generic_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for generic losses (all tokens)."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_generic_dist.remote(tensordict, **kwargs)
+        )
+
+    def log_prob(self, data, **kwargs):
+        """Compute log probabilities."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_prob.remote(data, **kwargs))
+
+    def cleanup_batching(self):
+        """Clean up batching resources."""
+        import ray
+
+        return ray.get(self._remote_wrapper.cleanup_batching.remote())
+
+    def __del__(self):
+        """Cleanup when the wrapper is destroyed."""
+        try:
+            import ray
+
+            if hasattr(self, "_remote_wrapper") and ray.is_initialized():
+                # Clean up batching resources
+                try:
+                    ray.get(self._remote_wrapper.cleanup_batching.remote())
+                except Exception:
+                    pass  # Ignore cleanup errors during destruction
+        except Exception:
+            pass  # Ignore any errors during cleanup
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup."""
+        self.cleanup_batching()
+
+    def get_batching_state(self):
+        """Get the current batching state."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_batching_state.remote())
+
+    @property
+    def generate(self):
+        """Whether text generation is enabled."""
+        import ray
+
+        return ray.get(self._remote_wrapper.generate.remote)
+
+    @property
+    def pad_output(self):
+        """Whether output sequences are padded."""
+        import ray
+
+        return ray.get(self._remote_wrapper.pad_output.remote)
+
+    @property
+    def text_key(self):
+        """The key for text output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.text_key.remote)
+
+    @property
+    def tokens_key(self):
+        """The key for tokens output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.tokens_key.remote)
+
+    @property
+    def masks_key(self):
+        """The key for masks output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.masks_key.remote)
+
+    @property
+    def log_probs_key(self):
+        """The key for log probabilities output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_probs_key.remote)
+
+    @property
+    def in_keys(self):
+        """The input keys."""
+        import ray
+
+        return ray.get(self._remote_wrapper.in_keys.remote)
+
+    @property
+    def out_keys(self):
+        """The output keys."""
+        import ray
+
+        return ray.get(self._remote_wrapper.out_keys.remote)
+
+    @property
+    def inplace(self):
+        """Whether in-place operations are used."""
+        import ray
+
+        return ray.get(self._remote_wrapper.inplace.remote)
+
+    @property
+    def device(self):
+        """The device used for computation."""
+        import ray
+
+        return ray.get(self._remote_wrapper.device.remote)
+
+    @property
+    def layout(self):
+        """The layout used for output tensors."""
+        import ray
+
+        return ray.get(self._remote_wrapper.layout.remote)
+
+    @property
+    def num_samples(self):
+        """The number of samples to generate."""
+        import ray
+
+        return ray.get(self._remote_wrapper.num_samples.remote)
+
+    @property
+    def batching(self):
+        """Whether batching is enabled."""
+        import ray
+
+        return ray.get(self._remote_wrapper.batching.remote)
+
+    @property
+    def collector(self):
+        """The collector associated with the module."""
+        import ray
+
+        return ray.get(self._remote_wrapper.collector.remote)
+
+    @property
+    def log_prob_keys(self):
+        """The keys for log probabilities."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_prob_keys.remote)
+
+    @log_prob_keys.setter
+    def log_prob_keys(self, value):
+        """Set the keys for log probabilities."""
+        import ray
+
+        ray.get(self._remote_wrapper.log_prob_keys.remote(value))
+
+    @property
+    def dist_params_keys(self):
+        """The keys for distribution parameters."""
+        import ray
+
+        return ray.get(self._remote_wrapper.dist_params_keys.remote)
+
+    @property
+    def dist_sample_keys(self):
+        """The keys for distribution samples."""
+        import ray
+
+        return ray.get(self._remote_wrapper.dist_sample_keys.remote)

@@ -2850,6 +2850,53 @@ class TestBatching:
         assert result["text"].prompt == "Single question without batch dimension?"
 
 
+class TestRayWrapper:
+    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    def test_ray_wrapper(self, sample_text, backend):
+        import gc
+        from concurrent.futures import ThreadPoolExecutor
+
+        from torchrl import logger as torchrl_logger
+        from torchrl.modules.llm.policies import (
+            RemoteTransformersWrapper,
+            RemotevLLMWrapper,
+        )
+
+        # check that the wrapper is remote
+        if backend == "vllm":
+            cls = RemotevLLMWrapper
+        elif backend == "transformers":
+            cls = RemoteTransformersWrapper
+        else:
+            raise ValueError(f"Invalid backend: {backend}")
+        model = cls(
+            model="Qwen/Qwen2.5-0.5B",
+            generate=True,
+            input_mode="text",
+            batching=True,
+            generate_kwargs={"max_new_tokens": 10},
+        )
+        try:
+            # check batching
+            data = TensorDict(
+                text=Text(prompt=sample_text[0]),
+                batch_size=(),
+            )
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(model, data) for _ in range(10)]
+                torchrl_logger.info(f"Futures: {futures}")
+                results = [future.result() for future in futures]
+                torchrl_logger.info(f"Results: {results}")
+                assert all(result.batch_size == () for result in results)
+                assert all(
+                    isinstance(result["text"].response, str) for result in results
+                )
+                torchrl_logger.info("Batching test passed")
+        finally:
+            del model
+            gc.collect()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
