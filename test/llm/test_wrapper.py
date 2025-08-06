@@ -8,6 +8,7 @@ import argparse
 import importlib.util
 
 import os
+import time
 from functools import partial
 
 import pytest
@@ -18,6 +19,7 @@ from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm.policies.common import (
+    _batching,
     ChatHistory,
     LogProbs,
     Masks,
@@ -72,7 +74,11 @@ def vllm_instance():
     assert os.environ.get("VLLM_USE_V1") == "0"
 
     try:
-        model = LLM("Qwen/Qwen2.5-0.5B")
+        model = LLM(
+            "Qwen/Qwen2.5-0.5B",
+            max_num_batched_tokens=32768,  # Match max_model_len
+            max_model_len=32768,
+        )
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
         return model, tokenizer
@@ -280,12 +286,133 @@ def check_output_shapes(out, pad_output, requested_log_probs=False):
                         f"{obj_name}: if 'full' is defined, either both 'prompt' and 'response' must be set or neither of them. "
                         f"prompt={has_prompt}, response={has_response}, full={obj.full is not None}"
                     )
+
+
+def create_batching_test_wrapper(
+    wrapper_class, vllm_instance, transformers_instance, **kwargs
+):
+    """Helper function to create a wrapper for batching tests with proper error handling."""
+    # Handle the case where vLLM is not available
+    if wrapper_class == vLLMWrapper:
+        try:
+            model, tokenizer = vllm_instance
+        except Exception as e:
+            if "vLLM compatibility issue" in str(e):
+                pytest.skip("vLLM not available due to compatibility issues")
+            raise
     else:
-        # we can simply iterate over out
-        for _out in out.unbind(0):
-            check_output_shapes(
-                _out, pad_output=not _out.ndim, requested_log_probs=requested_log_probs
+        model, tokenizer = transformers_instance
+
+    return wrapper_class(
+        model,
+        tokenizer=tokenizer,
+        input_mode="text",
+        generate=True,
+        return_log_probs=True,
+        **kwargs,
+    )
+
+
+@pytest.fixture
+def monkey_patch_forward_for_timing():
+    """Fixture to monkey patch the forward method to add timing and batch size tracking."""
+    import threading
+    import time
+
+    # Track processing times and batch sizes
+    processing_times = []
+    batch_sizes = []
+    processing_lock = threading.Lock()
+
+    vllm_original_forward = vLLMWrapper.forward
+    while hasattr(vllm_original_forward, "__wrapped__"):
+        vllm_original_forward = vllm_original_forward.__wrapped__
+    vLLMWrapper._original_forward_unwrapped = vllm_original_forward
+    transformers_original_forward = TransformersWrapper.forward
+    while hasattr(transformers_original_forward, "__wrapped__"):
+        transformers_original_forward = transformers_original_forward.__wrapped__
+    TransformersWrapper._original_forward_unwrapped = transformers_original_forward
+
+    def slow_forward(self, td_input, **kwargs):
+        """Slow version of forward to make batching observable."""
+        start_time = time.time()
+
+        # Simulate slow processing
+        time.sleep(0.1)  # Fixed duration for consistency
+
+        with processing_lock:
+            batch_size = td_input.batch_size[0] if td_input.batch_dims > 0 else 1
+            batch_sizes.append(batch_size)
+            processing_times.append(time.time() - start_time)
+
+        # Call the original forward method
+        result = self._original_forward_unwrapped(td_input, **kwargs)
+        return result
+
+    # Patch the classes directly
+    vLLMWrapper.slow_forward = _batching(slow_forward)
+    TransformersWrapper.slow_forward = _batching(slow_forward)
+
+    # Yield the tracking data
+    yield {
+        "processing_times": processing_times,
+        "batch_sizes": batch_sizes,
+        "processing_lock": processing_lock,
+    }
+
+    delattr(vLLMWrapper, "slow_forward")
+    delattr(TransformersWrapper, "slow_forward")
+    # delattr(vLLMWrapper, "_original_forward_unwrapped")
+    # delattr(TransformersWrapper, "_original_forward_unwrapped")
+
+
+@pytest.fixture
+def monkey_patch_forward_for_instrumentation():
+    """Fixture to monkey patch the forward method to add detailed processing event tracking."""
+    import threading
+    import time
+
+    # Track processing events
+    processing_events = []
+    processing_lock = threading.Lock()
+
+    vllm_original_forward = vLLMWrapper.forward.__wrapped__
+    while hasattr(vllm_original_forward, "__wrapped__"):
+        vllm_original_forward = vllm_original_forward.__wrapped__
+    vLLMWrapper._original_forward_unwrapped = vllm_original_forward
+    transformers_original_forward = TransformersWrapper.forward
+    while hasattr(transformers_original_forward, "__wrapped__"):
+        transformers_original_forward = transformers_original_forward.__wrapped__
+    TransformersWrapper._original_forward_unwrapped = transformers_original_forward
+
+    def instrumented_forward(self, td_input, **kwargs):
+        """Instrumented forward to track processing."""
+        with processing_lock:
+            processing_events.append(
+                {
+                    "timestamp": time.time(),
+                    "batch_size": td_input.batch_size[0]
+                    if td_input.batch_dims > 0
+                    else 1,
+                    "thread_id": threading.current_thread().ident,
+                }
             )
+
+        # Call the original forward method
+        return self._original_forward_unwrapped(td_input, **kwargs)
+
+    # Patch the classes directly
+    vLLMWrapper.instrumented_forward = _batching(instrumented_forward)
+    TransformersWrapper.instrumented_forward = _batching(instrumented_forward)
+
+    # Yield the tracking data
+    yield {"processing_events": processing_events, "processing_lock": processing_lock}
+
+    # Restore original methods
+    delattr(vLLMWrapper, "instrumented_forward")
+    delattr(TransformersWrapper, "instrumented_forward")
+    # delattr(vLLMWrapper, "_original_forward_unwrapped")
+    # delattr(TransformersWrapper, "_original_forward_unwrapped")
 
 
 @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
@@ -384,10 +511,11 @@ class TestWrappers:
             assert hasattr(tokens_obj, "response")
             assert hasattr(tokens_obj, "full")
             assert hasattr(tokens_obj, "padded")
-        if batch_size == "null":
-            assert tokens_obj.padded == pad_output
+        padded = tokens_obj.padded
+        if isinstance(padded, bool):
+            assert padded == pad_output
         else:
-            assert all(tokens_obj.padded) == pad_output
+            assert all(pad == pad_output for pad in padded)
 
         if generate:
             if pad_output:
@@ -408,10 +536,11 @@ class TestWrappers:
             assert hasattr(masks_obj, "all_attention_mask")
             assert hasattr(masks_obj, "all_assistant_mask")
             assert hasattr(masks_obj, "padded")
-        if batch_size == "null":
-            assert masks_obj.padded == pad_output
+        padded = masks_obj.padded
+        if isinstance(padded, bool):
+            assert padded == pad_output
         else:
-            assert all(masks_obj.padded) == pad_output
+            assert all(pad == pad_output for pad in padded)
 
         log_probs_obj = result["log_probs"]
         if pad_output:
@@ -419,10 +548,11 @@ class TestWrappers:
             assert hasattr(log_probs_obj, "response")
             assert hasattr(log_probs_obj, "full")
             assert hasattr(log_probs_obj, "padded")
-        if batch_size == "null":
-            assert log_probs_obj.padded == pad_output
+        padded = log_probs_obj.padded
+        if isinstance(padded, bool):
+            assert padded == pad_output
         else:
-            assert all(log_probs_obj.padded) == pad_output
+            assert all(pad == pad_output for pad in padded)
 
     @pytest.mark.parametrize(
         "wrapper_class",
@@ -1931,6 +2061,840 @@ class TestPacking:
         result_padded = wrapped_padded(td)
         result_packed = wrapper_packed(td)
         assert_close(result_packed["log_probs"], result_padded["log_probs"])
+
+
+class TestBatching:
+
+    # ================================================
+    # Batching Tests
+    # ================================================
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching(self, wrapper_class, vllm_instance, transformers_instance):
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        # Handle the case where vLLM is not available
+        if wrapper_class == vLLMWrapper:
+            try:
+                model, tokenizer = vllm_instance
+            except Exception as e:
+                if "vLLM compatibility issue" in str(e):
+                    pytest.skip("vLLM not available due to compatibility issues")
+                raise
+        else:
+            model, tokenizer = transformers_instance
+
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            min_batch_size=4,
+        )
+        # Create 2 threads and send inputs
+        inputs = [
+            TensorDict(
+                text=Text(prompt=[f"Question {i}?", f"Question {i+2}?"]),
+                batch_size=(2,),
+            )
+            for i in range(2)
+        ]
+        pool = ThreadPoolExecutor(max_workers=2)
+        try:
+            futures = [pool.submit(wrapper, input) for input in inputs]
+            wait(futures)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_uneven(self, wrapper_class, vllm_instance, transformers_instance):
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        if wrapper_class == vLLMWrapper:
+            model, tokenizer = vllm_instance
+        else:
+            model, tokenizer = transformers_instance
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            min_batch_size=5,
+            batching_timeout=5,  # Increased timeout for CI environments
+        )
+        inputs = [
+            TensorDict(text=Text(prompt=["Question 1?"]), batch_size=(1,)),
+            TensorDict(
+                text=Text(prompt=["Question 2?", "Question 3?", "Question 4?"]),
+                batch_size=(3,),
+            ),
+            TensorDict(
+                text=Text(prompt=["Question 5?", "Question 6?"]), batch_size=(2,)
+            ),
+        ]
+        pool = ThreadPoolExecutor(max_workers=3)
+        try:
+            futures = []
+            for input in inputs:
+                futures.append(pool.submit(wrapper, input))
+                time.sleep(0.05)  # Increased delay for more reliable timing
+
+            # Wait for first two futures with longer timeout
+            wait(futures[:2], timeout=3)
+
+            # Check results with more flexible assertions
+            result0 = futures[0].result()
+            result1 = futures[1].result()
+
+            assert result0["text"].prompt == ["Question 1?"]
+            assert result1["text"].prompt == [
+                "Question 2?",
+                "Question 3?",
+                "Question 4?",
+            ]
+
+            # The third future may or may not be done depending on timing
+            # Wait for it with a reasonable timeout
+            wait(futures[2:], timeout=10)
+            if not futures[2].done():
+                raise RuntimeError("Third future not done")
+            result2 = futures[2].result()
+            assert result2["text"].prompt == ["Question 5?", "Question 6?"]
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+            wrapper.cleanup_batching()
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_cleanup(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test batching cleanup functionality."""
+        if wrapper_class == vLLMWrapper:
+            model, tokenizer = vllm_instance
+        else:
+            model, tokenizer = transformers_instance
+
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            min_batch_size=3,
+        )
+
+        # Check initial state
+        state = wrapper.get_batching_state()
+        assert state["batching_enabled"] is True
+        assert state["min_batch_size"] == 3
+        assert state["queue_size"] == 0
+        assert state["pending_futures"] == 0
+
+        # Add some inputs to the queue
+        input1 = TensorDict(text=Text(prompt=["Test 1"]), batch_size=(1,))
+        input2 = TensorDict(text=Text(prompt=["Test 2"]), batch_size=(1,))
+
+        # Submit inputs (they won't be processed immediately due to batch size)
+        from concurrent.futures import ThreadPoolExecutor
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        try:
+            future1 = pool.submit(wrapper, input1)
+            future2 = pool.submit(wrapper, input2)
+
+            # Check state after adding inputs
+            state = wrapper.get_batching_state()
+            assert state["queue_size"] >= 0  # May be 0 if processed immediately
+            assert state["pending_futures"] >= 0
+
+            # Clean up
+            wrapper.cleanup_batching()
+
+            # Check state after cleanup
+            state = wrapper.get_batching_state()
+            assert state["queue_size"] == 0
+            assert state["pending_futures"] == 0
+
+            # Wait for futures to complete or fail
+            try:
+                future1.result(timeout=5)
+            except Exception:
+                # Futures may fail after cleanup, which is expected
+                pass
+            try:
+                future2.result(timeout=5)
+            except Exception:
+                # Futures may fail after cleanup, which is expected
+                pass
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+            wrapper.cleanup_batching()
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_min_batch_size_one_immediate_processing(
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        monkey_patch_forward_for_timing,
+    ):
+        """Test that with min_batch_size=1, first request is processed immediately and subsequent ones are grouped."""
+        import time
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        # Create wrapper using helper function
+        wrapper = create_batching_test_wrapper(
+            wrapper_class,
+            vllm_instance,
+            transformers_instance,
+            min_batch_size=1,
+            max_batch_size=3,  # Limit batch size to make grouping observable
+            batching_timeout=2.0,
+        )
+
+        # Monkey patch the forward method using fixture
+        processing_times = monkey_patch_forward_for_timing["processing_times"]
+        batch_sizes = monkey_patch_forward_for_timing["batch_sizes"]
+
+        # Create inputs with different timestamps
+        inputs = [
+            TensorDict(text=Text(prompt=[f"Request {i}"]), batch_size=(1,))
+            for i in range(5)
+        ]
+
+        # Submit requests with small delays to simulate real-world scenario
+        pool = ThreadPoolExecutor(max_workers=5)
+        futures = []
+
+        try:
+            for i, input_td in enumerate(inputs):
+                # Small delay between submissions to allow for batching
+                if i > 0:
+                    time.sleep(0.05)
+                future = pool.submit(wrapper.slow_forward, input_td)
+                futures.append(future)
+
+            # Wait for all futures to complete
+            done, not_done = wait(futures, timeout=30)
+            assert len(not_done) == 0, f"Futures not done: {not_done}"
+
+            # Verify all futures completed successfully
+            for result in done:
+                result = result.result()
+                assert "text" in result
+                assert result["text"].response is not None
+
+            # Analyze the results
+            assert len(processing_times) > 0, "No processing occurred"
+            assert len(batch_sizes) > 0, "No batch size tracking"
+
+            # The first request should be processed immediately (batch_size=1)
+            assert (
+                batch_sizes[0] == 1
+            ), f"First request should be processed alone, got batch_size={batch_sizes[0]}"
+
+            # Subsequent requests should be grouped (batch_size > 1)
+            if len(batch_sizes) > 1:
+                # At least one subsequent batch should have multiple items
+                subsequent_batches = batch_sizes[1:]
+                assert any(
+                    bs > 1 for bs in subsequent_batches
+                ), f"Subsequent requests should be grouped, but all batch sizes were 1: {subsequent_batches}"
+
+            # Verify that processing times are reasonable (not too fast, indicating no batching)
+            # The first request should take at least the sleep time
+            assert (
+                processing_times[0] >= 0.09
+            ), f"First request processed too quickly: {processing_times[0]}"
+
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+            wrapper.cleanup_batching()
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_continuous_throughput(
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        monkey_patch_forward_for_instrumentation,
+    ):
+        """Test that the wrapper stays busy with continuous requests."""
+        import time
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        # Create wrapper using helper function
+        wrapper = create_batching_test_wrapper(
+            wrapper_class,
+            vllm_instance,
+            transformers_instance,
+            min_batch_size=1,
+            max_batch_size=2,  # Small batch size to maximize throughput
+            batching_timeout=5.0,
+        )
+
+        # Monkey patch the forward method using fixture
+        processing_events = monkey_patch_forward_for_instrumentation[
+            "processing_events"
+        ]
+
+        # Submit continuous requests
+        pool = ThreadPoolExecutor(max_workers=3)
+        futures = []
+
+        try:
+            # Submit requests rapidly
+            for i in range(10):
+                input_td = TensorDict(
+                    text=Text(prompt=[f"Continuous request {i}"]), batch_size=(1,)
+                )
+                future = pool.submit(wrapper.instrumented_forward, input_td)
+                futures.append(future)
+                time.sleep(0.02)  # Small delay between submissions
+
+            # Wait for all futures to complete
+            wait(futures, timeout=30)
+
+            # Verify all futures completed successfully
+            for future in futures:
+                result = future.result(timeout=5)
+                assert "text" in result
+
+            # Analyze processing patterns
+            assert len(processing_events) > 0, "No processing occurred"
+
+            # Check that processing happened across multiple threads (indicating concurrent processing)
+            thread_ids = {event["thread_id"] for event in processing_events}  # noqa
+            assert (
+                len(thread_ids) > 1
+            ), f"All processing happened in single thread: {thread_ids}"
+
+            # Check that we have multiple processing events (indicating continuous activity)
+            assert (
+                len(processing_events) >= 5
+            ), f"Too few processing events: {len(processing_events)}"
+
+            # Check that batches were formed (some batch sizes > 1)
+            batch_sizes = [event["batch_size"] for event in processing_events]
+            assert any(
+                bs > 1 for bs in batch_sizes
+            ), f"No batching occurred: {batch_sizes}"
+
+            # Check processing timing - should be relatively continuous
+            timestamps = [event["timestamp"] for event in processing_events]
+            time_diffs = [
+                timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)
+            ]
+
+            # Most time differences should be small (indicating continuous processing)
+            small_diffs = [diff for diff in time_diffs if diff < 1.0]
+            assert (
+                len(small_diffs) >= len(time_diffs) * 0.7
+            ), f"Too many large gaps in processing: {time_diffs}"
+
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+            wrapper.cleanup_batching()
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_configuration_validation(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that batching configuration validation works correctly."""
+        # Handle the case where vLLM is not available
+        if wrapper_class == vLLMWrapper:
+            try:
+                model, tokenizer = vllm_instance
+            except Exception as e:
+                if "vLLM compatibility issue" in str(e):
+                    pytest.skip("vLLM not available due to compatibility issues")
+                raise
+        else:
+            model, tokenizer = transformers_instance
+
+        # Test valid configuration: min_batch_size <= max_batch_size
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            batching=True,
+            min_batch_size=2,
+            max_batch_size=5,
+        )
+        assert wrapper._min_batch_size == 2
+        assert wrapper._max_batch_size == 5
+
+        # Test valid configuration: min_batch_size == max_batch_size
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            batching=True,
+            min_batch_size=3,
+            max_batch_size=3,
+        )
+        assert wrapper._min_batch_size == 3
+        assert wrapper._max_batch_size == 3
+
+        # Test invalid configuration: min_batch_size > max_batch_size
+        with pytest.raises(
+            ValueError, match="min_batch_size \\(5\\) must be <= max_batch_size \\(2\\)"
+        ):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                batching=True,
+                min_batch_size=5,
+                max_batch_size=2,
+            )
+
+        # Test that validation only applies when both are specified
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            batching=True,
+            min_batch_size=5,
+            max_batch_size=None,
+        )
+        assert wrapper._min_batch_size == 5
+        assert wrapper._max_batch_size is None
+
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            batching=True,
+            min_batch_size=None,
+            max_batch_size=2,
+        )
+        assert wrapper._min_batch_size == 1
+        assert wrapper._max_batch_size == 2
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_standardized_generation_parameters(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that standardized generation parameters work across both wrappers."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test with standardized parameters
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            generate_kwargs={
+                "max_new_tokens": 10,  # Standardized name
+                "num_return_sequences": 1,  # Standardized name
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 50,
+                "repetition_penalty": 1.1,
+                "do_sample": True,
+                "num_beams": 1,
+                "length_penalty": 1.0,
+                "early_stopping": False,
+                "skip_special_tokens": True,
+                "logprobs": True,
+            },
+        )
+
+        # Test that the wrapper was created successfully
+        assert wrapper is not None
+
+        # Test that the parameters were properly converted
+        if wrapper_class == vLLMWrapper:
+            # Check that vLLM-specific parameters were set
+            assert (
+                wrapper.sampling_params.max_tokens == 10
+            )  # max_new_tokens -> max_tokens
+            assert wrapper.sampling_params.n == 1  # num_return_sequences -> n
+            assert wrapper.sampling_params.temperature == 0.7
+            assert wrapper.sampling_params.top_p == 0.9
+            assert wrapper.sampling_params.top_k == 50
+            assert wrapper.sampling_params.repetition_penalty == 1.1
+            assert wrapper.sampling_params.best_of == 1  # num_beams -> best_of
+            # do_sample=True means we use sampling (temperature > 0), not greedy decoding
+            assert wrapper.sampling_params.temperature > 0
+        else:
+            # Check that Transformers parameters were set
+            assert wrapper.generate_kwargs["max_new_tokens"] == 10
+            assert wrapper.generate_kwargs["num_return_sequences"] == 1
+            assert wrapper.generate_kwargs["temperature"] == 0.7
+            assert wrapper.generate_kwargs["top_p"] == 0.9
+            assert wrapper.generate_kwargs["top_k"] == 50
+            assert wrapper.generate_kwargs["repetition_penalty"] == 1.1
+            assert wrapper.generate_kwargs["do_sample"] is True
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_legacy_parameter_names(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that legacy parameter names are automatically converted to standardized names."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test with legacy parameter names
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            generate_kwargs={
+                "max_tokens": 10,  # Legacy vLLM name
+                "n": 1,  # Legacy vLLM name
+                "temperature": 0.7,
+            },
+        )
+
+        # Test that the wrapper was created successfully
+        assert wrapper is not None
+
+        # Test that the parameters were properly converted
+        if wrapper_class == vLLMWrapper:
+            # Check that legacy names were converted to vLLM format
+            assert (
+                wrapper.sampling_params.max_tokens == 10
+            )  # max_tokens -> max_tokens (no change)
+            assert wrapper.sampling_params.n == 1  # n -> n (no change)
+            assert wrapper.sampling_params.temperature == 0.7
+        else:
+            # Check that legacy names were converted to Transformers format
+            assert (
+                wrapper.generate_kwargs["max_new_tokens"] == 10
+            )  # max_tokens -> max_new_tokens
+            assert (
+                wrapper.generate_kwargs["num_return_sequences"] == 1
+            )  # n -> num_return_sequences
+            assert wrapper.generate_kwargs["temperature"] == 0.7
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_parameter_conflict_resolution(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that parameter conflicts are resolved correctly when both legacy and standardized names are used."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test with conflicting parameters - legacy name should win
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            generate_kwargs={
+                "max_tokens": 20,  # Legacy name
+                "max_new_tokens": 10,  # Standardized name
+                "n": 2,  # Legacy name
+                "num_return_sequences": 1,  # Standardized name
+                "temperature": 0.7,
+            },
+        )
+
+        # Test that the wrapper was created successfully
+        assert wrapper is not None
+
+        # Test that the parameters were properly resolved
+        if wrapper_class == vLLMWrapper:
+            # Legacy names should win
+            assert wrapper.sampling_params.max_tokens == 20  # max_tokens wins
+            assert wrapper.sampling_params.n == 2  # n wins
+            assert wrapper.sampling_params.temperature == 0.7
+        else:
+            # Legacy names should be converted to standardized names
+            assert (
+                wrapper.generate_kwargs["max_new_tokens"] == 20
+            )  # max_tokens -> max_new_tokens
+            assert (
+                wrapper.generate_kwargs["num_return_sequences"] == 2
+            )  # n -> num_return_sequences
+            assert wrapper.generate_kwargs["temperature"] == 0.7
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_parameter_validation(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that parameter validation works correctly."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test invalid temperature
+        with pytest.raises(ValueError, match="Temperature must be non-negative"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"temperature": -0.1},
+            )
+
+        # Test invalid top_p
+        with pytest.raises(ValueError, match="top_p must be between 0 and 1"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"top_p": 1.5},
+            )
+
+        # Test invalid top_k
+        with pytest.raises(ValueError, match="top_k must be positive"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"top_k": 0},
+            )
+
+        # Test invalid repetition_penalty
+        with pytest.raises(ValueError, match="repetition_penalty must be positive"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"repetition_penalty": 0.0},
+            )
+
+        # Test conflicting do_sample and temperature
+        with pytest.raises(
+            ValueError, match="When do_sample=False.*temperature must be 0"
+        ):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"do_sample": False, "temperature": 0.7},
+            )
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_null_dimension(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that null dimension inputs (batch_dims=0) work correctly.
+
+        This test specifically verifies the fix for handling TensorDicts with batch_dims=0
+        in the batching decorator, ensuring proper squeeze operation and result handling.
+        """
+        # Handle the case where vLLM is not available
+        if wrapper_class == vLLMWrapper:
+            try:
+                model, tokenizer = vllm_instance
+            except Exception as e:
+                if "vLLM compatibility issue" in str(e):
+                    pytest.skip("vLLM not available due to compatibility issues")
+                raise
+        else:
+            model, tokenizer = transformers_instance
+
+        # Test without batching first to verify basic functionality
+        wrapper_no_batch = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            # No batching parameters to avoid batching issues
+        )
+
+        # Test 1: Single null dimension input should work
+        # This is the key test case - a TensorDict without batch dimensions
+        null_dim_input = TensorDict(
+            text=Text(prompt="Single question without batch dimension?"),
+            batch_size=(),  # Empty tuple means no batch dimension
+        )
+
+        result_null = wrapper_no_batch(null_dim_input)
+
+        # Verify the result structure
+        assert "text" in result_null
+        assert "tokens" in result_null
+        assert "masks" in result_null
+        assert "log_probs" in result_null
+
+        # Verify the result has the expected shape (should maintain null dimension)
+        assert result_null.batch_size == ()
+        assert isinstance(
+            result_null["text"].prompt, str
+        )  # Should be a single string, not a list
+
+        # Test 2: Batch input should work normally
+        batch_input = TensorDict(
+            text=Text(prompt=["Question 1?", "Question 2?"]),
+            batch_size=(2,),
+        )
+
+        result_batch = wrapper_no_batch(batch_input)
+        assert result_batch.batch_size == (2,)
+        assert isinstance(result_batch["text"].prompt, list)
+        assert len(result_batch["text"].prompt) == 2
+
+        # Test 3: Test with batching enabled but with min_batch_size=1 to avoid complex batching
+        wrapper_with_batch = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            min_batch_size=1,  # Set to 1 to avoid complex batching scenarios
+        )
+
+        # Test null dimension with batching enabled
+        result_null_batch = wrapper_with_batch(null_dim_input)
+
+        # Verify the result structure
+        assert "text" in result_null_batch
+        assert "tokens" in result_null_batch
+        assert "masks" in result_null_batch
+        assert "log_probs" in result_null_batch
+
+        # Verify the result has the expected shape (should maintain null dimension)
+        assert result_null_batch.batch_size == ()
+        assert isinstance(
+            result_null_batch["text"].prompt, str
+        )  # Should be a single string, not a list
+
+        # Test 4: Verify that the _batching decorator correctly handles the squeeze logic
+        # This tests the specific fix in the _batching decorator
+        from torchrl.modules.llm.policies.common import _batching
+
+        # Create a simple mock function to test the decorator
+        def mock_forward(self, td_input, **kwargs):
+            # Return the input as-is for testing
+            return td_input
+
+        # Apply the batching decorator
+        batched_mock = _batching(mock_forward)
+
+        # Create a mock self object with batching attributes
+        class MockSelf:
+            def __init__(self):
+                self._min_batch_size = 1
+                self._max_batch_size = None
+                self._batch_queue = []
+                self._futures = []
+                self._batching_lock = type(
+                    "MockLock",
+                    (),
+                    {
+                        "__enter__": lambda self: None,
+                        "__exit__": lambda self, *args: None,
+                    },
+                )()
+                self._batching_timeout = 10.0
+
+        mock_self = MockSelf()
+
+        # Test the decorator with null dimension input
+        result = batched_mock(mock_self, null_dim_input)
+
+        # The result should be the same as the input since our mock just returns the input
+        assert result.batch_size == ()
+        assert result["text"].prompt == "Single question without batch dimension?"
+
+
+class TestRayWrapper:
+    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    def test_ray_wrapper(self, sample_text, backend):
+        import gc
+        from concurrent.futures import ThreadPoolExecutor
+
+        from torchrl import logger as torchrl_logger
+        from torchrl.modules.llm.policies import (
+            RemoteTransformersWrapper,
+            RemotevLLMWrapper,
+        )
+
+        # check that the wrapper is remote
+        if backend == "vllm":
+            cls = RemotevLLMWrapper
+        elif backend == "transformers":
+            cls = RemoteTransformersWrapper
+        else:
+            raise ValueError(f"Invalid backend: {backend}")
+        model = cls(
+            model="Qwen/Qwen2.5-0.5B",
+            generate=True,
+            input_mode="text",
+            batching=True,
+            generate_kwargs={"max_new_tokens": 10},
+        )
+        try:
+            # check batching
+            data = TensorDict(
+                text=Text(prompt=sample_text[0]),
+                batch_size=(),
+            )
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(model, data) for _ in range(10)]
+                torchrl_logger.info(f"Futures: {futures}")
+                results = [future.result() for future in futures]
+                torchrl_logger.info(f"Results: {results}")
+                assert all(result.batch_size == () for result in results)
+                assert all(
+                    isinstance(result["text"].response, str) for result in results
+                )
+                torchrl_logger.info("Batching test passed")
+        finally:
+            del model
+            gc.collect()
 
 
 if __name__ == "__main__":

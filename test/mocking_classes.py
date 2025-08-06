@@ -2588,3 +2588,69 @@ class MockNestedResetEnv(EnvBase):
 
     def _set_seed(self):
         pass
+
+
+class EnvThatErrorsBecauseOfStack(EnvBase):
+    def __init__(self, target: int = 5, batch_size: int | None = None):
+        super().__init__(device="cpu", batch_size=batch_size)
+        self.target = target
+        self.observation_spec = Bounded(
+            low=0, high=self.target, shape=(1,), dtype=torch.int64
+        )
+        self.action_spec = Categorical(n=2, shape=(1,), dtype=torch.int64)
+        self.reward_spec = Unbounded(shape=(1,), dtype=torch.float32)
+        self.done_spec = Categorical(n=2, shape=(1,), dtype=torch.bool)
+
+    def _reset(self, tensordict: TensorDict | None = None, **kwargs) -> TensorDict:
+        if tensordict is None:
+            tensordict = TensorDict(batch_size=self.batch_size, device=self.device)
+
+        observation = torch.zeros(
+            self.batch_size, dtype=self.observation_spec.dtype, device=self.device
+        )
+        reward = torch.zeros(
+            self.batch_size + torch.Size([1]),
+            dtype=self.reward_spec.dtype,
+            device=self.device,
+        )
+        done = torch.zeros(
+            self.batch_size + torch.Size([1]), dtype=torch.bool, device=self.device
+        )
+        terminated = torch.zeros_like(done)
+        action = torch.zeros(
+            self.batch_size + torch.Size([1]), dtype=torch.int64, device=self.device
+        )
+
+        tensordict.set(self.observation_keys[0], observation)
+        tensordict.set(self.reward_key, reward)
+        tensordict.set(self.done_keys[0], done)
+        tensordict.set("terminated", terminated)
+        tensordict.set(self.action_keys[0], action)
+
+        return tensordict
+
+    def _step(self, tensordict: TensorDict) -> TensorDict:
+        obs = tensordict.get(
+            self.observation_keys[0]
+        )  # the counter value or the counters value if it is several batchs
+        action = tensordict.get(self.action_keys[0]).squeeze(-1)
+
+        new_obs = obs + (action == 1).to(obs.dtype)
+        new_obs = new_obs.clamp_max(self.target)
+        reward = (new_obs == self.target).to(self.reward_spec.dtype).unsqueeze(-1)
+        done = (new_obs == self.target).to(torch.bool).unsqueeze(-1)
+        terminated = done.clone()
+        return TensorDict(
+            {
+                self.observation_keys[0]: new_obs,
+                self.reward_keys[0]: reward,
+                self.done_keys[0]: done,
+                "terminated": terminated,
+                self.action_keys[0]: action.unsqueeze(-1),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        return 0

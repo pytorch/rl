@@ -304,7 +304,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                   provided, the value of the parameters will be resampled uniformly
                   between the minimum and maximum value of the parameter content.
 
-             create_target_params (bool, optional): if ``True``, a detached
+            create_target_params (bool, optional): if ``True``, a detached
                 copy of the parameter will be available to feed a target network
                 under the name ``loss_module.<module_name>_target_params``.
                 If ``False`` (default), this attribute will still be available

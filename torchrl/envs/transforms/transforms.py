@@ -899,7 +899,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         auto_unwrap: bool | None = None,
         **kwargs,
     ) -> None:
-        """Initialize with base_env as first positional argument."""
         ...
 
     @overload
@@ -912,7 +911,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         auto_unwrap: bool | None = None,
         **kwargs,
     ) -> None:
-        """Initialize with base_env as keyword argument."""
         ...
 
     @overload
@@ -925,7 +923,6 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         auto_unwrap: bool | None = None,
         **kwargs,
     ) -> None:
-        """Initialize with env as keyword argument (deprecated)."""
         ...
 
     def __init__(
@@ -1765,7 +1762,7 @@ class Compose(Transform):
                     f"but received an object of type {type(transform)} instead."
                 )
         transform.eval()
-        if type(self) == type(transform) == Compose:
+        if type(self) is type(transform) is Compose:
             for t in transform:
                 self.append(t)
         else:
@@ -7772,7 +7769,7 @@ class StepCounter(Transform):
             # find a matching done key (there might be more than one)
             for done_key in self.done_keys:
                 # check root
-                if type(done_key) != type(step_count_key):
+                if type(done_key) is not type(step_count_key):
                     continue
                 if isinstance(done_key, tuple):
                     if done_key[:-1] == step_count_key[:-1]:
@@ -7803,7 +7800,7 @@ class StepCounter(Transform):
                 # find a matching done key (there might be more than one)
                 for done_key in self.done_keys:
                     # check root
-                    if type(done_key) != type(truncated_key):
+                    if type(done_key) is not type(truncated_key):
                         continue
                     if isinstance(done_key, tuple):
                         if done_key[:-1] == truncated_key[:-1]:
@@ -7826,7 +7823,7 @@ class StepCounter(Transform):
                     # find a matching done key (there might be more than one)
                     for done_key in self.done_keys:
                         # check root
-                        if type(done_key) != type(done_key):
+                        if type(done_key) is not type(done_key):
                             continue
                         if isinstance(done_key, tuple):
                             if done_key[:-1] == done_key[:-1]:
@@ -7862,7 +7859,7 @@ class StepCounter(Transform):
             # find a matching done key (there might be more than one)
             for done_key in self.done_keys:
                 # check root
-                if type(done_key) != type(step_count_key):
+                if type(done_key) is not type(step_count_key):
                     continue
                 if isinstance(done_key, tuple):
                     if done_key[:-1] == step_count_key[:-1]:
@@ -8511,7 +8508,7 @@ class InitTracker(Transform):
         for init_key in self.init_keys:
             for done_key in self.parent.done_keys:
                 # check root
-                if type(done_key) != type(init_key):
+                if type(done_key) is not type(init_key):
                     continue
                 if isinstance(done_key, tuple):
                     if done_key[:-1] == init_key[:-1]:
@@ -10766,7 +10763,7 @@ class TrajCounter(Transform):
         # find a matching done key (there might be more than one)
         for done_key in self.parent.done_keys:
             # check root
-            if type(done_key) != type(traj_count_key):
+            if type(done_key) is not type(traj_count_key):
                 continue
             if isinstance(done_key, tuple):
                 if done_key[:-1] == traj_count_key[:-1]:

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import threading
 import warnings
 from typing import Any, Literal
 
@@ -25,6 +26,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
+    _batching,
     _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
@@ -74,6 +76,55 @@ class vLLMWrapper(LLMWrapperBase):
             If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
+
+            **Standardized Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate (maps to vLLM's max_tokens)
+            * **num_return_sequences** (int): Number of sequences to return (maps to vLLM's n)
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation (maps to vLLM's stop)
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities
+
+                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter
+                    of the class.
+
+            **vLLM-Specific Parameters:**
+
+            * **presence_penalty** (float): Penalty for token presence
+            * **frequency_penalty** (float): Penalty for token frequency
+            * **ignore_eos** (bool): Whether to ignore EOS token
+            * **prompt_logprobs** (bool): Whether to return prompt log probabilities
+            * **detokenize** (bool): Whether to detokenize output
+            * **include_stop_str_in_output** (bool): Whether to include stop strings in output
+            * **spaces_between_special_tokens** (bool): Whether to add spaces between special tokens
+            * **sampling_type** (str): Type of sampling to use
+            * **temperature_last** (bool): Whether to apply temperature only to last token
+            * **top_p_last** (bool): Whether to apply top_p only to last token
+            * **top_k_last** (bool): Whether to apply top_k only to last token
+
+            **Legacy Parameter Support:**
+
+            * **max_tokens** (int): Automatically converted to max_new_tokens
+            * **n** (int): Automatically converted to num_return_sequences
+
+            **Parameter Conflict Resolution:**
+
+            When both legacy (vLLM-specific) and standardized parameter names are provided,
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
+            This ensures clear parameter usage and prevents unexpected behavior.
+
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
         pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
@@ -92,6 +143,26 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+
+    .. _ref_batching:
+        Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
@@ -136,7 +207,13 @@ class vLLMWrapper(LLMWrapperBase):
         ...     tokenizer=tokenizer,
         ...     input_mode="history",
         ...     generate=True,
-        ...     return_log_probs=True
+        ...     return_log_probs=True,
+        ...     generate_kwargs={
+        ...         "max_new_tokens": 50,  # Standardized parameter
+        ...         "temperature": 0.7,
+        ...         "top_p": 0.9,
+        ...         "do_sample": True,
+        ...     }
         ... )
         >>>
         >>> history = History.from_chats([[
@@ -159,7 +236,7 @@ class vLLMWrapper(LLMWrapperBase):
 
     def __init__(
         self,
-        model: vllm.LLM | str,
+        model: vllm.LLM | str,  # type: ignore
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
@@ -182,8 +259,38 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         super().__init__()
+
+        if batching and min_batch_size is None:
+            min_batch_size = 1
+        elif (min_batch_size is not None or max_batch_size is not None) and (
+            batching is False
+        ):
+            raise ValueError(
+                "min_batch_size and max_batch_size must be None if batching is False."
+            )
+
+        # Validate that min_batch_size <= max_batch_size when both are specified
+        if min_batch_size is not None and max_batch_size is not None:
+            if min_batch_size > max_batch_size:
+                raise ValueError(
+                    f"min_batch_size ({min_batch_size}) must be <= max_batch_size ({max_batch_size})"
+                )
+
+        self._min_batch_size = min_batch_size
+        self._max_batch_size = max_batch_size
+        self._batching_timeout = batching_timeout
+        self._batch_queue = []
+        self._futures = []
+        if self.batching:
+            self._batching_lock = threading.Lock()
+        else:
+            self._batching_lock = None
 
         if vllm is None:
             raise ImportError("vllm is required for vLLMWrapper")
@@ -325,8 +432,49 @@ class vLLMWrapper(LLMWrapperBase):
         else:
             generate_kwargs = dict(generate_kwargs)
 
+        # Standardize common parameters
+        generate_kwargs = self._standardize_generate_kwargs(generate_kwargs)
+
+        # Extract wrapper-specific parameters
+        vllm_specific_kwargs = self._get_wrapper_specific_kwargs(
+            generate_kwargs, "vllm"
+        )
+
+        # Convert common parameters back to vLLM format
+        vllm_kwargs = {}
+        for key, value in generate_kwargs.items():
+            if key in self.COMMON_GENERATION_PARAMS:
+                # Convert common names to vLLM names
+                if key == "max_new_tokens":
+                    vllm_kwargs["max_tokens"] = value
+                elif key == "num_return_sequences":
+                    vllm_kwargs["n"] = value
+                elif key == "stop_sequences":
+                    vllm_kwargs["stop"] = value
+                elif key == "logprobs":
+                    vllm_kwargs["logprobs"] = value
+                elif key == "do_sample":
+                    # do_sample is handled through the sampling parameters
+                    # If do_sample=False, we use greedy decoding (temperature=0)
+                    # If do_sample=True, we use the provided sampling parameters
+                    if not value:
+                        vllm_kwargs["temperature"] = 0.0
+                    # If do_sample=True, we keep the existing temperature/top_p/top_k values
+                elif key == "num_beams":
+                    # vLLM uses best_of instead of num_beams
+                    vllm_kwargs["best_of"] = value
+                elif key in ["length_penalty", "early_stopping"]:
+                    # These parameters are not supported by vLLM, skip them
+                    pass
+                else:
+                    # Direct mapping for other common parameters
+                    vllm_kwargs[key] = value
+
+        # Add vLLM-specific parameters
+        vllm_kwargs.update(vllm_specific_kwargs)
+
         self.num_samples = num_samples
-        if generate_kwargs.get("n", 1) > 1 or num_samples is not None:
+        if vllm_kwargs.get("n", 1) > 1 or num_samples is not None:
             if inplace in (True, "empty"):
                 raise ValueError(
                     "inplace must be False (or None) when generating more than one sample."
@@ -334,14 +482,14 @@ class vLLMWrapper(LLMWrapperBase):
             if inplace is None:
                 inplace = False
             if (
-                generate_kwargs.get("n", 1) > 1
+                vllm_kwargs.get("n", 1) > 1
                 and num_samples is not None
-                and generate_kwargs.get("n", 1) != num_samples
+                and vllm_kwargs.get("n", 1) != num_samples
             ):
                 raise ValueError("num_samples differs from generate_kwargs['n'].")
             elif num_samples is None:
-                self.num_samples = generate_kwargs.get("n", 1)
-            generate_kwargs["n"] = self.num_samples
+                self.num_samples = vllm_kwargs.get("n", 1)
+            vllm_kwargs["n"] = self.num_samples
         elif inplace is None:
             inplace = True
 
@@ -352,17 +500,17 @@ class vLLMWrapper(LLMWrapperBase):
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
             # and retrieve the prompt log-probs
-            generate_kwargs["max_tokens"] = 1
+            vllm_kwargs["max_tokens"] = 1
             if not return_log_probs:
                 raise ValueError("return_log_probs must be True when generate=False.")
 
-        generate_kwargs.setdefault("detokenize", not pad_output)
-        generate_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
-        generate_kwargs.setdefault("logprobs", return_log_probs)
-        generate_kwargs.setdefault("include_stop_str_in_output", True)
-        generate_kwargs.setdefault("skip_special_tokens", False)
+        vllm_kwargs.setdefault("detokenize", not pad_output)
+        vllm_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
+        vllm_kwargs.setdefault("logprobs", return_log_probs)
+        vllm_kwargs.setdefault("include_stop_str_in_output", True)
+        vllm_kwargs.setdefault("skip_special_tokens", False)
 
-        sampling_params = SamplingParams(**generate_kwargs)
+        sampling_params = SamplingParams(**vllm_kwargs)
         self.sampling_params = sampling_params
 
         # Additional transformers-specific settings
@@ -503,6 +651,7 @@ class vLLMWrapper(LLMWrapperBase):
         return type(self)(**constructor_kwargs)
 
     @set_list_to_stack(True)
+    @_batching
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -612,7 +761,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _from_vllm_generate_history(
         self,
         tensordict_input: TensorDictBase,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Generate text from history input."""
@@ -752,7 +901,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _from_vllm_logprobs_history(
         self,
         tensordict_input: TensorDictBase,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Compute log-probs from history input."""
@@ -809,7 +958,7 @@ class vLLMWrapper(LLMWrapperBase):
         return result
 
     def _from_vllm_generate_text(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Generate text from text input."""
         # Type assertions
@@ -837,7 +986,7 @@ class vLLMWrapper(LLMWrapperBase):
         return self._generate_from_text(text, sampling_params, out)
 
     def _from_vllm_logprobs_text(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Compute log-probs from text input."""
         # Type assertions
@@ -865,7 +1014,7 @@ class vLLMWrapper(LLMWrapperBase):
         return self._logprobs_from_text(text, sampling_params, out)
 
     def _from_vllm_generate_tokens(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Generate text from tokens input."""
         # Type assertions
@@ -906,7 +1055,7 @@ class vLLMWrapper(LLMWrapperBase):
         )
 
     def _from_vllm_logprobs_tokens(
-        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+        self, td: TensorDictBase, sampling_params: Any, out: TensorDictBase
     ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
         # Type assertions
@@ -965,7 +1114,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _generate_from_text(
         self,
         text: str | list[str] | NonTensorStack,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Generate text from text input."""
@@ -1092,7 +1241,7 @@ class vLLMWrapper(LLMWrapperBase):
     def _logprobs_from_text(
         self,
         text: str | list[str] | NonTensorStack,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Compute log-probs from text input."""
@@ -1242,7 +1391,7 @@ class vLLMWrapper(LLMWrapperBase):
         self,
         tokens_prompt_unpadded: list[torch.Tensor] | None,
         tokens_prompt_padded: torch.Tensor | None,
-        sampling_params: SamplingParams,
+        sampling_params: Any,
         out: TensorDictBase,
     ) -> TensorDictBase:
         """Generate text from tokens input."""
@@ -1445,7 +1594,7 @@ class vLLMWrapper(LLMWrapperBase):
         response_struct: TensorDictBase | None = None,
         tokens_full_unpadded: list[torch.Tensor] | None = None,
         tokens_full_padded: torch.Tensor | None = None,
-        sampling_params: SamplingParams | None = None,
+        sampling_params: Any | None = None,
         out: TensorDictBase | None = None,
     ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
@@ -1803,7 +1952,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
     prompt: str
     prompt_token_ids: torch.Tensor
     prompt_logprobs: torch.Tensor
-    outputs: list  # type: ignore
+    outputs: Any
     finished: str
     metrics: str
     lora_request: str
@@ -1913,3 +2062,328 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                 )
                 for request in requests
             ]
+
+
+class RemotevLLMWrapper:
+    """A remote Ray actor wrapper for vLLMWrapper that provides a simplified interface.
+
+    This class wraps a vLLMWrapper instance as a Ray actor, allowing remote execution
+    while providing a clean interface that doesn't require explicit `remote()` and `get()` calls.
+
+    Args:
+        model (vllm.LLM | str): The vLLM model to wrap.
+            - If a string, it will be passed to `vllm.LLM` and downloaded on the remote worker.
+            - If a vLLM LLM object, it must be a remote model with a ray handle (not a local model).
+            Local vLLM models are not serializable and will raise an error.
+        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
+        **kwargs: All other arguments are passed directly to vLLMWrapper.
+
+    Example:
+        >>> import ray
+        >>> from torchrl.modules.llm.policies import RemotevLLMWrapper
+        >>>
+        >>> # Initialize Ray if not already done
+        >>> if not ray.is_initialized():
+        ...     ray.init()
+        >>>
+        >>> # Create remote wrapper
+        >>> remote_wrapper = RemotevLLMWrapper(
+        ...     model="gpt2",
+        ...     input_mode="history",
+        ...     generate=True,
+        ...     generate_kwargs={"max_new_tokens": 50}
+        ... )
+        >>>
+        >>> # Use like a regular wrapper (no remote/get calls needed)
+        >>> result = remote_wrapper(tensordict_input)
+        >>> print(result["text"].response)
+    """
+
+    def __init__(self, model, max_concurrency: int = 16, **kwargs):
+        import ray
+
+        # Validate model parameter - for vLLM, we accept strings or vLLM LLM objects with ray handles
+        if not isinstance(model, str):
+            # Check if it's a vLLM LLM object with ray handle
+            try:
+                import vllm
+
+                if isinstance(model, vllm.LLM):
+                    # Check if it has a ray handle (remote model)
+                    if not hasattr(model, "_llm_engine") or not hasattr(
+                        model._llm_engine, "model_executor"
+                    ):
+                        raise ValueError(
+                            "For RemotevLLMWrapper, when passing a vLLM LLM object, "
+                            "it should be a remote vLLM model with a ray handle. "
+                            "Local vLLM models are not serializable. "
+                            "Consider using a string model name/path instead."
+                        )
+                else:
+                    raise ValueError(
+                        f"For RemotevLLMWrapper, the model parameter must be a string "
+                        f"(model name or path) or a remote vLLM LLM object. Got type: {type(model)}. "
+                        f"Local vLLM models are not serializable."
+                    )
+            except ImportError:
+                raise ValueError(
+                    f"For RemotevLLMWrapper, the model parameter must be a string "
+                    f"(model name or path) or a remote vLLM LLM object. Got type: {type(model)}. "
+                    f"vLLM is not available, so only string model names/paths are supported."
+                )
+
+        if not ray.is_initialized():
+            ray.init()
+
+        # Create the remote actor
+        self._remote_wrapper = (
+            ray.remote(vLLMWrapper)
+            .options(max_concurrency=max_concurrency)
+            .remote(model, **kwargs)
+        )
+
+    def __call__(self, tensordict, **kwargs):
+        """Forward pass that automatically handles remote execution."""
+        import ray
+
+        return ray.get(self._remote_wrapper.__call__.remote(tensordict, **kwargs))
+
+    def forward(self, tensordict, **kwargs):
+        """Forward pass that automatically handles remote execution."""
+        import ray
+
+        return ray.get(self._remote_wrapper.forward.remote(tensordict, **kwargs))
+
+    def get_new_version(self, **kwargs):
+        """Get a new version of the wrapper with altered parameters."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_new_version.remote(**kwargs))
+
+    def get_dist(self, tensordict, **kwargs):
+        """Get distribution from logits/log-probs with optional masking."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_dist.remote(tensordict, **kwargs))
+
+    def get_dist_with_prompt_mask(self, tensordict, **kwargs):
+        """Get distribution masked to only include response tokens (exclude prompt)."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper.get_dist_with_prompt_mask.remote(tensordict, **kwargs)
+        )
+
+    def _get_dist_with_assistant_mask(self, tensordict, **kwargs):
+        """Get distribution masked to only include assistant tokens."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_assistant_mask.remote(
+                tensordict, **kwargs
+            )
+        )
+
+    def _get_dist_with_attention_mask(self, tensordict, **kwargs):
+        """Get distribution masked using attention mask."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_attention_mask.remote(
+                tensordict, **kwargs
+            )
+        )
+
+    def _get_dist_with_custom_mask(self, tensordict, **kwargs):
+        """Get distribution with custom mask."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_dist_with_custom_mask.remote(tensordict, **kwargs)
+        )
+
+    def _get_sft_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for SFT loss (response tokens only)."""
+        import ray
+
+        return ray.get(self._remote_wrapper._get_sft_dist.remote(tensordict, **kwargs))
+
+    def _get_rlhf_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for RLHF loss (assistant tokens only)."""
+        import ray
+
+        return ray.get(self._remote_wrapper._get_rlhf_dist.remote(tensordict, **kwargs))
+
+    def _get_generic_dist(self, tensordict, **kwargs):
+        """Get distribution suitable for generic losses (all tokens)."""
+        import ray
+
+        return ray.get(
+            self._remote_wrapper._get_generic_dist.remote(tensordict, **kwargs)
+        )
+
+    def log_prob(self, data, **kwargs):
+        """Compute log probabilities."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_prob.remote(data, **kwargs))
+
+    def cleanup_batching(self):
+        """Clean up batching resources."""
+        import ray
+
+        return ray.get(self._remote_wrapper.cleanup_batching.remote())
+
+    def __del__(self):
+        """Cleanup when the wrapper is destroyed."""
+        try:
+            import ray
+
+            if hasattr(self, "_remote_wrapper") and ray.is_initialized():
+                # Clean up batching resources
+                try:
+                    ray.get(self._remote_wrapper.cleanup_batching.remote())
+                except Exception:
+                    pass  # Ignore cleanup errors during destruction
+        except Exception:
+            pass  # Ignore any errors during cleanup
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup."""
+        self.cleanup_batching()
+
+    def get_batching_state(self):
+        """Get the current batching state."""
+        import ray
+
+        return ray.get(self._remote_wrapper.get_batching_state.remote())
+
+    @property
+    def generate(self):
+        """Whether text generation is enabled."""
+        import ray
+
+        return ray.get(self._remote_wrapper.generate.remote)
+
+    @property
+    def pad_output(self):
+        """Whether output sequences are padded."""
+        import ray
+
+        return ray.get(self._remote_wrapper.pad_output.remote)
+
+    @property
+    def text_key(self):
+        """The key for text output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.text_key.remote)
+
+    @property
+    def tokens_key(self):
+        """The key for tokens output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.tokens_key.remote)
+
+    @property
+    def masks_key(self):
+        """The key for masks output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.masks_key.remote)
+
+    @property
+    def log_probs_key(self):
+        """The key for log probabilities output."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_probs_key.remote)
+
+    @property
+    def in_keys(self):
+        """The input keys."""
+        import ray
+
+        return ray.get(self._remote_wrapper.in_keys.remote)
+
+    @property
+    def out_keys(self):
+        """The output keys."""
+        import ray
+
+        return ray.get(self._remote_wrapper.out_keys.remote)
+
+    @property
+    def inplace(self):
+        """Whether in-place operations are used."""
+        import ray
+
+        return ray.get(self._remote_wrapper.inplace.remote)
+
+    @property
+    def device(self):
+        """The device used for computation."""
+        import ray
+
+        return ray.get(self._remote_wrapper.device.remote)
+
+    @property
+    def layout(self):
+        """The layout used for output tensors."""
+        import ray
+
+        return ray.get(self._remote_wrapper.layout.remote)
+
+    @property
+    def num_samples(self):
+        """The number of samples to generate."""
+        import ray
+
+        return ray.get(self._remote_wrapper.num_samples.remote)
+
+    @property
+    def batching(self):
+        """Whether batching is enabled."""
+        import ray
+
+        return ray.get(self._remote_wrapper.batching.remote)
+
+    @property
+    def collector(self):
+        """The collector associated with the module."""
+        import ray
+
+        return ray.get(self._remote_wrapper.collector.remote)
+
+    @property
+    def log_prob_keys(self):
+        """The keys for log probabilities."""
+        import ray
+
+        return ray.get(self._remote_wrapper.log_prob_keys.remote)
+
+    @log_prob_keys.setter
+    def log_prob_keys(self, value):
+        """Set the keys for log probabilities."""
+        import ray
+
+        ray.get(self._remote_wrapper.log_prob_keys.remote(value))
+
+    @property
+    def dist_params_keys(self):
+        """The keys for distribution parameters."""
+        import ray
+
+        return ray.get(self._remote_wrapper.dist_params_keys.remote)
+
+    @property
+    def dist_sample_keys(self):
+        """The keys for distribution samples."""
+        import ray
+
+        return ray.get(self._remote_wrapper.dist_sample_keys.remote)

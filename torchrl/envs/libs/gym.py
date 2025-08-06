@@ -131,7 +131,7 @@ class set_gym_backend(_DecoratorContextManager):
         """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        found_setters = collections.defaultdict(lambda: False)
+        found_setters = collections.defaultdict(bool)
         for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)

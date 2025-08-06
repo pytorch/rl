@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import re
 import warnings
 import weakref
 from copy import deepcopy
@@ -725,7 +726,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return self
 
-    @wraps(check_env_specs_func)
     def check_env_specs(self, *args, **kwargs):
         kwargs.setdefault("return_contiguous", not self._has_dynamic_specs)
         return check_env_specs_func(self, *args, **kwargs)
@@ -2927,7 +2927,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     ):
                         warnings.warn(
                             f"A partial `'_reset'` key has been passed to `reset` ({reset_key}), "
-                            f"but the corresponding done_key ({done_key}) was not present in the input "
+                            f"but the corresponding done_key ({done_key}) wasn't present in the input "
                             f"tensordict. "
                             f"This is discouraged, since the input tensordict should contain "
                             f"all the data not being reset."
@@ -3387,12 +3387,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 out_td = torch.stack(tensordicts, len(batch_size), out=out)
             except RuntimeError as err:
                 if (
-                    "The shapes of the tensors to stack is incompatible" in str(err)
+                    re.match(
+                        "The shapes of the tensors to stack is incompatible", str(err)
+                    )
                     and self._has_dynamic_specs
                 ):
                     raise RuntimeError(
                         "The environment specs are dynamic. Call rollout with return_contiguous=False."
                     )
+                if re.match(
+                    "The sets of keys in the tensordicts to stack are exclusive",
+                    str(err),
+                ):
+                    for reward_key in self.reward_keys:
+                        if any(reward_key in td for td in tensordicts):
+                            raise RuntimeError(
+                                "The reward key was present in the root tensordict of at least one of the tensordicts to stack. "
+                                "The likely cause is that your environment returns a reward during a call to `reset`, which is not allowed. "
+                                "To fix this, you should return the reward in the `step` method but not in during `reset`. If you need a reward "
+                                "to be returned during `reset`, submit an issue on github."
+                            )
                 raise
         else:
             out_td = LazyStackedTensorDict.maybe_dense_stack(
@@ -3967,7 +3981,7 @@ class _EnvWrapper(EnvBase):
         super().__getattr__(attr)
 
         raise AttributeError(
-            f"env not set in {self.__class__.__name__}, cannot access {attr}"
+            f"The env wasn't set in {self.__class__.__name__}, cannot access {attr}"
         )
 
     @abc.abstractmethod

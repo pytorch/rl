@@ -1790,6 +1790,15 @@ def test_batch_errors():
     rb.sample()
 
 
+def test_add_warning():
+    rb = ReplayBuffer(storage=ListStorage(10), batch_size=3)
+    with pytest.warns(
+        UserWarning,
+        match=r"Using `add\(\)` with a TensorDict that has batch_size",
+    ):
+        rb.add(TensorDict(batch_size=[1]))
+
+
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
 @pytest.mark.parametrize("device", get_default_devices())

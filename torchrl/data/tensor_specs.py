@@ -523,7 +523,7 @@ class ContinuousBox(Box):
                 return True
             return False
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.low.dtype == other.low.dtype
             and self.high.dtype == other.high.dtype
             and self.device == other.device
@@ -627,7 +627,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     shape: torch.Size
     space: None | Box
-    device: torch.device | None = None
+    device: torch.device | None = None  # noqa # type: ignore
     dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
     _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
@@ -679,7 +679,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return decorator
 
     @property
-    def device(self) -> torch.device:
+    def device(self) -> torch.device:  # noqa # type: ignore
         """The device of the spec.
 
         Only :class:`Composite` specs can have a ``None`` device. All leaves must have a non-null device.
@@ -2163,7 +2163,7 @@ class OneHot(TensorSpec):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -2444,7 +2444,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
 
     def __eq__(self, other):
         return (
-            type(other) == type(self)
+            type(other) is type(self)
             and self.device == other.device
             and self.shape == other.shape
             and self.space == other.space
@@ -3443,7 +3443,7 @@ class MultiOneHot(OneHot):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -4042,7 +4042,7 @@ class Categorical(TensorSpec):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -4731,7 +4731,7 @@ class MultiCategorical(Categorical):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -5585,7 +5585,7 @@ class Composite(TensorSpec):
         #     return False
         # if val.shape[-self.ndim:] != self.shape:
         #     return False
-        if self.data_cls is not None and type(val) != self.data_cls:
+        if self.data_cls is not None and type(val) is not self.data_cls:
             return False
         for key, item in self._specs.items():
             if item is None or (isinstance(item, Composite) and item.is_empty()):
@@ -5902,7 +5902,7 @@ class Composite(TensorSpec):
 
     def __eq__(self, other: object) -> bool:
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())

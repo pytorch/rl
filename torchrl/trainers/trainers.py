@@ -208,8 +208,7 @@ class Trainer:
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
 
-        # Initialize logging storage - maintains history of all logged values
-        self._log_dict = defaultdict(lambda: [])
+        self._log_dict = defaultdict(list)
 
         # Hook collections for different stages of the training loop
         self._batch_process_ops = (

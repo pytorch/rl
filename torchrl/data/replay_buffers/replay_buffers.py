@@ -39,7 +39,7 @@ from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import accept_remote_rref_udf_invocation
+from torchrl._utils import accept_remote_rref_udf_invocation, RL_WARNINGS
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -719,6 +719,13 @@ class ReplayBuffer:
                     data = None
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
+        if RL_WARNINGS and is_tensor_collection(data) and data.ndim:
+            warnings.warn(
+                f"Using `add()` with a TensorDict that has batch_size={data.batch_size}. "
+                f"Use `extend()` to add multiple elements, or `add()` with a single element (batch_size=torch.Size([])). "
+                "You can silence this warning by setting the `RL_WARNINGS` environment variable to `'0'`."
+            )
+
         return self._add(data)
 
     def _add(self, data):
