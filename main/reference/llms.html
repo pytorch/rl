@@ -858,6 +858,93 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
 </tr>
 </tbody>
 </table>
+<section id="remote-wrappers">
+<h4>Remote Wrappers<a class="headerlink" href="#remote-wrappers" title="Permalink to this heading">¶</a></h4>
+<p>TorchRL provides remote wrapper classes that enable distributed execution of LLM wrappers using Ray. These wrappers provide a simplified interface that doesn’t require explicit <cite>remote()</cite> and <cite>get()</cite> calls, making them easy to use in distributed settings.</p>
+<p><strong>Key Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Simplified Interface</strong>: No need to call <cite>remote()</cite> and <cite>get()</cite> explicitly</p></li>
+<li><p><strong>Full API Compatibility</strong>: Exposes all public methods from the base <cite>LLMWrapperBase</cite> class</p></li>
+<li><p><strong>Automatic Ray Management</strong>: Handles Ray initialization and remote execution internally</p></li>
+<li><p><strong>Property Access</strong>: All properties are accessible through the remote wrapper</p></li>
+<li><p><strong>Error Handling</strong>: Proper error propagation from remote actors</p></li>
+<li><p><strong>Resource Management</strong>: Context manager support for automatic cleanup</p></li>
+</ul>
+<p><strong>Model Parameter Requirements:</strong></p>
+<ul class="simple">
+<li><p><strong>RemotevLLMWrapper</strong>: Accepts string model names/paths (recommended) or remote vLLM LLM objects with ray handles. Local vLLM models are not serializable.</p></li>
+<li><p><strong>RemoteTransformersWrapper</strong>: Only accepts string model names/paths. Transformers models are not serializable.</p></li>
+</ul>
+<p><strong>Usage Examples:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemotevLLMWrapper</span><span class="p">,</span> <span class="n">RemoteTransformersWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span><span class="p">,</span> <span class="n">Text</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+<span class="c1"># Initialize Ray (if not already done)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+    <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+
+<span class="c1"># Use context manager for proper cleanup (recommended)</span>
+<span class="k">with</span> <span class="n">RemotevLLMWrapper</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
+    <span class="n">max_concurrency</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>  <span class="c1"># Control concurrent calls</span>
+    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
+    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">}</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">remote_wrapper</span><span class="p">:</span>
+
+    <span class="c1"># Create test input</span>
+    <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
+        <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello, how are you?&quot;</span><span class="p">}</span>
+    <span class="p">]])</span>
+    <span class="n">chat_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">history</span><span class="p">)</span>
+    <span class="n">tensordict_input</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">chat_history</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+
+    <span class="c1"># Use like a regular wrapper (no remote/get calls needed!)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">remote_wrapper</span><span class="p">(</span><span class="n">tensordict_input</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
+
+<span class="c1"># Transformers wrapper (only string models supported)</span>
+<span class="k">with</span> <span class="n">RemoteTransformersWrapper</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
+    <span class="n">max_concurrency</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">}</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">remote_transformers</span><span class="p">:</span>
+
+    <span class="n">text_input</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">Text</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Hello world&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">remote_transformers</span><span class="p">(</span><span class="n">text_input</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Cleanup and Resource Management:</strong></p>
+<p>The remote wrappers implement context managers for proper resource cleanup:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Context manager (recommended)</span>
+<span class="k">with</span> <span class="n">RemotevLLMWrapper</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">wrapper</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">input_data</span><span class="p">)</span>
+    <span class="c1"># Cleanup is automatic when exiting the context</span>
+
+<span class="c1"># Manual cleanup</span>
+<span class="n">wrapper</span> <span class="o">=</span> <span class="n">RemotevLLMWrapper</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">input_data</span><span class="p">)</span>
+<span class="k">finally</span><span class="p">:</span>
+    <span class="n">wrapper</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="p">()</span>  <span class="c1"># Important: prevents hanging</span>
+</pre></div>
+</div>
+<p><strong>Performance Considerations:</strong></p>
+<ul class="simple">
+<li><p><strong>Network Overhead</strong>: Remote execution adds network communication overhead</p></li>
+<li><p><strong>Serialization</strong>: Data is serialized when sent to remote actors</p></li>
+<li><p><strong>Memory</strong>: Each remote actor maintains its own copy of the model</p></li>
+<li><p><strong>Concurrency</strong>: Multiple remote wrappers can run concurrently</p></li>
+<li><p><strong>Max Concurrency</strong>: Use the <cite>max_concurrency</cite> parameter to control the number of concurrent calls to each remote actor</p></li>
+<li><p><strong>Cleanup</strong>: Always use context managers or call <cite>cleanup_batching()</cite> to prevent hanging due to batching locks</p></li>
+</ul>
+</section>
 <section id="utils">
 <h4>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h4>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
@@ -1375,6 +1462,7 @@ that codes the LLM-specific functionalities.</p>
 </li>
 <li><a class="reference internal" href="#modules">Modules</a><ul>
 <li><a class="reference internal" href="#wrappers">Wrappers</a><ul>
+<li><a class="reference internal" href="#remote-wrappers">Remote Wrappers</a></li>
 <li><a class="reference internal" href="#utils">Utils</a></li>
 </ul>
 </li>
