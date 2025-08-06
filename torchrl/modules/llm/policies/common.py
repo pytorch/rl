@@ -384,12 +384,12 @@ class LLMWrapperBase(TensorDictModuleBase):
             **Parameter Conflict Resolution:**
 
             When both legacy (backend-specific) and standardized parameter names are provided,
-            a :exc:`ValueError` is raised to prevent confusion. For example:
+            the legacy names silently prevail. This ensures backward compatibility with existing code.
 
-            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
-            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, ``max_tokens`` wins
+            * If both ``n`` and ``num_return_sequences`` are passed, ``n`` wins
 
-            This ensures clear parameter usage and prevents unexpected behavior.
+            This behavior allows existing code to continue working without modification.
 
             **Parameter Validation:**
 
@@ -520,14 +520,16 @@ class LLMWrapperBase(TensorDictModuleBase):
         * vLLM's ``max_tokens`` -> ``max_new_tokens``
         * vLLM's ``n`` -> ``num_return_sequences``
 
+        **Parameter Conflict Resolution:**
+
+        When both legacy (backend-specific) and standardized parameter names are provided,
+        the legacy names silently prevail. This ensures backward compatibility with existing code.
+
         Args:
             generate_kwargs: The generation parameters to standardize
 
         Returns:
             Standardized generation parameters
-
-        Raises:
-            ValueError: If conflicting parameter names are provided
         """
         if generate_kwargs is None:
             return {}
@@ -535,20 +537,17 @@ class LLMWrapperBase(TensorDictModuleBase):
         standardized = dict(generate_kwargs)
 
         # Convert vLLM parameter names to common names
+        # Legacy names prevail in conflicts (backward compatibility)
         if "max_tokens" in standardized:
             if "max_new_tokens" in standardized:
-                raise ValueError(
-                    "Cannot specify both 'max_tokens' (legacy vLLM) and 'max_new_tokens' (standardized). "
-                    "Use 'max_new_tokens' for cross-backend compatibility."
-                )
+                # Legacy name wins - remove the standardized name
+                standardized.pop("max_new_tokens")
             standardized["max_new_tokens"] = standardized.pop("max_tokens")
 
         if "n" in standardized:
             if "num_return_sequences" in standardized:
-                raise ValueError(
-                    "Cannot specify both 'n' (legacy vLLM) and 'num_return_sequences' (standardized). "
-                    "Use 'num_return_sequences' for cross-backend compatibility."
-                )
+                # Legacy name wins - remove the standardized name
+                standardized.pop("num_return_sequences")
             standardized["num_return_sequences"] = standardized.pop("n")
 
         # Validate parameter combinations
@@ -1259,7 +1258,9 @@ def _batching(func):
         max_batch_size = getattr(self, "_max_batch_size", None)
         if min_batch_size is not None or max_batch_size is not None:
             # put elements in a queue until the batch size is reached
+            squeeze = False
             if td_input.batch_dims == 0:
+                squeeze = True
                 inputs = [td_input]
             else:
                 if td_input.batch_dims > 1:
@@ -1339,7 +1340,10 @@ def _batching(func):
                         if not future.done():
                             future.set_exception(e)
                     raise
-
+            if squeeze:
+                if len(futures) > 1:
+                    raise RuntimeError("More results than expected")
+                return futures[0].result()
             return lazy_stack([future.result() for future in futures])
         return func(self, td_input, **kwargs)
 
