@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from omegaconf import MISSING
 
@@ -70,7 +70,6 @@ def make_batched_env(
     Returns:
         The created batched environment instance.
     """
-    from omegaconf import OmegaConf
     from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 
     if create_env_fn is None:

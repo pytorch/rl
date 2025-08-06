@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
 
 import pytest
 import torch
@@ -952,6 +951,7 @@ class TestLossConfigs:
             == "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
         )
         from torchrl.objectives.ppo import PPOLoss
+
         loss = instantiate(cfg)
         assert isinstance(loss, PPOLoss)
         if loss_type == "clip":
@@ -1094,7 +1094,9 @@ class TestHydraParsing:
 
         initialize_config_module("torchrl.trainers.algorithms.configs")
 
-    def _run_hydra_test(self, tmpdir, yaml_config, test_script_content, success_message="SUCCESS"):
+    def _run_hydra_test(
+        self, tmpdir, yaml_config, test_script_content, success_message="SUCCESS"
+    ):
         """Helper function to run a Hydra test with subprocess approach."""
         import subprocess
         import sys
@@ -1379,6 +1381,7 @@ collector:
     def test_trainer_parsing_with_file(self, tmpdir):
         """Test trainer parsing with file config."""
         import os
+
         os.makedirs(tmpdir / "save", exist_ok=True)
 
         yaml_config = f"""

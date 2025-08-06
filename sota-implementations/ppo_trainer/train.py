@@ -4,6 +4,7 @@
 
 import hydra
 import torchrl
+from torchrl.trainers.algorithms.configs import *  # Import configurable system  # noqa
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.1")

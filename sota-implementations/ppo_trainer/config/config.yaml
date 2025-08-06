@@ -11,11 +11,9 @@ defaults:
   - env@training_env.create_env_fn.base_env: gym
   - transform@training_env.create_env_fn.transform: compose
   
-  - model: tanh_normal
   - model@models.policy_model: tanh_normal
   - model@models.value_model: value
   
-  - network: mlp
   - network@networks.policy_network: mlp
   - network@networks.value_network: mlp
   

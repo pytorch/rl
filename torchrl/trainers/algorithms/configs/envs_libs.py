@@ -17,11 +17,11 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 @dataclass
 class EnvLibsConfig(ConfigBase):
     """Base configuration class for environment libs."""
+
     _partial_: bool = False
 
     def __post_init__(self) -> None:
         """Post-initialization hook for environment libs configurations."""
-        pass
 
 
 @dataclass
@@ -47,6 +47,7 @@ class GymEnvConfig(EnvLibsConfig):
     def __post_init__(self) -> None:
         """Post-initialization hook for GymEnv configuration."""
         super().__post_init__()
+
 
 def make_gym_env(
     env_name: str,
@@ -357,4 +358,4 @@ class MultiThreadedEnvConfig(EnvLibsConfig):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for MultiThreadedEnv configuration."""
-        super().__post_init__() 
+        super().__post_init__()
