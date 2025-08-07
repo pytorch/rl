@@ -3722,6 +3722,14 @@ class TestMinari:
             if MINARI_DATASETS_PATH:
                 os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
 
+    def test_correct_categorical_missions(self):
+        exp_replay = MinariExperienceReplay(
+            dataset_id="minigrid/BabyAI-Pickup/optimal-v0",
+            batch_size=1,
+            root=None,
+        )
+        assert isinstance(exp_replay[0][("observation", "mission")], (bytes, str))
+
 
 @pytest.mark.slow
 class TestRoboset:
