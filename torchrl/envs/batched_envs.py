@@ -15,7 +15,7 @@ from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from warnings import warn
 
 import torch
@@ -330,7 +330,7 @@ class BatchedEnvBase(EnvBase):
             )
 
         create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
-        if isinstance(create_env_kwargs, dict):
+        if isinstance(create_env_kwargs, Mapping):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
             ]

@@ -167,7 +167,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
               global function. If this returns `None` (its default value), then the
               `default_interaction_type` of the `ProbabilisticTDModule`
               instance will be used. Note that
-              :class:`~torchrl.collectors.collectors.DataCollectorBase`
+              :class:`~torchrl.collectors.DataCollectorBase`
               instances will use `set_interaction_type` to
               :class:`tensordict.nn.InteractionType.RANDOM` by default.
 

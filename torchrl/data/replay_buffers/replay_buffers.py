@@ -1017,7 +1017,7 @@ class ReplayBuffer:
             self.set_rng(rng)
 
     @property
-    def sampler(self):
+    def sampler(self) -> Sampler:
         """The sampler of the replay buffer.
 
         The sampler must be an instance of :class:`~torchrl.data.replay_buffers.Sampler`.
@@ -1026,7 +1026,7 @@ class ReplayBuffer:
         return self._sampler
 
     @property
-    def writer(self):
+    def writer(self) -> Writer:
         """The writer of the replay buffer.
 
         The writer must be an instance of :class:`~torchrl.data.replay_buffers.Writer`.
@@ -1035,7 +1035,7 @@ class ReplayBuffer:
         return self._writer
 
     @property
-    def storage(self):
+    def storage(self) -> Storage:
         """The storage of the replay buffer.
 
         The storage must be an instance of :class:`~torchrl.data.replay_buffers.Storage`.

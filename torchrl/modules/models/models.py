@@ -161,7 +161,7 @@ class MLP(nn.Sequential):
     def __init__(
         self,
         in_features: int | None = None,
-        out_features: int | torch.Size = None,
+        out_features: int | torch.Size | None = None,
         depth: int | None = None,
         num_cells: Sequence[int] | int | None = None,
         activation_class: type[nn.Module] | Callable = nn.Tanh,

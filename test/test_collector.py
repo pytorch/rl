@@ -41,12 +41,14 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
-from torchrl.collectors.collectors import (
-    _Interruptor,
+from torchrl.collectors import (
+    aSyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
+    WeightUpdaterBase,
 )
+from torchrl.collectors.collectors import _Interruptor
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (

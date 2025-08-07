@@ -40,7 +40,7 @@ import torch
 
 from torch import multiprocessing as mp, nn
 
-from torchrl.collectors.collectors import (
+from torchrl.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,

@@ -26,7 +26,7 @@ import torch
 import tqdm
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors.collectors import (
+from torchrl.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,

@@ -1,0 +1,131 @@
+# PPO Trainer Configuration for Pendulum-v1
+# This configuration uses the new configurable trainer system
+
+defaults:
+  
+  - transform@transform0: noop_reset
+  - transform@transform1: step_counter
+  
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  
+  - collector@collector: multi_async
+
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: without_replacement
+  - trainer@trainer: ppo
+  - optimizer@optimizer: adam
+  - loss@loss: ppo
+  - logger@logger: wandb
+  - _self_
+
+# Network configurations
+networks:
+  policy_network:
+    out_features: 2  # Pendulum action space is 1-dimensional
+    in_features: 3   # Pendulum observation space is 3-dimensional
+    num_cells: [128, 128]
+
+  value_network:
+    out_features: 1  # Value output
+    in_features: 3   # Pendulum observation space
+    num_cells: [128, 128]
+
+# Model configurations
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${networks.value_network}
+
+# Environment configuration
+transform0:
+  noops: 30
+  random: true
+
+transform1:
+  max_steps: 200
+  step_count_key: "step_count"
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+# Loss configuration
+loss:
+  actor_network: ${models.policy_model}
+  critic_network: ${models.value_model}
+  entropy_coeff: 0.01
+
+# Optimizer configuration
+optimizer:
+  lr: 0.001
+
+# Collector configuration
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  total_frames: 1_000_000
+  frames_per_batch: 1024
+  num_workers: 2
+
+# Replay buffer configuration
+replay_buffer:
+  storage:
+    max_size: 1024
+    device: cpu
+    ndim: 1
+  sampler:
+    drop_last: true
+    shuffle: true
+  writer:
+    compilable: false
+  batch_size: 128
+
+logger:
+  exp_name: ppo_pendulum_v1
+  offline: false
+  project: torchrl-sota-implementations
+
+# Trainer configuration
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: 1_000_000
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: true
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
+  save_trainer_file: null
+  optim_steps_per_batch: null
+  num_epochs: 2

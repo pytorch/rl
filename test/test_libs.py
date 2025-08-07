@@ -48,7 +48,7 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl._utils import implement_for, logger as torchrl_logger
-from torchrl.collectors.collectors import SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     Binary,
     Bounded,
