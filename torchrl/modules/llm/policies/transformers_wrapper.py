@@ -2418,6 +2418,7 @@ class RemoteTransformersWrapper:
             Must be a string (model name or path) that will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
             Transformers models are not serializable, so only model names/paths are supported.
         max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
+        validate_model (bool, optional): Whether to validate the model. Defaults to True.
         **kwargs: All other arguments are passed directly to TransformersWrapper.
 
     Example:
@@ -2441,15 +2442,18 @@ class RemoteTransformersWrapper:
         >>> print(result["text"].response)
     """
 
-    def __init__(self, model, max_concurrency: int = 16, **kwargs):
+    def __init__(
+        self, model, max_concurrency: int = 16, validate_model: bool = True, **kwargs
+    ):
         import ray
 
         # Validate model parameter - only strings are allowed for Transformers
-        if not isinstance(model, str):
+        if not isinstance(model, str) and validate_model:
             raise ValueError(
                 "For RemoteTransformersWrapper, the model parameter must be a string "
                 f"(model name or path). Got type: {type(model)}. "
-                "Transformers models are not serializable, so only model names/paths are supported."
+                "Transformers models are not serializable, so only model names/paths are supported. "
+                "You can bypass this check by setting validate_model=False."
             )
 
         if not ray.is_initialized():

@@ -7,6 +7,9 @@ from __future__ import annotations
 import threading
 import warnings
 import weakref
+from concurrent.futures import CancelledError, Future, wait
+
+from contextlib import nullcontext
 from functools import wraps
 from typing import Any, Literal, overload
 
@@ -1143,16 +1146,62 @@ class LLMWrapperBase(TensorDictModuleBase):
             return data.get((self.log_prob_key, "response"), **get_kwargs)
         raise RuntimeError("log_prob not callable when generate=True.")
 
-    def cleanup_batching(self):
-        """Clear batching queues to prevent memory leaks.
+    def cleanup_batching(self, *, flush: bool = False) -> None:
+        """Reset the internal batching state.
 
-        This method should be called when the wrapper is no longer needed
-        or when you want to reset the batching state.
+        Args:
+            flush (bool, default False):
+                • False → cancel / fail every still-pending Future.
+                • True  → try to run one last forward pass with whatever is left in
+                `_batch_queue`, so callers receive real results instead of an
+                exception.
         """
-        if hasattr(self, "_batch_queue"):
+        # ── 0. Fast-exit if batching was never enabled ──────────────────────────────
+        if not hasattr(self, "_batch_queue"):
+            return
+
+        # ── 1. Enter the same lock used by the decorator to avoid races ────────────
+        lock = getattr(self, "_batching_lock", None)  # may be None
+        with (lock or nullcontext()):
+            # ── 2.  Resolve outstanding Futures  ───────────────────────────────────
+            if flush and self._batch_queue:
+                try:
+                    # one last forward pass
+                    results = self(
+                        lazy_stack(self._batch_queue),
+                        _batched_cleanup=True,  # avoid going through the decorator
+                    ).unbind(0)
+                except Exception as exc:
+                    for fut in self._futures:
+                        if not fut.done():
+                            fut.set_exception(exc)
+                else:
+                    # size mismatch ⇒ fall back to exceptions
+                    if len(results) != len(self._futures):
+                        exc = RuntimeError(
+                            f"cleanup_batching(): expected {len(self._futures)} "
+                            f"results, got {len(results)}"
+                        )
+                        for fut in self._futures:
+                            if not fut.done():
+                                fut.set_exception(exc)
+                    else:
+                        for fut, res in zip(self._futures, results):
+                            if not fut.done():
+                                fut.set_result(res)
+            else:
+                # cancel / fail everything so waiting threads can return
+                cancel_exc = CancelledError("Batching aborted by cleanup_batching()")
+                for fut in getattr(self, "_futures", ()):
+                    if not fut.done():
+                        fut.set_exception(cancel_exc)
+
+            # ── 3.  Clear containers (they may hold large tensors)  ────────────────
             self._batch_queue.clear()
-        if hasattr(self, "_futures"):
             self._futures.clear()
+
+    def __del__(self):
+        self.cleanup_batching()
 
     def get_batching_state(self):
         """Get the current batching state for debugging and monitoring.
@@ -1249,108 +1298,67 @@ def _extract_responses_from_full_histories(
 
 
 def _batching(func):
-    from concurrent.futures import Future, wait
-
     @wraps(func)
     def _batched_func(self, td_input: TensorDictBase, **kwargs):
-        min_batch_size = getattr(self, "_min_batch_size", None)
-        max_batch_size = getattr(self, "_max_batch_size", None)
-        if min_batch_size is not None or max_batch_size is not None:
-            # put elements in a queue until the batch size is reached
-            squeeze = False
-            if td_input.batch_dims == 0:
-                squeeze = True
-                inputs = [td_input]
-            else:
-                if td_input.batch_dims > 1:
-                    raise ValueError(
-                        f"Batching not supported for batch_dims > 1: {td_input.batch_dims}"
-                    )
-                inputs = list(td_input.unbind(0))
+        # -- 0. skip if batching is disabled
+        if not self.batching:
+            return func(self, td_input, **kwargs)
 
-            # Create as many futures as inputs
-            futures = [Future() for _ in inputs]
+        # ── 1. Normalise input ──────────────────────────────────────────────────
+        if td_input.batch_dims > 1:
+            raise ValueError(
+                f"Batching not supported for batch_dims > 1: {td_input.batch_dims}"
+            )
 
-            self._batch_queue.extend(inputs)
-            self._futures.extend(futures)
+        single = td_input.batch_dims == 0
+        inputs = [td_input] if single else list(td_input.unbind(0))
+        futures = [Future() for _ in inputs]
 
-            if min_batch_size is None:
-                min_batch_size = 1
+        # ── 2. Enqueue work and, if first in, do the draining ───────────────────
+        self._batch_queue.extend(inputs)
+        self._futures.extend(futures)
 
-            # Acquire lock
-            # Note: Because of the lock, we may be waiting for the LLM to finish processing the previous batch
-            # for a little while. That means that the length of the batch queue may increase so even if
-            # min_batch_size is 1 and only one element is passed, we may be processing more than one element
-            # here.
-            with self._batching_lock:
-                # If we have more than min_batch_size, we can process the batch immediately
-                if len(self._batch_queue) >= min_batch_size:
-                    # if max_batch_size is not defined, process all elements
-                    if max_batch_size is None:
-                        max_batch_size = len(self._batch_queue)
-                    if len(self._batch_queue) != len(self._futures):
-                        raise RuntimeError(
-                            f"Batch queue and futures length mismatch: {len(self._batch_queue)} != {len(self._futures)}"
-                        )
-                    batch = self._batch_queue[:max_batch_size]
-                    batch_size = len(batch)
-                    try:
-                        batch = lazy_stack(batch)
-                        results = func(self, batch, **kwargs)
-                        batch_results = results.unbind(0)
-                        if len(batch_results) != batch_size:
-                            raise RuntimeError(
-                                f"Batch results and futures length mismatch: {len(batch_results)} != {batch_size}"
-                            )
-                        for i, future in enumerate(self._futures[:batch_size]):
-                            if future.done():
-                                raise RuntimeError(
-                                    f"Future {i} already done: {future.result()}"
-                                )
-                            future.set_result(batch_results[i])
-                    except Exception as e:
-                        # Set exception for all futures in this batch that haven't been completed yet
-                        for future in self._futures[:batch_size]:
-                            if not future.done():
-                                future.set_exception(e)
-                        raise
+        min_bs = getattr(self, "_min_batch_size", 1)
+        max_bs = getattr(self, "_max_batch_size", None)
 
-                    self._batch_queue = self._batch_queue[batch_size:]
-                    self._futures = self._futures[batch_size:]
+        with self._batching_lock:
+            # Only the thread that managed to grab the lock will run the loop
+            while len(self._batch_queue) >= min_bs:
+                # Determine slice
+                slice_size = (
+                    len(self._batch_queue)
+                    if max_bs is None
+                    else min(max_bs, len(self._batch_queue))
+                )
+                batch = self._batch_queue[:slice_size]
+                fut_slice = self._futures[:slice_size]
 
-            # Now wait for the current futures to complete (with timeout if needed)
-            _, not_done = wait(futures, timeout=self._batching_timeout)
-
-            # if there are still futures not done, process them as is
-            if not_done:
+                # Execute model
                 try:
-                    with self._batching_lock:
-                        inputs_not_done = [
-                            inputs[futures.index(future)] for future in not_done
-                        ]
-                        results = func(
-                            self, torch.stack(inputs_not_done), **kwargs
-                        ).unbind(0)
-                        for i, future in enumerate(not_done):
-                            future.set_result(results[i])
-                        # remove not done futures from the queue
-                        self._batch_queue = [
-                            q
-                            for q, f in zip(self._batch_queue, futures)
-                            if f not in not_done
-                        ]
-                        self._futures = [f for f in self._futures if f not in not_done]
-                except Exception as e:
-                    # Set exception for remaining futures that haven't been completed yet
-                    for future in not_done:
-                        if not future.done():
-                            future.set_exception(e)
+                    results = func(self, lazy_stack(batch), **kwargs).unbind(0)
+                    if len(results) != slice_size:  # sanity
+                        raise RuntimeError(
+                            f"Expected {slice_size} results, got {len(results)}"
+                        )
+                    # Fulfil the corresponding futures
+                    for fut, res in zip(fut_slice, results):
+                        fut.set_result(res)
+                except Exception as exc:
+                    for fut in fut_slice:
+                        fut.set_exception(exc)
+                    # Propagate to caller; other waiters will read the exception from their future
                     raise
-            if squeeze:
-                if len(futures) > 1:
-                    raise RuntimeError("More results than expected")
-                return futures[0].result()
-            return lazy_stack([future.result() for future in futures])
-        return func(self, td_input, **kwargs)
+
+                # Pop processed work
+                del self._batch_queue[:slice_size]
+                del self._futures[:slice_size]
+
+        # ── 3. Outside the lock: wait only for OUR futures (they may already be done) ──
+        wait(
+            futures
+        )  # no timeout → immediate return if set_result()/set_exception() already called
+        result = [f.result() for f in futures]
+
+        return result[0] if single else lazy_stack(result)
 
     return _batched_func
