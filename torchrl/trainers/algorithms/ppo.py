@@ -15,7 +15,7 @@ from typing import Callable
 from tensordict import TensorDict, TensorDictBase
 from torch import optim
 
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import DataCollectorBase
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -163,7 +163,6 @@ class PPOTrainer(Trainer):
         - Value function statistics
         - Advantage statistics
         """
-
         # Always log done states as percentage (episode completion rate)
         log_done_percentage = LogScalar(
             key=("next", "done"),

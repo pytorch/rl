@@ -89,7 +89,7 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
-    _target_: str = "torchrl.collectors.collectors.aSyncDataCollector"
+    _target_: str = "torchrl.collectors.aSyncDataCollector"
 
     def __post_init__(self):
         self.create_env_fn._partial_ = True
@@ -126,7 +126,7 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
-    _target_: str = "torchrl.collectors.collectors.MultiSyncDataCollector"
+    _target_: str = "torchrl.collectors.MultiSyncDataCollector"
 
     def __post_init__(self):
         for env_cfg in self.create_env_fn:
@@ -164,7 +164,7 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
-    _target_: str = "torchrl.collectors.collectors.MultiaSyncDataCollector"
+    _target_: str = "torchrl.collectors.MultiaSyncDataCollector"
 
     def __post_init__(self):
         for env_cfg in self.create_env_fn:

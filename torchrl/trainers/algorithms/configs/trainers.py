@@ -10,7 +10,7 @@ from typing import Any
 
 import torch
 
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import DataCollectorBase
 from torchrl.objectives.common import LossModule
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.ppo import PPOTrainer

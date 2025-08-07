@@ -10,8 +10,9 @@ import importlib.util
 
 import pytest
 import torch
-
 from hydra.utils import instantiate
+
+from torchrl import logger as torchrl_logger
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
@@ -849,7 +850,7 @@ class TestCollectorsConfig:
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_collector_config(self, factory, collector):
-        from torchrl.collectors.collectors import (
+        from torchrl.collectors import (
             aSyncDataCollector,
             MultiaSyncDataCollector,
             MultiSyncDataCollector,
@@ -950,7 +951,6 @@ class TestLossConfigs:
             cfg._target_
             == "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
         )
-        from torchrl.objectives.ppo import PPOLoss
 
         loss = instantiate(cfg)
         assert isinstance(loss, PPOLoss)
@@ -1142,10 +1142,10 @@ if __name__ == "__main__":
 
             if result.returncode == 0:
                 assert success_message in result.stdout
-                print("Test passed!")
+                torchrl_logger.info("Test passed!")
             else:
-                print(f"Test failed: {result.stderr}")
-                print(f"stdout: {result.stdout}")
+                torchrl_logger.error(f"Test failed: {result.stderr}")
+                torchrl_logger.error(f"stdout: {result.stdout}")
                 raise AssertionError(f"Test failed: {result.stderr}")
 
         except subprocess.TimeoutExpired:
@@ -1289,7 +1289,7 @@ network:
     env = hydra.utils.instantiate(cfg.env)
     assert isinstance(env, torchrl.envs.EnvBase)
     assert env.env_name == "CartPole-v1"
-    
+
     # Test network config
     network = hydra.utils.instantiate(cfg.network)
     assert isinstance(network, torchrl.modules.MLP)
@@ -1475,10 +1475,10 @@ trainer:
     # Just verify we can instantiate the main components without running
     loss = hydra.utils.instantiate(cfg.loss)
     assert isinstance(loss, torchrl.objectives.PPOLoss)
-    
+
     collector = hydra.utils.instantiate(cfg.data_collector)
     assert isinstance(collector, torchrl.collectors.SyncDataCollector)
-    
+
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
 """

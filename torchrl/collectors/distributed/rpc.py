@@ -22,10 +22,10 @@ from torch import nn
 from torch.distributed import rpc
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import (
+from torchrl.collectors import (
     DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
+    MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,
 )

@@ -27,7 +27,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     VERBOSE,
 )
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,

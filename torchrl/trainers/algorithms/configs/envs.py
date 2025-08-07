@@ -82,7 +82,10 @@ def make_batched_env(
     if isinstance(create_env_fn, EnvBase):
         # Already an instance (either instantiated config or actual env), wrap in lambda
         env_instance = create_env_fn
-        env_fn = lambda env_instance=env_instance: env_instance
+
+        def env_fn(env_instance=env_instance):
+            return env_instance
+
     else:
         env_fn = create_env_fn
     assert callable(env_fn), env_fn
