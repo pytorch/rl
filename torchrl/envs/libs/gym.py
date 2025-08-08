@@ -707,17 +707,9 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
+@implement_for("gym")
 def _is_from_pixels(env):
     observation_spec = env.observation_space
-    try:
-        PixelObservationWrapper = gym_backend(
-            "wrappers.pixel_observation"
-        ).PixelObservationWrapper
-    except ModuleNotFoundError:
-
-        class PixelObservationWrapper:
-            pass
-
     from torchrl.envs.libs.utils import (
         GymPixelObservationWrapper as LegacyPixelObservationWrapper,
     )
@@ -725,12 +717,11 @@ def _is_from_pixels(env):
     gDict = gym_backend("spaces").dict.Dict
     Box = gym_backend("spaces").Box
 
-    if isinstance(observation_spec, (Dict,)):
-        if "pixels" in set(observation_spec.keys()):
-            return True
+    # Check if it's a gymnasium Dict space
     if isinstance(observation_spec, (gDict,)):
         if "pixels" in set(observation_spec.spaces.keys()):
             return True
+    # Check if it's a pixel-like Box space
     elif (
         isinstance(observation_spec, Box)
         and (observation_spec.low == 0).all()
@@ -741,10 +732,110 @@ def _is_from_pixels(env):
         return True
     else:
         while True:
-            if isinstance(
-                env, (LegacyPixelObservationWrapper, PixelObservationWrapper)
-            ):
+            # For gym, try PixelObservationWrapper
+            try:
+                PixelObservationWrapper = gym_backend(
+                    "wrappers.pixel_observation"
+                ).PixelObservationWrapper
+                if isinstance(env, PixelObservationWrapper):
+                    return True
+            except (ModuleNotFoundError, AttributeError):
+                pass
+
+            # Check our custom wrapper
+            if isinstance(env, LegacyPixelObservationWrapper):
                 return True
+
+            if hasattr(env, "env"):
+                env = env.env
+            else:
+                break
+    return False
+
+
+@implement_for("gymnasium", None, "1.1.0")
+def _is_from_pixels(env):  # noqa: F811
+    observation_spec = env.observation_space
+    from torchrl.envs.libs.utils import (
+        GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+    )
+
+    gDict = gym_backend("spaces").dict.Dict
+    Box = gym_backend("spaces").Box
+
+    # Check if it's a gymnasium Dict space
+    if isinstance(observation_spec, (gDict,)):
+        if "pixels" in set(observation_spec.spaces.keys()):
+            return True
+    # Check if it's a pixel-like Box space
+    elif (
+        isinstance(observation_spec, Box)
+        and (observation_spec.low == 0).all()
+        and (observation_spec.high == 255).all()
+        and observation_spec.low.shape[-1] == 3
+        and observation_spec.low.ndim == 3
+    ):
+        return True
+    else:
+        while True:
+            # For gymnasium < 1.1.0, try PixelObservationWrapper
+            try:
+                PixelObservationWrapper = gym_backend(
+                    "wrappers.pixel_observation"
+                ).PixelObservationWrapper
+                if isinstance(env, PixelObservationWrapper):
+                    return True
+            except (ModuleNotFoundError, AttributeError):
+                pass
+
+            # Check our custom wrapper
+            if isinstance(env, LegacyPixelObservationWrapper):
+                return True
+
+            if hasattr(env, "env"):
+                env = env.env
+            else:
+                break
+    return False
+
+
+@implement_for("gymnasium", "1.1.0")
+def _is_from_pixels(env):  # noqa: F811
+    observation_spec = env.observation_space
+    from torchrl.envs.libs.utils import (
+        GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+    )
+
+    gDict = gym_backend("spaces").dict.Dict
+    Box = gym_backend("spaces").Box
+
+    # Check if it's a gymnasium Dict space
+    if isinstance(observation_spec, (gDict,)):
+        if "pixels" in set(observation_spec.spaces.keys()):
+            return True
+    # Check if it's a pixel-like Box space
+    elif (
+        isinstance(observation_spec, Box)
+        and (observation_spec.low == 0).all()
+        and (observation_spec.high == 255).all()
+        and observation_spec.low.shape[-1] == 3
+        and observation_spec.low.ndim == 3
+    ):
+        return True
+    else:
+        while True:
+            # For gymnasium >= 1.1.0, use AddRenderObservation
+            try:
+                AddRenderObservation = gym_backend("wrappers").AddRenderObservation
+                if isinstance(env, AddRenderObservation):
+                    return True
+            except (ModuleNotFoundError, AttributeError):
+                pass
+
+            # Check our custom wrapper
+            if isinstance(env, LegacyPixelObservationWrapper):
+                return True
+
             if hasattr(env, "env"):
                 env = env.env
             else:

@@ -1650,6 +1650,140 @@ class TestGym:
                 del env
                 gc.collect()
 
+    def test_is_from_pixels_simple_env(self):
+        """Test that _is_from_pixels correctly identifies non-pixel environments."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a simple environment that doesn't have pixels
+        class SimpleEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(3,))
+
+        env = SimpleEnv()
+
+        # This should return False since it's not a pixel environment
+        result = _is_from_pixels(env)
+        assert result is False, f"Expected False for simple environment, got {result}"
+
+    def test_is_from_pixels_box_env(self):
+        """Test that _is_from_pixels correctly identifies pixel Box environments."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a pixel-like environment
+        class PixelEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Box(
+                    low=0, high=255, shape=(64, 64, 3)
+                )
+
+        pixel_env = PixelEnv()
+
+        # This should return True since it's a pixel environment
+        result = _is_from_pixels(pixel_env)
+        assert result is True, f"Expected True for pixel environment, got {result}"
+
+    def test_is_from_pixels_dict_env(self):
+        """Test that _is_from_pixels correctly identifies Dict environments with pixels."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a Dict environment that has pixels
+        class DictPixelEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Dict(
+                    {
+                        "pixels": gym.spaces.Box(low=0, high=255, shape=(64, 64, 3)),
+                        "state": gym.spaces.Box(low=-1, high=1, shape=(3,)),
+                    }
+                )
+
+        dict_pixel_env = DictPixelEnv()
+
+        # This should return True since it has a "pixels" key
+        result = _is_from_pixels(dict_pixel_env)
+        assert (
+            result is True
+        ), f"Expected True for Dict environment with pixels, got {result}"
+
+    def test_is_from_pixels_dict_env_no_pixels(self):
+        """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a Dict environment that doesn't have pixels
+        class DictNoPixelEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Dict(
+                    {
+                        "state": gym.spaces.Box(low=-1, high=1, shape=(3,)),
+                        "features": gym.spaces.Box(low=0, high=1, shape=(5,)),
+                    }
+                )
+
+        dict_no_pixel_env = DictNoPixelEnv()
+
+        # This should return False since it doesn't have a "pixels" key
+        result = _is_from_pixels(dict_no_pixel_env)
+        assert (
+            result is False
+        ), f"Expected False for Dict environment without pixels, got {result}"
+
+    def test_is_from_pixels_wrapper_env(self):
+        """Test that _is_from_pixels correctly identifies wrapped environments."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a mock environment that simulates being wrapped with a pixel wrapper
+        class MockWrappedEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Box(
+                    low=0, high=255, shape=(64, 64, 3)
+                )
+
+        # Mock the isinstance check to simulate the wrapper detection
+        import torchrl.envs.libs.utils
+
+        original_isinstance = isinstance
+
+        def mock_isinstance(obj, cls):
+            if cls == torchrl.envs.libs.utils.GymPixelObservationWrapper:
+                return True
+            return original_isinstance(obj, cls)
+
+        # Temporarily patch isinstance
+        import builtins
+
+        builtins.isinstance = mock_isinstance
+
+        try:
+            wrapped_env = MockWrappedEnv()
+
+            # This should return True since it's detected as a pixel wrapper
+            result = _is_from_pixels(wrapped_env)
+            assert (
+                result is True
+            ), f"Expected True for wrapped environment, got {result}"
+        finally:
+            # Restore original isinstance
+            builtins.isinstance = original_isinstance
+
 
 @pytest.mark.skipif(
     not _has_minigrid or not _has_gymnasium, reason="MiniGrid not found"
