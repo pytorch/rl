@@ -2486,7 +2486,7 @@
             <span class="p">]</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">RemotevLLMWrapper</span><span class="p">:</span>
+<div class="viewcode-block" id="RemotevLLMWrapper"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RemotevLLMWrapper</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote Ray actor wrapper for vLLMWrapper that provides a simplified interface.</span>
 
 <span class="sd">    This class wraps a vLLMWrapper instance as a Ray actor, allowing remote execution</span>
@@ -2498,6 +2498,7 @@
 <span class="sd">            - If a vLLM LLM object, it must be a remote model with a ray handle (not a local model).</span>
 <span class="sd">            Local vLLM models are not serializable and will raise an error.</span>
 <span class="sd">        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.</span>
+<span class="sd">        validate_model (bool, optional): Whether to validate the model. Defaults to True.</span>
 <span class="sd">        **kwargs: All other arguments are passed directly to vLLMWrapper.</span>
 
 <span class="sd">    Example:</span>
@@ -2521,11 +2522,13 @@
 <span class="sd">        &gt;&gt;&gt; print(result[&quot;text&quot;].response)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">max_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">max_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span> <span class="n">validate_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">):</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
         <span class="c1"># Validate model parameter - for vLLM, we accept strings or vLLM LLM objects with ray handles</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">validate_model</span><span class="p">:</span>
             <span class="c1"># Check if it&#39;s a vLLM LLM object with ray handle</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="kn">import</span><span class="w"> </span><span class="nn">vllm</span>
@@ -2539,19 +2542,22 @@
                             <span class="s2">&quot;For RemotevLLMWrapper, when passing a vLLM LLM object, &quot;</span>
                             <span class="s2">&quot;it should be a remote vLLM model with a ray handle. &quot;</span>
                             <span class="s2">&quot;Local vLLM models are not serializable. &quot;</span>
-                            <span class="s2">&quot;Consider using a string model name/path instead.&quot;</span>
+                            <span class="s2">&quot;Consider using a string model name/path instead. &quot;</span>
+                            <span class="s2">&quot;You can bypass this check by setting validate_model=False.&quot;</span>
                         <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;For RemotevLLMWrapper, the model parameter must be a string &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;(model name or path) or a remote vLLM LLM object. Got type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Local vLLM models are not serializable.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Local vLLM models are not serializable. &quot;</span>
+                        <span class="s2">&quot;You can bypass this check by setting validate_model=False.&quot;</span>
                     <span class="p">)</span>
             <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;For RemotevLLMWrapper, the model parameter must be a string &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;(model name or path) or a remote vLLM LLM object. Got type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;vLLM is not available, so only string model names/paths are supported.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;vLLM is not available, so only string model names/paths are supported. &quot;</span>
+                    <span class="s2">&quot;You can bypass this check by setting validate_model=False.&quot;</span>
                 <span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
@@ -2570,31 +2576,31 @@
 
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="fm">__call__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.forward"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass that automatically handles remote execution.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">forward</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">forward</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_new_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.get_new_version"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_new_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_new_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a new version of the wrapper with altered parameters.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_new_version</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_new_version</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.get_dist"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_dist">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution from logits/log-probs with optional masking.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist_with_prompt_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.get_dist_with_prompt_mask"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_dist_with_prompt_mask">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist_with_prompt_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked to only include response tokens (exclude prompt).&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_dist_with_prompt_mask</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_assistant_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked to only include assistant tokens.&quot;&quot;&quot;</span>
@@ -2644,17 +2650,17 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_generic_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.log_prob"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log probabilities.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">log_prob</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">log_prob</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup_batching</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.cleanup_batching"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.cleanup_batching">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup_batching</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clean up batching resources.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup when the wrapper is destroyed.&quot;&quot;&quot;</span>
@@ -2678,11 +2684,11 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager exit with cleanup.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_batching_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="RemotevLLMWrapper.get_batching_state"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_batching_state">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_batching_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current batching state.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_batching_state</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_batching_state</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -2808,7 +2814,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The keys for distribution samples.&quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">dist_sample_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">dist_sample_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span></div>
 </pre></div>
 
              </article>
