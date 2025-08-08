@@ -1300,11 +1300,11 @@ def _extract_responses_from_full_histories(
 def _batching(func):
     @wraps(func)
     def _batched_func(self, td_input: TensorDictBase, **kwargs):
-        # -- 0. skip if batching is disabled
+        # -- 0. Bypass if batching disabled
         if not self.batching:
             return func(self, td_input, **kwargs)
 
-        # ── 1. Normalise input ──────────────────────────────────────────────────
+        # -- 1. Normalise --------------------------------------------------------
         if td_input.batch_dims > 1:
             raise ValueError(
                 f"Batching not supported for batch_dims > 1: {td_input.batch_dims}"
@@ -1313,52 +1313,59 @@ def _batching(func):
         single = td_input.batch_dims == 0
         inputs = [td_input] if single else list(td_input.unbind(0))
         futures = [Future() for _ in inputs]
+        pending = set(futures)  # ← track our own Futures
 
-        # ── 2. Enqueue work and, if first in, do the draining ───────────────────
+        # -- 2. Enqueue ----------------------------------------------------------
         self._batch_queue.extend(inputs)
         self._futures.extend(futures)
 
         min_bs = getattr(self, "_min_batch_size", 1)
         max_bs = getattr(self, "_max_batch_size", None)
 
+        # -- 3. Drain while holding the lock ------------------------------------
         with self._batching_lock:
-            # Only the thread that managed to grab the lock will run the loop
-            while len(self._batch_queue) >= min_bs:
-                # Determine slice
-                slice_size = (
-                    len(self._batch_queue)
-                    if max_bs is None
-                    else min(max_bs, len(self._batch_queue))
-                )
-                batch = self._batch_queue[:slice_size]
-                fut_slice = self._futures[:slice_size]
+            if all(f.done() for f in futures):
+                # Our items were already processed by another thread.
+                # Skip draining; other workers will handle the rest of the queue.
+                pass
+            else:
+                while len(self._batch_queue) >= min_bs:
+                    slice_size = (
+                        len(self._batch_queue)
+                        if max_bs is None
+                        else min(max_bs, len(self._batch_queue))
+                    )
+                    batch = self._batch_queue[:slice_size]
+                    fut_slice = self._futures[:slice_size]
 
-                # Execute model
-                try:
-                    results = func(self, lazy_stack(batch), **kwargs).unbind(0)
-                    if len(results) != slice_size:  # sanity
-                        raise RuntimeError(
-                            f"Expected {slice_size} results, got {len(results)}"
-                        )
-                    # Fulfil the corresponding futures
-                    for fut, res in zip(fut_slice, results):
-                        fut.set_result(res)
-                except Exception as exc:
-                    for fut in fut_slice:
-                        fut.set_exception(exc)
-                    # Propagate to caller; other waiters will read the exception from their future
-                    raise
+                    try:
+                        results = func(self, lazy_stack(batch), **kwargs).unbind(0)
+                        if len(results) != slice_size:
+                            raise RuntimeError(
+                                f"Expected {slice_size} results, got {len(results)}"
+                            )
+                        for fut, res in zip(fut_slice, results):
+                            fut.set_result(res)
+                            pending.discard(fut)  # ← mark as done
+                    except Exception as exc:
+                        for fut in fut_slice:
+                            fut.set_exception(exc)
+                            pending.discard(fut)
+                        raise
 
-                # Pop processed work
-                del self._batch_queue[:slice_size]
-                del self._futures[:slice_size]
+                    # Pop processed work
+                    del self._batch_queue[:slice_size]
+                    del self._futures[:slice_size]
 
-        # ── 3. Outside the lock: wait only for OUR futures (they may already be done) ──
-        wait(
-            futures
-        )  # no timeout → immediate return if set_result()/set_exception() already called
-        result = [f.result() for f in futures]
+                    # ---- Early-exit: all *our* Futures are done -------------------
+                    if not pending:
+                        break
 
-        return result[0] if single else lazy_stack(result)
+        # -- 4. Outside the lock: wait only on remaining (rare) -----------------
+        if pending:  # usually empty; safety for min_bs > queue size
+            wait(pending)
+        results = [f.result() for f in futures]
+
+        return results[0] if single else lazy_stack(results)
 
     return _batched_func
