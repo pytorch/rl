@@ -28,7 +28,7 @@ repos:
           - flake8-bugbear==22.10.27
           - flake8-comprehensions==3.10.1
           - torchfix==0.0.2
-          - flake8-print==5.0.0
+          - flake8-print==4.0.1
 
   - repo: https://github.com/PyCQA/pydocstyle
     rev: 6.3.0

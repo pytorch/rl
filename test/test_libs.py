@@ -21,10 +21,10 @@ if _has_isaac:
     from torchrl.envs.libs.isaacgym import IsaacGymEnv
 import argparse
 import importlib
-
 import time
 import urllib
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from sys import platform
 from unittest import mock
@@ -229,9 +229,11 @@ def get_gym_pixel_wrapper():  # noqa: F811
 @implement_for("gymnasium", "1.1.0")
 def get_gym_pixel_wrapper():  # noqa: F811
     # works whenever gym_version > version.parse("0.19")
-    PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
-        "wrappers"
-    ).AddRenderObservation(*args, render_only=pixels_only, **kwargs)
+    def PixelObservationWrapper(*args, pixels_only=False, **kwargs):
+        return gym_backend("wrappers").AddRenderObservation(
+            *args, render_only=pixels_only, **kwargs
+        )
+
     return PixelObservationWrapper
 
 
@@ -1805,7 +1807,10 @@ class TestDMControl:
         r0 = env0.rollout(100, break_when_any_done=False)
         assert r0.device == torch.device("cpu")
         actions = collections.deque(r0["action"].unbind(0))
-        policy = lambda td: td.set("action", actions.popleft())
+
+        def policy(td):
+            return td.set("action", actions.popleft())
+
         env1.set_seed(0)
         r1 = env1.rollout(100, policy, break_when_any_done=False)
         assert r1.device == torch.device("cuda:0")
@@ -2929,8 +2934,12 @@ class TestVmas:
         self, n_envs, n_workers, n_agents, maybe_fork_ParallelEnv, frames_per_batch=80
     ):
         torch.manual_seed(1)
-        env_fun = lambda: VmasEnv(
-            scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
+        env_fun = partial(
+            VmasEnv,
+            scenario="flocking",
+            num_envs=n_envs,
+            n_agents=n_agents,
+            max_steps=7,
         )
 
         env = maybe_fork_ParallelEnv(n_workers, env_fun)
@@ -4460,7 +4469,8 @@ class TestPettingZoo:
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_vec_env(self, task, parallel, maybe_fork_ParallelEnv):
-        env_fun = lambda: PettingZooEnv(
+        env_fun = partial(
+            PettingZooEnv,
             task=task,
             parallel=parallel,
             seed=0,
@@ -4498,7 +4508,8 @@ class TestPettingZoo:
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_collector(self, task, parallel):
-        env_fun = lambda: PettingZooEnv(
+        env_fun = partial(
+            PettingZooEnv,
             task=task,
             parallel=parallel,
             seed=0,
