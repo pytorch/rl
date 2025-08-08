@@ -19,6 +19,6 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - jax[cuda12]
+    - jax[cuda12]>=0.7.0
     - brax
     - psutil

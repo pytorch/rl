@@ -24,7 +24,7 @@ dependencies:
     - ale-py
     - gymnasium-robotics
     - minari[create]
-    - jax
+    - jax>=0.7.0
     - mujoco               
     - mujoco-py<2.2,>=2.1
     - minigrid
