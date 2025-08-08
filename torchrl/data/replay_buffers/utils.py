@@ -16,6 +16,7 @@ from typing import Any, Callable, Union
 
 import numpy as np
 import torch
+from pyvers import implement_for
 from tensordict import (
     lazy_stack,
     MemoryMappedTensor,
@@ -27,7 +28,7 @@ from tensordict import (
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_unflatten
-from torchrl._utils import implement_for, logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"

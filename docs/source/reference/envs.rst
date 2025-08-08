@@ -1395,7 +1395,7 @@ support multiple versions of gym without requiring any effort from the user side
 For example, considering that our virtual environment has the v0.26.2 installed,
 the following function will return ``1`` when queried:
 
-    >>> from torchrl._utils import implement_for
+    >>> from pyvers import implement_for
     >>> @implement_for("gym", None, "0.26.0")
     ... def fun():
     ...     return 0

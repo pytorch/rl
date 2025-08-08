@@ -17,17 +17,12 @@ from typing import Callable
 import pytest
 import torch
 import torch.cuda
+from pyvers import implement_for
 from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn, vmap
 
-from torchrl._utils import (
-    implement_for,
-    logger,
-    logger as torchrl_logger,
-    RL_WARNINGS,
-    seed_generator,
-)
+from torchrl._utils import logger, logger as torchrl_logger, RL_WARNINGS, seed_generator
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv

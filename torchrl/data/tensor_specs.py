@@ -34,6 +34,7 @@ import numpy as np
 
 import tensordict
 import torch
+from pyvers import implement_for
 from tensordict import (
     is_tensor_collection,
     lazy_stack,
@@ -52,7 +53,7 @@ from tensordict.utils import (
     is_non_tensor,
     NestedKey,
 )
-from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
+from torchrl._utils import _make_ordinal_device, get_binary_env_var
 
 try:
     from torch.compiler import is_compiling
