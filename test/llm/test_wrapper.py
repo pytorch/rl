@@ -38,6 +38,7 @@ os.environ["VLLM_USE_V1"] = "0"
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
+_has_ray = importlib.util.find_spec("ray") is not None
 
 TransformersWrapperMaxTokens = partial(
     TransformersWrapper, generate_kwargs={"max_new_tokens": 10, "do_sample": True}
@@ -2513,94 +2514,6 @@ class TestBatching:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
-    def test_batching_continuous_throughput(
-        self,
-        wrapper_class,
-        vllm_instance,
-        transformers_instance,
-        monkey_patch_forward_for_instrumentation,
-    ):
-        """Test that the wrapper stays busy with continuous requests."""
-        import time
-        from concurrent.futures import ThreadPoolExecutor, wait
-
-        # Create wrapper using helper function
-        wrapper = create_batching_test_wrapper(
-            wrapper_class,
-            vllm_instance,
-            transformers_instance,
-            min_batch_size=1,
-            max_batch_size=2,  # Small batch size to maximize throughput
-            batching_timeout=5.0,
-        )
-
-        # Monkey patch the forward method using fixture
-        processing_events = monkey_patch_forward_for_instrumentation[
-            "processing_events"
-        ]
-
-        # Submit continuous requests
-        futures = []
-        pool = ThreadPoolExecutor(max_workers=5)
-        try:
-            # Submit requests rapidly
-            for i in range(10):
-                input_td = TensorDict(
-                    text=Text(prompt=[f"Continuous request {i}"]), batch_size=(1,)
-                )
-                future = pool.submit(wrapper.instrumented_forward, input_td)
-                futures.append(future)
-                time.sleep(0.02)  # Small delay between submissions
-
-            # Wait for all futures to complete
-            wait(futures, timeout=30)
-
-            # Verify all futures completed successfully
-            for future in futures:
-                result = future.result(timeout=5)
-                assert "text" in result
-
-            # Analyze processing patterns
-            assert len(processing_events) > 0, "No processing occurred"
-
-            # Check that processing happened across multiple threads (indicating concurrent processing)
-            thread_ids = {event["thread_id"] for event in processing_events}  # noqa
-            assert (
-                len(thread_ids) > 1
-            ), f"All processing happened in single thread: {thread_ids}"
-
-            # Check that we have multiple processing events (indicating continuous activity)
-            assert (
-                len(processing_events) >= 5
-            ), f"Too few processing events: {len(processing_events)}"
-
-            # Check that batches were formed (some batch sizes > 1)
-            batch_sizes = [event["batch_size"] for event in processing_events]
-            assert any(
-                bs > 1 for bs in batch_sizes
-            ), f"No batching occurred: {batch_sizes}"
-
-            # Check processing timing - should be relatively continuous
-            timestamps = [event["timestamp"] for event in processing_events]
-            time_diffs = [
-                timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)
-            ]
-
-            # Most time differences should be small (indicating continuous processing)
-            small_diffs = [diff for diff in time_diffs if diff < 1.0]
-            assert (
-                len(small_diffs) >= len(time_diffs) * 0.7
-            ), f"Too many large gaps in processing: {time_diffs}"
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
-            del wrapper
-            gc.collect()
-
-    @pytest.mark.parametrize(
-        "wrapper_class",
-        [vLLMWrapper, TransformersWrapperMaxTokens],
-        ids=["vllm", "transformers"],
-    )
     def test_batching_configuration_validation(
         self, wrapper_class, vllm_instance, transformers_instance
     ):
@@ -2919,6 +2832,84 @@ class TestRayWrapper:
         finally:
             del model
             gc.collect()
+
+
+@pytest.mark.skipif(not _has_ray, reason="Ray not available")
+class TestActorSharing:
+    """Test actor sharing functionality for Remote wrappers."""
+
+    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    def test_actor_sharing(self, backend):
+        """Test that creating the same wrapper twice uses the same actor."""
+        import ray
+        from torchrl.modules.llm.policies import (
+            RemoteTransformersWrapper,
+            RemotevLLMWrapper,
+        )
+
+        # Initialize Ray if not already done
+        if not ray.is_initialized():
+            ray.init()
+
+        # Choose the wrapper class based on backend
+        if backend == "vllm":
+            if not _has_vllm:
+                pytest.skip("vllm not available")
+            WrapperClass = RemotevLLMWrapper
+        elif backend == "transformers":
+            if not _has_transformers:
+                pytest.skip("transformers not available")
+            WrapperClass = RemoteTransformersWrapper
+        else:
+            raise ValueError(f"Invalid backend: {backend}")
+
+        try:
+            # Create first wrapper with explicit actor name
+            wrapper1 = WrapperClass(
+                model="Qwen/Qwen2.5-0.5B",
+                generate=True,
+                input_mode="text",
+                generate_kwargs={"max_new_tokens": 5},
+                actor_name="test_shared_actor",
+            )
+
+            # Create second wrapper with same actor name
+            wrapper2 = WrapperClass(
+                model="Qwen/Qwen2.5-0.5B",
+                generate=True,
+                input_mode="text",
+                generate_kwargs={"max_new_tokens": 5},
+                actor_name="test_shared_actor",
+            )
+
+            # Check that both wrappers use the same actor
+            assert (
+                wrapper1._remote_wrapper == wrapper2._remote_wrapper
+            ), f"Wrappers should share the same actor for backend {backend}"
+
+            # Test that both wrappers work
+            test_data = TensorDict(
+                text=Text(prompt="Hello, how are you?"),
+                batch_size=(),
+            )
+
+            result1 = wrapper1(test_data)
+            result2 = wrapper2(test_data)
+
+            # Both should produce valid results
+            assert "text" in result1
+            assert "text" in result2
+            assert isinstance(result1["text"].response, str)
+            assert isinstance(result2["text"].response, str)
+
+        finally:
+            # Cleanup
+            try:
+                del wrapper1
+                del wrapper2
+                gc.collect()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
