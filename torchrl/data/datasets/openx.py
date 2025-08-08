@@ -10,8 +10,9 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import torch
 from tensordict import make_tensordict, NonTensorData, pad, TensorDict

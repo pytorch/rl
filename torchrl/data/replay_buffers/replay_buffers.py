@@ -11,9 +11,10 @@ import multiprocessing
 import textwrap
 import threading
 import warnings
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
 import torch

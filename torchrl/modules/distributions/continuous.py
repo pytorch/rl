@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import weakref
+from collections.abc import Sequence
 from numbers import Number
-from typing import Sequence
 
 import numpy as np
 import torch

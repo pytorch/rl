@@ -10,8 +10,8 @@ import shutil
 import tempfile
 import urllib
 import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import torch

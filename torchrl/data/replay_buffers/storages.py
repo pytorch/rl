@@ -11,9 +11,10 @@ import sys
 import textwrap
 import warnings
 from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import tensordict

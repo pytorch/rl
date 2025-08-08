@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorDictBase

@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+from collections.abc import Callable, Iterator
 
-from typing import Any, Callable, Iterator
+from typing import Any
 
 import torch
 from torchrl._utils import logger as torchrl_logger

@@ -7,9 +7,10 @@ from __future__ import annotations
 import functools
 import re
 import warnings
+from collections.abc import Callable, Iterable
 from copy import copy
 from enum import Enum
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, TypeVar
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key

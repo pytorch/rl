@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import weakref
 from collections import deque
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 import torch
 from tensordict import (

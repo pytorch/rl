@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import warnings
-from typing import Any, Callable, Iterator, OrderedDict, Sequence
+from collections import OrderedDict
+from collections.abc import Callable, Iterator, Sequence
+from typing import Any
 
 import torch
 import torch.nn as nn

@@ -8,9 +8,9 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterator
 
 import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase

@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import abc
 import weakref
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import torch
 from tensordict import TensorDict, TensorDictBase

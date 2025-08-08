@@ -10,10 +10,10 @@ import os.path
 import shutil
 import tempfile
 from collections import defaultdict
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
-from typing import Callable
 
 import torch
 from tensordict import is_non_tensor, PersistentTensorDict, TensorDict

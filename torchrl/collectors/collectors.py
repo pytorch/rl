@@ -17,12 +17,13 @@ import time
 import typing
 import warnings
 from collections import defaultdict, OrderedDict
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Iterator, Mapping, Sequence, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 import torch

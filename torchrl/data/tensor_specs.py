@@ -12,23 +12,12 @@ import gc
 import math
 import warnings
 import weakref
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import wraps
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    overload,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Generic, overload, TypeVar, Union
 
 import numpy as np
 
@@ -61,27 +50,27 @@ except ImportError:
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
-INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
+INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, list]
 
 SHAPE_INDEX_TYPING = Union[
     int,
     range,
-    List[int],
+    list[int],
     np.ndarray,
     slice,
     None,
     torch.Tensor,
     type(...),
-    Tuple[
+    tuple[
         int,
         range,
-        List[int],
+        list[int],
         np.ndarray,
         slice,
         None,
         torch.Tensor,
         type(...),
-        Tuple[Any],
+        tuple[Any],
     ],
 ]
 
@@ -6273,7 +6262,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     def update(self, dict) -> None:
         for key, item in dict.items():
             if key in self.keys() and isinstance(
-                item, (Dict, Composite, StackedComposite)
+                item, (dict, Composite, StackedComposite)
             ):
                 for spec, sub_item in zip(self._specs, item.unbind(self.dim)):
                     spec[key].update(sub_item)
