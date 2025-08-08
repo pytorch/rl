@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 import tensordict
 import torch
+from pyvers import implement_for
 from tensordict import (
     is_tensor_collection,
     lazy_stack,
@@ -31,7 +32,7 @@ from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
-from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
+from torchrl._utils import _make_ordinal_device, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
     CompressedListStorageCheckpointer,
     ListStorageCheckpointer,

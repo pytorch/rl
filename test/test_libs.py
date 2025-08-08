@@ -34,6 +34,7 @@ import pytest
 import torch
 
 from packaging import version
+from pyvers import implement_for
 from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
@@ -47,7 +48,7 @@ from tensordict.nn import (
 )
 from torch import nn
 
-from torchrl._utils import implement_for, logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.data import (
     Binary,

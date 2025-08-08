@@ -8,7 +8,6 @@ from __future__ import annotations
 import collections
 import importlib
 import warnings
-from copy import copy
 from types import ModuleType
 from typing import Dict
 from warnings import warn
@@ -16,10 +15,15 @@ from warnings import warn
 import numpy as np
 import torch
 from packaging import version
+
+from pyvers import (
+    BackendManager,
+    gym_backend as pyvers_gym_backend,
+    implement_for,
+    register_backend,
+)
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
-
-from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
     _minmax_dtype,
     Binary,
@@ -39,11 +43,7 @@ from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 from torchrl.envs.utils import _classproperty
 
-try:
-    from torch.utils._contextlib import _DecoratorContextManager
-except ModuleNotFoundError:
-    from torchrl._utils import _DecoratorContextManager
-
+# Keep these for backward compatibility with existing code
 DEFAULT_GYM = None
 IMPORT_ERROR = None
 # check gym presence without importing it
@@ -56,6 +56,14 @@ _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
 _has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
+# Register gym backends with pyvers
+register_backend(
+    "gym",
+    {
+        "gym": "gym",
+        "gymnasium": "gymnasium",
+    },
+)
 
 GYMNASIUM_1_ERROR = """RuntimeError: TorchRL does not support gymnasium 1.0 versions due to incompatible
 changes in the Gym API.
@@ -80,7 +88,7 @@ def _minigrid_lib():
     return minigrid
 
 
-class set_gym_backend(_DecoratorContextManager):
+class set_gym_backend(BackendManager):
     """Sets the gym-backend to a certain value.
 
     Args:
@@ -124,71 +132,7 @@ class set_gym_backend(_DecoratorContextManager):
     """
 
     def __init__(self, backend):
-        self.backend = backend
-
-    def _call(self):
-        """Sets the backend as default."""
-        global DEFAULT_GYM
-        DEFAULT_GYM = self.backend
-        found_setters = collections.defaultdict(bool)
-        for setter in copy(implement_for._setters):
-            check_module = (
-                callable(setter.module_name)
-                and setter.module_name.__name__ == self.backend.__name__
-            ) or setter.module_name == self.backend.__name__
-            check_version = setter.check_version(
-                self.backend.__version__, setter.from_version, setter.to_version
-            )
-            if check_module and check_version:
-                setter.module_set()
-                found_setter = True
-            elif check_module:
-                found_setter = False
-            else:
-                found_setter = None
-            if found_setter is not None:
-                found_setters[setter.func_name] = (
-                    found_setters[setter.func_name] or found_setter
-                )
-        # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
-        for func_name, found_setter in found_setters.items():
-            if not found_setter:
-                raise ImportError(
-                    f"could not set anything related to gym backend "
-                    f"{self.backend.__name__} with version={self.backend.__version__} for the function with name {func_name}. "
-                    f"Check that the gym versions match!"
-                )
-
-    def set(self):
-        """Irreversibly sets the gym backend in the script."""
-        self._call()
-
-    def __enter__(self):
-        # we save a complete list of setters as well as whether they should be set.
-        # we want the full list because we want to be able to nest the calls to set_gym_backend.
-        # we also want to keep track of which ones are set to reproduce what was set before.
-        self._setters_saved = copy(implement_for._implementations)
-        self._call()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        implement_for.reset(setters_dict=self._setters_saved)
-        delattr(self, "_setters_saved")
-
-    def clone(self):
-        # override this method if your children class takes __init__ parameters
-        return self.__class__(self.backend)
-
-    @property
-    def backend(self):
-        if isinstance(self._backend, str):
-            return importlib.import_module(self._backend)
-        elif callable(self._backend):
-            return self._backend()
-        return self._backend
-
-    @backend.setter
-    def backend(self, value):
-        self._backend = value
+        super().__init__("gym", backend)
 
 
 def gym_backend(submodule=None):
@@ -207,26 +151,42 @@ def gym_backend(submodule=None):
         ...     wrappers = gym_backend('wrappers')
         ...     print(wrappers)
     """
-    global IMPORT_ERROR
-    global DEFAULT_GYM
-    if DEFAULT_GYM is None:
-        try:
-            # rule of thumbs: gymnasium precedes
-            import gymnasium as gym
-        except ImportError as err:
-            IMPORT_ERROR = err
+    # Get the current backend from pyvers
+    try:
+        backend = pyvers_gym_backend()
+    except ImportError:
+        backend = None
+
+    if backend is None:
+        global IMPORT_ERROR
+        global DEFAULT_GYM
+        if DEFAULT_GYM is None:
             try:
-                import gym as gym
+                # rule of thumbs: gymnasium precedes
+                import gymnasium as gym
             except ImportError as err:
                 IMPORT_ERROR = err
-                gym = None
-        DEFAULT_GYM = gym
-    if submodule is not None:
-        if not submodule.startswith("."):
-            submodule = "." + submodule
-            submodule = importlib.import_module(submodule, package=DEFAULT_GYM.__name__)
-            return submodule
-    return DEFAULT_GYM
+                try:
+                    import gym as gym
+                except ImportError as err:
+                    IMPORT_ERROR = err
+                    gym = None
+            DEFAULT_GYM = gym
+        backend = DEFAULT_GYM
+
+    if backend is None:
+        raise ImportError("No gym backend could be loaded")
+
+    if submodule is None:
+        return backend
+
+    # Get the submodule
+    try:
+        return getattr(backend, submodule)
+    except AttributeError:
+        raise AttributeError(
+            f"Module {backend.__name__} has no attribute '{submodule}'"
+        )
 
 
 __all__ = ["GymWrapper", "GymEnv"]

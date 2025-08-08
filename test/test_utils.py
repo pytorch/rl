@@ -23,7 +23,8 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
 else:
     from _utils_internal import capture_log_records, get_default_devices
 from packaging import version
-from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
+from pyvers import implement_for
+from torchrl._utils import _rng_decorator, get_binary_env_var
 
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 

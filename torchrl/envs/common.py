@@ -16,6 +16,7 @@ from typing import Any, Callable, Iterator
 import numpy as np
 import torch
 import torch.nn as nn
+from pyvers import implement_for
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
@@ -28,7 +29,6 @@ from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
     _replace_last,
-    implement_for,
     prod,
     seed_generator,
 )
