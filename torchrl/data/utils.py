@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import functools
 import typing
-from typing import Any, Callable, List, Tuple, Union
+from collections.abc import Callable
+from typing import Any, Union
 
 import numpy as np
 import torch
@@ -45,7 +46,7 @@ if hasattr(typing, "get_args"):
 else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
-INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+INDEX_TYPING = Union[None, int, slice, str, Tensor, list[Any], tuple[Any, ...]]
 
 
 ACTION_SPACE_MAP = {

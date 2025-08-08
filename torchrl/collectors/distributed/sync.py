@@ -9,9 +9,11 @@ from __future__ import annotations
 import os
 import socket
 import warnings
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Any, Callable, Literal, OrderedDict, Sequence
+from typing import Any, Literal
 
 import torch.cuda
 from tensordict import TensorDict, TensorDictBase

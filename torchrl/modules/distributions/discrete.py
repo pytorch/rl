@@ -4,9 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from enum import Enum
 from functools import wraps
-from typing import Sequence
 
 import torch
 import torch.distributions as D

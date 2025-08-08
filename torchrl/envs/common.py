@@ -9,9 +9,10 @@ import abc
 import re
 import warnings
 import weakref
+from collections.abc import Callable, Iterator
 from copy import deepcopy
 from functools import partial, wraps
-from typing import Any, Callable, Iterator
+from typing import Any
 
 import numpy as np
 import torch

@@ -11,8 +11,10 @@ import os
 import socket
 import time
 import warnings
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from copy import copy, deepcopy
-from typing import Any, Callable, OrderedDict, Sequence
+from typing import Any
 
 import torch.cuda
 

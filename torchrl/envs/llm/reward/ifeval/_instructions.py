@@ -36,7 +36,8 @@ import json
 import random
 import re
 import string
-from typing import Any, Dict, Literal, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, Literal, Optional, Union
 
 from torchrl._utils import logger as torchrl_logger
 
@@ -50,7 +51,7 @@ from ._instructions_util import (
 )
 
 
-_InstructionArgsDtype = Optional[Dict[str, Union[int, str, Sequence[str]]]]
+_InstructionArgsDtype = Optional[dict[str, Union[int, str, Sequence[str]]]]
 
 _LANGUAGES = LANGUAGE_CODES
 

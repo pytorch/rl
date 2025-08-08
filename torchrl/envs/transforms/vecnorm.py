@@ -7,9 +7,11 @@ from __future__ import annotations
 import math
 import uuid
 import warnings
+from collections import OrderedDict
+from collections.abc import Sequence
 from copy import copy
 
-from typing import Any, OrderedDict, Sequence
+from typing import Any
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import importlib
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 import torch
 from tensordict import TensorDict, TensorDictBase

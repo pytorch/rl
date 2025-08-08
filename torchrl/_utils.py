@@ -16,12 +16,13 @@ import threading
 import time
 import traceback
 import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from copy import copy
 from functools import wraps
 from importlib import import_module
 from textwrap import indent
-from typing import Any, Callable, cast, TypeVar
+from typing import Any, cast, TypeVar
 
 import numpy as np
 import torch

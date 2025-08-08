@@ -11,8 +11,8 @@ import os.path
 import sys
 import time
 import unittest
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable
 
 import pytest
 import torch

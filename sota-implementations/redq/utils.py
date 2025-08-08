@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 from copy import copy
-from typing import Callable, Sequence
 
 import torch
 from omegaconf import OmegaConf

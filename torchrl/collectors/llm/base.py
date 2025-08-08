@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import torch
 

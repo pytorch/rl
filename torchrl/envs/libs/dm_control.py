@@ -7,7 +7,7 @@ from __future__ import annotations
 import collections
 import importlib
 import os
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 import torch
@@ -44,7 +44,7 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     import dm_env
 
-    if isinstance(spec, collections.OrderedDict) or isinstance(spec, Dict):
+    if isinstance(spec, collections.OrderedDict) or isinstance(spec, dict):
         spec = {
             k: _dmcontrol_to_torchrl_spec_transform(
                 item,

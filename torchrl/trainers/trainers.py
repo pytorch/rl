@@ -9,9 +9,10 @@ import abc
 import pathlib
 import warnings
 from collections import defaultdict, OrderedDict
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, Callable, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import torch.nn
@@ -362,19 +363,19 @@ class Trainer:
 
         elif dest == "pre_steps_log":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=Tuple[str, float]
+                op, input=TensorDictBase, output=tuple[str, float]
             )
             self._pre_steps_log_ops.append((op, kwargs))
 
         elif dest == "post_steps_log":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=Tuple[str, float]
+                op, input=TensorDictBase, output=tuple[str, float]
             )
             self._post_steps_log_ops.append((op, kwargs))
 
         elif dest == "post_optim_log":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=Tuple[str, float]
+                op, input=TensorDictBase, output=tuple[str, float]
             )
             self._post_optim_log_ops.append((op, kwargs))
 

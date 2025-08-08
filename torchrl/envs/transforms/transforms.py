@@ -14,20 +14,13 @@ import multiprocessing as mp
 import time
 import warnings
 import weakref
+from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from enum import IntEnum
 from functools import wraps
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    Mapping,
-    OrderedDict,
-    Sequence,
-    TYPE_CHECKING,
-    TypeVar,
-    Union,
-)
+from typing import Any, TYPE_CHECKING, TypeVar, Union
 
 import numpy as np
 
