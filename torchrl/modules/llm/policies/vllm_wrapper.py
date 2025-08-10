@@ -23,6 +23,7 @@ from tensordict.tensorclass import from_dataclass, TensorClass
 from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
+from torchrl import logger as torchrl_logger
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
@@ -2101,7 +2102,12 @@ class RemotevLLMWrapper:
     """
 
     def __init__(
-        self, model, max_concurrency: int = 16, validate_model: bool = True, **kwargs
+        self,
+        model,
+        max_concurrency: int = 16,
+        validate_model: bool = True,
+        actor_name: str = None,
+        **kwargs,
     ):
         import ray
 
@@ -2141,10 +2147,22 @@ class RemotevLLMWrapper:
         if not ray.is_initialized():
             ray.init()
 
-        # Create the remote actor
+        if actor_name is not None:
+            # Check if an actor with this name already exists
+            try:
+                existing_actor = ray.get_actor(actor_name)
+                torchrl_logger.info(f"Using existing actor {actor_name}")
+                # If we can get the actor, assume it's alive and use it
+                self._remote_wrapper = existing_actor
+                return
+            except ValueError:
+                # Actor doesn't exist, create a new one
+                torchrl_logger.info(f"Creating new actor {actor_name}")
+
+        # Create the remote actor with the unique name
         self._remote_wrapper = (
             ray.remote(vLLMWrapper)
-            .options(max_concurrency=max_concurrency)
+            .options(max_concurrency=max_concurrency, name=actor_name)
             .remote(model, **kwargs)
         )
 
