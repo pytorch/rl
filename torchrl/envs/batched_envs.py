@@ -1843,7 +1843,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.consolidate:
             try:
                 data = tensordict.consolidate(
-                    share_memory=True, inplace=True, num_threads=1
+                    share_memory=True, inplace=False, num_threads=1
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2677,6 +2677,7 @@ def _run_worker_pipe_direct(
             # data = data[idx]
             data, reset_kwargs = data
             if data is not None:
+                data.unlock_()
                 data._fast_apply(
                     lambda x: x.clone() if x.device.type == "cuda" else x, out=data
                 )
