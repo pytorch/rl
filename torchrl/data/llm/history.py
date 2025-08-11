@@ -1219,15 +1219,6 @@ class History(TensorClass["nocast"]):
                 f"The new history to append must have one less dimension than self. Got self.ndim={self.ndim} and history.ndim={history.ndim}."
             )
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
-        # if self.ndim > 1 and dim >= self.ndim - 1:
-        #     # then we need to append each element independently
-        #     result = []
-        #     for hist, new_hist in zip(self.unbind(0), history.unbind(0)):
-        #         hist_c = hist.append(new_hist, inplace=inplace, dim=dim - 1)
-        #         result.append(hist_c)
-        #     if inplace:
-        #         return self
-        #     return lazy_stack(result)
         if inplace:
             if (
                 isinstance(self._tensordict, LazyStackedTensorDict)
