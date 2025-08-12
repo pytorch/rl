@@ -8,4 +8,4 @@ tiktoken
 tqdm
 transformers
 git+https://github.com/pytorch/rl
-git+https://github.com/pytorch-labs/tensordict
+git+https://github.com/meta-pytorch/tensordict
