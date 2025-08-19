@@ -1037,6 +1037,6 @@ def tree_iter(pytree):  # noqa: F811
 def _auto_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda:0")
-    elif torch.mps.is_available():
+    elif getattr(torch.mps, "is_available", lambda: False)():
         return torch.device("mps:0")
     return torch.device("cpu")
