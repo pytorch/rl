@@ -361,8 +361,6 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                 torchrl_logger.info(
                     f"creating tensordict data in {self.data_path_root}: "
                 )
-                #td_data = td_data.memmap_like(self.data_path_root)
-                #td_data = td_data.unlock_()
                 if dataset_has_nontensor:
                     _preallocate_nontensor_fields(td_data, episode, total_steps, name_map=_NAME_MATCH)
                 torchrl_logger.info(f"tensordict structure: {td_data}")
