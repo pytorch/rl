@@ -393,7 +393,7 @@ class LSTMModule(ModuleBase):
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.modules import MLP
+        >>> from torchrl.modules import MLP, LSTMModule
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
