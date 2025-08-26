@@ -11,11 +11,12 @@ import os
 import time
 import weakref
 from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any, Callable, Sequence
+from typing import Any
 from warnings import warn
 
 import torch

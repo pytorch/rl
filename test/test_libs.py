@@ -21,10 +21,10 @@ if _has_isaac:
     from torchrl.envs.libs.isaacgym import IsaacGymEnv
 import argparse
 import importlib
-
 import time
 import urllib
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from sys import platform
 from unittest import mock
@@ -229,9 +229,11 @@ def get_gym_pixel_wrapper():  # noqa: F811
 @implement_for("gymnasium", "1.1.0")
 def get_gym_pixel_wrapper():  # noqa: F811
     # works whenever gym_version > version.parse("0.19")
-    PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
-        "wrappers"
-    ).AddRenderObservation(*args, render_only=pixels_only, **kwargs)
+    def PixelObservationWrapper(*args, pixels_only=False, **kwargs):
+        return gym_backend("wrappers").AddRenderObservation(
+            *args, render_only=pixels_only, **kwargs
+        )
+
     return PixelObservationWrapper
 
 
@@ -1649,6 +1651,140 @@ class TestGym:
                 del env
                 gc.collect()
 
+    def test_is_from_pixels_simple_env(self):
+        """Test that _is_from_pixels correctly identifies non-pixel environments."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a simple environment that doesn't have pixels
+        class SimpleEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(3,))
+
+        env = SimpleEnv()
+
+        # This should return False since it's not a pixel environment
+        result = _is_from_pixels(env)
+        assert result is False, f"Expected False for simple environment, got {result}"
+
+    def test_is_from_pixels_box_env(self):
+        """Test that _is_from_pixels correctly identifies pixel Box environments."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a pixel-like environment
+        class PixelEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Box(
+                    low=0, high=255, shape=(64, 64, 3)
+                )
+
+        pixel_env = PixelEnv()
+
+        # This should return True since it's a pixel environment
+        result = _is_from_pixels(pixel_env)
+        assert result is True, f"Expected True for pixel environment, got {result}"
+
+    def test_is_from_pixels_dict_env(self):
+        """Test that _is_from_pixels correctly identifies Dict environments with pixels."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a Dict environment that has pixels
+        class DictPixelEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Dict(
+                    {
+                        "pixels": gym.spaces.Box(low=0, high=255, shape=(64, 64, 3)),
+                        "state": gym.spaces.Box(low=-1, high=1, shape=(3,)),
+                    }
+                )
+
+        dict_pixel_env = DictPixelEnv()
+
+        # This should return True since it has a "pixels" key
+        result = _is_from_pixels(dict_pixel_env)
+        assert (
+            result is True
+        ), f"Expected True for Dict environment with pixels, got {result}"
+
+    def test_is_from_pixels_dict_env_no_pixels(self):
+        """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a Dict environment that doesn't have pixels
+        class DictNoPixelEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Dict(
+                    {
+                        "state": gym.spaces.Box(low=-1, high=1, shape=(3,)),
+                        "features": gym.spaces.Box(low=0, high=1, shape=(5,)),
+                    }
+                )
+
+        dict_no_pixel_env = DictNoPixelEnv()
+
+        # This should return False since it doesn't have a "pixels" key
+        result = _is_from_pixels(dict_no_pixel_env)
+        assert (
+            result is False
+        ), f"Expected False for Dict environment without pixels, got {result}"
+
+    def test_is_from_pixels_wrapper_env(self):
+        """Test that _is_from_pixels correctly identifies wrapped environments."""
+        from torchrl.envs.libs.gym import _is_from_pixels
+
+        # Test with a mock environment that simulates being wrapped with a pixel wrapper
+        class MockWrappedEnv:
+            def __init__(self):
+                try:
+                    import gymnasium as gym
+                except ImportError:
+                    import gym
+                self.observation_space = gym.spaces.Box(
+                    low=0, high=255, shape=(64, 64, 3)
+                )
+
+        # Mock the isinstance check to simulate the wrapper detection
+        import torchrl.envs.libs.utils
+
+        original_isinstance = isinstance
+
+        def mock_isinstance(obj, cls):
+            if cls == torchrl.envs.libs.utils.GymPixelObservationWrapper:
+                return True
+            return original_isinstance(obj, cls)
+
+        # Temporarily patch isinstance
+        import builtins
+
+        builtins.isinstance = mock_isinstance
+
+        try:
+            wrapped_env = MockWrappedEnv()
+
+            # This should return True since it's detected as a pixel wrapper
+            result = _is_from_pixels(wrapped_env)
+            assert (
+                result is True
+            ), f"Expected True for wrapped environment, got {result}"
+        finally:
+            # Restore original isinstance
+            builtins.isinstance = original_isinstance
+
 
 @pytest.mark.skipif(
     not _has_minigrid or not _has_gymnasium, reason="MiniGrid not found"
@@ -1805,7 +1941,10 @@ class TestDMControl:
         r0 = env0.rollout(100, break_when_any_done=False)
         assert r0.device == torch.device("cpu")
         actions = collections.deque(r0["action"].unbind(0))
-        policy = lambda td: td.set("action", actions.popleft())
+
+        def policy(td):
+            return td.set("action", actions.popleft())
+
         env1.set_seed(0)
         r1 = env1.rollout(100, policy, break_when_any_done=False)
         assert r1.device == torch.device("cuda:0")
@@ -2929,8 +3068,12 @@ class TestVmas:
         self, n_envs, n_workers, n_agents, maybe_fork_ParallelEnv, frames_per_batch=80
     ):
         torch.manual_seed(1)
-        env_fun = lambda: VmasEnv(
-            scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
+        env_fun = partial(
+            VmasEnv,
+            scenario="flocking",
+            num_envs=n_envs,
+            n_agents=n_agents,
+            max_steps=7,
         )
 
         env = maybe_fork_ParallelEnv(n_workers, env_fun)
@@ -3410,7 +3553,7 @@ D4RL_ENVIRONMENTS = [
 
 def _minari_init() -> tuple[bool, Exception | None]:
     """Initialize Minari datasets list. Returns True if already initialized."""
-    global _MINARI_DATASETS
+    global _MINARI_DATASETS  # noqa: F824
     if _MINARI_DATASETS and not all(
         isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS
     ):
@@ -4468,7 +4611,8 @@ class TestPettingZoo:
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_vec_env(self, task, parallel, maybe_fork_ParallelEnv):
-        env_fun = lambda: PettingZooEnv(
+        env_fun = partial(
+            PettingZooEnv,
             task=task,
             parallel=parallel,
             seed=0,
@@ -4506,7 +4650,8 @@ class TestPettingZoo:
     @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_collector(self, task, parallel):
-        env_fun = lambda: PettingZooEnv(
+        env_fun = partial(
+            PettingZooEnv,
             task=task,
             parallel=parallel,
             seed=0,

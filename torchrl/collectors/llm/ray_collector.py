@@ -7,7 +7,8 @@ from __future__ import annotations
 import copy
 
 import warnings
-from typing import Any, Callable, Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import torch
 from tensordict import TensorDictBase

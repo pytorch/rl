@@ -7,7 +7,6 @@ from __future__ import annotations
 import copy
 import importlib
 import warnings
-from typing import Dict
 
 import numpy as np
 import packaging
@@ -807,7 +806,7 @@ class PettingZooWrapper(_EnvWrapper):
                 for index, agent in enumerate(agents):
                     agent_obs = observation_dict[agent]
                     agent_info = info_dict[agent]
-                    if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
+                    if isinstance(agent_obs, dict) and "action_mask" in agent_obs:
                         if agent in agents_acting:
                             group_mask[index] = torch.tensor(
                                 agent_obs["action_mask"],
@@ -815,7 +814,7 @@ class PettingZooWrapper(_EnvWrapper):
                                 dtype=torch.bool,
                             )
                         del agent_obs["action_mask"]
-                    elif isinstance(agent_info, Dict) and "action_mask" in agent_info:
+                    elif isinstance(agent_info, dict) and "action_mask" in agent_info:
                         if agent in agents_acting:
                             group_mask[index] = torch.tensor(
                                 agent_info["action_mask"],

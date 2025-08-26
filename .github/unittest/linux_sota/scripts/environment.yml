@@ -29,3 +29,5 @@ dependencies:
     - coverage
     - vmas
     - transformers
+    - minari
+    - minari[create]

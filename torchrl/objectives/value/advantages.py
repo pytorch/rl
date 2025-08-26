@@ -7,10 +7,10 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase

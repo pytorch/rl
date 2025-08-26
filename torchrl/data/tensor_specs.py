@@ -12,23 +12,12 @@ import gc
 import math
 import warnings
 import weakref
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import wraps
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    overload,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Generic, overload, TypeVar, Union
 
 import numpy as np
 
@@ -61,27 +50,27 @@ except ImportError:
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
-INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
+INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, list]
 
 SHAPE_INDEX_TYPING = Union[
     int,
     range,
-    List[int],
+    list[int],
     np.ndarray,
     slice,
     None,
     torch.Tensor,
     type(...),
-    Tuple[
+    tuple[
         int,
         range,
-        List[int],
+        list[int],
         np.ndarray,
         slice,
         None,
         torch.Tensor,
         type(...),
-        Tuple[Any],
+        tuple[Any],
     ],
 ]
 
@@ -523,7 +512,7 @@ class ContinuousBox(Box):
                 return True
             return False
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.low.dtype == other.low.dtype
             and self.high.dtype == other.high.dtype
             and self.device == other.device
@@ -627,7 +616,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     shape: torch.Size
     space: None | Box
-    device: torch.device | None = None
+    device: torch.device | None = None  # noqa # type: ignore
     dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
     _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
@@ -679,7 +668,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return decorator
 
     @property
-    def device(self) -> torch.device:
+    def device(self) -> torch.device:  # noqa # type: ignore
         """The device of the spec.
 
         Only :class:`Composite` specs can have a ``None`` device. All leaves must have a non-null device.
@@ -2163,7 +2152,7 @@ class OneHot(TensorSpec):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -2444,7 +2433,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
 
     def __eq__(self, other):
         return (
-            type(other) == type(self)
+            type(other) is type(self)
             and self.device == other.device
             and self.shape == other.shape
             and self.space == other.space
@@ -3443,7 +3432,7 @@ class MultiOneHot(OneHot):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -4042,7 +4031,7 @@ class Categorical(TensorSpec):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -4731,7 +4720,7 @@ class MultiCategorical(Categorical):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -5585,7 +5574,7 @@ class Composite(TensorSpec):
         #     return False
         # if val.shape[-self.ndim:] != self.shape:
         #     return False
-        if self.data_cls is not None and type(val) != self.data_cls:
+        if self.data_cls is not None and type(val) is not self.data_cls:
             return False
         for key, item in self._specs.items():
             if item is None or (isinstance(item, Composite) and item.is_empty()):
@@ -5902,7 +5891,7 @@ class Composite(TensorSpec):
 
     def __eq__(self, other: object) -> bool:
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
@@ -6273,7 +6262,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     def update(self, dict) -> None:
         for key, item in dict.items():
             if key in self.keys() and isinstance(
-                item, (Dict, Composite, StackedComposite)
+                item, (dict, Composite, StackedComposite)
             ):
                 for spec, sub_item in zip(self._specs, item.unbind(self.dim)):
                     spec[key].update(sub_item)

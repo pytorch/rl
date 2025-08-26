@@ -16,6 +16,8 @@ from .policies import (
     LLMWrapperBase,
     LogProbs,
     Masks,
+    RemoteTransformersWrapper,
+    RemotevLLMWrapper,
     Text,
     Tokens,
     TransformersWrapper,
@@ -23,16 +25,18 @@ from .policies import (
 )
 
 __all__ = [
-    "LLMWrapperBase",
+    "ChatHistory",
     "LLMOnDevice",
+    "LLMWrapperBase",
+    "LogProbs",
+    "Masks",
+    "RemoteTransformersWrapper",
+    "RemotevLLMWrapper",
+    "Text",
+    "Tokens",
     "TransformersWrapper",
     "make_vllm_worker",
-    "ChatHistory",
     "stateless_init_process_group",
     "vLLMWorker",
     "vLLMWrapper",
-    "Text",
-    "LogProbs",
-    "Masks",
-    "Tokens",
 ]

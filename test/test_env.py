@@ -107,7 +107,7 @@ try:
     _atari_found = True
 except FileNotFoundError:
     _atari_found = False
-    atari_confs = defaultdict(lambda: "")
+    atari_confs = defaultdict(str)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
@@ -136,6 +136,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
         EnvThatDoesNothing,
+        EnvThatErrorsBecauseOfStack,
         EnvWithDynamicSpec,
         EnvWithMetadata,
         EnvWithTensorClass,
@@ -178,6 +179,7 @@ else:
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
         EnvThatDoesNothing,
+        EnvThatErrorsBecauseOfStack,
         EnvWithDynamicSpec,
         EnvWithMetadata,
         EnvWithTensorClass,
@@ -343,6 +345,20 @@ class TestEnvBase:
             2, lambda: GymEnv("CartPole-v1", categorical_action_encoding=True)
         )
         env.rollout(10, policy)
+
+    def test_stack_error(self):
+        env = EnvThatErrorsBecauseOfStack()
+        assert not env._has_dynamic_specs
+        cm = pytest.raises(
+            RuntimeError,
+            match="The reward key was present in the root tensordict of at least one of the tensordicts to stack",
+        )
+        with cm:
+            env.check_env_specs()
+        with cm:
+            env.rollout(10, break_when_any_done=True, return_contiguous=True)
+        with cm:
+            env.rollout(10, break_when_any_done=False, return_contiguous=True)
 
     @pytest.mark.parametrize("dynamic_shape", [True, False])
     def test_make_spec_from_td(self, dynamic_shape):

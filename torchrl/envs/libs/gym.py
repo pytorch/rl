@@ -10,7 +10,6 @@ import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict
 from warnings import warn
 
 import numpy as np
@@ -130,7 +129,7 @@ class set_gym_backend(_DecoratorContextManager):
         """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        found_setters = collections.defaultdict(lambda: False)
+        found_setters = collections.defaultdict(bool)
         for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)
@@ -510,7 +509,7 @@ def convert_sequence_spec(
     return out
 
 
-@register_gym_spec_conversion(Dict)
+@register_gym_spec_conversion(dict)
 def convert_dict_spec(
     spec,
     dtype=None,
@@ -765,7 +764,7 @@ def _is_from_pixels(env):
     gDict = gym_backend("spaces").dict.Dict
     Box = gym_backend("spaces").Box
 
-    if isinstance(observation_spec, (Dict,)):
+    if isinstance(observation_spec, (dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
     if isinstance(observation_spec, (gDict,)):

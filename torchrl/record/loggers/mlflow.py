@@ -7,8 +7,9 @@ from __future__ import annotations
 import importlib.util
 
 import os
+from collections.abc import Sequence
 from tempfile import TemporaryDirectory
-from typing import Any, Sequence
+from typing import Any
 
 from torch import Tensor
 

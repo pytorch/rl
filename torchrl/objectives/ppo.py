@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import contextlib
 import warnings
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping
 
 import torch
 from tensordict import (
@@ -100,7 +100,7 @@ class PPOLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: scalar | Mapping[NestedKey, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
@@ -351,7 +351,7 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] | None = None,
+        entropy_coeff: float | Mapping[NestedKey, float] | None = None,
         log_explained_variance: bool = True,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
@@ -459,9 +459,7 @@ class PPOLoss(LossModule):
 
         if isinstance(entropy_coeff, Mapping):
             # Store the mapping for per-head coefficients
-            self._entropy_coeff_map = {
-                str(k): float(v) for k, v in entropy_coeff.items()
-            }
+            self._entropy_coeff_map = {k: float(v) for k, v in entropy_coeff.items()}
             # Register an empty buffer for compatibility
             self.register_buffer("entropy_coeff", torch.tensor(0.0))
         elif isinstance(entropy_coeff, (float, int, torch.Tensor)):
@@ -911,6 +909,7 @@ class PPOLoss(LossModule):
 
         If `self._entropy_coeff_map` is provided, apply per-head entropy coefficients.
         Otherwise, use the scalar `self.entropy_coeff`.
+        The entries in self._entropy_coeff_map require the full nested key to the entropy head.
         """
         if self._entropy_coeff_map is None:
             if is_tensor_collection(entropy):
@@ -918,7 +917,10 @@ class PPOLoss(LossModule):
             return -self.entropy_coeff * entropy
 
         loss_term = None  # running sum over heads
-        for head_name, entropy_head in entropy.items():
+        coeff = 0
+        for head_name, entropy_head in entropy.items(
+            include_nested=True, leaves_only=True
+        ):
             try:
                 coeff = self._entropy_coeff_map[head_name]
             except KeyError as exc:
@@ -926,7 +928,7 @@ class PPOLoss(LossModule):
             coeff_t = torch.as_tensor(
                 coeff, dtype=entropy_head.dtype, device=entropy_head.device
             )
-            head_loss_term = -coeff_t * _sum_td_features(entropy_head)
+            head_loss_term = -coeff_t * entropy_head
             loss_term = (
                 head_loss_term if loss_term is None else loss_term + head_loss_term
             )  # accumulate
@@ -970,7 +972,7 @@ class ClipPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: (scalar | Mapping[NesstedKey, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
@@ -1075,7 +1077,7 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] | None = None,
+        entropy_coeff: float | Mapping[NestedKey, float] | None = None,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -1263,7 +1265,7 @@ class KLPENPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: scalar | Mapping[NestedKey, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
@@ -1369,7 +1371,7 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] | None = None,
+        entropy_coeff: float | Mapping[NestedKey, float] | None = None,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,

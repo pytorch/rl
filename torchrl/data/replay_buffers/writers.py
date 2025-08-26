@@ -8,10 +8,11 @@ import heapq
 import json
 import textwrap
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch

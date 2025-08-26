@@ -11,8 +11,8 @@ import os.path
 import sys
 import time
 import unittest
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable
 
 import pytest
 import torch
@@ -261,7 +261,7 @@ def capture_log_records(records, logger_qname, record_name):
             self.old_emit = old_emit
 
         def __call__(self, record):
-            nonlocal records
+            nonlocal records  # noqa: F824
             self.old_emit(record)
             if record_name in record.name:
                 records.append(record)

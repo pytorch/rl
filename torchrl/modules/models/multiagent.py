@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Sequence
 
 import numpy as np
 import torch

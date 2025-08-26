@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, TYPE_CHECKING
+from collections.abc import Callable
+
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import lazy_stack, TensorDictBase

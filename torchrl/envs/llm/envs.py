@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
 
-from typing import Any, Callable, Literal, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 

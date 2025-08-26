@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import torch
 from tensordict import TensorDict, TensorDictBase
