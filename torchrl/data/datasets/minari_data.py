@@ -356,13 +356,13 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                 )
                 if "terminated" in td_data.keys():
                     td_data["done"] = td_data["truncated"] | td_data["terminated"]
-                td_data = td_data.expand(total_steps)
+                td_data = td_data.expand(total_steps).contiguous()
                 # save to designated location
                 torchrl_logger.info(
                     f"creating tensordict data in {self.data_path_root}: "
                 )
-                td_data = td_data.memmap_like(self.data_path_root)
-                td_data = td_data.unlock_()
+                #td_data = td_data.memmap_like(self.data_path_root)
+                #td_data = td_data.unlock_()
                 if dataset_has_nontensor:
                     _preallocate_nontensor_fields(td_data, episode, total_steps, name_map=_NAME_MATCH)
                 torchrl_logger.info(f"tensordict structure: {td_data}")
@@ -440,6 +440,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                 f"index={index} - episode num {episode_num}"
                             )
                         index += steps
+
+                td_data = td_data.memmap_like(self.data_path_root)
                 # Add a "done" entry
                 if self.split_trajs:
                     with td_data.unlock_():
