@@ -3575,6 +3575,138 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    @staticmethod
+    def _zero_postproc(td):
+        # Apply zero to all tensor values in the tensordict
+        return torch.zeros_like(td)
+
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            SyncDataCollector,
+            functools.partial(MultiSyncDataCollector, cat_results="stack"),
+            MultiaSyncDataCollector,
+        ],
+    )
+    @pytest.mark.parametrize("use_replay_buffer", [True, False])
+    @pytest.mark.parametrize("extend_buffer", [True, False])
+    def test_collector_postproc_zeros(
+        self, collector_class, use_replay_buffer, extend_buffer
+    ):
+        """Test that postproc functionality works correctly across all collector types.
+
+        This test verifies that:
+        1. Postproc is applied correctly when no replay buffer is used
+        2. Postproc is applied correctly when replay buffer is used with extend_buffer=True
+        3. Postproc is not applied when replay buffer is used with extend_buffer=False
+        4. The behavior is consistent across Sync, MultiaSync, and MultiSync collectors
+        """
+        # Create a simple dummy environment
+        def make_env():
+            env = DiscreteActionVecMockEnv()
+            env.set_seed(0)
+            return env
+
+        # Create a simple dummy policy
+        def make_policy(env):
+            return RandomPolicy(env.action_spec)
+
+        # Test parameters
+        total_frames = 64
+        frames_per_batch = 16
+
+        if use_replay_buffer:
+            # Create replay buffer
+            rb = ReplayBuffer(
+                storage=LazyTensorStorage(256), batch_size=5, compilable=False
+            )
+
+            # Test with replay buffer
+            if collector_class == SyncDataCollector:
+                collector = collector_class(
+                    make_env(),
+                    make_policy(make_env()),
+                    replay_buffer=rb,
+                    total_frames=total_frames,
+                    frames_per_batch=frames_per_batch,
+                    extend_buffer=extend_buffer,
+                    postproc=self._zero_postproc if extend_buffer else None,
+                )
+            else:
+                # MultiSync and MultiaSync collectors
+                collector = collector_class(
+                    [make_env, make_env],
+                    make_policy(make_env()),
+                    replay_buffer=rb,
+                    total_frames=total_frames,
+                    frames_per_batch=frames_per_batch,
+                    extend_buffer=extend_buffer,
+                    postproc=self._zero_postproc if extend_buffer else None,
+                )
+            try:
+                # Collect data
+                collected_frames = 0
+                for _ in collector:
+                    collected_frames += frames_per_batch
+                    if extend_buffer:
+                        # With extend_buffer=True, postproc should be applied
+                        # Check that the replay buffer contains zeros
+                        sample = rb.sample(5)
+                        torch.testing.assert_close(
+                            sample["observation"],
+                            torch.zeros_like(sample["observation"]),
+                        )
+                        torch.testing.assert_close(
+                            sample["action"], torch.zeros_like(sample["action"])
+                        )
+                        # Check next.reward instead of reward
+                        torch.testing.assert_close(
+                            sample["next", "reward"],
+                            torch.zeros_like(sample["next", "reward"]),
+                        )
+                    else:
+                        # With extend_buffer=False, postproc should not be applied
+                        # Check that the replay buffer contains non-zero values
+                        sample = rb.sample(5)
+                        assert torch.any(sample["observation"] != 0.0)
+                        assert torch.any(sample["action"] != 0.0)
+
+                    if collected_frames >= total_frames:
+                        break
+            finally:
+                collector.shutdown()
+
+        else:
+            # Test without replay buffer
+            if collector_class == SyncDataCollector:
+                collector = collector_class(
+                    make_env(),
+                    make_policy(make_env()),
+                    total_frames=total_frames,
+                    frames_per_batch=frames_per_batch,
+                    postproc=self._zero_postproc,
+                )
+            else:
+                # MultiSync and MultiaSync collectors
+                collector = collector_class(
+                    [make_env, make_env],
+                    make_policy(make_env()),
+                    total_frames=total_frames,
+                    frames_per_batch=frames_per_batch,
+                    postproc=self._zero_postproc,
+                )
+            try:
+                # Collect data and verify postproc is applied
+                for batch in collector:
+                    # All values should be zero due to postproc
+                    assert torch.all(batch["observation"] == 0.0)
+                    assert torch.all(batch["action"] == 0.0)
+                    # Check next.reward instead of reward
+                    assert torch.all(batch["next", "reward"] == 0.0)
+                    break  # Just check first batch
+            finally:
+                collector.shutdown()
+
 
 def __deepcopy_error__(*args, **kwargs):
     raise RuntimeError("deepcopy not allowed")

@@ -801,7 +801,9 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> tuple[Any, dict]:
-        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
@@ -1539,7 +1541,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> tuple[Any, dict]:
-        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
