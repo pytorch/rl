@@ -12,7 +12,7 @@ import gc
 import math
 import warnings
 import weakref
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import wraps
@@ -6262,7 +6262,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     def update(self, dict) -> None:
         for key, item in dict.items():
             if key in self.keys() and isinstance(
-                item, (dict, Composite, StackedComposite)
+                item, (Mapping, Composite, StackedComposite)
             ):
                 for spec, sub_item in zip(self._specs, item.unbind(self.dim)):
                     spec[key].update(sub_item)

@@ -1791,6 +1791,10 @@ def test_batch_errors():
 
 
 def test_add_warning():
+    from torchrl._utils import RL_WARNINGS
+
+    if not RL_WARNINGS:
+        return
     rb = ReplayBuffer(storage=ListStorage(10), batch_size=3)
     with pytest.warns(
         UserWarning,
