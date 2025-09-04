@@ -104,7 +104,8 @@ class Storage:
         return _attached_entities_list
 
     # TODO: Check this
-    @torch.compiler.disable()
+    # @torch.compiler.disable()
+    @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
         return self._attached_entities
 
