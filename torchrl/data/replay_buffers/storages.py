@@ -104,7 +104,8 @@ class Storage:
         return _attached_entities_list
 
     # TODO: Check this
-    @torch.compiler.disable()
+    # @torch.compiler.disable()
+    @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
         return self._attached_entities
 
@@ -163,6 +164,8 @@ class Storage:
     def _empty(self):
         ...
 
+    # TODO: Without this disable, compiler recompiles due to changing len(self) guards.
+    @torch.compiler.disable()
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
@@ -974,6 +977,8 @@ class TensorStorage(Storage):
         else:
             return tree_map(lambda x: x[index], storage)
 
+    # TODO: Without this disable, compiler recompiles due to changing _len_value guards.
+    @torch.compiler.disable()
     def __len__(self):
         return self._len
 

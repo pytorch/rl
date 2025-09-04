@@ -888,10 +888,11 @@ class TestStorages:
             torch._logging.set_logs()
 
         assert len(storage) == num_extend * data_size
-        assert len(records) == 8, (
-            "If this ever decreases, that's probably good news and the "
-            "`torch._dynamo.disable` wrapper around "
-            "`TensorStorage._rand_given_ndim` can be removed."
+        assert len(records) <= 8, (
+            "Excessive recompilations detected. Expected 8 or fewer, but got "
+            f"{len(records)}. This suggests the `torch.compiler.disable` "
+            "decorators may not be working properly or new recompilation "
+            "sources have been introduced."
         )
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
