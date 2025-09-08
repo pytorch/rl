@@ -130,7 +130,7 @@ jobs:
       repository: pytorch/rl
       download-artifact: docs
       ref: gh-pages
-      test-infra-ref: main
+      test-infra-ref: release/2.8
       script: |
         set -euo pipefail
 
