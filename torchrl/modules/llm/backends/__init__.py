@@ -11,9 +11,24 @@ from .vllm import (
     vLLMWorker,
 )
 
+from .vllm_async import (
+    AsyncLLMEngineExtended,
+    AsyncVLLMEngineService,
+    AsyncvLLMWorker,
+    make_async_vllm_engine,
+    stateless_init_process_group_async,
+)
+
 __all__ = [
+    # Legacy vLLM (sync)
     "vLLMWorker",
     "stateless_init_process_group",
     "make_vllm_worker",
     "LLMOnDevice",
+    # Async vLLM
+    "AsyncvLLMWorker",
+    "AsyncLLMEngineExtended",
+    "AsyncVLLMEngineService",
+    "make_async_vllm_engine",
+    "stateless_init_process_group_async",
 ]
