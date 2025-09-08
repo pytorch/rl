@@ -74,6 +74,63 @@ for data in collector:
 
 </details>
 
+### 🧪 PPOTrainer (Experimental) - High-Level Training Interface
+
+TorchRL now includes an **experimental PPOTrainer** that provides a complete, configurable PPO training solution! This prototype feature combines TorchRL's modular components into a cohesive training system with sensible defaults:
+
+- 🎯 **Complete Training Pipeline**: Handles environment setup, data collection, loss computation, and optimization automatically
+- ⚙️ **Extensive Configuration**: Comprehensive Hydra-based config system for easy experimentation and hyperparameter tuning
+- 📊 **Built-in Logging**: Automatic tracking of rewards, actions, episode completion rates, and training statistics
+- 🔧 **Modular Design**: Built on existing TorchRL components (collectors, losses, replay buffers) for maximum flexibility
+- 📝 **Minimal Code**: Complete SOTA implementation in [just ~20 lines](sota-implementations/ppo_trainer/train.py)!
+
+**Working Example**: See [`sota-implementations/ppo_trainer/`](sota-implementations/ppo_trainer/) for a complete, working PPO implementation that trains on Pendulum-v1 with full Hydra configuration support.
+
+<details>
+  <summary>Complete Training Script (sota-implementations/ppo_trainer/train.py)</summary>
+
+```python
+import hydra
+from torchrl.trainers.algorithms.configs import *
+
+@hydra.main(config_path="config", config_name="config", version_base="1.1")
+def main(cfg):
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    trainer.train()
+
+if __name__ == "__main__":
+    main()
+```
+*That's it! Complete PPO training in ~20 lines with full configurability.*
+
+</details>
+
+<details>
+  <summary>API Usage Examples</summary>
+
+```python
+from torchrl.trainers.algorithms.ppo import PPOTrainer
+from hydra import instantiate
+
+# Basic usage with default configuration
+config = PPOTrainer.default_config()
+trainer = instantiate(config)
+trainer.train()
+
+# Custom configuration with overrides
+config = PPOTrainer.default_config(
+    total_frames=2_000_000,
+    env_cfg__env_name="HalfCheetah-v4",
+    actor_network__network__num_cells=256
+)
+trainer = instantiate(config)
+trainer.train()
+```
+
+</details>
+
+**Future Plans**: Additional algorithm trainers (SAC, TD3, DQN) and full integration of all TorchRL components within the configuration system are planned for upcoming releases.
+
 ## Key features
 
 - 🐍 **Python-first**: Designed with Python as the primary language for ease of use and flexibility

@@ -47,6 +47,10 @@ except ImportError:
 class PPOTrainer(Trainer):
     """PPO (Proximal Policy Optimization) trainer implementation.
 
+    .. warning::
+        This is an experimental/prototype feature. The API may change in future versions.
+        Please report any issues or feedback to help improve this implementation.
+
     This trainer implements the PPO algorithm for training reinforcement learning agents.
     It extends the base Trainer class with PPO-specific functionality including
     policy optimization, value function learning, and entropy regularization.
@@ -61,6 +65,25 @@ class PPOTrainer(Trainer):
     - Observation statistics (optional)
 
     Logging can be configured via constructor parameters to enable/disable specific metrics.
+
+    Examples:
+        >>> # Basic usage with default configuration
+        >>> from torchrl.trainers.algorithms.ppo import PPOTrainer
+        >>> config = PPOTrainer.default_config()
+        >>> trainer = instantiate(config)
+        >>> trainer.train()
+
+        >>> # Custom configuration
+        >>> config = PPOTrainer.default_config(
+        ...     total_frames=2_000_000,
+        ...     env_cfg__env_name="HalfCheetah-v4"
+        ... )
+        >>> trainer = instantiate(config)
+        >>> trainer.train()
+
+    .. note::
+        This trainer requires a configurable environment setup. See the
+        :class:`~torchrl.trainers.algorithms.configs` module for configuration options.
     """
 
     def __init__(
@@ -90,6 +113,12 @@ class PPOTrainer(Trainer):
         log_actions: bool = True,
         log_observations: bool = False,
     ) -> None:
+        warnings.warn(
+            "PPOTrainer is an experimental/prototype feature. The API may change in future versions. "
+            "Please report any issues or feedback to help improve this implementation.",
+            UserWarning,
+            stacklevel=2,
+        )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -117,23 +146,26 @@ class PPOTrainer(Trainer):
         )
         self.register_op("pre_epoch", gae)
 
-        if not isinstance(replay_buffer.sampler, SamplerWithoutReplacement):
+        if replay_buffer is not None and not isinstance(
+            replay_buffer.sampler, SamplerWithoutReplacement
+        ):
             warnings.warn(
                 "Sampler is not a SamplerWithoutReplacement, which is required for PPO."
             )
 
-        rb_trainer = ReplayBufferTrainer(
-            replay_buffer,
-            batch_size=None,
-            flatten_tensordicts=True,
-            memmap=False,
-            device=getattr(replay_buffer.storage, "device", "cpu"),
-            iterate=True,
-        )
+        if replay_buffer is not None:
+            rb_trainer = ReplayBufferTrainer(
+                replay_buffer,
+                batch_size=None,
+                flatten_tensordicts=True,
+                memmap=False,
+                device=getattr(replay_buffer.storage, "device", "cpu"),
+                iterate=True,
+            )
 
-        self.register_op("pre_epoch", rb_trainer.extend)
-        self.register_op("process_optim_batch", rb_trainer.sample)
-        self.register_op("post_loss", rb_trainer.update_priority)
+            self.register_op("pre_epoch", rb_trainer.extend)
+            self.register_op("process_optim_batch", rb_trainer.sample)
+            self.register_op("post_loss", rb_trainer.update_priority)
 
         policy_weights_getter = partial(
             TensorDict.from_module, self.loss_module.actor_network
