@@ -67,23 +67,21 @@ class PPOTrainer(Trainer):
     Logging can be configured via constructor parameters to enable/disable specific metrics.
 
     Examples:
-        >>> # Basic usage with default configuration
+        >>> # Basic usage with manual configuration
         >>> from torchrl.trainers.algorithms.ppo import PPOTrainer
-        >>> config = PPOTrainer.default_config()
-        >>> trainer = instantiate(config)
-        >>> trainer.train()
-
-        >>> # Custom configuration
-        >>> config = PPOTrainer.default_config(
-        ...     total_frames=2_000_000,
-        ...     env_cfg__env_name="HalfCheetah-v4"
-        ... )
+        >>> from torchrl.trainers.algorithms.configs import PPOTrainerConfig
+        >>> from hydra import instantiate
+        >>> config = PPOTrainerConfig(...)  # Configure with required parameters
         >>> trainer = instantiate(config)
         >>> trainer.train()
 
     .. note::
         This trainer requires a configurable environment setup. See the
         :class:`~torchrl.trainers.algorithms.configs` module for configuration options.
+
+    .. warning::
+        This is an experimental feature. The API may change in future versions.
+        We welcome feedback and contributions to help improve this implementation!
     """
 
     def __init__(

@@ -931,8 +931,8 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         if len(args) > 0:
             # New syntax: TransformedEnv(base_env, transform, ...)
             base_env = args[0]
-            transform = args[1] if len(args) > 1 else None
-            cache_specs = args[2] if len(args) > 2 else True
+            transform = args[1] if len(args) > 1 else kwargs.pop("transform", None)
+            cache_specs = args[2] if len(args) > 2 else kwargs.pop("cache_specs", True)
             auto_unwrap = kwargs.pop("auto_unwrap", None)
         elif "env" in kwargs:
             # Old syntax: TransformedEnv(env=..., transform=...)

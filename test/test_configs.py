@@ -1082,66 +1082,6 @@ class TestTrainerConfigs:
         assert trainer_config.actor_network is None
         assert trainer_config.critic_network is None
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
-    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_ppo_trainer_integration_basic(self):
-        """Test basic PPOTrainer integration with minimal training."""
-        import warnings
-
-        try:
-            from hydra import instantiate
-            from torchrl.trainers.algorithms.ppo import PPOTrainer
-        except ImportError:
-            pytest.skip("PPOTrainer or Hydra not available")
-
-        # Suppress the experimental warning for testing
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-
-            # Check that PPOTrainer has default_config method
-            if not hasattr(PPOTrainer, "default_config"):
-                pytest.skip("PPOTrainer.default_config not implemented yet")
-
-            # Create a basic config with very small parameters for fast testing
-            config = PPOTrainer.default_config(
-                total_frames=100,  # Very small for fast test
-                env_cfg__env_name="CartPole-v1",  # Simple discrete environment
-                collector_cfg__frames_per_batch=32,
-                replay_buffer_cfg__storage__max_size=64,
-                trainer_cfg__optim_steps_per_batch=1,
-                trainer_cfg__num_epochs=1,
-                trainer_cfg__progress_bar=False,  # Disable for testing
-                trainer_cfg__save_trainer_file=None,  # No saving in tests
-                optimizer_cfg__lr=1e-3,
-            )
-
-            # Test that we can instantiate the trainer
-            trainer = instantiate(config)
-
-            # Verify trainer attributes
-            assert trainer.total_frames == 100
-            assert hasattr(trainer, "collector")
-            assert hasattr(trainer, "loss_module")
-            assert hasattr(trainer, "optimizer")
-            assert hasattr(trainer, "replay_buffer")
-
-            # Test that training runs without errors (just a few steps)
-            try:
-                # Override total_frames to be very small for testing
-                trainer.total_frames = 50
-                trainer.train()
-                # If we get here, the integration test passed
-            except Exception as e:
-                # Log the error for debugging but don't fail the test
-                # as this is just a basic smoke test
-                warnings.warn(f"Training error (expected for basic test): {e}")
-
-            # Clean up
-            trainer.shutdown()
-
-            # For now, we just test instantiation works
-            # Full training test can be enabled once the implementation is more stable
-
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestHydraParsing:
@@ -1151,7 +1091,10 @@ class TestHydraParsing:
 
         GlobalHydra.instance().clear()
         from hydra import initialize_config_module
+        from torchrl.trainers.algorithms.configs import _register_configs
 
+        # Register the configs manually for testing
+        _register_configs()
         initialize_config_module("torchrl.trainers.algorithms.configs")
 
     def _run_hydra_test(

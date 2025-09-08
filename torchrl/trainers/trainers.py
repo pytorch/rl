@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import pad, TensorDictBase
+from tensordict import NestedKey, pad, TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
@@ -1049,7 +1049,7 @@ class LogScalar(TrainerHookBase):
     handles masking and computes both mean and standard deviation.
 
     Args:
-        key (str or tuple): the key where to find the value in the input batch.
+        key (NestedKey): the key where to find the value in the input batch.
             Can be a string for simple keys or a tuple for nested keys.
         logname (str, optional): name of the metric to be logged. If None, will use
             the key as the log name. Default is None.
@@ -1077,7 +1077,7 @@ class LogScalar(TrainerHookBase):
 
     def __init__(
         self,
-        key: str | tuple,
+        key: NestedKey,
         logname: str | None = None,
         log_pbar: bool = False,
         include_std: bool = True,

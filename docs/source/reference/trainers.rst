@@ -217,41 +217,44 @@ with configurable defaults and a comprehensive configuration system built on Hyd
 - Modular design built on existing TorchRL components
 - **Minimal code**: Complete SOTA implementation in just ~20 lines!
 
-**Quick Start:**
+.. warning::
+    This is an experimental feature. The API may change in future versions. 
+    We welcome feedback and contributions to help improve this implementation!
 
-.. code-block:: python
+**Quick Start - Command Line Interface:**
 
-    from torchrl.trainers.algorithms.ppo import PPOTrainer
-    from hydra import instantiate
+.. code-block:: bash
 
-    # Basic usage with default configuration
-    config = PPOTrainer.default_config()
-    trainer = instantiate(config)
-    trainer.train()
+    # Basic usage - train PPO on Pendulum-v1 with default settings
+    python sota-implementations/ppo_trainer/train.py
 
 **Custom Configuration:**
 
-.. code-block:: python
+.. code-block:: bash
 
-    # Override specific parameters
-    config = PPOTrainer.default_config(
-        total_frames=2_000_000,
-        env_cfg__env_name="HalfCheetah-v4",
-        actor_network__network__num_cells=256,
-        optimizer_cfg__lr=3e-4
-    )
-    trainer = instantiate(config)
-    trainer.train()
+    # Override specific parameters via command line
+    python sota-implementations/ppo_trainer/train.py \
+        trainer.total_frames=2000000 \
+        training_env.create_env_fn.base_env.env_name=HalfCheetah-v4 \
+        networks.policy_network.num_cells=[256,256] \
+        optimizer.lr=0.0003
 
 **Environment Switching:**
 
-.. code-block:: python
+.. code-block:: bash
 
-    # Switch to a different environment
-    config = PPOTrainer.default_config(
-        env_cfg__env_name="Walker2d-v4",
-        env_cfg__backend="gymnasium"
-    )
+    # Switch to a different environment and logger
+    python sota-implementations/ppo_trainer/train.py \
+        env=gym \
+        training_env.create_env_fn.base_env.env_name=Walker2d-v4 \
+        logger=tensorboard
+
+**See All Options:**
+
+.. code-block:: bash
+
+    # View all available configuration options
+    python sota-implementations/ppo_trainer/train.py --help
 
 **Configuration Groups:**
 

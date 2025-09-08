@@ -1,3 +1,10 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
@@ -322,7 +329,7 @@ def _make_tanh_normal_model(*args, **kwargs):
         distribution_class=TanhNormal,
         return_log_prob=return_log_prob,
         default_interaction_type=exploration_type,
-        **kwargs
+        **kwargs,
     )
 
     result = ProbabilisticTensorDictSequential(module, prob_module)

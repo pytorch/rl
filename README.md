@@ -25,9 +25,26 @@
 
 ## 🚀 What's New
 
+### 🚀 **Command-Line Training Interface** - Train RL Agents Without Writing Code! (Experimental)
+
+TorchRL now provides a **powerful command-line interface** that lets you train state-of-the-art RL agents with simple bash commands! No Python scripting required - just run training with customizable parameters:
+
+- 🎯 **One-Command Training**: `python sota-implementations/ppo_trainer/train.py`
+- ⚙️ **Full Customization**: Override any parameter via command line: `trainer.total_frames=2000000 optimizer.lr=0.0003`
+- 🌍 **Multi-Environment Support**: Switch between Gym, Brax, DM Control, and more with `env=gym training_env.create_env_fn.base_env.env_name=HalfCheetah-v4`
+- 📊 **Built-in Logging**: TensorBoard, Weights & Biases, CSV logging out of the box
+- 🔧 **Hydra-Powered**: Leverages Hydra's powerful configuration system for maximum flexibility
+- 🏃‍♂️ **Production Ready**: Same robust training pipeline as our SOTA implementations
+
+**Perfect for**: Researchers, practitioners, and anyone who wants to train RL agents without diving into implementation details. 
+
+⚠️ **Note**: This is an experimental feature. The API may change in future versions. We welcome feedback and contributions to help improve this implementation!
+
+Check out the [complete CLI documentation](https://github.com/pytorch/rl/tree/main/sota-implementations/ppo_trainer) to get started!
+
 ### LLM API - Complete Framework for Language Model Fine-tuning
 
-TorchRL now includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This new framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
+TorchRL also includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This new framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
 
 - 🤖 **Unified LLM Wrappers**: Seamless integration with Hugging Face models and vLLM inference engines - more to come!
 - 💬 **Conversation Management**: Advanced [`History`](torchrl/data/llm/history.py) class for multi-turn dialogue with automatic chat template detection
@@ -101,30 +118,32 @@ def main(cfg):
 if __name__ == "__main__":
     main()
 ```
-*That's it! Complete PPO training in ~20 lines with full configurability.*
+*Complete PPO training in ~20 lines with full configurability.*
 
 </details>
 
 <details>
   <summary>API Usage Examples</summary>
 
-```python
-from torchrl.trainers.algorithms.ppo import PPOTrainer
-from hydra import instantiate
+```bash
+# Basic usage - train PPO on Pendulum-v1 with default settings
+python sota-implementations/ppo_trainer/train.py
 
-# Basic usage with default configuration
-config = PPOTrainer.default_config()
-trainer = instantiate(config)
-trainer.train()
+# Custom configuration with command-line overrides
+python sota-implementations/ppo_trainer/train.py \
+    trainer.total_frames=2000000 \
+    training_env.create_env_fn.base_env.env_name=HalfCheetah-v4 \
+    networks.policy_network.num_cells=[256,256] \
+    optimizer.lr=0.0003
 
-# Custom configuration with overrides
-config = PPOTrainer.default_config(
-    total_frames=2_000_000,
-    env_cfg__env_name="HalfCheetah-v4",
-    actor_network__network__num_cells=256
-)
-trainer = instantiate(config)
-trainer.train()
+# Use different environment and logger
+python sota-implementations/ppo_trainer/train.py \
+    env=gym \
+    training_env.create_env_fn.base_env.env_name=Walker2d-v4 \
+    logger=tensorboard
+
+# See all available options
+python sota-implementations/ppo_trainer/train.py --help
 ```
 
 </details>
