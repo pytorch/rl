@@ -433,9 +433,10 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_spawning_popen</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tensordict</span>
@@ -467,6 +468,11 @@
     <span class="n">INT_CLASSES</span><span class="p">,</span>
     <span class="n">tree_iter</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.compiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_dynamo_compiling</span> <span class="k">as</span> <span class="n">is_compiling</span>
 
 
 <div class="viewcode-block" id="Storage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Storage</span><span class="p">:</span>
@@ -519,6 +525,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_attached_entities_list</span> <span class="o">=</span> <span class="n">_attached_entities_list</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="n">_attached_entities_list</span>
 
+    <span class="c1"># TODO: Check this</span>
+    <span class="c1"># @torch.compiler.disable()</span>
     <span class="nd">@torch</span><span class="o">.</span><span class="n">_dynamo</span><span class="o">.</span><span class="n">assume_constant_result</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_attached_entities_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attached_entities</span>
@@ -578,6 +586,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="o">...</span>
 
+    <span class="c1"># TODO: Without this disable, compiler recompiles due to changing len(self) guards.</span>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_rand_given_ndim</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
         <span class="c1"># a method to return random indices given the storage ndim</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
@@ -1039,7 +1049,7 @@
 
     <span class="nd">@_len</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_len</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compilable</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compilable</span><span class="p">:</span>
             <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_len_value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">_len_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">_len_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
@@ -1114,7 +1124,7 @@
 
     <span class="c1"># TODO: Without this disable, compiler recompiles for back-to-back calls.</span>
     <span class="c1"># Figuring out a way to avoid this disable would give better performance.</span>
-    <span class="nd">@torch</span><span class="o">.</span><span class="n">_dynamo</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_rand_given_ndim</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rand_given_ndim_impl</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
 
@@ -1389,6 +1399,8 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">tree_map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">storage</span><span class="p">)</span>
 
+    <span class="c1"># TODO: Without this disable, compiler recompiles due to changing _len_value guards.</span>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_len</span>
 

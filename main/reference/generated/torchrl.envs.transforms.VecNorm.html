@@ -575,7 +575,7 @@ names to the keys.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.VecNorm.frozen_copy">
-<span class="sig-name descname"><span class="pre">frozen_copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#VecNorm.frozen_copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNorm.frozen_copy" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">frozen_copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.VecNorm" title="torchrl.envs.transforms.transforms.VecNorm"><span class="pre">VecNorm</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#VecNorm.frozen_copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNorm.frozen_copy" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a copy of the Transform that keeps track of the stats but does not update them.</p>
 </dd></dl>
 
@@ -629,7 +629,7 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.VecNorm.standard_normal">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">standard_normal</span></span><a class="headerlink" href="#torchrl.envs.transforms.VecNorm.standard_normal" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">standard_normal</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrl.envs.transforms.VecNorm.standard_normal" title="Permalink to this definition">¶</a></dt>
 <dd><p>Whether the affine transform given by <cite>loc</cite> and <cite>scale</cite> follows the standard normal equation.</p>
 <p>Similar to <code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationNorm</span></code> standard_normal attribute.</p>
 <p>Always returns <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>

@@ -491,7 +491,7 @@ to download the full example code.</p>
 <p>Memory-based policies are crucial not only when the observations are partially
 observable but also when the time dimension must be taken into account to
 make informed decisions.</p>
-<p>Recurrent neural network have long been a popular tool for memory-based
+<p>Recurrent neural networks have long been a popular tool for memory-based
 policies. The idea is to keep a recurrent state in memory between two
 consecutive steps, and use this as an input to the policy along with the
 current observation.</p>
@@ -533,6 +533,7 @@ is implemented in practice.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">SliceSampler</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Compose</span><span class="p">,</span>
     <span class="n">ExplorationType</span><span class="p">,</span>
@@ -798,13 +799,16 @@ this work.</p>
 </section>
 <section id="collector-and-replay-buffer">
 <h2>Collector and replay buffer<a class="headerlink" href="#collector-and-replay-buffer" title="Permalink to this heading">¶</a></h2>
-<p>We build the simplest data collector there is. We’ll try to train our algorithm
-with a million frames, extending the buffer with 50 frames at a time. The buffer
-will be designed to store 20 thousands trajectories of 50 steps each.
-At each optimization step (16 per data collection), we’ll collect 4 items
-from our buffer, for a total of 200 transitions.
-We’ll use a <a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a> storage to keep the data
-on disk.</p>
+<p>For RNN-based policies, we need to sample sequences of consecutive transitions
+rather than independent transitions. We’ll use a <a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.samplers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>
+to sample trajectory slices of length 50. This ensures that the LSTM hidden states
+can be properly propagated through the sequence during training.</p>
+<p>The buffer will store 1,000,000 individual transitions, and when sampling, we’ll
+get slices of up to 50 consecutive steps. At each optimization step (16 per data collection),
+we’ll sample batches totaling 200 transitions from trajectory slices.</p>
+<p>We’ll use a <a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage" title="torchrl.data.replay_buffers.LazyMemmapStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyMemmapStorage</span></code></a> storage to keep the data
+on disk, and pass the replay buffer directly to the data collector so it can
+automatically populate the buffer as data is collected.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>For the sake of efficiency, we’re only running a few thousands iterations
@@ -812,48 +816,64 @@ here. In a real setting, the total number of frames should be set to 1M.</p>
 </div>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">buffer_scratch_dir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
 
-<span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">stoch_policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
 <span class="n">rb</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
-    <span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">20_000</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="o">=</span><span class="n">buffer_scratch_dir</span><span class="p">),</span>
-    <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="mi">1_000_000</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="o">=</span><span class="n">buffer_scratch_dir</span><span class="p">),</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span>
+        <span class="n">slice_len</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span> <span class="n">cache_values</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">strict_length</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
     <span class="n">prefetch</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">transform</span><span class="o">=</span><span class="k">lambda</span> <span class="n">td</span><span class="p">:</span> <span class="n">td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span>
+    <span class="n">env</span><span class="p">,</span>
+    <span class="n">stoch_policy</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">storing_device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 </section>
 <section id="training-loop">
 <h2>Training loop<a class="headerlink" href="#training-loop" title="Permalink to this heading">¶</a></h2>
-<p>To keep track of the progress, we will run the policy in the environment once
-every 50 data collection, and plot the results after training.</p>
+<p>Since we passed the replay buffer to the collector, the collector no longer yields
+data directly - instead it automatically populates the replay buffer. We iterate
+through the collector to trigger data collection, then sample from the buffer for training.
+To keep track of the progress, we will run the policy in the environment once
+every 50 data collection iterations, and plot the results after training.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">utd</span> <span class="o">=</span> <span class="mi">16</span>
 <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="n">collector</span><span class="o">.</span><span class="n">total_frames</span><span class="p">)</span>
 <span class="n">longest</span> <span class="o">=</span> <span class="mi">0</span>
 
 <span class="n">traj_lens</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
-    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span>
-            <span class="s2">&quot;Let us print the first batch of data.</span><span class="se">\n</span><span class="s2">Pay attention to the key names &quot;</span>
-            <span class="s2">&quot;which will reflect what can be found in this data structure, in particular: &quot;</span>
-            <span class="s2">&quot;the output of the QValueModule (action_values, action and chosen_action_value),&quot;</span>
-            <span class="s2">&quot;the &#39;is_init&#39; key that will tell us if a step is initial or not, and the &quot;</span>
-            <span class="s2">&quot;recurrent_state keys.</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span>
-            <span class="n">data</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
-    <span class="c1"># it is important to pass data that is not flattened</span>
-    <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">to_tensordict</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">())</span>
-    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">utd</span><span class="p">):</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+    <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">collector</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">)</span>
+    <span class="c1"># Only start training once we have enough data in the buffer</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
+        <span class="k">continue</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">utd</span><span class="p">):</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">j</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Let&#39;s print the first sample to see the data structure</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="s2">&quot;Let us print the first batch of sampled data from the replay buffer.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;Pay attention to the key names which will reflect what can be found in this data structure, &quot;</span>
+                <span class="s2">&quot;in particular: the output of the QValueModule (action_values, action and chosen_action_value),&quot;</span>
+                <span class="s2">&quot;the &#39;is_init&#39; key that will tell us if a step is initial or not, and the &quot;</span>
+                <span class="s2">&quot;recurrent_state keys.</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">s</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="n">loss_vals</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
         <span class="n">loss_vals</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
         <span class="n">optim</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
         <span class="n">optim</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
-    <span class="n">longest</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">longest</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;step_count&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
     <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
-        <span class="sa">f</span><span class="s2">&quot;steps: </span><span class="si">{</span><span class="n">longest</span><span class="si">}</span><span class="s2">, loss_val: </span><span class="si">{</span><span class="n">loss_vals</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, action_spread: </span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;buffer_size: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rb</span><span class="p">)</span><span class="si">}</span><span class="s2">, loss_val: </span><span class="si">{</span><span class="n">loss_vals</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="p">)</span>
-    <span class="n">exploration_module</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+    <span class="n">exploration_module</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">collector</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">)</span>
     <span class="n">updater</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
 
     <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span><span class="p">),</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html#torch.no_grad" title="torch.no_grad" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span></a><span class="p">():</span>

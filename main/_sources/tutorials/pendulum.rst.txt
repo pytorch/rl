@@ -94,14 +94,13 @@ This tutorial will be structured as follows:
 A built-in version of this environment can be found in class:`~torchrl.envs.PendulumEnv`.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-104
+.. GENERATED FROM PYTHON SOURCE LINES 78-103
 
 .. code-block:: Python
 
 
 
     from collections import defaultdict
-    from typing import Optional
 
     import numpy as np
     import torch
@@ -125,7 +124,7 @@ A built-in version of this environment can be found in class:`~torchrl.envs.Pend
     DEFAULT_Y = 1.0
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 125-247
+.. GENERATED FROM PYTHON SOURCE LINES 124-246
 
 There are four things you must take care of when designing a new environment
 class:
@@ -250,7 +249,7 @@ environment is stateless. In stateful settings, the ``self`` argument is
 needed as the state needs to be read from the environment.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 247-287
+.. GENERATED FROM PYTHON SOURCE LINES 246-286
 
 .. code-block:: Python
 
@@ -295,7 +294,7 @@ needed as the state needs to be read from the environment.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 288-317
+.. GENERATED FROM PYTHON SOURCE LINES 287-316
 
 Resetting the simulator: :func:`~torchrl.envs.EnvBase._reset`
 -------------------------------------------------------------
@@ -327,7 +326,7 @@ for :meth:`_reset` and our environment is non-terminating, so we always
 expect it to be ``False``.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 317-355
+.. GENERATED FROM PYTHON SOURCE LINES 316-354
 
 .. code-block:: Python
 
@@ -370,7 +369,7 @@ expect it to be ``False``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 356-409
+.. GENERATED FROM PYTHON SOURCE LINES 355-408
 
 Environment metadata: ``env.*_spec``
 ------------------------------------
@@ -426,7 +425,7 @@ For non batch-locked environments, such as the one in our example (see below),
 this is irrelevant as the environment batch size will most likely be empty.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 409-460
+.. GENERATED FROM PYTHON SOURCE LINES 408-459
 
 .. code-block:: Python
 
@@ -482,7 +481,7 @@ this is irrelevant as the environment batch size will most likely be empty.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 461-471
+.. GENERATED FROM PYTHON SOURCE LINES 460-470
 
 Reproducible experiments: seeding
 ---------------------------------
@@ -495,19 +494,19 @@ incorporates a mechanism that allows seeding multiple environments with a
 different pseudo-random and reproducible seed.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 471-478
+.. GENERATED FROM PYTHON SOURCE LINES 470-477
 
 .. code-block:: Python
 
 
 
-    def _set_seed(self, seed: Optional[int]) -> None:
+    def _set_seed(self, seed: int | None) -> None:
         rng = torch.manual_seed(seed)
         self.rng = rng
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 479-490
+.. GENERATED FROM PYTHON SOURCE LINES 478-489
 
 Wrapping things together: the :class:`~torchrl.envs.EnvBase` class
 ------------------------------------------------------------------
@@ -521,7 +520,7 @@ We add a static method :meth:`PendulumEnv.gen_params` which deterministically
 generates a set of hyperparameters to be used during execution:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 490-517
+.. GENERATED FROM PYTHON SOURCE LINES 489-516
 
 .. code-block:: Python
 
@@ -553,7 +552,7 @@ generates a set of hyperparameters to be used during execution:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 518-524
+.. GENERATED FROM PYTHON SOURCE LINES 517-523
 
 We define the environment as non-``batch_locked`` by turning the ``homonymous``
 attribute to ``False``. This means that we will **not** enforce the input
@@ -562,7 +561,7 @@ attribute to ``False``. This means that we will **not** enforce the input
 The following code will just put together the pieces we have coded above.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 524-553
+.. GENERATED FROM PYTHON SOURCE LINES 523-552
 
 .. code-block:: Python
 
@@ -596,7 +595,7 @@ The following code will just put together the pieces we have coded above.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 554-562
+.. GENERATED FROM PYTHON SOURCE LINES 553-561
 
 Testing our environment
 -----------------------
@@ -607,7 +606,7 @@ matches the one dictated by its specs.
 Let us try it out:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 562-566
+.. GENERATED FROM PYTHON SOURCE LINES 561-565
 
 .. code-block:: Python
 
@@ -616,13 +615,13 @@ Let us try it out:
     check_env_specs(env)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 567-570
+.. GENERATED FROM PYTHON SOURCE LINES 566-569
 
 We can have a look at our specs to have a visual representation of the environment
 signature:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 570-575
+.. GENERATED FROM PYTHON SOURCE LINES 569-574
 
 .. code-block:: Python
 
@@ -632,12 +631,12 @@ signature:
     print("reward_spec:", env.reward_spec)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 576-578
+.. GENERATED FROM PYTHON SOURCE LINES 575-577
 
 We can execute a couple of commands too to check that the output structure
 matches what is expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 578-582
+.. GENERATED FROM PYTHON SOURCE LINES 577-581
 
 .. code-block:: Python
 
@@ -646,7 +645,7 @@ matches what is expected.
     print("reset tensordict", td)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 583-589
+.. GENERATED FROM PYTHON SOURCE LINES 582-588
 
 We can run the :func:`env.rand_step` to generate
 an action randomly from the ``action_spec`` domain. A ``tensordict`` containing
@@ -655,7 +654,7 @@ environment is stateless. In stateful contexts, ``env.rand_step()`` works
 perfectly too.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 589-592
+.. GENERATED FROM PYTHON SOURCE LINES 588-591
 
 .. code-block:: Python
 
@@ -663,7 +662,7 @@ perfectly too.
     print("random step tensordict", td)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 593-608
+.. GENERATED FROM PYTHON SOURCE LINES 592-607
 
 Transforming an environment
 ---------------------------
@@ -681,7 +680,7 @@ dimension. We also pass them as ``in_keys_inv`` to squeeze them back to their
 original shape once they are passed as input in the next iteration.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 608-618
+.. GENERATED FROM PYTHON SOURCE LINES 607-617
 
 .. code-block:: Python
 
@@ -696,7 +695,7 @@ original shape once they are passed as input in the next iteration.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 619-678
+.. GENERATED FROM PYTHON SOURCE LINES 618-677
 
 Writing custom transforms
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -758,7 +757,7 @@ Let us code new transforms that will compute the ``sine`` and ``cosine``
 values of the position angle, as these values are more useful to us to learn
 a policy than the raw angle value:
 
-.. GENERATED FROM PYTHON SOURCE LINES 678-733
+.. GENERATED FROM PYTHON SOURCE LINES 677-732
 
 .. code-block:: Python
 
@@ -818,13 +817,13 @@ a policy than the raw angle value:
     env.append_transform(t_cos)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 734-737
+.. GENERATED FROM PYTHON SOURCE LINES 733-736
 
 Concatenates the observations onto an "observation" entry.
 ``del_keys=False`` ensures that we keep these values for the next
 iteration.
 
-.. GENERATED FROM PYTHON SOURCE LINES 737-742
+.. GENERATED FROM PYTHON SOURCE LINES 736-741
 
 .. code-block:: Python
 
@@ -834,18 +833,18 @@ iteration.
     env.append_transform(cat_transform)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 743-744
+.. GENERATED FROM PYTHON SOURCE LINES 742-743
 
 Once more, let us check that our environment specs match what is received:
 
-.. GENERATED FROM PYTHON SOURCE LINES 744-746
+.. GENERATED FROM PYTHON SOURCE LINES 743-745
 
 .. code-block:: Python
 
     check_env_specs(env)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 747-764
+.. GENERATED FROM PYTHON SOURCE LINES 746-763
 
 Executing a rollout
 -------------------
@@ -865,7 +864,7 @@ Executing a rollout is a succession of simple steps:
 These operations have been conveniently wrapped in the :meth:`~torchrl.envs.EnvBase.rollout`
 method, from which we provide a simplified version here below.
 
-.. GENERATED FROM PYTHON SOURCE LINES 764-781
+.. GENERATED FROM PYTHON SOURCE LINES 763-780
 
 .. code-block:: Python
 
@@ -887,7 +886,7 @@ method, from which we provide a simplified version here below.
     print("data from rollout:", simple_rollout(100))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 782-793
+.. GENERATED FROM PYTHON SOURCE LINES 781-792
 
 Batching computations
 ---------------------
@@ -901,7 +900,7 @@ without recreating the environment.
 To do this, we just generate parameters with the desired shape.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 793-800
+.. GENERATED FROM PYTHON SOURCE LINES 792-799
 
 .. code-block:: Python
 
@@ -913,14 +912,14 @@ To do this, we just generate parameters with the desired shape.
     print("rand step (batch size of 10)", td)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 801-805
+.. GENERATED FROM PYTHON SOURCE LINES 800-804
 
 Executing a rollout with a batch of data requires us to reset the environment
 out of the rollout function, since we need to define the batch_size
 dynamically and this is not supported by :meth:`~torchrl.envs.EnvBase.rollout`:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 805-814
+.. GENERATED FROM PYTHON SOURCE LINES 804-813
 
 .. code-block:: Python
 
@@ -934,7 +933,7 @@ dynamically and this is not supported by :meth:`~torchrl.envs.EnvBase.rollout`:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 815-831
+.. GENERATED FROM PYTHON SOURCE LINES 814-830
 
 Training a simple policy
 ------------------------
@@ -953,7 +952,7 @@ be coded with a custom environment in TorchRL.
 Let us first write the policy network:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 831-849
+.. GENERATED FROM PYTHON SOURCE LINES 830-848
 
 .. code-block:: Python
 
@@ -976,12 +975,12 @@ Let us first write the policy network:
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 850-852
+.. GENERATED FROM PYTHON SOURCE LINES 849-851
 
 and our optimizer:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 852-855
+.. GENERATED FROM PYTHON SOURCE LINES 851-854
 
 .. code-block:: Python
 
@@ -989,7 +988,7 @@ and our optimizer:
     optim = torch.optim.Adam(policy.parameters(), lr=2e-3)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 856-870
+.. GENERATED FROM PYTHON SOURCE LINES 855-869
 
 Training loop
 ^^^^^^^^^^^^^
@@ -1006,7 +1005,7 @@ At the end of the training loop, we should have a final reward close to 0
 which demonstrates that the pendulum is upward and still as desired.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 870-920
+.. GENERATED FROM PYTHON SOURCE LINES 869-919
 
 .. code-block:: Python
 
@@ -1061,7 +1060,7 @@ which demonstrates that the pendulum is upward and still as desired.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 921-937
+.. GENERATED FROM PYTHON SOURCE LINES 920-936
 
 Conclusion
 ----------

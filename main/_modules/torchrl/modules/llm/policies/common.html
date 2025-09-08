@@ -1722,11 +1722,11 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_batching</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
     <span class="nd">@wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_batched_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_input</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="c1"># -- 0. skip if batching is disabled</span>
+        <span class="c1"># -- 0. Bypass if batching disabled</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">batching</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-        <span class="c1"># ── 1. Normalise input ──────────────────────────────────────────────────</span>
+        <span class="c1"># -- 1. Normalise --------------------------------------------------------</span>
         <span class="k">if</span> <span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Batching not supported for batch_dims &gt; 1: </span><span class="si">{</span><span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -1735,53 +1735,60 @@
         <span class="n">single</span> <span class="o">=</span> <span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">==</span> <span class="mi">0</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">td_input</span><span class="p">]</span> <span class="k">if</span> <span class="n">single</span> <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">td_input</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
         <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">Future</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">]</span>
+        <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>  <span class="c1"># ← track our own Futures</span>
 
-        <span class="c1"># ── 2. Enqueue work and, if first in, do the draining ───────────────────</span>
+        <span class="c1"># -- 2. Enqueue ----------------------------------------------------------</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
 
         <span class="n">min_bs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_min_batch_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="n">max_bs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_max_batch_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
+        <span class="c1"># -- 3. Drain while holding the lock ------------------------------------</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batching_lock</span><span class="p">:</span>
-            <span class="c1"># Only the thread that managed to grab the lock will run the loop</span>
-            <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">min_bs</span><span class="p">:</span>
-                <span class="c1"># Determine slice</span>
-                <span class="n">slice_size</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">max_bs</span> <span class="ow">is</span> <span class="kc">None</span>
-                    <span class="k">else</span> <span class="nb">min</span><span class="p">(</span><span class="n">max_bs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">))</span>
-                <span class="p">)</span>
-                <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
-                <span class="n">fut_slice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">done</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">):</span>
+                <span class="c1"># Our items were already processed by another thread.</span>
+                <span class="c1"># Skip draining; other workers will handle the rest of the queue.</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">min_bs</span><span class="p">:</span>
+                    <span class="n">slice_size</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">max_bs</span> <span class="ow">is</span> <span class="kc">None</span>
+                        <span class="k">else</span> <span class="nb">min</span><span class="p">(</span><span class="n">max_bs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">))</span>
+                    <span class="p">)</span>
+                    <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
+                    <span class="n">fut_slice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
 
-                <span class="c1"># Execute model</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">results</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">!=</span> <span class="n">slice_size</span><span class="p">:</span>  <span class="c1"># sanity</span>
-                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="n">slice_size</span><span class="si">}</span><span class="s2"> results, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span>
-                    <span class="c1"># Fulfil the corresponding futures</span>
-                    <span class="k">for</span> <span class="n">fut</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">fut_slice</span><span class="p">,</span> <span class="n">results</span><span class="p">):</span>
-                        <span class="n">fut</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
-                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                    <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">fut_slice</span><span class="p">:</span>
-                        <span class="n">fut</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
-                    <span class="c1"># Propagate to caller; other waiters will read the exception from their future</span>
-                    <span class="k">raise</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">results</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">!=</span> <span class="n">slice_size</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="n">slice_size</span><span class="si">}</span><span class="s2"> results, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="p">)</span>
+                        <span class="k">for</span> <span class="n">fut</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">fut_slice</span><span class="p">,</span> <span class="n">results</span><span class="p">):</span>
+                            <span class="n">fut</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+                            <span class="n">pending</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">fut</span><span class="p">)</span>  <span class="c1"># ← mark as done</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                        <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">fut_slice</span><span class="p">:</span>
+                            <span class="n">fut</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
+                            <span class="n">pending</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">fut</span><span class="p">)</span>
+                        <span class="k">raise</span>
 
-                <span class="c1"># Pop processed work</span>
-                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
-                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
+                    <span class="c1"># Pop processed work</span>
+                    <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
+                    <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="p">[:</span><span class="n">slice_size</span><span class="p">]</span>
 
-        <span class="c1"># ── 3. Outside the lock: wait only for OUR futures (they may already be done) ──</span>
-        <span class="n">wait</span><span class="p">(</span>
-            <span class="n">futures</span>
-        <span class="p">)</span>  <span class="c1"># no timeout → immediate return if set_result()/set_exception() already called</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">result</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">]</span>
+                    <span class="c1"># ---- Early-exit: all *our* Futures are done -------------------</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">pending</span><span class="p">:</span>
+                        <span class="k">break</span>
 
-        <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">single</span> <span class="k">else</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="c1"># -- 4. Outside the lock: wait only on remaining (rare) -----------------</span>
+        <span class="k">if</span> <span class="n">pending</span><span class="p">:</span>  <span class="c1"># usually empty; safety for min_bs &gt; queue size</span>
+            <span class="n">wait</span><span class="p">(</span><span class="n">pending</span><span class="p">)</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">result</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">single</span> <span class="k">else</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">_batched_func</span>
 </pre></div>

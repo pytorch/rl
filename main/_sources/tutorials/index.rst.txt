@@ -155,14 +155,14 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
-  .. image:: /tutorials/images/thumb/sphx_glr_dqn_with_rnn_thumb.png
+  .. image:: /tutorials/images/thumb/sphx_glr_llm_browser_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_dqn_with_rnn.py`
+  :ref:`sphx_glr_tutorials_llm_browser.py`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Recurrent DQN: Training recurrent policies</div>
+      <div class="sphx-glr-thumbnail-title">TorchRL LLM: Building Tool-Enabled Environments</div>
     </div>
 
 
@@ -172,14 +172,14 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
-  .. image:: /tutorials/images/thumb/sphx_glr_llm_browser_thumb.png
+  .. image:: /tutorials/images/thumb/sphx_glr_dqn_with_rnn_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_llm_browser.py`
+  :ref:`sphx_glr_tutorials_dqn_with_rnn.py`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">TorchRL LLM: Building Tool-Enabled Environments</div>
+      <div class="sphx-glr-thumbnail-title">Recurrent DQN: Training recurrent policies</div>
     </div>
 
 
@@ -388,8 +388,8 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-5
    /tutorials/getting-started-1
    /tutorials/multi_task
-   /tutorials/dqn_with_rnn
    /tutorials/llm_browser
+   /tutorials/dqn_with_rnn
    /tutorials/export
    /tutorials/multiagent_ppo
    /tutorials/torchrl_envs

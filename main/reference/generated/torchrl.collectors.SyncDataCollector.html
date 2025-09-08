@@ -535,10 +535,16 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <li><p><strong>reset_at_each_iter</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether environments should be reset
 at the beginning of a batch collection.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>postproc</strong> (<em>Callable</em><em>, </em><em>optional</em>) – A post-processing transform, such as
+<li><p><strong>postproc</strong> (<em>Callable</em><em>, </em><em>optional</em>) – <p>A post-processing transform, such as
 a <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> or a <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiStep</span></code>
-instance.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+instance.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Postproc is not applied when a replay buffer is used and items are added to the buffer
+as they are produced (<cite>extend_buffer=False</cite>). The recommended usage is to use <cite>extend_buffer=True</cite>.</p>
+</div>
+<p>Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</p></li>
 <li><p><strong>split_trajs</strong> (<em>bool</em><em>, </em><em>optional</em>) – Boolean indicating whether the resulting
 TensorDict should be split according to the trajectories.
 See <a class="reference internal" href="torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> for more

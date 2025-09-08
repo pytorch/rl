@@ -433,9 +433,10 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -712,6 +713,24 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dim_extend</span> <span class="o">=</span> <span class="n">dim_extend</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">checkpointer</span> <span class="o">=</span> <span class="n">checkpointer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_prioritized_sampler</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_initialize_prioritized_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize priority trees for existing data when using PrioritizedSampler.</span>
+
+<span class="sd">        This method ensures that when a PrioritizedSampler is used with storage that</span>
+<span class="sd">        already contains data, the priority trees are properly populated with default</span>
+<span class="sd">        priorities for all existing entries.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrioritizedSampler</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="p">,</span> <span class="n">PrioritizedSampler</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Set default priorities for all existing data</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="n">default_priorities</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">),),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">default_priority</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">default_priorities</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_storage</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Storage</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">compilable</span>
@@ -892,7 +911,7 @@
         <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># explicit return for remote calls</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">write_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">write_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The total number of items written so far in the buffer through add and extend.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">_write_count</span>
 
@@ -1222,7 +1241,9 @@
 
     <span class="nd">@pin_memory_output</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+        <span class="n">is_comp</span> <span class="o">=</span> <span class="n">is_compiling</span><span class="p">()</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">:</span>
             <span class="n">index</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">)</span>
             <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
@@ -1960,7 +1981,9 @@
 
     <span class="nd">@pin_memory_output</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+        <span class="n">is_comp</span> <span class="o">=</span> <span class="n">is_compiling</span><span class="p">()</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">:</span>
             <span class="n">index</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">)</span>
             <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>

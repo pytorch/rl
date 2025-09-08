@@ -431,9 +431,10 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span>
@@ -784,19 +785,19 @@
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;pre_steps_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
-                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_steps_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
-                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_optim_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
-                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 

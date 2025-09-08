@@ -432,7 +432,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModuleType</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -932,7 +931,7 @@
     <span class="k">return</span> <span class="n">out</span>
 
 
-<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="n">Dict</span><span class="p">)</span>
+<span class="nd">@register_gym_spec_conversion</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">convert_dict_spec</span><span class="p">(</span>
     <span class="n">spec</span><span class="p">,</span>
     <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -1187,7 +1186,7 @@
     <span class="n">gDict</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;spaces&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">dict</span><span class="o">.</span><span class="n">Dict</span>
     <span class="n">Box</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;spaces&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">Box</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="p">(</span><span class="n">Dict</span><span class="p">,)):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="p">(</span><span class="nb">dict</span><span class="p">,)):</span>
         <span class="k">if</span> <span class="s2">&quot;pixels&quot;</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
             <span class="k">return</span> <span class="kc">True</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">,</span> <span class="p">(</span><span class="n">gDict</span><span class="p">,)):</span>

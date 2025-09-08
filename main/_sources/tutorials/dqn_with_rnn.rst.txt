@@ -55,7 +55,7 @@ Memory-based policies are crucial not only when the observations are partially
 observable but also when the time dimension must be taken into account to
 make informed decisions.
 
-Recurrent neural network have long been a popular tool for memory-based
+Recurrent neural networks have long been a popular tool for memory-based
 policies. The idea is to keep a recurrent state in memory between two
 consecutive steps, and use this as an input to the policy along with the
 current observation.
@@ -96,7 +96,7 @@ Setup
 -----
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-108
+.. GENERATED FROM PYTHON SOURCE LINES 72-109
 
 .. code-block:: Python
 
@@ -112,6 +112,7 @@ Setup
     from torch import nn
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+    from torchrl.data.replay_buffers.samplers import SliceSampler
     from torchrl.envs import (
         Compose,
         ExplorationType,
@@ -137,7 +138,7 @@ Setup
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-166
+.. GENERATED FROM PYTHON SOURCE LINES 130-167
 
 Environment
 -----------
@@ -177,7 +178,7 @@ Two transforms are important for the purpose of this tutorial:
   we can wait until we build it!
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 166-180
+.. GENERATED FROM PYTHON SOURCE LINES 167-181
 
 .. code-block:: Python
 
@@ -196,12 +197,12 @@ Two transforms are important for the purpose of this tutorial:
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 181-183
+.. GENERATED FROM PYTHON SOURCE LINES 182-184
 
 As always, we need to initialize manually our normalization constants:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 183-186
+.. GENERATED FROM PYTHON SOURCE LINES 184-187
 
 .. code-block:: Python
 
@@ -209,7 +210,7 @@ As always, we need to initialize manually our normalization constants:
     td = env.reset()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-202
+.. GENERATED FROM PYTHON SOURCE LINES 188-203
 
 Policy
 ------
@@ -227,7 +228,7 @@ that will squash the output in a vector of size 64. The :class:`~torchrl.modules
 can assist us with this:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 202-214
+.. GENERATED FROM PYTHON SOURCE LINES 203-215
 
 .. code-block:: Python
 
@@ -244,20 +245,20 @@ can assist us with this:
         out_keys=["embed"],
     )
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-218
+.. GENERATED FROM PYTHON SOURCE LINES 216-219
 
 we execute the first module on a batch of data to gather the size of the
 output vector:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 218-220
+.. GENERATED FROM PYTHON SOURCE LINES 219-221
 
 .. code-block:: Python
 
     n_cells = feature(env.reset())["embed"].shape[-1]
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 221-243
+.. GENERATED FROM PYTHON SOURCE LINES 222-244
 
 LSTM Module
 ~~~~~~~~~~~
@@ -282,7 +283,7 @@ values for these attributes to facilitate its construction.
   is the correct one.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 243-252
+.. GENERATED FROM PYTHON SOURCE LINES 244-253
 
 .. code-block:: Python
 
@@ -296,11 +297,11 @@ values for these attributes to facilitate its construction.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 253-254
+.. GENERATED FROM PYTHON SOURCE LINES 254-255
 
 Let us look at the LSTM Module class, specifically its in and out_keys:
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-257
+.. GENERATED FROM PYTHON SOURCE LINES 255-258
 
 .. code-block:: Python
 
@@ -308,7 +309,7 @@ Let us look at the LSTM Module class, specifically its in and out_keys:
     print("out_keys", lstm.out_keys)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 258-271
+.. GENERATED FROM PYTHON SOURCE LINES 259-272
 
 We can see that these values contain the key we indicated as the in_key (and out_key)
 as well as recurrent key names. The out_keys are preceded by a "next" prefix
@@ -324,26 +325,26 @@ The :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer` method does
 exactly that:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 271-273
+.. GENERATED FROM PYTHON SOURCE LINES 272-274
 
 .. code-block:: Python
 
     env.append_transform(lstm.make_tensordict_primer())
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 274-276
+.. GENERATED FROM PYTHON SOURCE LINES 275-277
 
 and that's it! We can print the environment to check that everything looks good now
 that we have added the primer:
 
-.. GENERATED FROM PYTHON SOURCE LINES 276-278
+.. GENERATED FROM PYTHON SOURCE LINES 277-279
 
 .. code-block:: Python
 
     print(env)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 279-285
+.. GENERATED FROM PYTHON SOURCE LINES 280-286
 
 MLP
 ~~~
@@ -352,7 +353,7 @@ We use a single-layer MLP to represent the action values we'll be using for
 our policy.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 285-292
+.. GENERATED FROM PYTHON SOURCE LINES 286-293
 
 .. code-block:: Python
 
@@ -364,11 +365,11 @@ our policy.
         device=device,
     )
 
-.. GENERATED FROM PYTHON SOURCE LINES 293-294
+.. GENERATED FROM PYTHON SOURCE LINES 294-295
 
 and fill the bias with zeros:
 
-.. GENERATED FROM PYTHON SOURCE LINES 294-298
+.. GENERATED FROM PYTHON SOURCE LINES 295-299
 
 .. code-block:: Python
 
@@ -377,7 +378,7 @@ and fill the bias with zeros:
     mlp = Mod(mlp, in_keys=["embed"], out_keys=["action_value"])
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 299-310
+.. GENERATED FROM PYTHON SOURCE LINES 300-311
 
 Using the Q-Values to select an action
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -391,14 +392,14 @@ either by passing a string or an action-spec. This allows us to use
 Categorical (sometimes called "sparse") encoding or the one-hot version of it.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 310-312
+.. GENERATED FROM PYTHON SOURCE LINES 311-313
 
 .. code-block:: Python
 
     qval = QValueModule(action_space=None, spec=env.action_spec)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 313-322
+.. GENERATED FROM PYTHON SOURCE LINES 314-323
 
 .. note::
   TorchRL also provides a wrapper class :class:`torchrl.modules.QValueActor` that
@@ -410,14 +411,14 @@ Categorical (sometimes called "sparse") encoding or the one-hot version of it.
 We can now put things together in a :class:`~tensordict.nn.TensorDictSequential`
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 322-324
+.. GENERATED FROM PYTHON SOURCE LINES 323-325
 
 .. code-block:: Python
 
     policy = Seq(feature, lstm, mlp, qval)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 325-331
+.. GENERATED FROM PYTHON SOURCE LINES 326-332
 
 DQN being a deterministic algorithm, exploration is a crucial part of it.
 We'll be using an :math:`\epsilon`-greedy policy with an epsilon of 0.2 decaying
@@ -426,7 +427,7 @@ This decay is achieved via a call to :meth:`~torchrl.modules.EGreedyModule.step`
 (see training loop below).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 331-339
+.. GENERATED FROM PYTHON SOURCE LINES 332-340
 
 .. code-block:: Python
 
@@ -439,7 +440,7 @@ This decay is achieved via a call to :meth:`~torchrl.modules.EGreedyModule.step`
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 340-357
+.. GENERATED FROM PYTHON SOURCE LINES 341-358
 
 Using the model for the loss
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -459,14 +460,14 @@ Because we still have a couple of uninitialized parameters we should
 initialize them before creating an optimizer and such.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 357-359
+.. GENERATED FROM PYTHON SOURCE LINES 358-360
 
 .. code-block:: Python
 
     policy(env.reset())
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 360-371
+.. GENERATED FROM PYTHON SOURCE LINES 361-372
 
 DQN Loss
 --------
@@ -480,21 +481,21 @@ To use the Double-DQN, we ask for a ``delay_value`` argument that will
 create a non-differentiable copy of the network parameters to be used
 as a target network.
 
-.. GENERATED FROM PYTHON SOURCE LINES 371-373
+.. GENERATED FROM PYTHON SOURCE LINES 372-374
 
 .. code-block:: Python
 
     loss_fn = DQNLoss(policy, action_space=env.action_spec, delay_value=True)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 374-378
+.. GENERATED FROM PYTHON SOURCE LINES 375-379
 
 Since we are using a double DQN, we need to update the target parameters.
 We'll use a  :class:`~torchrl.objectives.SoftUpdate` instance to carry out
 this work.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 378-382
+.. GENERATED FROM PYTHON SOURCE LINES 379-383
 
 .. code-block:: Python
 
@@ -503,48 +504,68 @@ this work.
     optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 383-398
+.. GENERATED FROM PYTHON SOURCE LINES 384-404
 
 Collector and replay buffer
 ---------------------------
 
-We build the simplest data collector there is. We'll try to train our algorithm
-with a million frames, extending the buffer with 50 frames at a time. The buffer
-will be designed to store 20 thousands trajectories of 50 steps each.
-At each optimization step (16 per data collection), we'll collect 4 items
-from our buffer, for a total of 200 transitions.
+For RNN-based policies, we need to sample sequences of consecutive transitions
+rather than independent transitions. We'll use a :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+to sample trajectory slices of length 50. This ensures that the LSTM hidden states
+can be properly propagated through the sequence during training.
+
+The buffer will store 1,000,000 individual transitions, and when sampling, we'll
+get slices of up to 50 consecutive steps. At each optimization step (16 per data collection),
+we'll sample batches totaling 200 transitions from trajectory slices.
+
 We'll use a :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` storage to keep the data
-on disk.
+on disk, and pass the replay buffer directly to the data collector so it can
+automatically populate the buffer as data is collected.
 
 .. note::
   For the sake of efficiency, we're only running a few thousands iterations
   here. In a real setting, the total number of frames should be set to 1M.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 398-407
+.. GENERATED FROM PYTHON SOURCE LINES 404-425
 
 .. code-block:: Python
 
     buffer_scratch_dir = tempfile.TemporaryDirectory().name
 
-    collector = SyncDataCollector(env, stoch_policy, frames_per_batch=50, total_frames=200)
     rb = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(20_000, scratch_dir=buffer_scratch_dir),
-        batch_size=4,
+        storage=LazyMemmapStorage(1_000_000, scratch_dir=buffer_scratch_dir),
+        sampler=SliceSampler(
+            slice_len=50, end_key=("next", "done"), cache_values=True, strict_length=False
+        ),
+        batch_size=200,
         prefetch=10,
+        transform=lambda td: td.to(device),
+    )
+
+    collector = SyncDataCollector(
+        env,
+        stoch_policy,
+        frames_per_batch=50,
+        total_frames=200,
+        storing_device="cpu",
+        replay_buffer=rb,
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 408-414
+.. GENERATED FROM PYTHON SOURCE LINES 426-435
 
 Training loop
 -------------
 
+Since we passed the replay buffer to the collector, the collector no longer yields
+data directly - instead it automatically populates the replay buffer. We iterate
+through the collector to trigger data collection, then sample from the buffer for training.
 To keep track of the progress, we will run the policy in the environment once
-every 50 data collection, and plot the results after training.
+every 50 data collection iterations, and plot the results after training.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 414-450
+.. GENERATED FROM PYTHON SOURCE LINES 435-472
 
 .. code-block:: Python
 
@@ -554,30 +575,31 @@ every 50 data collection, and plot the results after training.
     longest = 0
 
     traj_lens = []
-    for i, data in enumerate(collector):
-        if i == 0:
-            print(
-                "Let us print the first batch of data.\nPay attention to the key names "
-                "which will reflect what can be found in this data structure, in particular: "
-                "the output of the QValueModule (action_values, action and chosen_action_value),"
-                "the 'is_init' key that will tell us if a step is initial or not, and the "
-                "recurrent_state keys.\n",
-                data,
-            )
-        pbar.update(data.numel())
-        # it is important to pass data that is not flattened
-        rb.extend(data.unsqueeze(0).to_tensordict().cpu())
-        for _ in range(utd):
-            s = rb.sample().to(device, non_blocking=True)
+    for i, _ in enumerate(collector):
+        pbar.update(collector.frames_per_batch)
+        # Only start training once we have enough data in the buffer
+        if len(rb) < 1000:
+            continue
+        for j in range(utd):
+            s = rb.sample()
+            if i == 0 and j == 0:
+                # Let's print the first sample to see the data structure
+                print(
+                    "Let us print the first batch of sampled data from the replay buffer.\n"
+                    "Pay attention to the key names which will reflect what can be found in this data structure, "
+                    "in particular: the output of the QValueModule (action_values, action and chosen_action_value),"
+                    "the 'is_init' key that will tell us if a step is initial or not, and the "
+                    "recurrent_state keys.\n",
+                    s,
+                )
             loss_vals = loss_fn(s)
             loss_vals["loss"].backward()
             optim.step()
             optim.zero_grad()
-        longest = max(longest, data["step_count"].max().item())
         pbar.set_description(
-            f"steps: {longest}, loss_val: {loss_vals['loss'].item(): 4.4f}, action_spread: {data['action'].sum(0)}"
+            f"buffer_size: {len(rb)}, loss_val: {loss_vals['loss'].item(): 4.4f}"
         )
-        exploration_module.step(data.numel())
+        exploration_module.step(collector.frames_per_batch)
         updater.step()
 
         with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
@@ -585,12 +607,12 @@ every 50 data collection, and plot the results after training.
             traj_lens.append(rollout.get(("next", "step_count")).max().item())
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 451-453
+.. GENERATED FROM PYTHON SOURCE LINES 473-475
 
 Let's plot our results:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 453-460
+.. GENERATED FROM PYTHON SOURCE LINES 475-482
 
 .. code-block:: Python
 
@@ -602,7 +624,7 @@ Let's plot our results:
         plt.title("Test trajectory lengths")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 461-479
+.. GENERATED FROM PYTHON SOURCE LINES 483-501
 
 Conclusion
 ----------

@@ -439,12 +439,13 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span><span class="p">,</span> <span class="n">queues</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing.managers</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Empty</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">TypeVar</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TypeVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -929,6 +930,10 @@
 <span class="sd">        postproc (Callable, optional): A post-processing transform, such as</span>
 <span class="sd">            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`</span>
 <span class="sd">            instance.</span>
+
+<span class="sd">            .. warning:: Postproc is not applied when a replay buffer is used and items are added to the buffer</span>
+<span class="sd">                as they are produced (`extend_buffer=False`). The recommended usage is to use `extend_buffer=True`.</span>
+
 <span class="sd">            Defaults to ``None``.</span>
 <span class="sd">        split_trajs (bool, optional): Boolean indicating whether the resulting</span>
 <span class="sd">            TensorDict should be split according to the trajectories.</span>
@@ -1679,7 +1684,8 @@
                 <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="c1"># if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out</span>
                     <span class="c1">#  frames are updated within the rollout function</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: No tensordict_out. Yielding.&quot;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: No tensordict_out. Yielding.&quot;</span><span class="p">)</span>
                     <span class="k">yield</span>
                     <span class="k">continue</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_increment_frames</span><span class="p">(</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
@@ -3442,7 +3448,11 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="n">n_collected</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">)</span>
+                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span>
+                <span class="p">)</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_private_keys</span><span class="p">:</span>
                 <span class="n">excluded_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)]</span>
@@ -3565,7 +3575,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">postproc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">_device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">:</span>
@@ -3686,7 +3696,7 @@
                 <span class="n">worker_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="n">worker_frames</span>
             <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">worker_frames</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">[</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">](</span><span class="n">out</span><span class="p">)</span>
 
             <span class="c1"># the function blocks here until the next item is asked, hence we send the message to the</span>
