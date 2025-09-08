@@ -78,7 +78,7 @@ def train(cfg: DictConfig):  # noqa: F821
     # Policy
     actor_net = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-        n_agent_outputs=env.action_spec.shape[-1],
+        n_agent_outputs=env.full_action_spec_unbatched[env.action_key].shape[-1],
         n_agents=env.n_agents,
         centralised=False,
         share_params=cfg.model.shared_parameters,
@@ -116,7 +116,9 @@ def train(cfg: DictConfig):  # noqa: F821
     # Critic
     module = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1]
-        + env.action_spec.shape[-1],  # Q critic takes action and value
+        + env.full_action_spec_unbatched[env.action_key].shape[
+            -1
+        ],  # Q critic takes action and value
         n_agent_outputs=1,
         n_agents=env.n_agents,
         centralised=cfg.model.centralised_critic,
