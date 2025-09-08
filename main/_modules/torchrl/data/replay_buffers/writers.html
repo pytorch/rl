@@ -999,6 +999,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_mark_update_entities</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">index</span></div>
 
+    <span class="c1"># TODO: Workaround for PyTorch nightly regression where compiler can&#39;t handle</span>
+    <span class="c1"># method calls on objects returned from _attached_entities_iter()</span>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_mark_update_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mark entities as updated with the given index.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">ent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_attached_entities_iter</span><span class="p">():</span>
+            <span class="n">ent</span><span class="o">.</span><span class="n">mark_update</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cursor</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_top_values</span> <span class="o">=</span> <span class="p">[]</span>
