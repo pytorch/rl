@@ -1262,7 +1262,8 @@ class SyncDataCollector(DataCollectorBase):
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
-                    torchrl_logger.info("Collector: No tensordict_out. Yielding.")
+                    if self.verbose:
+                        torchrl_logger.info("Collector: No tensordict_out. Yielding.")
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())

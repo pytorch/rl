@@ -489,7 +489,7 @@ class ReplayBuffer:
         return None  # explicit return for remote calls
 
     @property
-    def write_count(self):
+    def write_count(self) -> int:
         """The total number of items written so far in the buffer through add and extend."""
         return self._writer._write_count
 
