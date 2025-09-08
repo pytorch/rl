@@ -9,7 +9,7 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable
+from collections.abc import Iterable
 
 import torch
 from tensordict import TensorDictBase, unravel_key_list

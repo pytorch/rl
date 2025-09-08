@@ -11,7 +11,6 @@ import warnings
 from contextlib import nullcontext
 from copy import copy
 from types import ModuleType
-from typing import Dict
 from warnings import warn
 
 import numpy as np
@@ -511,7 +510,7 @@ def convert_sequence_spec(
     return out
 
 
-@register_gym_spec_conversion(Dict)
+@register_gym_spec_conversion(dict)
 def convert_dict_spec(
     spec,
     dtype=None,
@@ -766,7 +765,7 @@ def _is_from_pixels(env):
     gDict = gym_backend("spaces").dict.Dict
     Box = gym_backend("spaces").Box
 
-    if isinstance(observation_spec, (Dict,)):
+    if isinstance(observation_spec, (dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
     if isinstance(observation_spec, (gDict,)):

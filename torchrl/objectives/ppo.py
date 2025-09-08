@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import contextlib
 import warnings
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping
 
 import torch
 from tensordict import (

@@ -23,7 +23,7 @@ from tensordict import (
 from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
-
+from torchrl import logger as torchrl_logger
 from torchrl.modules.llm.policies.common import (
     _batching,
     _extract_responses_from_full_histories,
@@ -2418,6 +2418,7 @@ class RemoteTransformersWrapper:
             Must be a string (model name or path) that will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
             Transformers models are not serializable, so only model names/paths are supported.
         max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
+        validate_model (bool, optional): Whether to validate the model. Defaults to True.
         **kwargs: All other arguments are passed directly to TransformersWrapper.
 
     Example:
@@ -2441,23 +2442,44 @@ class RemoteTransformersWrapper:
         >>> print(result["text"].response)
     """
 
-    def __init__(self, model, max_concurrency: int = 16, **kwargs):
+    def __init__(
+        self,
+        model,
+        max_concurrency: int = 16,
+        validate_model: bool = True,
+        actor_name: str = None,
+        **kwargs,
+    ):
         import ray
 
         # Validate model parameter - only strings are allowed for Transformers
-        if not isinstance(model, str):
+        if not isinstance(model, str) and validate_model:
             raise ValueError(
                 "For RemoteTransformersWrapper, the model parameter must be a string "
                 f"(model name or path). Got type: {type(model)}. "
-                "Transformers models are not serializable, so only model names/paths are supported."
+                "Transformers models are not serializable, so only model names/paths are supported. "
+                "You can bypass this check by setting validate_model=False."
             )
 
         if not ray.is_initialized():
             ray.init()
-        # Create the remote actor
+
+        if actor_name is not None:
+            # Check if an actor with this name already exists
+            try:
+                existing_actor = ray.get_actor(actor_name)
+                # If we can get the actor, assume it's alive and use it
+                self._remote_wrapper = existing_actor
+                torchrl_logger.info(f"Using existing actor {actor_name}")
+                return
+            except ValueError:
+                # Actor doesn't exist, create a new one
+                torchrl_logger.info(f"Creating new actor {actor_name}")
+
+        # Create the remote actor with the unique name
         self._remote_wrapper = (
             ray.remote(TransformersWrapper)
-            .options(max_concurrency=max_concurrency)
+            .options(max_concurrency=max_concurrency, name=actor_name)
             .remote(model, **kwargs)
         )
 

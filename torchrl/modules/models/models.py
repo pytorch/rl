@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from numbers import Number
-from typing import Callable, Sequence
 
 import torch
 from torch import nn

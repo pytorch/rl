@@ -7,13 +7,13 @@ from __future__ import annotations
 import abc
 import multiprocessing
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import as_completed, ThreadPoolExecutor
 
 # import queue
 from multiprocessing import Queue
 from queue import Empty
-from typing import Callable, Literal, Sequence
+from typing import Literal
 
 import torch
 from tensordict import (

@@ -8,9 +8,10 @@
 # from __future__ import annotations
 
 import importlib.util
+from collections.abc import Callable, Sequence
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import torch
 from torchrl._utils import logger as torchrl_logger, VERBOSE
@@ -463,7 +464,7 @@ def get_stats_random_rollout(
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: Union[str, tuple[str, ...]] = None,
+    key: Optional[Union[str, tuple[str, ...]]] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 

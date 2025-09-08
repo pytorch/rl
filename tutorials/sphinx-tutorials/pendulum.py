@@ -98,7 +98,6 @@ except RuntimeError:
 # sphinx_gallery_end_ignore
 
 from collections import defaultdict
-from typing import Optional
 
 import numpy as np
 import torch
@@ -470,7 +469,7 @@ def make_composite_from_td(td):
 #
 
 
-def _set_seed(self, seed: Optional[int]) -> None:
+def _set_seed(self, seed: int | None) -> None:
     rng = torch.manual_seed(seed)
     self.rng = rng
 

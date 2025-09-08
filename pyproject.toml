@@ -75,6 +75,7 @@ offline-data = [
 ]
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"]
 open_spiel = ["open_spiel>=1.5"]
+brax = ["jax[cuda12]>=0.7.0", "brax"]
 llm = [
     "transformers",
     "vllm",

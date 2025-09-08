@@ -14,21 +14,13 @@ import multiprocessing as mp
 import time
 import warnings
 import weakref
+from collections import OrderedDict
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from copy import copy
 from enum import IntEnum
 from functools import wraps
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    Mapping,
-    OrderedDict,
-    overload,
-    Sequence,
-    TYPE_CHECKING,
-    TypeVar,
-    Union,
-)
+from typing import Any, overload, TYPE_CHECKING, TypeVar, Union
 
 import numpy as np
 
@@ -113,6 +105,11 @@ _MAX_NOOPS_TRIALS = 10
 FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent environment."
 
 T = TypeVar("T", bound="Transform")
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = Any
 
 
 def _apply_to_composite(function):
@@ -263,7 +260,7 @@ class Transform(nn.Module):
         """Close the transform."""
 
     @property
-    def in_keys(self):
+    def in_keys(self) -> Sequence[NestedKey]:
         in_keys = self.__dict__.get("_in_keys", None)
         if in_keys is None:
             return []
@@ -278,7 +275,7 @@ class Transform(nn.Module):
         self._in_keys = value
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         out_keys = self.__dict__.get("_out_keys", None)
         if out_keys is None:
             return []
@@ -293,7 +290,7 @@ class Transform(nn.Module):
         self._out_keys = value
 
     @property
-    def in_keys_inv(self):
+    def in_keys_inv(self) -> Sequence[NestedKey]:
         in_keys_inv = self.__dict__.get("_in_keys_inv", None)
         if in_keys_inv is None:
             return []
@@ -308,7 +305,7 @@ class Transform(nn.Module):
         self._in_keys_inv = value
 
     @property
-    def out_keys_inv(self):
+    def out_keys_inv(self) -> Sequence[NestedKey]:
         out_keys_inv = self.__dict__.get("_out_keys_inv", None)
         if out_keys_inv is None:
             return []
@@ -351,7 +348,7 @@ class Transform(nn.Module):
     def init(self, tensordict) -> None:
         """Runs init steps for the transform."""
 
-    def _apply_transform(self, obs: torch.Tensor) -> None:
+    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         """Applies the transform to a tensor or a leaf.
 
         This operation can be called multiple times (if multiples keys of the
@@ -548,11 +545,11 @@ class Transform(nn.Module):
         out = self._inv_call(clone(tensordict))
         return out
 
-    def transform_env_device(self, device: torch.device):
+    def transform_env_device(self, device: torch.device) -> torch.device:
         """Transforms the device of the parent env."""
         return device
 
-    def transform_env_batch_size(self, batch_size: torch.Size):
+    def transform_env_batch_size(self, batch_size: torch.Size) -> torch.Size:
         """Transforms the batch-size of the parent env."""
         return batch_size
 
@@ -697,7 +694,7 @@ class Transform(nn.Module):
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
-    def clone(self) -> T:
+    def clone(self) -> Self:
         self_copy = copy(self)
         state = copy(self.__dict__)
         # modules, params, buffers
@@ -811,17 +808,17 @@ class Transform(nn.Module):
             self.__dict__["_parent"] = parent
         return parent
 
-    def empty_cache(self):
+    def empty_cache(self) -> None:
         self.__dict__["_parent"] = None
 
-    def set_missing_tolerance(self, mode=False):
+    def set_missing_tolerance(self, mode=False) -> None:
         self._missing_tolerance = mode
 
     @property
-    def missing_tolerance(self):
+    def missing_tolerance(self) -> bool:
         return self._missing_tolerance
 
-    def to(self, *args, **kwargs):
+    def to(self, *args, **kwargs) -> Transform:
         # remove the parent, because it could have the wrong device associated
         self.empty_cache()
         return super().to(*args, **kwargs)
@@ -1125,7 +1122,7 @@ but got an object of type {type(transform)}."""
         )
 
     @property
-    def _inplace_update(self):
+    def _inplace_update(self) -> bool:
         return self.base_env._inplace_update
 
     @property
@@ -1812,10 +1809,10 @@ class Compose(Transform):
         self.transforms.insert(index, transform)
         transform.set_container(self)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Transform]:
         yield from self.transforms
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.transforms)
 
     def __repr__(self) -> str:
@@ -1828,17 +1825,17 @@ class Compose(Transform):
             layers_str = ""
         return f"{self.__class__.__name__}({layers_str})"
 
-    def empty_cache(self):
+    def empty_cache(self) -> None:
         for t in self.transforms:
             t.empty_cache()
         super().empty_cache()
 
-    def reset_parent(self):
+    def reset_parent(self) -> None:
         for t in self.transforms:
             t.reset_parent()
         super().reset_parent()
 
-    def clone(self) -> T:
+    def clone(self) -> Self:
         transforms = []
         for t in self.transforms:
             transforms.append(t.clone())
@@ -2074,7 +2071,7 @@ class ClipTransform(Transform):
         self.high_eps = high_eps
         self.high_max = high_max
 
-    def _apply_transform(self, obs: torch.Tensor) -> None:
+    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.low is None:
             return obs.clamp_max(self.high)
         elif self.high is None:
@@ -2189,7 +2186,7 @@ class TargetReturn(Transform):
         self.reset_key = reset_key
 
     @property
-    def reset_key(self):
+    def reset_key(self) -> NestedKey:
         reset_key = getattr(self, "_reset_key", None)
         if reset_key is not None:
             return reset_key
@@ -2207,7 +2204,7 @@ class TargetReturn(Transform):
         self._reset_key = value
 
     @property
-    def in_keys(self):
+    def in_keys(self) -> Sequence[NestedKey]:
         in_keys = self.__dict__.get("_in_keys", None)
         if in_keys is None:
             in_keys = self.parent.reward_keys
@@ -2219,7 +2216,7 @@ class TargetReturn(Transform):
         self._in_keys = value
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         out_keys = self.__dict__.get("_out_keys", None)
         if out_keys is None:
             out_keys = [
@@ -2711,13 +2708,13 @@ class FlattenObservation(ObservationTransform):
         self._last_dim = last_dim
 
     @property
-    def first_dim(self):
+    def first_dim(self) -> int:
         if self._first_dim >= 0 and self.parent is not None:
             return len(self.parent.batch_size) + self._first_dim
         return self._first_dim
 
     @property
-    def last_dim(self):
+    def last_dim(self) -> int:
         if self._last_dim >= 0 and self.parent is not None:
             return len(self.parent.batch_size) + self._last_dim
         return self._last_dim
@@ -2819,11 +2816,11 @@ class UnsqueezeTransform(Transform):
         self._dim = dim
 
     @property
-    def unsqueeze_dim(self):
+    def unsqueeze_dim(self) -> int:
         return self.dim
 
     @property
-    def dim(self):
+    def dim(self) -> int:
         if self._dim >= 0 and self.parent is not None:
             return len(self.parent.batch_size) + self._dim
         return self._dim
@@ -2924,7 +2921,7 @@ class SqueezeTransform(UnsqueezeTransform):
         )
 
     @property
-    def squeeze_dim(self):
+    def squeeze_dim(self) -> int:
         return super().dim
 
     _apply_transform = UnsqueezeTransform._inv_apply_transform
@@ -3257,7 +3254,7 @@ class ObservationNorm(ObservationTransform):
         self.register_buffer("scale", scale)
 
     @property
-    def initialized(self):
+    def initialized(self) -> bool:
         return not isinstance(self.loc, nn.UninitializedBuffer)
 
     def init_stats(
@@ -4233,7 +4230,7 @@ class DTypeCastTransform(Transform):
         )
 
     @property
-    def in_keys(self):
+    def in_keys(self) -> Sequence[NestedKey] | None:
         in_keys = self.__dict__.get("_in_keys", None)
         if in_keys is None:
             parent = self.parent
@@ -4261,7 +4258,7 @@ class DTypeCastTransform(Transform):
         self._in_keys = value
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey] | None:
         out_keys = self.__dict__.get("_out_keys", None)
         if out_keys is None:
             out_keys = self._out_keys = copy(self.in_keys)
@@ -4276,7 +4273,7 @@ class DTypeCastTransform(Transform):
         self._out_keys = value
 
     @property
-    def in_keys_inv(self):
+    def in_keys_inv(self) -> Sequence[NestedKey] | None:
         in_keys_inv = self.__dict__.get("_in_keys_inv", None)
         if in_keys_inv is None:
             parent = self.parent
@@ -4304,7 +4301,7 @@ class DTypeCastTransform(Transform):
         self._in_keys_inv = value
 
     @property
-    def out_keys_inv(self):
+    def out_keys_inv(self) -> Sequence[NestedKey] | None:
         out_keys_inv = self.__dict__.get("_out_keys_inv", None)
         if out_keys_inv is None:
             out_keys_inv = self._out_keys_inv = copy(self.in_keys_inv)
@@ -4915,7 +4912,7 @@ class CatTensors(Transform):
         self.unsqueeze_if_oor = unsqueeze_if_oor
 
     @property
-    def keys_to_exclude(self):
+    def keys_to_exclude(self) -> list[NestedKey]:
         if self._keys_to_exclude is None:
             self._keys_to_exclude = [
                 key for key in self.in_keys if key != self.out_keys[0]
@@ -5422,7 +5419,7 @@ class Hash(UnaryTransform):
         else:
             return hash_tensor
 
-    def get_input_from_hash(self, hash_tensor):
+    def get_input_from_hash(self, hash_tensor) -> Any:
         """Look up the input that was given for a particular hash output.
 
         This feature is only available if, during initialization, either the
@@ -5559,7 +5556,7 @@ class Tokenizer(UnaryTransform):
         self._missing_tolerance = missing_tolerance
 
     @property
-    def device(self):
+    def device(self) -> torch.device | None:
         if "_device" in self.__dict__:
             return self._device
         parent = self.parent
@@ -6072,7 +6069,7 @@ class DiscreteActionProjection(Transform):
         # tensordict
         return next_tensordict
 
-    def _apply_transform(self, action: torch.Tensor) -> None:
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
         # We still need to code the forward transform for replay buffers and models
         action = action.argmax(-1)  # bool to int
         action = nn.functional.one_hot(action, self.max_actions)
@@ -6534,10 +6531,10 @@ class TensorDictPrimer(Transform):
         return input_spec
 
     @property
-    def _batch_size(self):
+    def _batch_size(self) -> torch.Size:
         return self.parent.batch_size
 
-    def _validate_value_tensor(self, value, spec):
+    def _validate_value_tensor(self, value, spec) -> bool:
         if not spec.is_in(value):
             raise RuntimeError(f"Value ({value}) is not in the spec domain ({spec}).")
         return True
@@ -6892,7 +6889,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         self.frozen = False
         return self
 
-    def frozen_copy(self):
+    def frozen_copy(self) -> VecNorm:
         """Returns a copy of the Transform that keeps track of the stats but does not update them."""
         if self._td is None:
             raise RuntimeError(
@@ -7067,7 +7064,9 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
             return Compose(*out)
         return _out
 
-    def _get_loc_scale(self, loc_only=False, scale_only=False):
+    def _get_loc_scale(
+        self, loc_only=False, scale_only=False
+    ) -> tuple[TensorDict | None, TensorDict | None]:
         loc = {}
         scale = {}
         for key in self.in_keys:
@@ -7087,7 +7086,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         return loc, scale
 
     @property
-    def standard_normal(self):
+    def standard_normal(self) -> bool:
         """Whether the affine transform given by `loc` and `scale` follows the standard normal equation.
 
         Similar to :class:`~torchrl.envs.ObservationNorm` standard_normal attribute.
@@ -7310,7 +7309,7 @@ class RewardSum(Transform):
         self.reward_spec = reward_spec
 
     @property
-    def in_keys(self):
+    def in_keys(self) -> Sequence[NestedKey]:
         in_keys = self.__dict__.get("_in_keys", None)
         if in_keys in (None, []):
             # retrieve rewards from parent env
@@ -7331,7 +7330,7 @@ class RewardSum(Transform):
         self._in_keys = value
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         out_keys = self.__dict__.get("_out_keys", None)
         if out_keys in (None, []):
             out_keys = [
@@ -7356,7 +7355,7 @@ class RewardSum(Transform):
         self._out_keys = value
 
     @property
-    def reset_keys(self):
+    def reset_keys(self) -> Sequence[NestedKey]:
         reset_keys = self.__dict__.get("_reset_keys", None)
         if reset_keys is None:
             parent = self.parent
@@ -7612,7 +7611,7 @@ class StepCounter(Transform):
         super().__init__()
 
     @property
-    def truncated_keys(self):
+    def truncated_keys(self) -> list[NestedKey]:
         truncated_keys = self.__dict__.get("_truncated_keys", None)
         if truncated_keys is None:
             # make the default truncated keys
@@ -7627,7 +7626,7 @@ class StepCounter(Transform):
         return truncated_keys
 
     @property
-    def done_keys(self):
+    def done_keys(self) -> list[NestedKey]:
         done_keys = self.__dict__.get("_done_keys", None)
         if done_keys is None:
             # make the default done keys
@@ -7642,7 +7641,7 @@ class StepCounter(Transform):
         return done_keys
 
     @property
-    def terminated_keys(self):
+    def terminated_keys(self) -> list[NestedKey]:
         terminated_keys = self.__dict__.get("_terminated_keys", None)
         if terminated_keys is None:
             # make the default terminated keys
@@ -7657,7 +7656,7 @@ class StepCounter(Transform):
         return terminated_keys
 
     @property
-    def step_count_keys(self):
+    def step_count_keys(self) -> list[NestedKey]:
         step_count_keys = self.__dict__.get("_step_count_keys", None)
         if step_count_keys is None:
             # make the default step_count keys
@@ -7672,14 +7671,14 @@ class StepCounter(Transform):
         return step_count_keys
 
     @property
-    def reset_keys(self):
+    def reset_keys(self) -> list[NestedKey]:
         if self.parent is not None:
             return self.parent._filtered_reset_keys
         # fallback on default "_reset"
         return ["_reset"]
 
     @property
-    def full_done_spec(self):
+    def full_done_spec(self) -> TensorSpec | None:
         return self.parent.output_spec["full_done_spec"] if self.parent else None
 
     def _reset(
@@ -8183,7 +8182,7 @@ class TimeMaxPool(Transform):
         return buffer_name
 
     @property
-    def reset_key(self):
+    def reset_key(self) -> NestedKey:
         reset_key = self.__dict__.get("_reset_key", None)
         if reset_key is None:
             reset_keys = self.parent.reset_keys
@@ -8423,7 +8422,7 @@ class InitTracker(Transform):
         return super().set_container(container)
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         return self.init_keys
 
     @out_keys.setter
@@ -8435,7 +8434,7 @@ class InitTracker(Transform):
         )
 
     @property
-    def init_keys(self):
+    def init_keys(self) -> Sequence[NestedKey]:
         init_keys = self.__dict__.get("_init_keys", None)
         if init_keys is not None:
             return init_keys
@@ -8454,7 +8453,7 @@ class InitTracker(Transform):
         return self._init_keys
 
     @property
-    def reset_keys(self):
+    def reset_keys(self) -> Sequence[NestedKey]:
         return self.parent._filtered_reset_keys
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
@@ -9654,7 +9653,7 @@ class _InvertTransform(Transform):
         self.transform = transform
 
     @property
-    def in_keys(self):
+    def in_keys(self) -> Sequence[NestedKey]:
         return self.transform.in_keys_inv
 
     @in_keys.setter
@@ -9663,7 +9662,7 @@ class _InvertTransform(Transform):
             raise RuntimeError("Cannot set non-null value in in_keys.")
 
     @property
-    def in_keys_inv(self):
+    def in_keys_inv(self) -> Sequence[NestedKey]:
         return self.transform.in_keys
 
     @in_keys_inv.setter
@@ -9672,7 +9671,7 @@ class _InvertTransform(Transform):
             raise RuntimeError("Cannot set non-null value in in_keys_inv.")
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         return self.transform.out_keys_inv
 
     @out_keys.setter
@@ -9681,7 +9680,7 @@ class _InvertTransform(Transform):
             raise RuntimeError("Cannot set non-null value in out_keys.")
 
     @property
-    def out_keys_inv(self):
+    def out_keys_inv(self) -> Sequence[NestedKey]:
         return self.transform.out_keys
 
     @out_keys_inv.setter
@@ -9723,10 +9722,10 @@ class _CallableTransform(Transform):
         super().__init__()
         self.func = func
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs) -> TensorDictBase:
         return self.func(*args, **kwargs)
 
-    def _call(self, next_tensordict: TensorDictBase):
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         return self.func(next_tensordict)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -10380,7 +10379,7 @@ class ActionDiscretizer(Transform):
         self.sampling = sampling
         self.categorical = categorical
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         def _indent(s):
             return indent(s, 4 * " ")
 
@@ -10676,7 +10675,7 @@ class TrajCounter(Transform):
         state["_traj_count"] = None
         return state
 
-    def clone(self):
+    def clone(self) -> Self:
         clone = super().clone()
         # All clones share the same _traj_count and lock
         clone._traj_count = self._traj_count

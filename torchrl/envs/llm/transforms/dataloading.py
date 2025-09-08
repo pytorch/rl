@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import warnings
 from collections import deque
-from collections.abc import Mapping
-from typing import Any, Callable, Iterable, Literal
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any, Literal
 
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase

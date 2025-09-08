@@ -8,9 +8,9 @@ from __future__ import annotations
 import pathlib
 import warnings
 
-from functools import partial
+from collections.abc import Callable
 
-from typing import Callable
+from functools import partial
 
 from tensordict import TensorDict, TensorDictBase
 from torch import optim

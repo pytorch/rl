@@ -11,9 +11,10 @@ import sys
 import textwrap
 import warnings
 from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import tensordict
@@ -45,6 +46,11 @@ from torchrl.data.replay_buffers.utils import (
     INT_CLASSES,
     tree_iter,
 )
+
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_dynamo_compiling as is_compiling
 
 
 class Storage:
@@ -97,6 +103,8 @@ class Storage:
             self._attached_entities_list = _attached_entities_list = []
         return _attached_entities_list
 
+    # TODO: Check this
+    # @torch.compiler.disable()
     @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
         return self._attached_entities
@@ -156,6 +164,8 @@ class Storage:
     def _empty(self):
         ...
 
+    # TODO: Without this disable, compiler recompiles due to changing len(self) guards.
+    @torch.compiler.disable()
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
@@ -617,7 +627,7 @@ class TensorStorage(Storage):
 
     @_len.setter
     def _len(self, value):
-        if not self._compilable:
+        if not is_compiling() and not self._compilable:
             _len_value = self.__dict__.get("_len_value", None)
             if _len_value is None:
                 _len_value = self._len_value = mp.Value("i", 0)
@@ -692,7 +702,7 @@ class TensorStorage(Storage):
 
     # TODO: Without this disable, compiler recompiles for back-to-back calls.
     # Figuring out a way to avoid this disable would give better performance.
-    @torch._dynamo.disable()
+    @torch.compiler.disable()
     def _rand_given_ndim(self, batch_size):
         return self._rand_given_ndim_impl(batch_size)
 
@@ -967,6 +977,8 @@ class TensorStorage(Storage):
         else:
             return tree_map(lambda x: x[index], storage)
 
+    # TODO: Without this disable, compiler recompiles due to changing _len_value guards.
+    @torch.compiler.disable()
     def __len__(self):
         return self._len
 
