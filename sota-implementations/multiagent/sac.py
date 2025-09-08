@@ -77,8 +77,11 @@ def train(cfg: DictConfig):  # noqa: F821
     if cfg.env.continuous_actions:
         actor_net = nn.Sequential(
             MultiAgentMLP(
-                n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-                n_agent_outputs=2 * env.action_spec.shape[-1],
+                n_agent_inputs=env.unbatched_observation_spec[
+                    "agents", "observation"
+                ].shape[-1],
+                n_agent_outputs=2
+                * env.full_action_spec_unbatched["agents", "action"].shape[-1],
                 n_agents=env.n_agents,
                 centralised=False,
                 share_params=cfg.model.shared_parameters,
@@ -111,7 +114,9 @@ def train(cfg: DictConfig):  # noqa: F821
         # Critic
         module = MultiAgentMLP(
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1]
-            + env.action_spec.shape[-1],  # Q critic takes action and value
+            + env.full_action_spec_unbatched["agents", "action"].shape[
+                -1
+            ],  # Q critic takes action and value
             n_agent_outputs=1,
             n_agents=env.n_agents,
             centralised=cfg.model.centralised_critic,
@@ -130,7 +135,9 @@ def train(cfg: DictConfig):  # noqa: F821
         actor_net = nn.Sequential(
             MultiAgentMLP(
                 n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-                n_agent_outputs=env.action_spec.space.n,
+                n_agent_outputs=env.full_action_spec_unbatched[
+                    "agents", "action"
+                ].space.n,
                 n_agents=env.n_agents,
                 centralised=False,
                 share_params=cfg.model.shared_parameters,
@@ -147,7 +154,7 @@ def train(cfg: DictConfig):  # noqa: F821
         )
         policy = ProbabilisticActor(
             module=policy_module,
-            spec=env.full_action_spec_unbatched,
+            spec=env.full_action_spec_unbatched["agents", "action"],
             in_keys=[("agents", "logits")],
             out_keys=[env.action_key],
             distribution_class=OneHotCategorical
@@ -159,7 +166,7 @@ def train(cfg: DictConfig):  # noqa: F821
         # Critic
         module = MultiAgentMLP(
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-            n_agent_outputs=env.action_spec.space.n,
+            n_agent_outputs=env.full_action_spec_unbatched["agents", "action"].space.n,
             n_agents=env.n_agents,
             centralised=cfg.model.centralised_critic,
             share_params=cfg.model.shared_parameters,
@@ -209,7 +216,7 @@ def train(cfg: DictConfig):  # noqa: F821
             actor_network=policy,
             qvalue_network=value_module,
             delay_qvalue=True,
-            num_actions=env.action_spec.space.n,
+            num_actions=env.full_action_spec_unbatched["agents", "action"].space.n,
             action_space=env.full_action_spec_unbatched,
         )
         loss_module.set_keys(

@@ -75,7 +75,8 @@ def train(cfg: DictConfig):  # noqa: F821
     actor_net = nn.Sequential(
         MultiAgentMLP(
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-            n_agent_outputs=2 * env.action_spec.shape[-1],
+            n_agent_outputs=2
+            * env.full_action_spec_unbatched[env.action_key].shape[-1],
             n_agents=env.n_agents,
             centralised=False,
             share_params=cfg.model.shared_parameters,
