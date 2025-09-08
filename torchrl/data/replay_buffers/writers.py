@@ -577,6 +577,14 @@ class TensorDictMaxValueWriter(Writer):
         self._mark_update_entities(index)
         return index
 
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @torch.compiler.disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
+        for ent in self._storage._attached_entities_iter():
+            ent.mark_update(index)
+
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
         self._current_top_values = []
