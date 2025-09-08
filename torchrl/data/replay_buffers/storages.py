@@ -50,7 +50,7 @@ from torchrl.data.replay_buffers.utils import (
 try:
     from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_dynamo_compiling as is_compiling
+    from torch._dynamo import is_compiling
 
 
 class Storage:
