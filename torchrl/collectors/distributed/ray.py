@@ -16,7 +16,7 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors import (
+from torchrl.collectors.collectors import (
     DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
     MultiaSyncDataCollector,

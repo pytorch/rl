@@ -20,7 +20,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors import (
+from torchrl.collectors.collectors import (
     DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
     MultiaSyncDataCollector,
