@@ -1008,7 +1008,7 @@ source torchrl/bin/activate  # On Windows use: venv\Scripts\activate
 Or create a conda environment where the packages will be installed.
 
 ```
-conda create --name torchrl python=3.9
+conda create --name torchrl python=3.10
 conda activate torchrl
 ```
 
@@ -1065,7 +1065,7 @@ Importantly, the nightly builds require the nightly builds of PyTorch too.
 Also, a local build of torchrl with the nightly build of tensordict may fail - install both nightlies or both local builds but do not mix them.
 
 
-**Disclaimer**: As of today, TorchRL is roughly compatible with any pytorch version >= 2.1 and installing it will not
+**Disclaimer**: As of today, TorchRL requires Python 3.10+ and is roughly compatible with any pytorch version >= 2.1. Installing it will not
 directly require a newer version of pytorch to be installed. Indirectly though, tensordict still requires the latest
 PyTorch to be installed and we are working hard to loosen that requirement. 
 The C++ binaries of TorchRL (mainly for prioritized replay buffers) will only work with PyTorch 2.7.0 and above.

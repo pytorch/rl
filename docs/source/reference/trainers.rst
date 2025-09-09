@@ -287,7 +287,10 @@ directory contains a complete, working PPO implementation that demonstrates the 
 
 **Configuration Classes:**
 
-The PPOTrainer uses a hierarchical configuration system with these main config classes:
+The PPOTrainer uses a hierarchical configuration system with these main config classes.
+
+.. note::
+   The configuration system requires Python 3.10+ due to its use of modern type annotation syntax.
 
 - **Trainer**: :class:`~torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig`
 - **Environment**: :class:`~torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig`, :class:`~torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig`

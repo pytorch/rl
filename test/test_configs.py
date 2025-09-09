@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import sys
 
 import pytest
 import torch
@@ -24,8 +25,12 @@ _has_gym = (importlib.util.find_spec("gym") is not None) or (
     importlib.util.find_spec("gymnasium") is not None
 )
 _has_hydra = importlib.util.find_spec("hydra") is not None
+_python_version_compatible = sys.version_info >= (3, 10)
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestEnvConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_gym_env_config(self):
@@ -59,6 +64,9 @@ class TestEnvConfigs:
         assert isinstance(env, cls)
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestDataConfigs:
     """Test cases for data.py configuration classes."""
 
@@ -660,6 +668,9 @@ class TestDataConfigs:
         assert buffer._writer._compilable is True
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestModuleConfigs:
     """Test cases for modules.py configuration classes."""
 
@@ -845,6 +856,9 @@ class TestModuleConfigs:
         assert value_model.module.out_features == 1
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestCollectorsConfig:
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
@@ -920,6 +934,9 @@ class TestCollectorsConfig:
                 collector_instance.shutdown(timeout=10)
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestLossConfigs:
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
@@ -960,6 +977,9 @@ class TestLossConfigs:
             assert isinstance(loss, KLPENPPOLoss)
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestOptimizerConfigs:
     def test_adam_config(self):
         """Test AdamConfig."""
@@ -973,6 +993,9 @@ class TestOptimizerConfigs:
         assert cfg.eps == 1e-4  # Still default
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestTrainerConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_ppo_trainer_config(self):
@@ -1084,6 +1107,9 @@ class TestTrainerConfigs:
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
 class TestHydraParsing:
     @pytest.fixture(autouse=True, scope="module")
     def init_hydra(self):
