@@ -63,7 +63,9 @@ def set_list_to_stack_fixture():
 
 
 @pytest.fixture(scope="module")
-def vllm_instance():
+def vllm_instance() -> tuple[
+    vllm.LLM, transformers.AutoTokenizer  # noqa # type: ignore
+]:  # noqa # type: ignore
     """Create vLLM model and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
@@ -89,7 +91,9 @@ def vllm_instance():
 
 
 @pytest.fixture(scope="module")
-def transformers_instance():
+def transformers_instance() -> tuple[
+    transformers.AutoModelForCausalLM, transformers.AutoTokenizer  # noqa # type: ignore
+]:  # noqa # type: ignore
     """Create transformers model and tokenizer for testing."""
     if not _has_transformers:
         pytest.skip("transformers not available")
@@ -434,8 +438,9 @@ class TestWrappers:
         self, wrapper_class, vllm_instance, transformers_instance
     ):
         """Test that legacy parameter names are automatically converted to standardized names."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        model, tokenizer = (
+            vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        )
 
         # Test with legacy parameter names
         wrapper = wrapper_class(
