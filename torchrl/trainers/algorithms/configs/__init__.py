@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
-from hydra.core.config_store import ConfigStore
+import sys
 
+from hydra.core.config_store import ConfigStore
 from torchrl.trainers.algorithms.configs.collectors import (
     AsyncDataCollectorConfig,
     DataCollectorConfig,
@@ -521,4 +522,5 @@ def _register_configs():
     cs.store(group="logger", name="base", node=LoggerConfig)
 
 
-_register_configs()
+if not sys.version_info < (3, 10):  #  type: ignore # noqa
+    _register_configs()
