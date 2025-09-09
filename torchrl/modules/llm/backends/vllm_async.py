@@ -741,15 +741,13 @@ class AsyncVLLM:
             actor_index (int | None): Specific actor to use (random if None).
 
         Returns:
-            RequestOutput or list of RequestOutput: Generated outputs from vLLM.
+            list[RequestOutput]: Generated outputs from vLLM.
         """
         if actor_index is None:
             actor = random.choice(self.actors)
         else:
             actor = self.actors[actor_index]
-        list_convert = False
         if not isinstance(prompts, list):
-            list_convert = True
             prompts = [prompts]
         # prompt_token_ids is a list of lists
         if prompt_token_ids is not None:
@@ -758,7 +756,6 @@ class AsyncVLLM:
             if not len(prompt_token_ids):
                 raise ValueError("prompt_token_ids must not be empty")
             if not isinstance(prompt_token_ids[0], list):
-                list_convert = True
                 prompt_token_ids = [prompt_token_ids]
         if not isinstance(prompt_token_ids, list):
             raise ValueError(
@@ -781,10 +778,7 @@ class AsyncVLLM:
                 for prompt, prompt_token_ids_i in zip(prompts, prompt_token_ids)
             ]
         )
-        if list_convert:
-            return results[0]
-        else:
-            return results
+        return results
 
     def get_random_actor_index(self) -> int:
         """Get a random actor index."""
