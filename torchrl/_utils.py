@@ -548,11 +548,19 @@ class implement_for:
 
     def _delazify(self, func_name):
         out = None
-        for local_call in implement_for._lazy_impl[func_name]:
+        # Make a copy of the list to avoid issues when clearing during iteration
+        lazy_calls = implement_for._lazy_impl[func_name][:]
+        for local_call in lazy_calls:
             out = local_call()
-        # Clear the lazy implementations after processing to prevent reprocessing
-        # when compilable=True causes multiple _delazify calls
-        implement_for._lazy_impl[func_name].clear()
+        # Only clear for compilable decorators, since non-compilable decorators
+        # need to keep the list to allow multiple lazy calls
+        # Check if any of the decorators are compilable
+        any_compilable = any(
+            hasattr(call, "__self__") and call.__self__._compilable
+            for call in lazy_calls
+        )
+        if any_compilable:
+            implement_for._lazy_impl[func_name].clear()
         return out
 
     def __call__(self, fn):
