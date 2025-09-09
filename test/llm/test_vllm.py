@@ -234,12 +234,14 @@ class TestAsyncLLMEngineExtended:
             mock_engine = MagicMock()
             mock_from_args.return_value = mock_engine
 
-            engine = _AsyncLLMEngine(mock_async_engine_args, bundle_indices=[0, 1])
+            engine = _AsyncLLMEngine(
+                engine_args=mock_async_engine_args, bundle_indices=[0, 1]
+            )
 
             # Check that engine args were modified correctly
             assert (
                 mock_async_engine_args.worker_cls
-                == "torchrl.modules.llm.backends.vllm_async.AsyncvLLMWorker"
+                == "torchrl.modules.llm.backends.vllm_async._AsyncvLLMWorker"
             )
             assert mock_async_engine_args.distributed_executor_backend == "ray"
             assert mock_async_engine_args.enable_prefix_caching is True
@@ -255,7 +257,7 @@ class TestAsyncLLMEngineExtended:
         from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args"):
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
             assert engine.ready() is True
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
@@ -277,7 +279,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test generation with prompt_token_ids
             tokens = [1, 2, 3, 4, 5]
@@ -306,7 +308,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test generation with text
             text = "Hello, world!"
@@ -335,7 +337,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine.generate = mock_slow_generate
             mock_engine.abort = AsyncMock()  # Mock abort method
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test timeout
             tokens = [1, 2, 3, 4, 5]
@@ -366,7 +368,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test generation with batch of text prompts
             prompts = ["Hello, world!", "How are you?"]
@@ -400,7 +402,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test generation with batch of token IDs
             token_ids = [[1, 2, 3], [4, 5, 6]]
@@ -438,7 +440,7 @@ class TestAsyncLLMEngineExtended:
                 mock_tokens_prompt = MagicMock()
                 MockTokensPrompt.return_value = mock_tokens_prompt
 
-                engine = _AsyncLLMEngine(mock_async_engine_args)
+                engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
                 # Test generation with single token list (should create TokensPrompt)
                 tokens = [1, 2, 3, 4, 5]
@@ -462,7 +464,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine = AsyncMock()
             mock_from_args.return_value = mock_engine
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test with neither prompts nor prompt_token_ids
             with pytest.raises(
@@ -489,7 +491,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test generation with LoRA request
             mock_lora_request = MagicMock()
@@ -513,7 +515,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine.get_tokenizer.return_value = mock_tokenizer
             mock_from_args.return_value = mock_engine
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             result = await engine.get_tokenizer()
             assert result == mock_tokenizer
@@ -529,7 +531,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine.engine = mock_inner_engine
             mock_from_args.return_value = mock_engine
 
-            engine = _AsyncLLMEngine(mock_async_engine_args)
+            engine = _AsyncLLMEngine(engine_args=mock_async_engine_args)
 
             # Test method call
             engine.collective_rpc_v0(
@@ -901,7 +903,7 @@ class TestIntegration:
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             mock_from_args.return_value = MagicMock()
 
-            _AsyncLLMEngine(engine_args)
+            _AsyncLLMEngine(engine_args=engine_args)
 
             # Verify the args were modified correctly
             assert (

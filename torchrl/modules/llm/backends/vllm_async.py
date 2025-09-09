@@ -730,15 +730,15 @@ class AsyncVLLM:
         compatibility between sync and async engines.
 
         Args:
-            prompts: String, TokensPrompt, or list of these. Input prompts for generation.
-            sampling_params: SamplingParams object for controlling generation behavior.
-            prompt_token_ids: Alternative to prompts - token IDs for generation.
-            use_tqdm: Whether to show progress bar (not used in async engine).
-            lora_request: LoRA request for adapter-based generation.
-            prompt_adapter_request: Prompt adapter request.
-            guided_options_request: Guided decoding options.
-            timeout_seconds: Timeout for generation in seconds.
-            actor_index: Specific actor to use (random if None).
+            prompts (String, TokensPrompt, or list of these): Input prompts for generation.
+            sampling_params (SamplingParams): SamplingParams object for controlling generation behavior.
+            prompt_token_ids (list[int] | list[list[int]]): Alternative to prompts - token IDs for generation.
+            use_tqdm (bool): Whether to show progress bar (not used in async engine).
+            lora_request (Any): LoRA request for adapter-based generation.
+            prompt_adapter_request (Any): Prompt adapter request.
+            guided_options_request (Any): Guided decoding options.
+            timeout_seconds (float | None): Timeout for generation in seconds.
+            actor_index (int | None): Specific actor to use (random if None).
 
         Returns:
             RequestOutput or list of RequestOutput: Generated outputs from vLLM.
@@ -747,19 +747,38 @@ class AsyncVLLM:
             actor = random.choice(self.actors)
         else:
             actor = self.actors[actor_index]
-
-        return ray.get(
-            actor.generate.remote(
-                prompts,
-                sampling_params,
-                prompt_token_ids=prompt_token_ids,
-                use_tqdm=use_tqdm,
-                lora_request=lora_request,
-                prompt_adapter_request=prompt_adapter_request,
-                guided_options_request=guided_options_request,
-                timeout_seconds=timeout_seconds,
-            )
+        list_convert = False
+        if not isinstance(prompts, list):
+            list_convert = True
+            prompts = [prompts]
+        # prompt_token_ids is a list of lists
+        if prompt_token_ids is not None:
+            if not isinstance(prompt_token_ids, list):
+                raise ValueError("prompt_token_ids must be a list of lists")
+            if not len(prompt_token_ids):
+                raise ValueError("prompt_token_ids must not be empty")
+            if not isinstance(prompt_token_ids[0], list):
+                list_convert = True
+                prompt_token_ids = [prompt_token_ids]
+        results = ray.get(
+            [
+                actor.generate.remote(
+                    prompt,
+                    sampling_params,
+                    prompt_token_ids=prompt_token_ids_i,
+                    use_tqdm=use_tqdm,
+                    lora_request=lora_request,
+                    prompt_adapter_request=prompt_adapter_request,
+                    guided_options_request=guided_options_request,
+                    timeout_seconds=timeout_seconds,
+                )
+                for prompt, prompt_token_ids_i in zip(prompts, prompt_token_ids)
+            ]
         )
+        if list_convert:
+            return results[0]
+        else:
+            return results
 
     def get_random_actor_index(self) -> int:
         """Get a random actor index."""

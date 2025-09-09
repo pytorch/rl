@@ -760,49 +760,12 @@ class vLLMWrapper(LLMWrapperBase):
 
     def _call_generate_sync_or_async(self, *args, **kwargs):
         """Call generate method, handling both sync and async engines."""
-        if self._is_async_engine:
-            # For async engines, we need to run in an event loop
-            import asyncio
-
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                # No event loop in current thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            if loop.is_running():
-                # We're already in an async context, need to use a new thread
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(self._run_async_generate, *args, **kwargs)
-                    return future.result()
-            else:
-                # We can run the async function directly
-                return loop.run_until_complete(self._async_generate(*args, **kwargs))
+        if not self._remote_calls:
+            return self.model.generate(*args, **kwargs)
         else:
-            # Standard sync or remote call
-            if not self._remote_calls:
-                return self.model.generate(*args, **kwargs)
-            else:
-                import ray
+            import ray
 
-                return ray.get(self.model.generate.remote(*args, **kwargs))
-
-    def _run_async_generate(self, *args, **kwargs):
-        """Helper to run async generate in a new event loop."""
-        import asyncio
-
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(self._async_generate(*args, **kwargs))
-        finally:
-            loop.close()
-
-    async def _async_generate(self, *args, **kwargs):
-        """Async generate method for async engines."""
-        return await self.model.generate(*args, **kwargs)
+            return ray.get(self.model.generate.remote(*args, **kwargs))
 
     @set_list_to_stack(True)
     @_batching

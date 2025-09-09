@@ -3074,12 +3074,15 @@ class TestRayWrapper:
             cls = RemoteTransformersWrapper
         else:
             raise ValueError(f"Invalid backend: {backend}")
+        num_gpus = 0 if not torch.cuda.is_available() else 1
         model = cls(
             model="Qwen/Qwen2.5-0.5B",
             generate=True,
             input_mode="text",
             batching=True,
             generate_kwargs={"max_new_tokens": 10},
+            num_gpus=num_gpus,
+            num_cpus=1,
         )
         try:
             # check batching

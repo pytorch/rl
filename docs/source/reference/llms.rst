@@ -455,7 +455,9 @@ It provides a distributed, async-capable inference service built on Ray that off
 
 - **Distributed Architecture**: Runs multiple vLLM engine replicas as Ray actors for horizontal scaling
 - **Load Balancing**: Automatically distributes requests across available replicas
-- **Native vLLM Batching**: Leverages vLLM's optimized batching for maximum throughput
+- **Native vLLM Batching**: Leverages vLLM's optimized batching for maximum throughput.
+  Every thread or actor in your code will be able to make requests to the vLLM engine(s), put the query in
+  the queue and let the engine handle the batching.
 - **Resource Management**: Automatic GPU allocation and cleanup through Ray placement groups
 - **Simple API**: Single-import convenience with :meth:`~torchrl.modules.llm.AsyncVLLM.from_pretrained`
 
@@ -484,6 +486,9 @@ It provides a distributed, async-capable inference service built on Ray that off
     # Cleanup when done
     async_engine.shutdown()
 
+These objects (AsyncVLLM and vLLMWrapper) can be shared across multiple collectors, environments, or workers efficiently.
+They can be directly passed from one worker to another: under the hood, Ray will handle the handler sharing and remote execution.
+
 **Performance Benefits:**
 
 - **Higher Throughput**: Multiple replicas process requests concurrently
@@ -491,17 +496,69 @@ It provides a distributed, async-capable inference service built on Ray that off
 - **Reduced Latency**: Native batching reduces per-request overhead
 - **Fault Tolerance**: Ray provides automatic error recovery and resource management
 
-**When to Use AsyncVLLM:**
+**Resource Sharing:**
 
-- Production inference workloads requiring high throughput
-- Multi-GPU setups (tensor parallelism + multiple replicas)
-- Distributed training with separate inference actors
-- Any scenario where you need multiple concurrent LLM calls
+AsyncVLLM instances can be shared across multiple collectors, environments, or workers efficiently:
+
+.. code-block:: python
+
+    from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
+    from torchrl.collectors.llm import LLMCollector
+    
+    # Create a shared AsyncVLLM service
+    shared_async_engine = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-7B",
+        num_devices=2,
+        num_replicas=4,  # High throughput for multiple consumers
+        max_model_len=4096
+    )
+    
+    # Multiple wrappers can use the same AsyncVLLM service
+    wrapper1 = vLLMWrapper(shared_async_engine, input_mode="history")
+    wrapper2 = vLLMWrapper(shared_async_engine, input_mode="text")
+    
+    # Multiple collectors can share the same service
+    collector1 = LLMCollector(env1, policy=wrapper1)
+    collector2 = LLMCollector(env2, policy=wrapper2)
+    
+    # The AsyncVLLM service automatically load-balances across replicas
+    # No additional coordination needed between consumers
+
+This approach is more efficient than creating separate vLLM instances for each consumer, as it:
+
+- **Reduces Memory Usage**: Single model loading shared across consumers
+- **Automatic Load Balancing**: Requests are distributed across replicas
+- **Better Resource Utilization**: GPUs are used more efficiently
+- **Simplified Management**: Single service to monitor and manage
+
+.. note::
+    **AsyncVLLM vs. Traditional Actor Sharing**
+    
+    Unlike traditional Ray actor sharing patterns where you manually create named actors and share references,
+    AsyncVLLM handles the distributed architecture internally. You simply create one AsyncVLLM service and 
+    pass it to multiple consumers. The service automatically:
+    
+    - Creates and manages multiple Ray actors (replicas) internally
+    - Load-balances requests across replicas without manual coordination
+    - Handles actor lifecycle and resource cleanup
+    
+    This eliminates the need for manual actor name management and reference sharing that was required 
+    with the previous `RemotevLLMWrapper` approach.
 
 Remote Wrappers
 ^^^^^^^^^^^^^^^
 
 TorchRL provides remote wrapper classes that enable distributed execution of LLM wrappers using Ray. These wrappers provide a simplified interface that doesn't require explicit `remote()` and `get()` calls, making them easy to use in distributed settings.
+
+.. note::
+    **For vLLM: Use AsyncVLLM Instead**
+    
+    For vLLM-based inference, we recommend using :class:`~torchrl.modules.llm.AsyncVLLM` directly rather than 
+    remote wrappers. AsyncVLLM provides better performance, resource utilization, and built-in load balancing.
+    See the `Async vLLM Engine (Recommended)`_ section above for details.
+    
+    Remote wrappers are primarily intended for Transformers-based models or other use cases where AsyncVLLM 
+    is not applicable.
 
 **Key Features:**
 
@@ -515,6 +572,10 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
 **Model Parameter Requirements:**
 
 - **RemoteTransformersWrapper**: Only accepts string model names/paths. Transformers models are not serializable.
+
+**Supported Backends:**
+
+Currently, only Transformers-based models are supported through remote wrappers. For vLLM models, use :class:`~torchrl.modules.llm.AsyncVLLM` instead.
 
 **Usage Examples:**
 
