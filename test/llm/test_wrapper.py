@@ -82,6 +82,7 @@ def vllm_instance() -> tuple[
             "Qwen/Qwen2.5-0.5B",
             max_num_batched_tokens=32768,  # Match max_model_len
             max_model_len=32768,
+            gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
         )
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
@@ -117,6 +118,7 @@ def async_vllm_instance() -> tuple[
             num_replicas=1,
             max_model_len=32768,
             max_num_batched_tokens=32768,
+            gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
         )
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
