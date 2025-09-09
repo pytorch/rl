@@ -760,6 +760,12 @@ class AsyncVLLM:
             if not isinstance(prompt_token_ids[0], list):
                 list_convert = True
                 prompt_token_ids = [prompt_token_ids]
+        if not isinstance(prompt_token_ids, list):
+            raise ValueError(
+                "prompt_token_ids must be a list of ints or a list of lists of ints"
+            )
+        if len(prompts) != len(prompt_token_ids):
+            raise ValueError("prompts and prompt_token_ids must have the same length")
         results = ray.get(
             [
                 actor.generate.remote(
