@@ -50,6 +50,24 @@ except ImportError:
     SamplingParams = Any  # type: ignore
     RequestOutput = Any  # type: ignore
 
+# Import async vLLM engines
+try:
+    from torchrl.modules.llm.backends.vllm_async import (
+        AsyncLLMEngineExtended,
+        AsyncVLLMEngineService,
+    )
+
+    _has_async_vllm = True
+except ImportError:
+
+    class AsyncLLMEngineExtended:
+        """AsyncLLMEngineExtended is not available."""
+
+    class AsyncVLLMEngineService:
+        """AsyncVLLMEngineService is not available."""
+
+    _has_async_vllm = False
+
 
 class vLLMWrapper(LLMWrapperBase):
     """A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.
@@ -57,8 +75,14 @@ class vLLMWrapper(LLMWrapperBase):
     This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input
     modalities (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
 
+    The wrapper supports both synchronous (vllm.LLM) and asynchronous (AsyncVLLMEngineService, AsyncLLMEngineExtended) vLLM engines.
+    When using async engines, generation calls will be awaited automatically.
+
     Args:
-        model (vllm.LLM | str): The vLLM model to wrap. If a string, it will be passed to `vllm.LLM`.
+        model (vllm.LLM | AsyncVLLMEngineService | AsyncLLMEngineExtended | str): The vLLM model to wrap.
+            - If a string, it will be passed to `vllm.LLM` (sync mode)
+            - If a vllm.LLM instance, uses synchronous generation
+            - If an AsyncVLLMEngineService or AsyncLLMEngineExtended instance, uses asynchronous generation
 
     Keyword Args:
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for encoding and decoding text.
@@ -237,7 +261,7 @@ class vLLMWrapper(LLMWrapperBase):
 
     def __init__(
         self,
-        model: vllm.LLM | str,  # type: ignore
+        model: Any,  # vllm.LLM | AsyncVLLMEngineService | AsyncLLMEngineExtended | str
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
@@ -298,8 +322,27 @@ class vLLMWrapper(LLMWrapperBase):
         if transformers is None:
             raise ImportError("transformers is required for vLLMWrapper")
 
+        # Detect and initialize model
+        self._is_async_engine = False
         if isinstance(model, str):
             model = vllm.LLM(model)
+        elif _has_async_vllm and isinstance(
+            model, (AsyncVLLMEngineService, AsyncLLMEngineExtended)
+        ):
+            self._is_async_engine = True
+        elif vllm is not None and isinstance(model, vllm.LLM):
+            # Standard sync vLLM model
+            pass
+        else:
+            # Check if it might be a remote vLLM model
+            if hasattr(model, "generate"):
+                # Assume it's a remote model if it has generate method
+                pass
+            else:
+                raise ValueError(
+                    f"model must be a string, vllm.LLM, AsyncVLLMEngineService, "
+                    f"AsyncLLMEngineExtended, or remote vLLM model. Got {type(model)}"
+                )
 
         if isinstance(tokenizer, str):
             from transformers import AutoTokenizer
@@ -315,7 +358,10 @@ class vLLMWrapper(LLMWrapperBase):
             )
 
         self.model = model
-        self._remote_calls = not isinstance(model, vllm.LLM)
+        self._remote_calls = (
+            not (isinstance(model, vllm.LLM) if vllm else False)
+            and not self._is_async_engine
+        )
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
@@ -414,7 +460,27 @@ class vLLMWrapper(LLMWrapperBase):
         # Get tokenizer if needed
         if tokenizer is None:
             try:
-                tokenizer = model.get_tokenizer()
+                if self._is_async_engine:
+                    # For async engines, we need to get tokenizer differently
+                    if hasattr(model, "get_tokenizer"):
+                        # AsyncLLMEngineExtended has get_tokenizer as async method
+                        import asyncio
+
+                        if asyncio.iscoroutinefunction(model.get_tokenizer):
+                            # We can't call async methods in __init__, so we'll defer this
+                            tokenizer = None  # Will need to be set later
+                            warnings.warn(
+                                "Tokenizer retrieval from async engines is deferred. "
+                                "Please call set_tokenizer() after initialization if needed."
+                            )
+                        else:
+                            tokenizer = model.get_tokenizer()
+                    else:
+                        warnings.warn(
+                            "No tokenizer provided and no tokenizer found in async model."
+                        )
+                else:
+                    tokenizer = model.get_tokenizer()
             except AttributeError:
                 warnings.warn("No tokenizer provided and no tokenizer found in model.")
         self.tokenizer = tokenizer
@@ -650,6 +716,76 @@ class vLLMWrapper(LLMWrapperBase):
 
         # Create and return new instance
         return type(self)(**constructor_kwargs)
+
+    def set_tokenizer(self, tokenizer):
+        """Set the tokenizer for the wrapper. Useful for async engines where tokenizer retrieval is deferred."""
+        self.tokenizer = tokenizer
+        if self.tokenizer is not None and (
+            not hasattr(self.tokenizer, "pad_token") or self.tokenizer.pad_token is None
+        ):
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        if self.tokenizer is not None:
+            padding_value = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
+        else:
+            padding_value = None
+        self.padding_value = padding_value
+
+    async def _async_get_tokenizer(self):
+        """Get tokenizer from async engine."""
+        if self._is_async_engine and hasattr(self.model, "get_tokenizer"):
+            import asyncio
+
+            if asyncio.iscoroutinefunction(self.model.get_tokenizer):
+                return await self.model.get_tokenizer()
+            else:
+                return self.model.get_tokenizer()
+        return None
+
+    def _call_generate_sync_or_async(self, *args, **kwargs):
+        """Call generate method, handling both sync and async engines."""
+        if self._is_async_engine:
+            # For async engines, we need to run in an event loop
+            import asyncio
+
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # No event loop in current thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            if loop.is_running():
+                # We're already in an async context, need to use a new thread
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(self._run_async_generate, *args, **kwargs)
+                    return future.result()
+            else:
+                # We can run the async function directly
+                return loop.run_until_complete(self._async_generate(*args, **kwargs))
+        else:
+            # Standard sync or remote call
+            if not self._remote_calls:
+                return self.model.generate(*args, **kwargs)
+            else:
+                import ray
+
+                return ray.get(self.model.generate.remote(*args, **kwargs))
+
+    def _run_async_generate(self, *args, **kwargs):
+        """Helper to run async generate in a new event loop."""
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self._async_generate(*args, **kwargs))
+        finally:
+            loop.close()
+
+    async def _async_generate(self, *args, **kwargs):
+        """Async generate method for async engines."""
+        return await self.model.generate(*args, **kwargs)
 
     @set_list_to_stack(True)
     @_batching
@@ -1144,14 +1280,10 @@ class vLLMWrapper(LLMWrapperBase):
         elif not isinstance(text, list):
             text = text.tolist()
 
-        if not self._remote_calls:
-            request_output = self.model.generate(text, *args, **generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(
-                self.model.generate.remote(text, *args, **generate_kwargs)
-            )
+        # Use unified interface for sync/async/remote calls
+        request_output = self._call_generate_sync_or_async(
+            text, *args, **generate_kwargs
+        )
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1294,12 +1426,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
-        if not self._remote_calls:
-            request_output = self.model.generate(**generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(self.model.generate.remote(**generate_kwargs))
+        request_output = self._call_generate_sync_or_async(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1424,14 +1551,8 @@ class vLLMWrapper(LLMWrapperBase):
             tokens_prompt_list = self._to_list(tokens_prompt_unpadded, None)
         generate_kwargs.update({"prompt_token_ids": tokens_prompt_list})
 
-        if not self._remote_calls:
-            request_output = self.model.generate(*args, **generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(
-                self.model.generate.remote(*args, **generate_kwargs)
-            )
+        # Use unified interface for sync/async/remote calls
+        request_output = self._call_generate_sync_or_async(*args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1668,12 +1789,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
-        if not self._remote_calls:
-            tokens_out_stuct = self.model.generate(**generate_kwargs)
-        else:
-            import ray
-
-            tokens_out_stuct = ray.get(self.model.generate.remote(**generate_kwargs))
+        tokens_out_stuct = self._call_generate_sync_or_async(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)
 
@@ -2106,7 +2222,7 @@ class RemotevLLMWrapper:
         model,
         max_concurrency: int = 16,
         validate_model: bool = True,
-        actor_name: str = None,
+        actor_name: str | None = None,
         **kwargs,
     ):
         import ray

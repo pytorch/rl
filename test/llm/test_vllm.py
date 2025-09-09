@@ -8,6 +8,7 @@ import asyncio
 import importlib.util
 import os
 import uuid
+import warnings
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -929,6 +930,126 @@ class TestIntegration:
         params3 = SamplingParams(n=3, temperature=1.0)  # Multiple samples
         assert params3.n == 3
         assert params3.temperature == 1.0
+
+
+# Test vLLM wrapper with async engines
+class TestVLLMWrapperWithAsyncEngines:
+    """Test vLLMWrapper integration with async engines."""
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    def test_vllm_wrapper_with_mock_async_engine_extended(self):
+        """Test vLLMWrapper with AsyncLLMEngineExtended."""
+        with patch("torchrl.modules.llm.policies.vllm_wrapper._has_async_vllm", True):
+            with patch(
+                "torchrl.modules.llm.policies.vllm_wrapper.AsyncLLMEngineExtended"
+            ) as MockAsyncEngine:
+                mock_engine = MagicMock()
+                mock_engine.generate = AsyncMock(return_value=MagicMock())
+                MockAsyncEngine.return_value = mock_engine
+
+                # Test that wrapper accepts async engine
+                from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+
+                wrapper = vLLMWrapper(
+                    model=mock_engine,
+                    input_mode="text",
+                    generate=True,
+                    return_log_probs=False,
+                )
+
+                # Verify async engine detection
+                assert wrapper._is_async_engine is True
+                assert wrapper._remote_calls is False
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    def test_vllm_wrapper_with_mock_async_engine_service(self):
+        """Test vLLMWrapper with AsyncVLLMEngineService."""
+        with patch("torchrl.modules.llm.policies.vllm_wrapper._has_async_vllm", True):
+            with patch(
+                "torchrl.modules.llm.policies.vllm_wrapper.AsyncVLLMEngineService"
+            ) as MockAsyncService:
+                mock_service = MagicMock()
+                mock_service.generate = MagicMock(return_value=MagicMock())
+                MockAsyncService.return_value = mock_service
+
+                # Test that wrapper accepts async service
+                from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+
+                wrapper = vLLMWrapper(
+                    model=mock_service,
+                    input_mode="text",
+                    generate=True,
+                    return_log_probs=False,
+                )
+
+                # Verify async engine detection
+                assert wrapper._is_async_engine is True
+                assert wrapper._remote_calls is False
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    def test_vllm_wrapper_tokenizer_deferral_for_async(self):
+        """Test that tokenizer retrieval is deferred for async engines."""
+        with patch("torchrl.modules.llm.policies.vllm_wrapper._has_async_vllm", True):
+            with patch(
+                "torchrl.modules.llm.policies.vllm_wrapper.AsyncLLMEngineExtended"
+            ) as MockAsyncEngine:
+                mock_engine = MagicMock()
+                # Mock async get_tokenizer
+                mock_engine.get_tokenizer = AsyncMock()
+                MockAsyncEngine.return_value = mock_engine
+
+                from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+
+                with patch("asyncio.iscoroutinefunction", return_value=True):
+                    with warnings.catch_warnings(record=True) as w:
+                        warnings.simplefilter("always")
+
+                        wrapper = vLLMWrapper(
+                            model=mock_engine,
+                            input_mode="text",
+                            generate=True,
+                            return_log_probs=False,
+                        )
+
+                        # Verify warning was issued about deferred tokenizer
+                        assert len(w) == 1
+                        assert (
+                            "Tokenizer retrieval from async engines is deferred"
+                            in str(w[0].message)
+                        )
+                        assert wrapper._is_async_engine is True
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    def test_set_tokenizer_method(self):
+        """Test the set_tokenizer method for async engines."""
+        with patch("torchrl.modules.llm.policies.vllm_wrapper._has_async_vllm", True):
+            with patch(
+                "torchrl.modules.llm.policies.vllm_wrapper.AsyncLLMEngineExtended"
+            ) as MockAsyncEngine:
+                mock_engine = MagicMock()
+                MockAsyncEngine.return_value = mock_engine
+
+                from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+
+                wrapper = vLLMWrapper(
+                    model=mock_engine,
+                    input_mode="text",
+                    generate=True,
+                    return_log_probs=False,
+                )
+
+                # Mock tokenizer
+                mock_tokenizer = MagicMock()
+                mock_tokenizer.pad_token = None
+                mock_tokenizer.eos_token = "<eos>"
+                mock_tokenizer.return_value = {"input_ids": [123]}
+
+                # Test set_tokenizer method
+                wrapper.set_tokenizer(mock_tokenizer)
+
+                assert wrapper.tokenizer == mock_tokenizer
+                assert wrapper.tokenizer.pad_token == "<eos>"
+                assert wrapper.padding_value == 123
 
 
 if __name__ == "__main__":

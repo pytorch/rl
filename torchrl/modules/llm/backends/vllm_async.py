@@ -269,6 +269,9 @@ class AsyncLLMEngineExtended:
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
 
+        # Track whether input was originally a single prompt
+        single_prompt_input = False
+
         # Handle prompt_token_ids if provided
         if prompt_token_ids is not None:
             if prompts is not None:
@@ -287,10 +290,15 @@ class AsyncLLMEngineExtended:
             else:
                 # Single token ID list - cast to ensure type compatibility
                 token_list = list(prompt_token_ids) if prompt_token_ids else []
-                prompts = [TokensPrompt(prompt_token_ids=token_list)]
+                prompts = TokensPrompt(prompt_token_ids=token_list)
+                single_prompt_input = True
 
         elif prompts is None:
             raise ValueError("Must specify either prompts or prompt_token_ids")
+        else:
+            # prompts was provided directly
+            if not isinstance(prompts, (list, tuple)):
+                single_prompt_input = True
 
         # Default sampling params if not provided
         if sampling_params is None:
@@ -322,7 +330,7 @@ class AsyncLLMEngineExtended:
             return final
 
         async def _run_generation():
-            if not isinstance(prompts, (list, tuple)):
+            if single_prompt_input:
                 return await _gen_one(prompts)
 
             # List of prompts: run concurrently
