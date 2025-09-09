@@ -550,6 +550,9 @@ class implement_for:
         out = None
         for local_call in implement_for._lazy_impl[func_name]:
             out = local_call()
+        # Clear the lazy implementations after processing to prevent reprocessing
+        # when compilable=True causes multiple _delazify calls
+        implement_for._lazy_impl[func_name].clear()
         return out
 
     def __call__(self, fn):
