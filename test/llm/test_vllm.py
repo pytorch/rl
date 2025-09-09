@@ -156,18 +156,24 @@ class TestAsyncVLLMIntegration:
 
             # Get model metadata
             model_metadata = updater.get_model_metadata(policy)
-            updater.init(model_metadata)
 
-            # Mock a simple collector interface for the updater
+            # Create a proper collector mock that provides access to the AsyncVLLM service
             class MockCollector:
-                def __init__(self, policy_ref):
+                def __init__(self, policy_ref, vllm_service):
                     self.policy = policy_ref
+                    # The vLLMUpdater expects the collector to have a _collector attribute
+                    # for Ray-based collectors, or a policy.model for local collectors
+                    # We'll use the local collector pattern and patch policy.model to be the Ray actor
+                    self.policy.model = vllm_service.actors[0]
 
                 def increment_version(self):
                     pass
 
-            mock_collector = MockCollector(policy)
+            mock_collector = MockCollector(policy, service)
             updater.register_collector(mock_collector)
+
+            # Initialize the updater - this will now have access to the collector
+            updater.init(model_metadata)
 
             # Modify some weights slightly in the transformer
             with torch.no_grad():
