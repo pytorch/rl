@@ -485,8 +485,9 @@ class TestWrappers:
         self, wrapper_class, vllm_instance, transformers_instance
     ):
         """Test that parameter conflicts are resolved correctly when both legacy and standardized names are used."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        model, tokenizer = (
+            vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        )
 
         # Test with conflicting parameters - legacy name should win
         wrapper = wrapper_class(
@@ -531,8 +532,9 @@ class TestWrappers:
         self, wrapper_class, vllm_instance, transformers_instance
     ):
         """Test that parameter validation works correctly."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        model, tokenizer = (
+            vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        )
 
         # Test invalid temperature
         with pytest.raises(ValueError, match="Temperature must be non-negative"):
@@ -2608,8 +2610,9 @@ class TestBatching:
         self, wrapper_class, vllm_instance, transformers_instance
     ):
         """Test that standardized generation parameters work across both wrappers."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        model, tokenizer = (
+            vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        )
 
         # Test with standardized parameters
         wrapper = wrapper_class(
