@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import importlib.util
 import os
-from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -20,218 +19,184 @@ _has_ray = importlib.util.find_spec("ray") is not None
 # Skip entire module if vLLM is not available
 pytestmark = pytest.mark.skipif(not _has_vllm, reason="vllm not available")
 
+MODEL_NAME = "Qwen/Qwen2.5-0.5B"
 
-@pytest.fixture
-def mock_sampling_params():
-    """Mock SamplingParams for testing."""
+
+@pytest.fixture(scope="module")
+def sampling_params():
+    """Real SamplingParams for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
 
     from vllm import SamplingParams
 
-    return SamplingParams(temperature=0.7, top_p=0.9, max_tokens=50)
+    return SamplingParams(
+        temperature=0.0, max_tokens=10
+    )  # Use greedy decoding for reproducibility
 
 
-@pytest.fixture
-def mock_request_output():
-    """Mock RequestOutput for testing."""
-    if not _has_vllm:
-        pytest.skip("vllm not available")
-
-    from vllm.outputs import CompletionOutput
-
-    # Create a mock completion output
-    completion = MagicMock(spec=CompletionOutput)
-    completion.text = "Hello, world!"
-    completion.token_ids = [1, 2, 3, 4, 5]
-    completion.logprobs = None
-    completion.finish_reason = "stop"
-
-    # Create a mock request output
-    output = MagicMock()
-    output.prompt = "Test prompt"
-    output.outputs = [completion]
-    output.finished = True
-
-    return output
-
-
-class TestAsyncVLLM:
-    """Test the public AsyncVLLM API."""
+class TestAsyncVLLMIntegration:
+    """Integration tests for AsyncVLLM with real models."""
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_from_pretrained_single_replica(self, mock_sampling_params):
-        """Test AsyncVLLM.from_pretrained with single replica."""
+    @pytest.mark.slow
+    def test_vllm_api_compatibility(self, sampling_params):
+        """Test that AsyncVLLM supports the same inputs as vLLM.LLM.generate()."""
         from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        with patch.object(AsyncVLLM, "_launch") as mock_launch:
-            with patch("torch.cuda.device_count", return_value=2):
-                service = AsyncVLLM.from_pretrained(
-                    "Qwen/Qwen2.5-0.5B", num_replicas=1, max_model_len=512
-                )
+        # Create AsyncVLLM service
+        service = AsyncVLLM.from_pretrained(
+            MODEL_NAME,
+            num_replicas=1,
+            max_model_len=512,
+            gpu_memory_utilization=0.3,  # Use less GPU memory for CI
+        )
 
-                # Verify service was configured correctly
-                assert service.num_replicas == 1
-                assert service.engine_args.model == "Qwen/Qwen2.5-0.5B"
-                assert service.engine_args.max_model_len == 512
-                assert service.engine_args.enable_prefix_caching is True
-                mock_launch.assert_called_once()
+        try:
+            # Get tokenizer first for token tests
+            import ray
 
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_from_pretrained_multi_replica(self, mock_sampling_params):
-        """Test AsyncVLLM.from_pretrained with multiple replicas."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+            tokenizer = ray.get(service.actors[0].get_tokenizer.remote())
 
-        with patch.object(AsyncVLLM, "_launch") as mock_launch:
-            service = AsyncVLLM.from_pretrained(
-                "Qwen/Qwen2.5-0.5B", num_replicas=2, num_devices=1
+            # Test 1: Single text prompt (string)
+            result1 = service.generate("Hello, world!", sampling_params)
+            # Handle potential list return for single input
+            if isinstance(result1, list):
+                output1 = result1[0]
+            else:
+                output1 = result1
+            assert hasattr(output1, "outputs") and output1.outputs
+            assert hasattr(output1.outputs[0], "text")
+
+            # Test 2: List of text prompts
+            prompts = ["Hello, world!", "How are you?"]
+            result2 = service.generate(prompts, sampling_params)
+            assert isinstance(result2, list)
+            assert len(result2) == 2
+            for output in result2:
+                assert hasattr(output, "outputs") and output.outputs
+
+            # Test 3: Token IDs (single sequence)
+            token_ids = tokenizer.encode("Hello, world!")
+            result3 = service.generate(
+                prompt_token_ids=token_ids, sampling_params=sampling_params
             )
+            # Handle potential list return for single input
+            if isinstance(result3, list):
+                output3 = result3[0]
+            else:
+                output3 = result3
+            assert hasattr(output3, "outputs") and output3.outputs
 
-            # Verify service was configured correctly
-            assert service.num_replicas == 2
-            assert service.engine_args.tensor_parallel_size == 1
-            mock_launch.assert_called_once()
+            # Test 4: List of token ID sequences
+            token_ids_batch = [
+                tokenizer.encode("Hello, world!"),
+                tokenizer.encode("How are you?"),
+            ]
+            result4 = service.generate(
+                prompt_token_ids=token_ids_batch, sampling_params=sampling_params
+            )
+            assert isinstance(result4, list)
+            assert len(result4) == 2
 
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_generate_text_input(self, mock_sampling_params, mock_request_output):
-        """Test generation with text input (same as vLLM.LLM API)."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+            # Verify outputs contain text
+            text_output = output1.outputs[0].text.strip()
+            token_output = output3.outputs[0].text.strip()
+            assert len(text_output) > 0
+            assert len(token_output) > 0
 
-        with patch.object(AsyncVLLM, "_launch"):
-            service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-0.5B", num_replicas=1)
-
-            # Mock actors
-            mock_actor = MagicMock()
-            service.actors = [mock_actor]
-
-            # Mock ray.get to return our mock output
-            with patch("ray.get", return_value=mock_request_output):
-                result = service.generate(
-                    prompts="Hello, world!", sampling_params=mock_sampling_params
-                )
-
-                assert result == mock_request_output
-                mock_actor.generate.remote.assert_called_once()
-
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_generate_token_input(self, mock_sampling_params, mock_request_output):
-        """Test generation with token IDs input (same as vLLM.LLM API)."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
-
-        with patch.object(AsyncVLLM, "_launch"):
-            service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-0.5B", num_replicas=1)
-
-            # Mock actors
-            mock_actor = MagicMock()
-            service.actors = [mock_actor]
-
-            # Mock ray.get to return our mock output
-            with patch("ray.get", return_value=mock_request_output):
-                result = service.generate(
-                    prompt_token_ids=[1, 2, 3, 4, 5],
-                    sampling_params=mock_sampling_params,
-                )
-
-                assert result == mock_request_output
-                mock_actor.generate.remote.assert_called_once()
+        finally:
+            service.shutdown()
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_generate_batch_input(self, mock_sampling_params, mock_request_output):
-        """Test generation with batch input (same as vLLM.LLM API)."""
+    @pytest.mark.slow
+    def test_weight_updates_with_transformer(self, sampling_params):
+        """Test weight updates using vLLMUpdater with a real transformer model."""
+        from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
         from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+        from torchrl.modules.llm.policies.transformers_wrapper import (
+            TransformersWrapper,
+        )
 
-        with patch.object(AsyncVLLM, "_launch"):
-            service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-0.5B", num_replicas=1)
+        # Create a transformer policy with the same model
+        policy = TransformersWrapper(
+            model=MODEL_NAME,
+            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            generate_kwargs={
+                "max_new_tokens": 256,
+                "do_sample": False,  # Use greedy decoding for consistency
+            },
+        )
 
-            # Mock actors
-            mock_actor = MagicMock()
-            service.actors = [mock_actor]
+        # Create AsyncVLLM service
+        service = AsyncVLLM.from_pretrained(
+            MODEL_NAME,
+            num_replicas=1,
+            max_model_len=256,
+            gpu_memory_utilization=0.3,
+            dtype="float16" if torch.cuda.is_available() else "float32",
+        )
 
-            # Mock ray.get to return list of outputs
-            mock_outputs = [mock_request_output, mock_request_output]
-            with patch("ray.get", return_value=mock_outputs):
-                result = service.generate(
-                    prompts=["Hello, world!", "How are you?"],
-                    sampling_params=mock_sampling_params,
-                )
+        try:
+            # Get initial output before weight update
+            initial_result = service.generate("Hello, world!", sampling_params)
+            # Handle potential list return for single input
+            if isinstance(initial_result, list):
+                initial_output = initial_result[0]
+            else:
+                initial_output = initial_result
+            initial_text = initial_output.outputs[0].text  # type: ignore
 
-                assert result == mock_outputs
-                mock_actor.generate.remote.assert_called_once()
+            # Create weight updater
+            updater = vLLMUpdater(vllm_tp_size=1)
 
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_weight_updates(self):
-        """Test weight update functionality across replicas."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+            # Get model metadata
+            model_metadata = updater.get_model_metadata(policy)
+            updater.init(model_metadata)
 
-        with patch.object(AsyncVLLM, "_launch"):
-            service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-0.5B", num_replicas=2)
+            # Mock a simple collector interface for the updater
+            class MockCollector:
+                def __init__(self, policy_ref):
+                    self.policy = policy_ref
 
-            # Mock actors
-            mock_actor1 = MagicMock()
-            mock_actor2 = MagicMock()
-            service.actors = [mock_actor1, mock_actor2]
+                def increment_version(self):
+                    pass
 
-            # Test weight update broadcast
-            with patch("ray.get"):
-                service.update_weight_broadcast(
-                    "test_param", torch.float32, torch.Size([2, 3])
-                )
+            mock_collector = MockCollector(policy)
+            updater.register_collector(mock_collector)
 
-                # Verify both actors received the update
-                mock_actor1.update_weight_broadcast.remote.assert_called_once_with(
-                    "test_param", torch.float32, torch.Size([2, 3])
-                )
-                mock_actor2.update_weight_broadcast.remote.assert_called_once_with(
-                    "test_param", torch.float32, torch.Size([2, 3])
-                )
+            # Modify some weights slightly in the transformer
+            with torch.no_grad():
+                for name, param in policy.model.named_parameters():
+                    if "embed_tokens" in name and param.requires_grad:
+                        # Add small noise to embedding weights
+                        param.data += torch.randn_like(param.data) * 0.001
+                        break
 
-            # Test direct weight update
-            test_weight = torch.randn(2, 3)
-            with patch("ray.get"):
-                service.update_weight("test_param", test_weight)
+            # Update weights in vLLM
+            policy_weights = updater._maybe_map_weights(policy)
+            updater._sync_weights_with_worker(server_weights=policy_weights)
 
-                # Verify both actors received the update
-                mock_actor1.update_weight.remote.assert_called_once_with(
-                    "test_param", test_weight
-                )
-                mock_actor2.update_weight.remote.assert_called_once_with(
-                    "test_param", test_weight
-                )
+            # Get output after weight update
+            updated_result = service.generate("Hello, world!", sampling_params)
+            # Handle potential list return for single input
+            if isinstance(updated_result, list):
+                updated_output = updated_result[0]
+            else:
+                updated_output = updated_result
+            updated_text = updated_output.outputs[0].text  # type: ignore
 
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    def test_shutdown(self):
-        """Test proper cleanup of resources."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+            # Verify the weight update process completed without errors
+            assert isinstance(updated_text, str)
+            assert len(updated_text) > 0
+            # Verify initial generation also worked
+            assert len(initial_text) > 0
 
-        with patch.object(AsyncVLLM, "_launch"):
-            service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-0.5B", num_replicas=1)
-
-            # Mock placement group and actors
-            mock_placement_group = MagicMock()
-            service._placement_group = mock_placement_group
-            mock_actor = MagicMock()
-            service.actors = [mock_actor]
-
-            with patch("ray.kill") as mock_kill:
-                with patch(
-                    "ray.util.placement_group.remove_placement_group"
-                ) as mock_remove_pg:
-                    service.shutdown()
-
-                    # Verify cleanup
-                    mock_kill.assert_called_once_with(mock_actor, no_restart=True)
-                    mock_remove_pg.assert_called_once_with(mock_placement_group)
-                    assert service.actors == []
-                    assert service._placement_group is None
-                    assert service._launched is False
+        finally:
+            service.shutdown()
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no", "--exitfirst", "-v"])
+    pytest.main([__file__, "--capture", "no", "--exitfirst", "-v", "-s"])

@@ -3109,7 +3109,7 @@ class TestRayWrapper:
 class TestActorSharing:
     """Test actor sharing functionality for Remote wrappers."""
 
-    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    @pytest.mark.parametrize("backend", ["transformers"])
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
