@@ -8,7 +8,6 @@ import argparse
 import gc
 import importlib.util
 
-import os
 import time
 from functools import partial
 
@@ -67,13 +66,13 @@ def vllm_instance() -> tuple[
     """Create vLLM model and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
 
     import vllm.envs as envs
     from vllm import LLM
 
     envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
-
-    assert os.environ.get("VLLM_USE_V1") == "0"
 
     try:
         model = LLM(
@@ -96,12 +95,12 @@ def async_vllm_instance() -> tuple[
     """Create async vLLM engine and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
 
     import vllm.envs as envs
 
     envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
-
-    assert os.environ.get("VLLM_USE_V1") == "0"
 
     try:
         # Create async vLLM engine with same parameters as sync version

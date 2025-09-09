@@ -115,7 +115,7 @@ def stateless_init_process_group_async(
     if master_port is None:
         master_port = get_open_port()
 
-    master_port_int = int(master_port) if master_port else 0
+    master_port_int = int(master_port) if master_port is not None else 0
     pg = StatelessProcessGroup.create(
         host=master_address, port=master_port_int, rank=rank, world_size=world_size
     )
@@ -597,33 +597,23 @@ class AsyncVLLM:
             torchrl_logger.warning("AsyncVLLMEngineService already launched")
             return
 
+        # Check if CUDA is available since vLLM requires GPU
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "AsyncVLLM requires CUDA but no GPU devices are available. "
+                "Please run on a machine with GPU support."
+            )
+
         torchrl_logger.info(
             f"Launching {self.num_replicas} async vLLM engine actors..."
         )
 
-        # Create a placement group - different allocation for CPU vs GPU
-        device_type = getattr(self, "_device_type", "cuda")
-
-        if device_type == "cpu":
-            # For CPU mode, use CPU-only placement groups
-            bundles = [
-                {"CPU": 2.0}  # Use 2 CPUs per replica for CPU mode
-                for _ in range(self.num_replicas)
-            ]
-            torchrl_logger.info(
-                f"Creating CPU placement group with {len(bundles)} bundles"
-            )
-        else:
-            # For GPU mode, create placement groups with GPU allocation
-            bundles = [
-                {"GPU": 1.0, "CPU": 1.0}
-                for _ in range(
-                    self.num_replicas * self.engine_args.tensor_parallel_size
-                )
-            ]
-            torchrl_logger.info(
-                f"Creating GPU placement group with {len(bundles)} bundles"
-            )
+        # Create placement groups with GPU allocation
+        bundles = [
+            {"GPU": 1.0, "CPU": 1.0}
+            for _ in range(self.num_replicas * self.engine_args.tensor_parallel_size)
+        ]
+        torchrl_logger.info(f"Creating GPU placement group with {len(bundles)} bundles")
 
         self._placement_group = placement_group(bundles, strategy="PACK")
         torchrl_logger.info(f"Placement group created: {self._placement_group}")
@@ -638,18 +628,13 @@ class AsyncVLLM:
                 f"Creating async actor replica {i + 1}/{self.num_replicas} ..."
             )
 
-            if device_type == "cpu":
-                # For CPU mode, each replica gets one bundle
-                bundle_indices = [i]
-                bundle_index = i
-            else:
-                # For GPU mode, calculate bundle indices for tensor parallelism
-                bundle_indices = None
-                if self.engine_args.tensor_parallel_size > 1:
-                    bundle_indices = _get_bundle_indices(
-                        self._placement_group, i, self.engine_args.tensor_parallel_size
-                    )
-                bundle_index = bundle_indices[0] if bundle_indices else i
+            # Calculate bundle indices for tensor parallelism
+            bundle_indices = None
+            if self.engine_args.tensor_parallel_size > 1:
+                bundle_indices = _get_bundle_indices(
+                    self._placement_group, i, self.engine_args.tensor_parallel_size
+                )
+            bundle_index = bundle_indices[0] if bundle_indices else i
 
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=self._placement_group,
@@ -685,20 +670,17 @@ class AsyncVLLM:
         cls,
         engine_args: AsyncEngineArgs,
         num_replicas: int = 1,
-        device_type: str = "cuda",
     ) -> AsyncVLLM:
         """Launch a new AsyncVLLMEngineService.
 
         Args:
             engine_args (AsyncEngineArgs): Arguments for creating the AsyncLLMEngine instances.
             num_replicas (int): Number of actor replicas to create.
-            device_type (str): Device type ("cuda" or "cpu").
 
         Returns:
             AsyncVLLMEngineService: The launched service.
         """
         service = cls(engine_args, num_replicas)
-        service._device_type = device_type
         service._launch()
         return service
 
@@ -709,7 +691,6 @@ class AsyncVLLM:
         devices: list[torch.device | int] | None = None,
         num_devices: int | None = None,
         num_replicas: int = 1,
-        device_type: str | None = None,
         **kwargs,
     ) -> AsyncVLLM:
         """Create an AsyncVLLM instance from a pretrained model.
@@ -722,19 +703,14 @@ class AsyncVLLM:
             devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
             num_devices (int, optional): Number of devices to use. Exclusive with devices.
             num_replicas (int): Number of engine replicas to create.
-            device_type (str, optional): Device type to use ("cuda", "cpu", or "auto").
-                If "auto", will detect based on CUDA availability. Defaults to "auto".
             **kwargs: Additional arguments passed to AsyncEngineArgs.
 
         Returns:
             AsyncVLLM: The launched async vLLM service.
 
         Example:
-            >>> # Simple usage with defaults (auto-detects GPU/CPU)
+            >>> # Simple usage with defaults
             >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B")
-            >>>
-            >>> # CPU usage
-            >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", device_type="cpu")
             >>>
             >>> # Multi-GPU tensor parallel with multiple replicas
             >>> service = AsyncVLLM.from_pretrained(
@@ -753,7 +729,6 @@ class AsyncVLLM:
             devices=devices,
             num_devices=num_devices,
             num_replicas=num_replicas,
-            device_type=device_type,
             **kwargs,
         )
 
@@ -943,7 +918,6 @@ def make_async_vllm_engine(
     devices: list[torch.device | int] | None = None,
     num_devices: int | None = None,
     num_replicas: int = 1,
-    device_type: str | None = None,
     **kwargs,
 ) -> AsyncVLLM:
     """Create an async vLLM engine service.
@@ -953,83 +927,58 @@ def make_async_vllm_engine(
         devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
         num_devices (int, optional): Number of devices to use. Exclusive with devices.
         num_replicas (int): Number of engine replicas to create.
-        device_type (str, optional): Device type to use ("cuda", "cpu", or "auto").
-            If "auto", will detect based on CUDA availability. Defaults to "auto".
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
-        AsyncVLLMEngineService: The launched engine service.
+        AsyncVLLM: The launched engine service.
+
+    Raises:
+        RuntimeError: If no CUDA devices are available.
+        ValueError: If invalid device configuration is provided.
 
     Example:
-        >>> # Create a CPU async engine
-        >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B", device_type="cpu")
+        >>> # Create a single-GPU async engine
+        >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B")
         >>>
         >>> # Create a 2-GPU tensor parallel async engine with 2 replicas
         >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B", num_devices=2, num_replicas=2)
         >>> # Generate text
-        >>> result = service.generate_text("Hello, world!", sampling_params)
+        >>> result = service.generate("Hello, world!", sampling_params)
     """
     if not _has_vllm:
         raise ImportError(
             "vllm is not installed. Please install it with `pip install vllm`."
         )
 
-    # Determine device type
-    if device_type is None:
-        device_type = "auto"
+    # Check if CUDA is available since vLLM requires GPU
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "AsyncVLLM requires CUDA but no GPU devices are available. "
+            "Please run on a machine with GPU support."
+        )
 
-    if device_type == "auto":
-        device_type = "cuda" if torch.cuda.is_available() else "cpu"
-
-    # Handle device specification based on device type
-    if device_type == "cpu":
-        # For CPU, we don't use devices/num_devices in the same way
-        if devices is not None or num_devices is not None:
-            torchrl_logger.warning(
-                "devices and num_devices are ignored when device_type='cpu'. "
-                "CPU mode uses tensor_parallel_size=1."
-            )
-        num_devices = 1  # CPU mode typically uses single process
-        # Override distributed backend for CPU
-        kwargs.setdefault("distributed_executor_backend", None)
+    # Handle device specification
+    if num_devices is not None and devices is not None:
+        raise ValueError("Cannot specify both num_devices and devices")
+    if num_devices is not None:
+        devices = None
+    elif devices is None:
+        devices = [0]  # Default to first GPU
+        num_devices = 1
+    elif len(devices) > 1:
+        num_devices = len(devices)
     else:
-        # GPU mode - handle device specification as before
-        if num_devices is not None and devices is not None:
-            raise ValueError("Cannot specify both num_devices and devices")
-        if num_devices is not None:
-            devices = None
-        elif devices is None:
-            if torch.cuda.is_available():
-                devices = [0]  # Default to first GPU
-                num_devices = 1
-            else:
-                raise RuntimeError(
-                    "No CUDA devices available but device_type='cuda'. "
-                    "Use device_type='cpu' for CPU inference."
-                )
-        elif len(devices) > 1:
-            num_devices = len(devices)
-        else:
-            num_devices = len(devices)
+        num_devices = len(devices)
 
-        # Validate GPU devices are available
-        if torch.cuda.device_count() == 0:
-            raise RuntimeError(
-                "No CUDA devices found but GPU mode requested. "
-                "Use device_type='cpu' for CPU inference."
-            )
-
-        # Validate device indices for GPU mode
-        if devices is not None:
-            for device in devices:
-                device_idx = device if isinstance(device, int) else device.index
-                if device_idx >= torch.cuda.device_count():
-                    raise ValueError(f"Invalid device index: {device_idx}")
+    # Validate device indices
+    if devices is not None:
+        for device in devices:
+            device_idx = device if isinstance(device, int) else device.index
+            if device_idx >= torch.cuda.device_count():
+                raise ValueError(f"Invalid device index: {device_idx}")
 
     # Create engine args
-    kwargs.setdefault(
-        "distributed_executor_backend", "ray" if device_type != "cpu" else None
-    )
+    kwargs.setdefault("distributed_executor_backend", "ray")
     engine_args = AsyncEngineArgs(
         model=model_name,
         tensor_parallel_size=num_devices,
@@ -1038,4 +987,4 @@ def make_async_vllm_engine(
         **kwargs,
     )
 
-    return AsyncVLLM.launch(engine_args, num_replicas, device_type=device_type)
+    return AsyncVLLM.launch(engine_args, num_replicas)

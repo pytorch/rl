@@ -2063,11 +2063,12 @@ class _RequestOutput_tc(TensorClass["nocast"]):
         def postproc(output):
             def get_logprob(output):
                 t = []
-                for v, tid in zip(output.logprobs, output.token_ids):
+                token_ids = output.token_ids
+                if isinstance(token_ids, torch.Tensor):
+                    token_ids = token_ids.tolist()
+                for v, tid in zip(output.logprobs, token_ids):
                     t.append(
-                        v[int(tid)]["logprob"]
-                        if v[tid].get("logprob") is not None
-                        else 0.0
+                        v[tid]["logprob"] if v[tid].get("logprob") is not None else 0.0
                     )
                 return torch.tensor(t)
 

@@ -5,10 +5,13 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 
 import pytest
 import torch
 
+# Set environment variable for vLLM V0 engine
+os.environ["VLLM_USE_V1"] = "0"
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -37,6 +40,7 @@ class TestAsyncVLLMIntegration:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     @pytest.mark.slow
     def test_vllm_api_compatibility(self, sampling_params):
         """Test that AsyncVLLM supports the same inputs as vLLM.LLM.generate()."""
@@ -108,6 +112,7 @@ class TestAsyncVLLMIntegration:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     @pytest.mark.slow
     def test_weight_updates_with_transformer(self, sampling_params):
         """Test weight updates using vLLMUpdater with a real transformer model."""
@@ -120,7 +125,7 @@ class TestAsyncVLLMIntegration:
         # Create a transformer policy with the same model
         policy = TransformersWrapper(
             model=MODEL_NAME,
-            device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            device=torch.device("cuda"),
             generate_kwargs={
                 "max_new_tokens": 256,
                 "do_sample": False,  # Use greedy decoding for consistency
@@ -133,7 +138,7 @@ class TestAsyncVLLMIntegration:
             num_replicas=1,
             max_model_len=256,
             gpu_memory_utilization=0.3,
-            dtype="float16" if torch.cuda.is_available() else "float32",
+            dtype="float16",
         )
 
         try:
@@ -190,36 +195,6 @@ class TestAsyncVLLMIntegration:
             assert len(updated_text) > 0
             # Verify initial generation also worked
             assert len(initial_text) > 0
-
-        finally:
-            service.shutdown()
-
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_ray, reason="ray not available")
-    @pytest.mark.slow
-    def test_cpu_mode(self, sampling_params):
-        """Test AsyncVLLM.from_pretrained works on CPU."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
-
-        # Test CPU mode explicitly
-        service = AsyncVLLM.from_pretrained(
-            MODEL_NAME,
-            device_type="cpu",
-            num_replicas=1,
-            max_model_len=256,
-        )
-
-        try:
-            # Basic generation test on CPU
-            result = service.generate("Hello, world!", sampling_params)
-            # Handle potential list return for single input
-            if isinstance(result, list):
-                output = result[0]
-            else:
-                output = result
-            assert hasattr(output, "outputs") and output.outputs
-            assert hasattr(output.outputs[0], "text")
-            assert len(output.outputs[0].text.strip()) > 0
 
         finally:
             service.shutdown()
