@@ -340,10 +340,10 @@ class vLLMWrapper(LLMWrapperBase):
         # Detect and initialize model
         self._is_async_engine = False
         if isinstance(model, str):
-            model = vllm.LLM(model)
+            model = AsyncVLLM.from_pretrained(model)
         elif _has_async_vllm and isinstance(model, AsyncVLLM):
             # AsyncVLLM has a synchronous interface (uses ray.get internally)
-            self._is_async_engine = False
+            self._is_async_engine = True
         elif _has_async_vllm and isinstance(model, _AsyncLLMEngine):
             # This is the internal async engine that requires await
             self._is_async_engine = True
