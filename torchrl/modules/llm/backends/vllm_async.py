@@ -194,12 +194,24 @@ class _AsyncLLMEngine:
     for TorchRL integration, including weight updates and batch management.
 
     This is a private class and should not be used directly. Use the ray remote actor class :class:`AsyncLLMEngineActor` instead.
+
+    Keyword Args:
+        engine_args (AsyncEngineArgs): Arguments for creating the AsyncLLMEngine instances.
+        bundle_indices (list[int], optional): Bundle indices for the engine.
+        enable_prefix_caching (bool, optional): Whether to enable prefix caching.
+
+            .. warning::
+                enable_prefix_caching is set to False by default, which is recommended if prompt log probs are needed.
+                Set it to True if prompt log probs are not needed.
+                See `this issue <https://github.com/vllm-project/vllm/issues/8268>`_ for more details.
     """
 
     def __init__(
         self,
+        *,
         engine_args: AsyncEngineArgs,
         bundle_indices: list[int] | None = None,
+        enable_prefix_caching: bool = False,
     ):
         if not _has_vllm:
             raise ImportError(
@@ -226,8 +238,7 @@ class _AsyncLLMEngine:
         engine_args.worker_cls = worker_cls
         engine_args.distributed_executor_backend = "ray"
 
-        # Enable prefix caching by default for better performance
-        engine_args.enable_prefix_caching = True
+        engine_args.enable_prefix_caching = enable_prefix_caching
 
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.bundle_indices = bundle_indices
@@ -465,6 +476,12 @@ class AsyncVLLM:
         engine_args (AsyncEngineArgs): Configuration for the vLLM engines.
         num_replicas (int, optional): Number of engine replicas to create. Defaults to 1.
         actor_class (optional): Custom Ray actor class. Defaults to the internal actor implementation.
+        enable_prefix_caching (bool, optional): Whether to enable prefix caching. Defaults to False.
+
+            .. warning::
+                enable_prefix_caching is set to False by default, which is recommended if prompt log probs are needed.
+                Set it to True if prompt log probs are not needed.
+                See `this issue <https://github.com/vllm-project/vllm/issues/8268>`_ for more details.
 
     Example:
         >>> from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
@@ -540,6 +557,7 @@ class AsyncVLLM:
         engine_args: AsyncEngineArgs,
         num_replicas: int = 1,
         actor_class=None,
+        enable_prefix_caching: bool = False,
     ):
         if not _has_vllm:
             raise ImportError(
@@ -551,7 +569,7 @@ class AsyncVLLM:
             )
 
         # Enable prefix caching by default for better performance
-        engine_args.enable_prefix_caching = True
+        engine_args.enable_prefix_caching = enable_prefix_caching
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
@@ -609,7 +627,11 @@ class AsyncVLLM:
                 scheduling_strategy=scheduling_strategy,
                 num_gpus=0,
                 num_cpus=0,
-            ).remote(self.engine_args, bundle_indices or [i])
+            ).remote(
+                engine_args=self.engine_args,
+                bundle_indices=bundle_indices or [i],
+                enable_prefix_caching=self.engine_args.enable_prefix_caching,
+            )
 
             self.actors.append(actor)
 

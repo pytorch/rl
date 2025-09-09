@@ -72,14 +72,32 @@ class vLLMWrapper(LLMWrapperBase):
     This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input
     modalities (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
 
-    The wrapper supports both synchronous (vllm.LLM) and asynchronous (AsyncVLLMEngineService, AsyncLLMEngineExtended) vLLM engines.
-    When using async engines, generation calls will be awaited automatically.
+    The wrapper supports both synchronous (vllm.LLM) and asynchronous (:class:`~torchrl.modules.llm.backends.AsyncVLLM`) vLLM engines.
+
+    .. note::
+        **Recommended: Use AsyncVLLM for better performance**
+
+        For distributed inference and better resource utilization, we recommend using
+        :class:`~torchrl.modules.llm.backends.AsyncVLLM` instead of the synchronous vllm.LLM:
+
+        >>> from torchrl.modules.llm.backends import AsyncVLLM
+        >>> from torchrl.modules.llm import vLLMWrapper
+        >>>
+        >>> # Recommended approach
+        >>> async_engine = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=2)
+        >>> wrapper = vLLMWrapper(async_engine, input_mode="history", generate=True)
+
+        AsyncVLLM provides:
+        - Better GPU utilization through Ray-based distribution
+        - Multiple replicas for higher throughput
+        - Native vLLM batching for optimal performance
+        - Automatic resource management and cleanup
 
     Args:
-        model (vllm.LLM | AsyncVLLMEngineService | AsyncLLMEngineExtended | str): The vLLM model to wrap.
-            - If a string, it will be passed to `vllm.LLM` (sync mode)
+        model (vllm.LLM | AsyncVLLM | str): The vLLM model to wrap.
+            - If a string, it will be passed to `vllm.LLM` (synchronous mode)
             - If a vllm.LLM instance, uses synchronous generation
-            - If an AsyncVLLMEngineService or AsyncLLMEngineExtended instance, uses asynchronous generation
+            - If an :class:`~torchrl.modules.llm.backends.AsyncVLLM` instance, uses distributed async generation (recommended)
 
     Keyword Args:
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for encoding and decoding text.

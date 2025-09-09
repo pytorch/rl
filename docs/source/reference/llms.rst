@@ -13,8 +13,9 @@ together to create a complete reinforcement learning pipeline for language model
    tokens, log-probabilities, and text.
 
 2. **LLM Wrapper API** (`Modules`_): Unified interfaces for different LLM backends, including :class:`~torchrl.modules.llm.TransformersWrapper` for 
-   Hugging Face models and :class:`~torchrl.modules.llm.vLLMWrapper` for vLLM inference. These wrappers provide consistent input/output formats across 
-   different backends and an integrated interface for loss computation, data storage, grading, weight synchronization, etc.
+   Hugging Face models, :class:`~torchrl.modules.llm.vLLMWrapper` for vLLM inference, and :class:`~torchrl.modules.llm.AsyncVLLM` for high-performance 
+   distributed vLLM inference (recommended). These wrappers provide consistent input/output formats across different backends and an integrated 
+   interface for loss computation, data storage, grading, weight synchronization, etc.
 
 3. **Environments** (`Environments`_): The orchestration layer that manages data loading, tool execution, reward computation, and formatting. This includes 
    :class:`~torchrl.envs.llm.ChatEnv` for conversation management, dataset environments, and various transforms for tool integration.
@@ -438,11 +439,65 @@ The main goal of these primitives is to:
     vLLMWrapper
     RemoteTransformersWrapper
     RemotevLLMWrapper
+    AsyncVLLM
     ChatHistory
     Text
     LogProbs
     Masks
     Tokens
+
+Async vLLM Engine (Recommended)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:class:`~torchrl.modules.llm.AsyncVLLM` is the recommended approach for high-performance vLLM inference in TorchRL. 
+It provides a distributed, async-capable inference service built on Ray that offers superior performance and resource utilization compared to synchronous vLLM engines.
+
+**Key Features:**
+
+- **Distributed Architecture**: Runs multiple vLLM engine replicas as Ray actors for horizontal scaling
+- **Load Balancing**: Automatically distributes requests across available replicas
+- **Native vLLM Batching**: Leverages vLLM's optimized batching for maximum throughput
+- **Resource Management**: Automatic GPU allocation and cleanup through Ray placement groups
+- **Simple API**: Single-import convenience with :meth:`~torchrl.modules.llm.AsyncVLLM.from_pretrained`
+
+**Basic Usage:**
+
+.. code-block:: python
+
+    from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
+    from vllm import SamplingParams
+    
+    # Create async vLLM service (recommended)
+    async_engine = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-7B",
+        num_devices=2,       # Use 2 GPUs per replica (tensor parallel)
+        num_replicas=2,      # Create 2 replicas for higher throughput
+        max_model_len=4096
+    )
+    
+    # Use with vLLMWrapper for TorchRL integration
+    wrapper = vLLMWrapper(async_engine, input_mode="history", generate=True)
+    
+    # Direct generation (also supported)
+    sampling_params = SamplingParams(temperature=0.7, max_tokens=100)
+    result = async_engine.generate("Hello, world!", sampling_params)
+    
+    # Cleanup when done
+    async_engine.shutdown()
+
+**Performance Benefits:**
+
+- **Higher Throughput**: Multiple replicas process requests concurrently
+- **Better GPU Utilization**: Ray ensures optimal GPU allocation and co-location
+- **Reduced Latency**: Native batching reduces per-request overhead
+- **Fault Tolerance**: Ray provides automatic error recovery and resource management
+
+**When to Use AsyncVLLM:**
+
+- Production inference workloads requiring high throughput
+- Multi-GPU setups (tensor parallelism + multiple replicas)
+- Distributed training with separate inference actors
+- Any scenario where you need multiple concurrent LLM calls
 
 Remote Wrappers
 ^^^^^^^^^^^^^^^
@@ -546,6 +601,8 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
+    make_async_vllm_engine
+    stateless_init_process_group_async
     LLMOnDevice
     make_vllm_worker
     stateless_init_process_group

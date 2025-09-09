@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 from .backends import (
+    AsyncVLLM,
     LLMOnDevice,
+    make_async_vllm_engine,
     make_vllm_worker,
     stateless_init_process_group,
+    stateless_init_process_group_async,
     vLLMWorker,
 )
 
@@ -25,18 +28,27 @@ from .policies import (
 )
 
 __all__ = [
+    # Data structures
     "ChatHistory",
-    "LLMOnDevice",
-    "LLMWrapperBase",
     "LogProbs",
     "Masks",
-    "RemoteTransformersWrapper",
-    "RemotevLLMWrapper",
     "Text",
     "Tokens",
+    # Wrapper base class
+    "LLMWrapperBase",
+    # Local wrappers
     "TransformersWrapper",
+    "vLLMWrapper",
+    # Remote wrappers
+    "RemoteTransformersWrapper",
+    "RemotevLLMWrapper",
+    # Async vLLM (recommended)
+    "AsyncVLLM",
+    "make_async_vllm_engine",
+    "stateless_init_process_group_async",
+    # Legacy vLLM utilities
+    "LLMOnDevice",
     "make_vllm_worker",
     "stateless_init_process_group",
     "vLLMWorker",
-    "vLLMWrapper",
 ]
