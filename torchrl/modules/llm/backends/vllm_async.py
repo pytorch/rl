@@ -902,18 +902,7 @@ def make_async_vllm_engine(
         devices = [0]  # Default to first GPU
         num_devices = 1
     elif len(devices) > 1:
-        # Convert devices to indices
-        devices = [
-            torch.device(device).index if not isinstance(device, int) else device
-            for device in devices
-        ]
         num_devices = len(devices)
-
-    # Validate devices
-    if devices is not None:
-        for d in devices:
-            if not isinstance(d, int) or d < 0 or d >= torch.cuda.device_count():
-                raise ValueError(f"Invalid device index: {d}")
 
     # Create engine args
     engine_args = AsyncEngineArgs(
