@@ -52,18 +52,15 @@ except ImportError:
 
 # Import async vLLM engines
 try:
-    from torchrl.modules.llm.backends.vllm_async import (
-        AsyncLLMEngineExtended,
-        AsyncVLLMEngineService,
-    )
+    from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine, AsyncVLLM
 
     _has_async_vllm = True
 except ImportError:
 
-    class AsyncLLMEngineExtended:
+    class _AsyncLLMEngine:
         """AsyncLLMEngineExtended is not available."""
 
-    class AsyncVLLMEngineService:
+    class AsyncVLLM:
         """AsyncVLLMEngineService is not available."""
 
     _has_async_vllm = False
@@ -326,9 +323,11 @@ class vLLMWrapper(LLMWrapperBase):
         self._is_async_engine = False
         if isinstance(model, str):
             model = vllm.LLM(model)
-        elif _has_async_vllm and isinstance(
-            model, (AsyncVLLMEngineService, AsyncLLMEngineExtended)
-        ):
+        elif _has_async_vllm and isinstance(model, AsyncVLLM):
+            # AsyncVLLM has a synchronous interface (uses ray.get internally)
+            self._is_async_engine = False
+        elif _has_async_vllm and isinstance(model, _AsyncLLMEngine):
+            # This is the internal async engine that requires await
             self._is_async_engine = True
         elif vllm is not None and isinstance(model, vllm.LLM):
             # Standard sync vLLM model
@@ -340,7 +339,7 @@ class vLLMWrapper(LLMWrapperBase):
                 pass
             else:
                 raise ValueError(
-                    f"model must be a string, vllm.LLM, AsyncVLLMEngineService, "
+                    f"model must be a string, vllm.LLM, AsyncVLLM, "
                     f"AsyncLLMEngineExtended, or remote vLLM model. Got {type(model)}"
                 )
 
@@ -361,6 +360,7 @@ class vLLMWrapper(LLMWrapperBase):
         self._remote_calls = (
             not (isinstance(model, vllm.LLM) if vllm else False)
             and not self._is_async_engine
+            and not (_has_async_vllm and isinstance(model, AsyncVLLM))
         )
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key

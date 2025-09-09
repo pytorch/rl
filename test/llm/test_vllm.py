@@ -96,14 +96,14 @@ class TestAsyncvLLMWorker:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_worker_initialization(self):
         """Test AsyncvLLMWorker initialization."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncvLLMWorker
+        from torchrl.modules.llm.backends.vllm_async import _AsyncvLLMWorker
 
         with patch(
             "torchrl.modules.llm.backends.vllm_async.Worker.__init__"
         ) as mock_init:
             mock_init.return_value = None
 
-            worker = AsyncvLLMWorker()
+            worker = _AsyncvLLMWorker()
 
             # Check that parent __init__ was called
             mock_init.assert_called_once()
@@ -114,7 +114,7 @@ class TestAsyncvLLMWorker:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_init_weight_update_group(self):
         """Test weight update group initialization."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncvLLMWorker
+        from torchrl.modules.llm.backends.vllm_async import _AsyncvLLMWorker
 
         # Mock dependencies
         with patch("torchrl.modules.llm.backends.vllm_async.Worker.__init__"):
@@ -133,7 +133,7 @@ class TestAsyncvLLMWorker:
                     mock_comm_group = MagicMock()
                     mock_init_group.return_value = mock_comm_group
 
-                    worker = AsyncvLLMWorker()
+                    worker = _AsyncvLLMWorker()
                     worker.device = torch.device("cuda:0")
 
                     # Test the method
@@ -152,10 +152,10 @@ class TestAsyncvLLMWorker:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_update_weight_broadcast(self):
         """Test weight update via broadcast."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncvLLMWorker
+        from torchrl.modules.llm.backends.vllm_async import _AsyncvLLMWorker
 
         with patch("torchrl.modules.llm.backends.vllm_async.Worker.__init__"):
-            worker = AsyncvLLMWorker()
+            worker = _AsyncvLLMWorker()
 
             # Mock model_update_group
             mock_group = MagicMock()
@@ -186,10 +186,10 @@ class TestAsyncvLLMWorker:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_update_weight_broadcast_no_group(self):
         """Test weight update broadcast fails when group is not initialized."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncvLLMWorker
+        from torchrl.modules.llm.backends.vllm_async import _AsyncvLLMWorker
 
         with patch("torchrl.modules.llm.backends.vllm_async.Worker.__init__"):
-            worker = AsyncvLLMWorker()
+            worker = _AsyncvLLMWorker()
             # model_update_group is None by default
 
             # Test that it raises RuntimeError
@@ -203,10 +203,10 @@ class TestAsyncvLLMWorker:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_update_weight(self):
         """Test direct weight update."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncvLLMWorker
+        from torchrl.modules.llm.backends.vllm_async import _AsyncvLLMWorker
 
         with patch("torchrl.modules.llm.backends.vllm_async.Worker.__init__"):
-            worker = AsyncvLLMWorker()
+            worker = _AsyncvLLMWorker()
 
             # Mock model_runner
             mock_model_runner = MagicMock()
@@ -228,15 +228,13 @@ class TestAsyncLLMEngineExtended:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_initialization(self, mock_async_engine_args):
         """Test AsyncLLMEngineExtended initialization."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             mock_engine = MagicMock()
             mock_from_args.return_value = mock_engine
 
-            engine = AsyncLLMEngineExtended(
-                mock_async_engine_args, bundle_indices=[0, 1]
-            )
+            engine = _AsyncLLMEngine(mock_async_engine_args, bundle_indices=[0, 1])
 
             # Check that engine args were modified correctly
             assert (
@@ -254,10 +252,10 @@ class TestAsyncLLMEngineExtended:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_ready(self, mock_async_engine_args):
         """Test ready method."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args"):
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
             assert engine.ready() is True
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
@@ -266,7 +264,7 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test async generate method with prompt_token_ids."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             # Mock the async engine
@@ -279,7 +277,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test generation with prompt_token_ids
             tokens = [1, 2, 3, 4, 5]
@@ -295,7 +293,7 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test async generate method with text prompts."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             # Mock the async engine
@@ -308,7 +306,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test generation with text
             text = "Hello, world!"
@@ -322,7 +320,7 @@ class TestAsyncLLMEngineExtended:
     @pytest.mark.asyncio
     async def test_generate_timeout(self, mock_async_engine_args, mock_sampling_params):
         """Test generate with timeout."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             # Mock the async engine
@@ -337,7 +335,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine.generate = mock_slow_generate
             mock_engine.abort = AsyncMock()  # Mock abort method
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test timeout
             tokens = [1, 2, 3, 4, 5]
@@ -354,7 +352,7 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test async generate method with batch text prompts."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             # Mock the async engine
@@ -368,7 +366,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test generation with batch of text prompts
             prompts = ["Hello, world!", "How are you?"]
@@ -388,7 +386,7 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test async generate method with batch token IDs."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             # Mock the async engine
@@ -402,7 +400,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test generation with batch of token IDs
             token_ids = [[1, 2, 3], [4, 5, 6]]
@@ -422,7 +420,7 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test async generate method with TokensPrompt objects."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             with patch("vllm.TokensPrompt") as MockTokensPrompt:
@@ -440,7 +438,7 @@ class TestAsyncLLMEngineExtended:
                 mock_tokens_prompt = MagicMock()
                 MockTokensPrompt.return_value = mock_tokens_prompt
 
-                engine = AsyncLLMEngineExtended(mock_async_engine_args)
+                engine = _AsyncLLMEngine(mock_async_engine_args)
 
                 # Test generation with single token list (should create TokensPrompt)
                 tokens = [1, 2, 3, 4, 5]
@@ -458,13 +456,13 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params
     ):
         """Test generate method with missing inputs."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             mock_engine = AsyncMock()
             mock_from_args.return_value = mock_engine
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test with neither prompts nor prompt_token_ids
             with pytest.raises(
@@ -478,7 +476,7 @@ class TestAsyncLLMEngineExtended:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test async generate method with LoRA request."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             # Mock the async engine
@@ -491,7 +489,7 @@ class TestAsyncLLMEngineExtended:
 
             mock_engine.generate = mock_generate
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test generation with LoRA request
             mock_lora_request = MagicMock()
@@ -507,7 +505,7 @@ class TestAsyncLLMEngineExtended:
     @pytest.mark.asyncio
     async def test_get_tokenizer(self, mock_async_engine_args):
         """Test get_tokenizer method."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             mock_engine = AsyncMock()
@@ -515,7 +513,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine.get_tokenizer.return_value = mock_tokenizer
             mock_from_args.return_value = mock_engine
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             result = await engine.get_tokenizer()
             assert result == mock_tokenizer
@@ -523,7 +521,7 @@ class TestAsyncLLMEngineExtended:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_collective_rpc_v0(self, mock_async_engine_args):
         """Test collective_rpc_v0 method."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
 
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             mock_engine = MagicMock()
@@ -531,7 +529,7 @@ class TestAsyncLLMEngineExtended:
             mock_engine.engine = mock_inner_engine
             mock_from_args.return_value = mock_engine
 
-            engine = AsyncLLMEngineExtended(mock_async_engine_args)
+            engine = _AsyncLLMEngine(mock_async_engine_args)
 
             # Test method call
             engine.collective_rpc_v0(
@@ -551,9 +549,9 @@ class TestAsyncVLLMEngineService:
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     def test_initialization(self, mock_async_engine_args):
         """Test AsyncVLLMEngineService initialization."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args, num_replicas=2)
+        service = AsyncVLLM(mock_async_engine_args, num_replicas=2)
 
         assert service.engine_args == mock_async_engine_args
         assert service.num_replicas == 2
@@ -567,9 +565,9 @@ class TestAsyncVLLMEngineService:
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     def test_get_random_actor_index(self, mock_async_engine_args):
         """Test get_random_actor_index method."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args, num_replicas=3)
+        service = AsyncVLLM(mock_async_engine_args, num_replicas=3)
 
         # Mock actors
         service.actors = [MagicMock(), MagicMock(), MagicMock()]
@@ -584,10 +582,10 @@ class TestAsyncVLLMEngineService:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_gpus_per_replica(self, mock_async_engine_args):
         """Test gpus_per_replica function."""
-        from torchrl.modules.llm.backends.vllm_async import gpus_per_replica
+        from torchrl.modules.llm.backends.vllm_async import _gpus_per_replica
 
         # Test default values
-        result = gpus_per_replica(mock_async_engine_args)
+        result = _gpus_per_replica(mock_async_engine_args)
         expected = (
             mock_async_engine_args.tensor_parallel_size * 1 * 1
         )  # Default data_parallel_size and pipeline_parallel_size
@@ -597,16 +595,16 @@ class TestAsyncVLLMEngineService:
         mock_async_engine_args.tensor_parallel_size = 2
         # Note: data_parallel_size and pipeline_parallel_size might not exist in all vLLM versions
         # So we test with the defaults
-        result = gpus_per_replica(mock_async_engine_args)
+        result = _gpus_per_replica(mock_async_engine_args)
         assert result == 2
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     def test_shutdown_no_actors(self, mock_async_engine_args):
         """Test shutdown when no actors are present."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args)
+        service = AsyncVLLM(mock_async_engine_args)
 
         # This should not raise any errors
         service.shutdown()
@@ -621,9 +619,9 @@ class TestAsyncVLLMEngineService:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test AsyncVLLMEngineService generate method with text."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args, num_replicas=2)
+        service = AsyncVLLM(mock_async_engine_args, num_replicas=2)
 
         # Mock actors
         mock_actor1 = MagicMock()
@@ -646,9 +644,9 @@ class TestAsyncVLLMEngineService:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test AsyncVLLMEngineService generate method with token IDs."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args, num_replicas=2)
+        service = AsyncVLLM(mock_async_engine_args, num_replicas=2)
 
         # Mock actors
         mock_actor1 = MagicMock()
@@ -673,9 +671,9 @@ class TestAsyncVLLMEngineService:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test AsyncVLLMEngineService generate method with batch prompts."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args, num_replicas=1)
+        service = AsyncVLLM(mock_async_engine_args, num_replicas=1)
 
         # Mock actor
         mock_actor = MagicMock()
@@ -697,9 +695,9 @@ class TestAsyncVLLMEngineService:
         self, mock_async_engine_args, mock_sampling_params, mock_request_output
     ):
         """Test AsyncVLLMEngineService generate method with LoRA request."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncVLLMEngineService
+        from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
-        service = AsyncVLLMEngineService(mock_async_engine_args, num_replicas=1)
+        service = AsyncVLLM(mock_async_engine_args, num_replicas=1)
 
         # Mock actor
         mock_actor = MagicMock()
@@ -887,7 +885,7 @@ class TestIntegration:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     def test_async_engine_args_compatibility(self):
         """Test that our AsyncEngineArgs usage is compatible with vLLM."""
-        from torchrl.modules.llm.backends.vllm_async import AsyncLLMEngineExtended
+        from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine
         from vllm import AsyncEngineArgs
 
         # Create real AsyncEngineArgs
@@ -903,7 +901,7 @@ class TestIntegration:
         with patch("vllm.AsyncLLMEngine.from_engine_args") as mock_from_args:
             mock_from_args.return_value = MagicMock()
 
-            AsyncLLMEngineExtended(engine_args)
+            _AsyncLLMEngine(engine_args)
 
             # Verify the args were modified correctly
             assert (

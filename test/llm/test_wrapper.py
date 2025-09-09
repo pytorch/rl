@@ -19,6 +19,7 @@ from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
+from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
@@ -99,11 +100,6 @@ def async_vllm_instance() -> tuple[
     if not _has_vllm:
         pytest.skip("vllm not available")
 
-    try:
-        from torchrl.modules.llm.backends.vllm_async import make_async_vllm_engine
-    except ImportError:
-        pytest.skip("async vllm backend not available")
-
     import vllm.envs as envs
 
     envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
@@ -112,7 +108,7 @@ def async_vllm_instance() -> tuple[
 
     try:
         # Create async vLLM engine with same parameters as sync version
-        async_engine = make_async_vllm_engine(
+        async_engine = AsyncVLLM.from_pretrained(
             model_name="Qwen/Qwen2.5-0.5B",
             num_devices=1,
             num_replicas=1,

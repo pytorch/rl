@@ -105,7 +105,7 @@ def stateless_init_process_group_async(
     return pynccl
 
 
-class AsyncvLLMWorker(Worker):
+class _AsyncvLLMWorker(Worker):
     """Async vLLM worker for Ray with weight update capabilities.
 
     This worker extends the base vLLM Worker to support async operations
@@ -187,11 +187,13 @@ class AsyncvLLMWorker(Worker):
         del weight
 
 
-class AsyncLLMEngineExtended:
+class _AsyncLLMEngine:
     """Extended AsyncLLMEngine with TorchRL-specific features.
 
     This class wraps vLLM's AsyncLLMEngine and adds functionality needed
     for TorchRL integration, including weight updates and batch management.
+
+    This is a private class and should not be used directly. Use the ray remote actor class :class:`AsyncLLMEngineActor` instead.
     """
 
     def __init__(
@@ -211,17 +213,17 @@ class AsyncLLMEngineExtended:
                 f"Overriding distributed_executor_backend from {old_backend} to ray"
             )
 
-        our_worker_cls = "torchrl.modules.llm.backends.vllm_async.AsyncvLLMWorker"
+        worker_cls = "torchrl.modules.llm.backends.vllm_async._AsyncvLLMWorker"
         if engine_args.worker_cls != "auto":
             old_worker_cls = engine_args.worker_cls
             torchrl_logger.warning(
-                f"Overriding worker_cls from {old_worker_cls} to {our_worker_cls}"
+                f"Overriding worker_cls from {old_worker_cls} to {worker_cls}"
             )
 
         if bundle_indices is not None:
             os.environ["VLLM_RAY_BUNDLE_INDICES"] = ",".join(map(str, bundle_indices))
 
-        engine_args.worker_cls = our_worker_cls
+        engine_args.worker_cls = worker_cls
         engine_args.distributed_executor_backend = "ray"
 
         # Enable prefix caching by default for better performance
@@ -400,7 +402,7 @@ class AsyncLLMEngineExtended:
         return self.engine.engine.collective_rpc(method, timeout, args, kwargs)
 
 
-def gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
+def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
     """Get the number of GPUs per replica for the given engine args."""
     return (
         engine_args.tensor_parallel_size
@@ -411,7 +413,7 @@ def gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
     )
 
 
-def get_bundle_indices(placement_group, index: int, length: int) -> list[int]:
+def _get_bundle_indices(placement_group, index: int, length: int) -> list[int]:
     """Get bundle indices for a placement group.
 
     Address https://github.com/ray-project/ray/issues/51117
@@ -443,16 +445,94 @@ def get_bundle_indices(placement_group, index: int, length: int) -> list[int]:
 
 # Create Ray remote versions
 if ray is not None and _has_vllm:
-    AsyncLLMEngineActor = ray.remote(num_cpus=0, num_gpus=0)(AsyncLLMEngineExtended)
+    _AsyncLLMEngineActor = ray.remote(num_cpus=0, num_gpus=0)(_AsyncLLMEngine)
 else:
-    AsyncLLMEngineActor = None
+    _AsyncLLMEngineActor = None
 
 
-class AsyncVLLMEngineService:
-    """A service that manages multiple async vLLM engine actors.
+class AsyncVLLM:
+    """A service that manages multiple async vLLM engine actors for distributed inference.
 
-    This service provides load balancing across multiple engine replicas,
-    handles weight updates, and manages the lifecycle of vLLM actors.
+    This is the main entry point for async vLLM inference in TorchRL. It manages multiple
+    vLLM engine replicas running as Ray actors, providing load balancing, weight updates,
+    and a unified interface for text generation.
+
+    The service automatically handles Ray actor lifecycle management, GPU allocation through
+    placement groups, and provides both synchronous and asynchronous generation interfaces
+    that are compatible with the standard vLLM API.
+
+    Args:
+        engine_args (AsyncEngineArgs): Configuration for the vLLM engines.
+        num_replicas (int, optional): Number of engine replicas to create. Defaults to 1.
+        actor_class (optional): Custom Ray actor class. Defaults to the internal actor implementation.
+
+    Example:
+        >>> from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+        >>> from vllm import SamplingParams
+        >>>
+        >>> # Simple usage - single GPU, single replica
+        >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B")
+        >>>
+        >>> # Advanced usage - multi-GPU tensor parallel with multiple replicas
+        >>> service = AsyncVLLM.from_pretrained(
+        ...     "Qwen/Qwen2.5-7B",
+        ...     num_devices=2,  # Use 2 GPUs for tensor parallelism
+        ...     num_replicas=2,  # Create 2 replicas for higher throughput
+        ...     max_model_len=4096
+        ... )
+        >>>
+        >>> # Generate text
+        >>> sampling_params = SamplingParams(temperature=0.7, max_tokens=100)
+        >>> result = service.generate("Hello, world!", sampling_params)
+        >>> print(result.outputs[0].text)
+        >>>
+        >>> # Alternative: using AsyncEngineArgs directly for advanced configuration
+        >>> from vllm import AsyncEngineArgs
+        >>> engine_args = AsyncEngineArgs(
+        ...     model="Qwen/Qwen2.5-3B",
+        ...     tensor_parallel_size=2
+        ... )
+        >>> service = AsyncVLLM.launch(engine_args, num_replicas=2)
+
+    .. note::
+        **Architecture and Design**
+
+        The AsyncVLLM service implements a distributed inference architecture with the following key components:
+
+        1. **Ray Actor Management**: Each replica runs as a separate Ray actor with dedicated GPU resources.
+           The service creates a placement group to ensure optimal GPU allocation and co-location of
+           tensor-parallel workers on the same node when possible.
+
+        2. **Load Balancing**: Generation requests are distributed across replicas using random selection
+           by default, or can target specific replicas using the `actor_index` parameter.
+
+        3. **Weight Synchronization**: The service supports weight updates across all replicas through
+           NCCL communication groups, enabling integration with distributed training workflows.
+
+        4. **Resource Management**: Automatic GPU allocation and cleanup through Ray placement groups,
+           with proper shutdown procedures to prevent resource leaks.
+
+        5. **API Compatibility**: Provides the same interface as vLLM's synchronous `LLM.generate()`
+           method, making it a drop-in replacement for async workloads.
+
+        **Ray Integration**
+
+        The service leverages Ray's actor model for distributed execution. Each replica is an independent
+        Ray actor that can be scheduled on different nodes. The service handles actor lifecycle,
+        monitors readiness, and provides centralized access to all replicas.
+
+        **Performance Considerations**
+
+        - Prefix caching is enabled by default for better performance with repeated prompts
+        - Tensor parallelism is supported for large models that don't fit on single GPUs
+        - Multiple replicas allow concurrent processing of different requests
+        - Native vLLM batching is used within each replica for optimal throughput
+
+        **Error Handling**
+
+        The service includes timeout support, graceful shutdown procedures, and best-effort
+        request cleanup on failures. Ray's fault tolerance mechanisms provide additional
+        resilience for long-running inference workloads.
     """
 
     def __init__(
@@ -461,13 +541,6 @@ class AsyncVLLMEngineService:
         num_replicas: int = 1,
         actor_class=None,
     ):
-        """Initialize the AsyncVLLMEngineService.
-
-        Args:
-            engine_args (AsyncEngineArgs): Arguments for creating the AsyncLLMEngine instances.
-            num_replicas (int): Number of actor replicas to create.
-            actor_class: Ray remote actor class to use (defaults to AsyncLLMEngineActor).
-        """
         if not _has_vllm:
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
@@ -482,7 +555,7 @@ class AsyncVLLMEngineService:
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
-        self.actor_class = actor_class or AsyncLLMEngineActor
+        self.actor_class = actor_class or _AsyncLLMEngineActor
         self.actors: list = []
         self._launched = False
         self._service_id = uuid.uuid4().hex[
@@ -520,7 +593,7 @@ class AsyncVLLMEngineService:
             )
             bundle_indices = None
             if self.engine_args.tensor_parallel_size > 1:
-                bundle_indices = get_bundle_indices(
+                bundle_indices = _get_bundle_indices(
                     self._placement_group, i, self.engine_args.tensor_parallel_size
                 )
 
@@ -554,7 +627,7 @@ class AsyncVLLMEngineService:
         cls,
         engine_args: AsyncEngineArgs,
         num_replicas: int = 1,
-    ) -> AsyncVLLMEngineService:
+    ) -> AsyncVLLM:
         """Launch a new AsyncVLLMEngineService.
 
         Args:
@@ -567,6 +640,54 @@ class AsyncVLLMEngineService:
         service = cls(engine_args, num_replicas)
         service._launch()
         return service
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_name: str,
+        devices: list[torch.device | int] | None = None,
+        num_devices: int | None = None,
+        num_replicas: int = 1,
+        **kwargs,
+    ) -> AsyncVLLM:
+        """Create an AsyncVLLM instance from a pretrained model.
+
+        This is a convenience method that combines model loading and service launching
+        in a single call, similar to how other ML libraries work.
+
+        Args:
+            model_name (str): The model name to pass to vLLM.
+            devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
+            num_devices (int, optional): Number of devices to use. Exclusive with devices.
+            num_replicas (int): Number of engine replicas to create.
+            **kwargs: Additional arguments passed to AsyncEngineArgs.
+
+        Returns:
+            AsyncVLLM: The launched async vLLM service.
+
+        Example:
+            >>> # Simple usage with defaults
+            >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B")
+            >>>
+            >>> # Multi-GPU tensor parallel with multiple replicas
+            >>> service = AsyncVLLM.from_pretrained(
+            ...     "Qwen/Qwen2.5-7B",
+            ...     num_devices=2,
+            ...     num_replicas=2,
+            ...     max_model_len=4096
+            ... )
+            >>>
+            >>> # Generate text
+            >>> from vllm import SamplingParams
+            >>> result = service.generate("Hello, world!", SamplingParams(max_tokens=50))
+        """
+        return make_async_vllm_engine(
+            model_name=model_name,
+            devices=devices,
+            num_devices=num_devices,
+            num_replicas=num_replicas,
+            **kwargs,
+        )
 
     def generate(
         self,
@@ -632,16 +753,16 @@ class AsyncVLLMEngineService:
         Returns:
             list: Ray futures for initialization calls.
         """
-        _gpus_per_replica = gpus_per_replica(self.engine_args)
-        weight_sync_world_size = self.num_replicas * _gpus_per_replica + 1
+        gpus_per_replica = _gpus_per_replica(self.engine_args)
+        weight_sync_world_size = self.num_replicas * gpus_per_replica + 1
         torchrl_logger.info(
             f"AsyncVLLMEngineService requests weight update group for {self.num_replicas} actors "
-            f"with {_gpus_per_replica} GPUs per replica and {weight_sync_world_size} world size"
+            f"with {gpus_per_replica} GPUs per replica and {weight_sync_world_size} world size"
         )
 
         refs = []
         for i, actor in enumerate(self.actors):
-            rank_offset = 1 + i * gpus_per_replica(self.engine_args)
+            rank_offset = 1 + i * gpus_per_replica
             if envs and envs.VLLM_USE_V1:
                 actor_collective_rpc = actor.collective_rpc_v1
             else:
@@ -726,7 +847,7 @@ def make_async_vllm_engine(
     num_devices: int | None = None,
     num_replicas: int = 1,
     **kwargs,
-) -> AsyncVLLMEngineService:
+) -> AsyncVLLM:
     """Create an async vLLM engine service.
 
     Args:
@@ -777,9 +898,9 @@ def make_async_vllm_engine(
         model=model_name,
         tensor_parallel_size=num_devices,
         distributed_executor_backend="ray",
-        worker_cls="torchrl.modules.llm.backends.vllm_async.AsyncvLLMWorker",
+        worker_cls="torchrl.modules.llm.backends.vllm_async._AsyncvLLMWorker",
         enable_prefix_caching=True,
         **kwargs,
     )
 
-    return AsyncVLLMEngineService.launch(engine_args, num_replicas)
+    return AsyncVLLM.launch(engine_args, num_replicas)
