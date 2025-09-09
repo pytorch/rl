@@ -438,7 +438,6 @@ The main goal of these primitives is to:
     TransformersWrapper
     vLLMWrapper
     RemoteTransformersWrapper
-    RemotevLLMWrapper
     AsyncVLLM
     ChatHistory
     Text
@@ -515,7 +514,6 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
 
 **Model Parameter Requirements:**
 
-- **RemotevLLMWrapper**: Accepts string model names/paths (recommended) or remote vLLM LLM objects with ray handles. Local vLLM models are not serializable.
 - **RemoteTransformersWrapper**: Only accepts string model names/paths. Transformers models are not serializable.
 
 **Usage Examples:**
@@ -523,7 +521,7 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
 .. code-block:: python
 
     import ray
-    from torchrl.modules.llm.policies import RemotevLLMWrapper, RemoteTransformersWrapper
+    from torchrl.modules.llm.policies import RemoteTransformersWrapper
     from torchrl.data.llm import History
     from torchrl.modules.llm.policies import ChatHistory, Text
     from tensordict import TensorDict
@@ -532,27 +530,8 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
     if not ray.is_initialized():
         ray.init()
 
-    # Use context manager for proper cleanup (recommended)
-    with RemotevLLMWrapper(
-        model="gpt2",
-        max_concurrency=16,  # Control concurrent calls
-        input_mode="history",
-        generate=True,
-        generate_kwargs={"max_new_tokens": 50, "temperature": 0.7}
-    ) as remote_wrapper:
-        
-        # Create test input
-        history = History.from_chats([[
-            {"role": "user", "content": "Hello, how are you?"}
-        ]])
-        chat_history = ChatHistory(prompt=history)
-        tensordict_input = TensorDict(history=chat_history, batch_size=(1,))
-        
-        # Use like a regular wrapper (no remote/get calls needed!)
-        result = remote_wrapper(tensordict_input)
-        print(result["text"].response)
-
     # Transformers wrapper (only string models supported)
+    # The remote wrappers implement context managers for proper resource cleanup:
     with RemoteTransformersWrapper(
         model="gpt2",
         max_concurrency=16,
@@ -564,25 +543,6 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
         text_input = TensorDict({"text": Text(prompt="Hello world")}, batch_size=(1,))
         result = remote_transformers(text_input)
         print(result["text"].response)
-
-**Cleanup and Resource Management:**
-
-The remote wrappers implement context managers for proper resource cleanup:
-
-.. code-block:: python
-
-    # Context manager (recommended)
-    with RemotevLLMWrapper(model="gpt2") as wrapper:
-        result = wrapper(input_data)
-        # Cleanup is automatic when exiting the context
-
-    # Manual cleanup
-    wrapper = RemotevLLMWrapper(model="gpt2")
-    try:
-        result = wrapper(input_data)
-    finally:
-        wrapper.cleanup_batching()  # Important: prevents hanging
-
 **Performance Considerations:**
 
 - **Network Overhead**: Remote execution adds network communication overhead

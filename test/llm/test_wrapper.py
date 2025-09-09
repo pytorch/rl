@@ -3059,20 +3059,17 @@ class TestBatching:
 
 
 class TestRayWrapper:
-    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    @pytest.mark.parametrize("backend", ["transformers"])
     def test_ray_wrapper(self, sample_text, backend):
         import gc
         from concurrent.futures import ThreadPoolExecutor
 
         from torchrl import logger as torchrl_logger
-        from torchrl.modules.llm.policies import (
-            RemoteTransformersWrapper,
-            RemotevLLMWrapper,
-        )
+        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # check that the wrapper is remote
         if backend == "vllm":
-            cls = RemotevLLMWrapper
+            raise ValueError("vllm backend is not supported")
         elif backend == "transformers":
             cls = RemoteTransformersWrapper
         else:
@@ -3113,10 +3110,7 @@ class TestActorSharing:
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
-        from torchrl.modules.llm.policies import (
-            RemoteTransformersWrapper,
-            RemotevLLMWrapper,
-        )
+        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # Initialize Ray if not already done
         if not ray.is_initialized():
@@ -3124,9 +3118,7 @@ class TestActorSharing:
 
         # Choose the wrapper class based on backend
         if backend == "vllm":
-            if not _has_vllm:
-                pytest.skip("vllm not available")
-            WrapperClass = RemotevLLMWrapper
+            raise ValueError("vllm backend is not supported")
         elif backend == "transformers":
             if not _has_transformers:
                 pytest.skip("transformers not available")

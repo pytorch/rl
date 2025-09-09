@@ -20,7 +20,6 @@ from .policies import (
     LogProbs,
     Masks,
     RemoteTransformersWrapper,
-    RemotevLLMWrapper,
     Text,
     Tokens,
     TransformersWrapper,
@@ -41,7 +40,6 @@ __all__ = [
     "vLLMWrapper",
     # Remote wrappers
     "RemoteTransformersWrapper",
-    "RemotevLLMWrapper",
     # Async vLLM (recommended)
     "AsyncVLLM",
     "make_async_vllm_engine",
