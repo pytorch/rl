@@ -760,9 +760,9 @@ class AsyncVLLM:
             prompts = [prompts]
             prompt_token_ids = [prompt_token_ids]
         elif single_prompt:
-            prompts = [prompts]
+            prompts = [prompts] * len(prompt_token_ids)  # type: ignore
         elif single_prompt_token_ids:
-            prompt_token_ids = [prompt_token_ids]
+            prompt_token_ids = [prompt_token_ids] * len(prompts)  # type: ignore
         if not isinstance(prompts, list):
             raise ValueError("prompts must be a list")
         if not isinstance(prompt_token_ids, list):
