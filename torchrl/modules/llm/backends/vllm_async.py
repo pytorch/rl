@@ -747,22 +747,32 @@ class AsyncVLLM:
             actor = random.choice(self.actors)
         else:
             actor = self.actors[actor_index]
-        if not isinstance(prompts, list):
-            prompts = [prompts]
-        # prompt_token_ids is a list of lists
+        single_prompt = not isinstance(prompts, list)
         if prompt_token_ids is not None:
             if not isinstance(prompt_token_ids, list):
                 raise ValueError("prompt_token_ids must be a list of lists")
             if not len(prompt_token_ids):
                 raise ValueError("prompt_token_ids must not be empty")
-            if not isinstance(prompt_token_ids[0], list):
-                prompt_token_ids = [prompt_token_ids]
+        single_prompt_token_ids = not isinstance(
+            prompt_token_ids, list
+        ) or not isinstance(prompt_token_ids[0], list)
+        if single_prompt and single_prompt_token_ids:
+            prompts = [prompts]
+            prompt_token_ids = [prompt_token_ids]
+        elif single_prompt:
+            prompt_token_ids = [prompt_token_ids]
+        elif single_prompt_token_ids:
+            prompts = [prompts]
+        if not isinstance(prompts, list):
+            raise ValueError("prompts must be a list")
         if not isinstance(prompt_token_ids, list):
             raise ValueError(
                 "prompt_token_ids must be a list of ints or a list of lists of ints"
             )
         if len(prompts) != len(prompt_token_ids):
-            raise ValueError("prompts and prompt_token_ids must have the same length")
+            raise ValueError(
+                "prompts and prompt_token_ids must have the same length (got {len(prompts)=} and {len(prompt_token_ids)=})"
+            )
         results = ray.get(
             [
                 actor.generate.remote(
