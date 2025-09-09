@@ -33,9 +33,6 @@ from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
 from transformers import AutoTokenizer
 
 
-# Set environment variable for vLLM V0 engine
-os.environ["VLLM_USE_V1"] = "0"
-
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
