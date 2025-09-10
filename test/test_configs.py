@@ -1549,7 +1549,7 @@ defaults:
   - trainer@trainer: ppo
   - optimizer@optimizer: adam
   - loss@loss: ppo
-  - logger@logger: wandb
+  - logger@logger: csv
   - _self_
 
 networks:
