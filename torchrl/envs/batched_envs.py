@@ -2451,12 +2451,14 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
 
             if _non_tensor_keys:
                 child_pipe.send(
                     ("non_tensor", cur_td.select(*_non_tensor_keys, strict=False))
                 )
+
+            # Set event only after non-tensor data is sent to avoid race condition
+            mp_event.set()
 
             del cur_td
 
@@ -2483,7 +2485,6 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
 
             # Make sure the root is updated
             root_shared_tensordict.update_(env._step_mdp(input))
@@ -2492,6 +2493,9 @@ def _run_worker_pipe_shared_mem(
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
                 )
+
+            # Set event only after non-tensor data is sent to avoid race condition
+            mp_event.set()
 
             del next_td
 
@@ -2525,12 +2529,14 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
 
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
                 child_pipe.send(("non_tensor", ntd))
+
+            # Set event only after non-tensor data is sent to avoid race condition
+            mp_event.set()
 
             del td, root_next_td
 
