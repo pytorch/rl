@@ -80,19 +80,19 @@ class BaseVLLMUpdaterTest(ABC):
     by having each concrete test class handle its own vLLM instance lifecycle.
     """
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def model_name(self):
         """Model name for testing - small model for faster testing."""
         return "Qwen/Qwen2.5-0.5B"
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def sampling_params(self):
         """Sampling parameters for testing."""
         if SamplingParams is not None:
             return SamplingParams(temperature=0.8, max_tokens=50)
         return None
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def source_policy(self, model_name):
         """Create source TransformersWrapper policy."""
         if (
@@ -113,13 +113,28 @@ class BaseVLLMUpdaterTest(ABC):
         )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        return TransformersWrapper(
+        wrapper = TransformersWrapper(
             model,
             tokenizer=tokenizer,
             input_mode="text",
             generate=False,
             return_log_probs=True,
         )
+
+        yield wrapper
+
+        # Cleanup
+        try:
+            del wrapper
+            del model
+            torchrl_logger.info("Source policy cleaned up")
+        except Exception as e:
+            torchrl_logger.warning(f"Error during source policy cleanup: {e}")
+        finally:
+            # Force garbage collection and CUDA memory cleanup
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     @abstractmethod
     @pytest.fixture
