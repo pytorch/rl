@@ -16,10 +16,10 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
+    MultiaSyncDataCollector,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -268,7 +268,7 @@ class RayCollector(DataCollectorBase):
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> from torchrl.collectors.collectors import SyncDataCollector
+        >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.collectors.distributed import RayCollector
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])

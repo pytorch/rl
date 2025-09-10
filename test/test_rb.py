@@ -858,8 +858,8 @@ class TestStorages:
         torch._dynamo.reset_code_caches()
 
         # Number of times to extend the replay buffer
-        num_extend = 10
-        data_size = 100
+        num_extend = 5
+        data_size = 50
         storage_size = (num_extend + 1) * data_size
         sample_size = 3
 

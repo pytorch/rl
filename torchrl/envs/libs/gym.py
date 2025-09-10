@@ -8,6 +8,7 @@ from __future__ import annotations
 import collections
 import importlib
 import warnings
+from contextlib import nullcontext
 from copy import copy
 from types import ModuleType
 from warnings import warn
@@ -1744,9 +1745,11 @@ class GymEnv(GymWrapper):
     """
 
     def __init__(self, env_name, **kwargs):
-        kwargs["env_name"] = env_name
-        self._set_gym_args(kwargs)
-        super().__init__(**kwargs)
+        backend = kwargs.pop("backend", None)
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            kwargs["env_name"] = env_name
+            self._set_gym_args(kwargs)
+            super().__init__(**kwargs)
 
     @implement_for("gym", None, "0.24.0")
     def _set_gym_args(self, kwargs) -> None:  # noqa: F811

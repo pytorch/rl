@@ -417,8 +417,8 @@ class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
-        create_env_fn (Callable): a callable that returns an instance of
-            :class:`~torchrl.envs.EnvBase` class.
+        create_env_fn (Callable or EnvBase): a callable that returns an instance of
+            :class:`~torchrl.envs.EnvBase` class, or the env itself.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
@@ -1795,6 +1795,8 @@ class _MultiDataCollector(DataCollectorBase):
             .. warning:: `policy_factory` is currently not compatible with multiprocessed data
                 collectors.
 
+        num_workers (int, optional): number of workers to use. If `create_env_fn` is a list, this will be ignored.
+            Defaults to `None` (workers determined by the `create_env_fn` length).
         frames_per_batch (int, Sequence[int]): A keyword-only argument representing the
             total number of elements in a batch. If a sequence is provided, represents the number of elements in a
             batch per worker. Total number of elements in a batch is then the sum over the sequence.
@@ -1951,6 +1953,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        num_workers: int | None = None,
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
@@ -1988,7 +1991,11 @@ class _MultiDataCollector(DataCollectorBase):
         | None = None,
     ):
         self.closed = True
-        self.num_workers = len(create_env_fn)
+        if isinstance(create_env_fn, Sequence):
+            self.num_workers = len(create_env_fn)
+        else:
+            self.num_workers = num_workers
+            create_env_fn = [create_env_fn] * self.num_workers
 
         if (
             isinstance(frames_per_batch, Sequence)
@@ -2111,7 +2118,9 @@ class _MultiDataCollector(DataCollectorBase):
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
                 "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
                 "on their own (via some specialized worker type / constructor) this may well work, but make sure "
-                "your weight synchronization strategy is properly set."
+                "your weight synchronization strategy is properly set. To suppress this warning, you can use "
+                "RemoteModuleWeightUpdater() which enforces explicit weight passing when calling update_policy_weights_(weights). "
+                "This will work whenever your inference and training policies are nn.Module instances with similar structures."
             )
 
         self.weight_updater = weight_updater

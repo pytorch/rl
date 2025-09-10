@@ -95,7 +95,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         """
         return None
 
-    def register_collector(self, collector: DataCollectorBase):  # noqa
+    def register_collector(self, collector):  # noqa
         """Register a collector in the updater.
 
         Once registered, the updater will not accept another collector.
@@ -109,7 +109,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         self._collector_wr = weakref.ref(collector)
 
     @property
-    def collector(self) -> torch.collector.DataCollectorBase:  # noqa
+    def collector(self):  # noqa
         """The collector or container of the receiver.
 
         Returns `None` if the container is out-of-scope or not set.
@@ -353,7 +353,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
         self.weight_getter = weight_getter
         self.policy_weights = policy_weights
 
-    def _get_server_weights(self) -> TensorDictBase:
+    def _get_server_weights(self) -> TensorDictBase | None:
         return self.weight_getter() if self.weight_getter is not None else None
 
     def _get_local_weights(self) -> TensorDictBase:
@@ -367,7 +367,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
 
     def _sync_weights_with_worker(
         self, *, worker_id: None = None, server_weights: TensorDictBase
-    ) -> TensorDictBase:
+    ) -> None:
         if server_weights is None:
             return
         self.policy_weights.update_(server_weights)
@@ -413,7 +413,7 @@ class MultiProcessedWeightUpdater(WeightUpdaterBase):
 
     def _sync_weights_with_worker(
         self, worker_id: int | torch.device, server_weights: TensorDictBase | None
-    ) -> TensorDictBase | None:
+    ) -> None:
         if server_weights is None:
             return
         self._policy_weights[worker_id].data.update_(server_weights)
@@ -429,6 +429,59 @@ class MultiProcessedWeightUpdater(WeightUpdaterBase):
 
     def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
         return server_weights
+
+
+class RemoteModuleWeightUpdater(WeightUpdaterBase):
+    """A weight updater for remote nn.Modules that requires explicit weight passing.
+
+    This weight updater is designed for scenarios where the master collector doesn't have
+    direct access to worker weights (e.g., when using policy_factory). It enforces that
+    weights must be passed explicitly when calling update_policy_weights_().
+
+    This updater does not try to retrieve weights from the server or workers automatically.
+    Instead, it raises an exception if weights are not provided, ensuring that the weight
+    synchronization is handled explicitly by the user.
+
+    Raises:
+        RuntimeError: If update_policy_weights_() is called without providing weights.
+
+    .. note::
+        This weight updater is primarily used to suppress warnings in tests and scenarios
+        where the weight synchronization is handled externally or the workers manage
+        their own weight updates.
+
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase`
+    """
+
+    def __init__(self):
+        pass
+
+    def _get_server_weights(self) -> TensorDictBase | None:
+        """Returns None since this updater doesn't manage server weights."""
+        return None
+
+    def _sync_weights_with_worker(
+        self,
+        *,
+        worker_id: int | torch.device | None = None,
+        server_weights: TensorDictBase,
+    ) -> None:
+        """Raises an error if weights are not provided explicitly.
+
+        Since this updater is for remote modules where the master doesn't have access
+        to worker weights, it enforces that weights must be passed explicitly.
+        """
+        if server_weights is None:
+            raise RuntimeError(
+                "RemoteModuleWeightUpdater requires weights to be passed explicitly. "
+                "Call update_policy_weights_(weights) with the weights to be synchronized."
+            )
+        # If weights are provided, we assume the synchronization is handled elsewhere
+        # This is a no-op updater that just validates the weight passing pattern
+
+    def all_worker_ids(self) -> None:
+        """Returns None since this updater doesn't manage specific workers."""
+        return None
 
 
 class RayWeightUpdater(WeightUpdaterBase):
