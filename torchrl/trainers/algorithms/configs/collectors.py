@@ -50,6 +50,7 @@ class SyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
+    weight_updater: Any = None
     _target_: str = "torchrl.collectors.SyncDataCollector"
     _partial_: bool = False
 
@@ -57,6 +58,8 @@ class SyncDataCollectorConfig(DataCollectorConfig):
         self.create_env_fn._partial_ = True
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
+        if self.weight_updater is not None:
+            self.weight_updater._partial_ = True
 
 
 @dataclass
@@ -89,12 +92,15 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
+    weight_updater: Any = None
     _target_: str = "torchrl.collectors.aSyncDataCollector"
 
     def __post_init__(self):
         self.create_env_fn._partial_ = True
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
+        if self.weight_updater is not None:
+            self.weight_updater._partial_ = True
 
 
 @dataclass
@@ -126,6 +132,7 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
+    weight_updater: Any = None
     _target_: str = "torchrl.collectors.MultiSyncDataCollector"
 
     def __post_init__(self):
@@ -133,6 +140,8 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
             env_cfg._partial_ = True
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
+        if self.weight_updater is not None:
+            self.weight_updater._partial_ = True
 
 
 @dataclass
@@ -164,6 +173,7 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
+    weight_updater: Any = None
     _target_: str = "torchrl.collectors.MultiaSyncDataCollector"
 
     def __post_init__(self):
@@ -171,3 +181,5 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
             env_cfg._partial_ = True
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
+        if self.weight_updater is not None:
+            self.weight_updater._partial_ = True

@@ -2118,7 +2118,9 @@ class _MultiDataCollector(DataCollectorBase):
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
                 "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
                 "on their own (via some specialized worker type / constructor) this may well work, but make sure "
-                "your weight synchronization strategy is properly set."
+                "your weight synchronization strategy is properly set. To suppress this warning, you can use "
+                "RemoteModuleWeightUpdater() which enforces explicit weight passing when calling update_policy_weights_(weights). "
+                "This will work whenever your inference and training policies are nn.Module instances with similar structures."
             )
 
         self.weight_updater = weight_updater

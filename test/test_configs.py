@@ -27,6 +27,11 @@ _has_gym = (importlib.util.find_spec("gym") is not None) or (
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
 
+# Make sure that warnings raise an exception
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+]
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
@@ -879,6 +884,9 @@ class TestCollectorsConfig:
             MLPConfig,
             TanhNormalModelConfig,
         )
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            RemoteModuleWeightUpdaterConfig,
+        )
 
         # We need an env config and a policy config
         env_cfg = GymEnvConfig(env_name="Pendulum-v1")
@@ -890,6 +898,7 @@ class TestCollectorsConfig:
 
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
+
             cfg_cls = AsyncDataCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
@@ -902,7 +911,12 @@ class TestCollectorsConfig:
             raise ValueError(f"Unknown collector type: {collector}")
 
         if factory:
-            cfg = cfg_cls(policy_factory=policy_cfg, **kwargs)
+            # When using policy_factory, use RemoteModuleWeightUpdater to suppress warnings
+            cfg = cfg_cls(
+                policy_factory=policy_cfg,
+                weight_updater=RemoteModuleWeightUpdaterConfig(),
+                **kwargs,
+            )
         else:
             cfg = cfg_cls(policy=policy_cfg, **kwargs)
 
@@ -1121,7 +1135,9 @@ class TestHydraParsing:
 
         # Register the configs manually for testing
         _register_configs()
-        initialize_config_module("torchrl.trainers.algorithms.configs")
+        initialize_config_module(
+            "torchrl.trainers.algorithms.configs", version_base="1.1"
+        )
 
     def _run_hydra_test(
         self, tmpdir, yaml_config, test_script_content, success_message="SUCCESS"
@@ -1173,9 +1189,35 @@ if __name__ == "__main__":
                 assert success_message in result.stdout
                 torchrl_logger.info("Test passed!")
             else:
-                torchrl_logger.error(f"Test failed: {result.stderr}")
-                torchrl_logger.error(f"stdout: {result.stdout}")
-                raise AssertionError(f"Test failed: {result.stderr}")
+                # Filter out known Hydra warnings that shouldn't cause test failures
+                stderr_lines = (
+                    result.stderr.strip().split("\n") if result.stderr.strip() else []
+                )
+                filtered_stderr = []
+                for line in stderr_lines:
+                    # Skip the Hydra working directory warning and related warnings
+                    if any(
+                        warning_text in line
+                        for warning_text in [
+                            "Future Hydra versions will no longer change working directory at job runtime by default",
+                            "UserWarning: Future Hydra versions will no longer change working directory",
+                            "hydra/_internal/hydra.py",
+                        ]
+                    ):
+                        continue
+                    filtered_stderr.append(line)
+
+                filtered_stderr_text = "\n".join(filtered_stderr).strip()
+
+                # Only fail if there are actual errors after filtering warnings
+                if filtered_stderr_text:
+                    torchrl_logger.error(f"Test failed: {filtered_stderr_text}")
+                    torchrl_logger.error(f"stdout: {result.stdout}")
+                    raise AssertionError(f"Test failed: {filtered_stderr_text}")
+                else:
+                    # No real errors, just warnings - treat as success if stdout contains success message
+                    assert success_message in result.stdout
+                    torchrl_logger.info("Test passed (with warnings filtered)!")
 
         except subprocess.TimeoutExpired:
             raise AssertionError("Test timed out")
@@ -1553,6 +1595,113 @@ training_env:
 """
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+class TestWeightUpdaterConfigs:
+    """Test cases for weight_update.py configuration classes."""
+
+    def test_weight_updater_config(self):
+        """Test basic WeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            WeightUpdaterConfig,
+        )
+
+        cfg = WeightUpdaterConfig()
+        assert cfg._target_ == "torchrl.collectors.WeightUpdaterBase"
+        assert cfg._partial_ is True
+
+    def test_vanilla_weight_updater_config(self):
+        """Test VanillaWeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            VanillaWeightUpdaterConfig,
+        )
+
+        cfg = VanillaWeightUpdaterConfig()
+        assert cfg._target_ == "torchrl.collectors.VanillaWeightUpdater"
+        assert cfg._partial_ is True
+        assert cfg.weight_getter is None
+        assert cfg.policy_weights is None
+
+    def test_multiprocessed_weight_updater_config(self):
+        """Test MultiProcessedWeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            MultiProcessedWeightUpdaterConfig,
+        )
+
+        cfg = MultiProcessedWeightUpdaterConfig()
+        assert cfg._target_ == "torchrl.collectors.MultiProcessedWeightUpdater"
+        assert cfg._partial_ is True
+        assert cfg.get_server_weights is None
+        assert cfg.policy_weights is None
+
+    def test_ray_weight_updater_config(self):
+        """Test RayWeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            RayWeightUpdaterConfig,
+        )
+
+        cfg = RayWeightUpdaterConfig(max_interval=5)
+        assert cfg._target_ == "torchrl.collectors.RayWeightUpdater"
+        assert cfg._partial_ is True
+        assert cfg.policy_weights is None
+        assert cfg.remote_collectors is None
+        assert cfg.max_interval == 5
+
+    def test_rpc_weight_updater_config(self):
+        """Test RPCWeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            RPCWeightUpdaterConfig,
+        )
+
+        cfg = RPCWeightUpdaterConfig(num_workers=4)
+        assert cfg._target_ == "torchrl.collectors.distributed.RPCWeightUpdater"
+        assert cfg._partial_ is True
+        assert cfg.collector_infos is None
+        assert cfg.collector_class is None
+        assert cfg.collector_rrefs is None
+        assert cfg.policy_weights is None
+        assert cfg.num_workers == 4
+
+    def test_distributed_weight_updater_config(self):
+        """Test DistributedWeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            DistributedWeightUpdaterConfig,
+        )
+
+        cfg = DistributedWeightUpdaterConfig(num_workers=8, sync=False)
+        assert cfg._target_ == "torchrl.collectors.distributed.DistributedWeightUpdater"
+        assert cfg._partial_ is True
+        assert cfg.store is None
+        assert cfg.policy_weights is None
+        assert cfg.num_workers == 8
+        assert cfg.sync is False
+
+    def test_remote_module_weight_updater_config(self):
+        """Test RemoteModuleWeightUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            RemoteModuleWeightUpdaterConfig,
+        )
+
+        cfg = RemoteModuleWeightUpdaterConfig()
+        assert cfg._target_ == "torchrl.collectors.RemoteModuleWeightUpdater"
+        assert cfg._partial_ is True
+
+    def test_vllm_updater_config(self):
+        """Test vLLMUpdaterConfig."""
+        from torchrl.trainers.algorithms.configs.weight_update import vLLMUpdaterConfig
+
+        cfg = vLLMUpdaterConfig(
+            master_address="localhost", master_port=12345, vllm_tp_size=2
+        )
+        assert cfg._target_ == "torchrl.collectors.llm.vLLMUpdater"
+        assert cfg._partial_ is True
+        assert cfg.master_address == "localhost"
+        assert cfg.master_port == 12345
+        assert cfg.model_metadata is None
+        assert cfg.vllm_tp_size == 2
 
 
 if __name__ == "__main__":

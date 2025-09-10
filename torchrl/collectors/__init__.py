@@ -15,6 +15,7 @@ from .collectors import (
 from .weight_update import (
     MultiProcessedWeightUpdater,
     RayWeightUpdater,
+    RemoteModuleWeightUpdater,
     VanillaWeightUpdater,
     WeightUpdaterBase,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "WeightUpdaterBase",
     "VanillaWeightUpdater",
     "RayWeightUpdater",
+    "RemoteModuleWeightUpdater",
     "MultiProcessedWeightUpdater",
     "aSyncDataCollector",
     "DataCollectorBase",

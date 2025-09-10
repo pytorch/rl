@@ -156,6 +156,16 @@ from torchrl.trainers.algorithms.configs.utils import (
     SGDConfig,
     SparseAdamConfig,
 )
+from torchrl.trainers.algorithms.configs.weight_update import (
+    DistributedWeightUpdaterConfig,
+    MultiProcessedWeightUpdaterConfig,
+    RayWeightUpdaterConfig,
+    RemoteModuleWeightUpdaterConfig,
+    RPCWeightUpdaterConfig,
+    VanillaWeightUpdaterConfig,
+    vLLMUpdaterConfig,
+    WeightUpdaterConfig,
+)
 
 __all__ = [
     # Base configuration
@@ -303,6 +313,15 @@ __all__ = [
     "LoggerConfig",
     "TensorboardLoggerConfig",
     "WandbLoggerConfig",
+    # Weight Updaters
+    "WeightUpdaterConfig",
+    "VanillaWeightUpdaterConfig",
+    "MultiProcessedWeightUpdaterConfig",
+    "RayWeightUpdaterConfig",
+    "RemoteModuleWeightUpdaterConfig",
+    "RPCWeightUpdaterConfig",
+    "DistributedWeightUpdaterConfig",
+    "vLLMUpdaterConfig",
 ]
 
 
@@ -520,6 +539,29 @@ def _register_configs():
     cs.store(group="logger", name="tensorboard", node=TensorboardLoggerConfig)
     cs.store(group="logger", name="csv", node=CSVLoggerConfig)
     cs.store(group="logger", name="base", node=LoggerConfig)
+
+    # =============================================================================
+    # Weight Updater Configurations
+    # =============================================================================
+
+    cs.store(group="weight_updater", name="base", node=WeightUpdaterConfig)
+    cs.store(group="weight_updater", name="vanilla", node=VanillaWeightUpdaterConfig)
+    cs.store(
+        group="weight_updater",
+        name="multiprocessed",
+        node=MultiProcessedWeightUpdaterConfig,
+    )
+    cs.store(group="weight_updater", name="ray", node=RayWeightUpdaterConfig)
+    cs.store(
+        group="weight_updater",
+        name="remote_module",
+        node=RemoteModuleWeightUpdaterConfig,
+    )
+    cs.store(group="weight_updater", name="rpc", node=RPCWeightUpdaterConfig)
+    cs.store(
+        group="weight_updater", name="distributed", node=DistributedWeightUpdaterConfig
+    )
+    cs.store(group="weight_updater", name="vllm", node=vLLMUpdaterConfig)
 
 
 if not sys.version_info < (3, 10):  #  type: ignore # noqa
