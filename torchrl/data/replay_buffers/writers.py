@@ -177,8 +177,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
@@ -206,8 +205,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def state_dict(self) -> dict[str, Any]:
@@ -220,6 +218,14 @@ class RoundRobinWriter(Writer):
         self._cursor = 0
         if empty_write_count:
             self._write_count = 0
+
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @torch.compiler.disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
+        for ent in self._storage._attached_entities_iter():
+            ent.mark_update(index)
 
     @property
     def _cursor(self):
@@ -305,8 +311,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
             )
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
@@ -335,8 +340,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
 
@@ -570,9 +574,16 @@ class TensorDictMaxValueWriter(Writer):
             device = getattr(self._storage, "device", None)
             out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
         index = self._replicate_index(out_index)
+        self._mark_update_entities(index)
+        return index
+
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @torch.compiler.disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
         for ent in self._storage._attached_entities_iter():
             ent.mark_update(index)
-        return index
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0

@@ -291,6 +291,24 @@ class ReplayBuffer:
         self.dim_extend = dim_extend
         self._storage.checkpointer = checkpointer
         self.set_rng(generator=generator)
+        self._initialize_prioritized_sampler()
+
+    def _initialize_prioritized_sampler(self) -> None:
+        """Initialize priority trees for existing data when using PrioritizedSampler.
+
+        This method ensures that when a PrioritizedSampler is used with storage that
+        already contains data, the priority trees are properly populated with default
+        priorities for all existing entries.
+        """
+        from .samplers import PrioritizedSampler
+
+        if isinstance(self._sampler, PrioritizedSampler) and len(self._storage) > 0:
+            # Set default priorities for all existing data
+            indices = torch.arange(len(self._storage), dtype=torch.long)
+            default_priorities = torch.full(
+                (len(self._storage),), self._sampler.default_priority, dtype=torch.float
+            )
+            self._sampler.update_priority(indices, default_priorities)
 
     def _maybe_make_storage(
         self, storage: Storage | Callable[[], Storage] | None, compilable
@@ -471,7 +489,7 @@ class ReplayBuffer:
         return None  # explicit return for remote calls
 
     @property
-    def write_count(self):
+    def write_count(self) -> int:
         """The total number of items written so far in the buffer through add and extend."""
         return self._writer._write_count
 
@@ -801,7 +819,9 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> tuple[Any, dict]:
-        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)
@@ -1539,7 +1559,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> tuple[Any, dict]:
-        with self._replay_lock if not is_compiling() else contextlib.nullcontext():
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
             data = self._storage.get(index)

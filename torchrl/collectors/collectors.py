@@ -508,6 +508,10 @@ class SyncDataCollector(DataCollectorBase):
         postproc (Callable, optional): A post-processing transform, such as
             a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
+
+            .. warning:: Postproc is not applied when a replay buffer is used and items are added to the buffer
+                as they are produced (`extend_buffer=False`). The recommended usage is to use `extend_buffer=True`.
+
             Defaults to ``None``.
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
@@ -729,6 +733,8 @@ class SyncDataCollector(DataCollectorBase):
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                self._sync_storage = torch.npu.synchronize
             elif self.storing_device.type == "cpu":
                 self._sync_storage = _do_nothing
             else:
@@ -743,6 +749,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_env = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                self._sync_env = torch.npu.synchronize
             elif self.env_device.type == "cpu":
                 self._sync_env = _do_nothing
             else:
@@ -756,6 +764,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_policy = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_policy = torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                self._sync_policy = torch.npu.synchronize
             elif self.policy_device.type == "cpu":
                 self._sync_policy = _do_nothing
             else:
@@ -1258,7 +1268,8 @@ class SyncDataCollector(DataCollectorBase):
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
-                    torchrl_logger.info("Collector: No tensordict_out. Yielding.")
+                    if self.verbose:
+                        torchrl_logger.info("Collector: No tensordict_out. Yielding.")
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
@@ -3021,7 +3032,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
             self._frames += n_collected
 
             if self.postprocs:
-                self.postprocs = self.postprocs.to(out.device)
+                self.postprocs = (
+                    self.postprocs.to(out.device)
+                    if hasattr(self.postprocs, "to")
+                    else self.postprocs
+                )
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
@@ -3144,7 +3159,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         self.out_tensordicts = defaultdict(lambda: None)
         self.running = False
 
-        if self.postprocs is not None:
+        if self.postprocs is not None and self.replay_buffer is None:
             postproc = self.postprocs
             self.postprocs = {}
             for _device in self.storing_device:
@@ -3265,7 +3280,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 worker_frames = self.frames_per_batch_worker()
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
-            if self.postprocs:
+            if out is not None and self.postprocs:
                 out = self.postprocs[out.device](out)
 
             # the function blocks here until the next item is asked, hence we send the message to the

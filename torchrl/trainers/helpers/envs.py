@@ -11,7 +11,7 @@ import importlib.util
 from collections.abc import Callable, Sequence
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any
+from typing import Any, Optional, Union
 
 import torch
 from torchrl._utils import logger as torchrl_logger, VERBOSE
@@ -224,18 +224,18 @@ def get_norm_state_dict(env):
 def transformed_env_constructor(
     cfg: DictConfig,  # noqa: F821
     video_tag: str = "",
-    logger: Logger | None = None,  # noqa
-    stats: dict | None = None,
+    logger: Optional[Logger] = None,  # noqa
+    stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
-    custom_env_maker: Callable | None = None,
-    custom_env: EnvBase | None = None,
+    custom_env_maker: Optional[Callable] = None,
+    custom_env: Optional[EnvBase] = None,
     return_transformed_envs: bool = True,
-    action_dim_gsde: int | None = None,
-    state_dim_gsde: int | None = None,
-    batch_dims: int | None = 0,
-    obs_norm_state_dict: dict | None = None,
-) -> Callable | EnvCreator:
+    action_dim_gsde: Optional[int] = None,
+    state_dim_gsde: Optional[int] = None,
+    batch_dims: Optional[int] = 0,
+    obs_norm_state_dict: Optional[dict] = None,
+) -> Union[Callable, EnvCreator]:
     """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
@@ -341,7 +341,7 @@ def transformed_env_constructor(
 
 def parallel_env_constructor(
     cfg: DictConfig, **kwargs  # noqa: F821
-) -> ParallelEnv | EnvCreator:
+) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
@@ -386,7 +386,7 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     cfg: DictConfig,  # noqa: F821
     proof_environment: EnvBase = None,
-    key: str | None = None,
+    key: Optional[str] = None,
 ):
     """Gathers stas (loc and scale) from an environment using random rollouts.
 
@@ -464,7 +464,7 @@ def get_stats_random_rollout(
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: str | tuple[str, ...] = None,
+    key: Optional[Union[str, tuple[str, ...]]] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
