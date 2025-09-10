@@ -7,7 +7,19 @@ from __future__ import annotations
 
 import sys
 
-from hydra.core.config_store import ConfigStore
+# Check for hydra/omegaconf availability - required for config system
+try:
+    import hydra  # noqa: F401
+    import omegaconf  # noqa: F401
+    from hydra.core.config_store import ConfigStore
+
+    _has_hydra = True
+except ImportError as e:
+    raise ImportError(
+        "The TorchRL configuration system requires hydra-core and omegaconf. "
+        "Please install them with: pip install 'torchrl[utils]' or pip install hydra-core omegaconf"
+    ) from e
+
 from torchrl.trainers.algorithms.configs.collectors import (
     AsyncDataCollectorConfig,
     DataCollectorConfig,

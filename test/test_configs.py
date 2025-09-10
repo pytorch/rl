@@ -11,14 +11,24 @@ import sys
 
 import pytest
 import torch
-from hydra.utils import instantiate
 
 from torchrl import logger as torchrl_logger
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
-from torchrl.trainers.algorithms.configs.modules import ActivationConfig, LayerConfig
+
+# Test if configs can be imported (requires hydra)
+try:
+    from torchrl.trainers.algorithms.configs.modules import (
+        ActivationConfig,
+        LayerConfig,
+    )
+
+    _configs_available = True
+except ImportError:
+    _configs_available = False
+    ActivationConfig = LayerConfig = None
 
 
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
@@ -36,9 +46,14 @@ pytestmark = [
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestEnvConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_gym_env_config(self):
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
 
         cfg = GymEnvConfig(env_name="CartPole-v1")
@@ -47,9 +62,11 @@ class TestEnvConfigs:
         assert cfg.from_pixels is False
         instantiate(cfg)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     @pytest.mark.parametrize("cls", [ParallelEnv, SerialEnv, AsyncEnvPool])
     def test_batched_env_config(self, cls):
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig
         from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
 
@@ -72,6 +89,9 @@ class TestEnvConfigs:
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestDataConfigs:
     """Test cases for data.py configuration classes."""
 
@@ -82,8 +102,10 @@ class TestDataConfigs:
         cfg = WriterConfig()
         assert cfg._target_ == "torchrl.data.replay_buffers.Writer"
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_round_robin_writer_config(self):
         """Test RoundRobinWriterConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import RoundRobinWriterConfig
 
         cfg = RoundRobinWriterConfig(compilable=True)
@@ -104,8 +126,10 @@ class TestDataConfigs:
         cfg = SamplerConfig()
         assert cfg._target_ == "torchrl.data.replay_buffers.Sampler"
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_random_sampler_config(self):
         """Test RandomSamplerConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import RandomSamplerConfig
 
         cfg = RandomSamplerConfig()
@@ -117,8 +141,10 @@ class TestDataConfigs:
 
         assert isinstance(sampler, RandomSampler)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensor_storage_config(self):
         """Test TensorStorageConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import TensorStorageConfig
 
         cfg = TensorStorageConfig(max_size=1000, device="cpu", ndim=2, compilable=True)
@@ -140,8 +166,10 @@ class TestDataConfigs:
         assert storage.max_size == 1000
         assert storage.ndim == 2
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensordict_replay_buffer_config(self):
         """Test TensorDictReplayBufferConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             ListStorageConfig,
             RandomSamplerConfig,
@@ -165,8 +193,10 @@ class TestDataConfigs:
         assert isinstance(buffer, TensorDictReplayBuffer)
         assert buffer._batch_size == 32
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_list_storage_config(self):
         """Test ListStorageConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import ListStorageConfig
 
         cfg = ListStorageConfig(max_size=1000, compilable=True)
@@ -181,8 +211,10 @@ class TestDataConfigs:
         assert isinstance(storage, ListStorage)
         assert storage.max_size == 1000
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_replay_buffer_config(self):
         """Test ReplayBufferConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             ListStorageConfig,
             RandomSamplerConfig,
@@ -217,8 +249,10 @@ class TestDataConfigs:
         assert cfg_optional.batch_size is None
         assert isinstance(instantiate(cfg_optional), ReplayBuffer)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensordict_replay_buffer_config_optional_fields(self):
         """Test that optional fields can be omitted from TensorDictReplayBuffer config."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             TensorDictReplayBufferConfig,
         )
@@ -257,6 +291,7 @@ class TestDataConfigs:
 
     def test_tensor_dict_max_value_writer_config(self):
         """Test TensorDictMaxValueWriterConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             TensorDictMaxValueWriterConfig,
         )
@@ -272,8 +307,10 @@ class TestDataConfigs:
 
         assert isinstance(writer, TensorDictMaxValueWriter)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensor_dict_round_robin_writer_config(self):
         """Test TensorDictRoundRobinWriterConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             TensorDictRoundRobinWriterConfig,
         )
@@ -289,8 +326,10 @@ class TestDataConfigs:
         assert isinstance(writer, TensorDictRoundRobinWriter)
         assert writer._compilable is True
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_immutable_dataset_writer_config(self):
         """Test ImmutableDatasetWriterConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             ImmutableDatasetWriterConfig,
         )
@@ -457,8 +496,10 @@ class TestDataConfigs:
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_prioritized_sampler_config(self):
         """Test PrioritizedSamplerConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import PrioritizedSamplerConfig
 
         cfg = PrioritizedSamplerConfig(
@@ -482,8 +523,10 @@ class TestDataConfigs:
         assert sampler._eps == 1e-8
         assert sampler.reduction == "max"
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_sampler_without_replacement_config(self):
         """Test SamplerWithoutReplacementConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             SamplerWithoutReplacementConfig,
         )
@@ -520,8 +563,10 @@ class TestDataConfigs:
         # For now, we just test the config creation
         assert cfg.writers[0]._target_ == "torchrl.data.replay_buffers.RoundRobinWriter"
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_lazy_stack_storage_config(self):
         """Test LazyStackStorageConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import LazyStackStorageConfig
 
         cfg = LazyStackStorageConfig(max_size=1000, compilable=True, stack_dim=1)
@@ -564,8 +609,10 @@ class TestDataConfigs:
         assert isinstance(storage, StorageEnsemble)
         assert len(storage._storages) == 2
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_lazy_memmap_storage_config(self):
         """Test LazyMemmapStorageConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import LazyMemmapStorageConfig
 
         cfg = LazyMemmapStorageConfig(
@@ -585,8 +632,10 @@ class TestDataConfigs:
         assert storage.max_size == 1000
         assert storage.ndim == 2
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_lazy_tensor_storage_config(self):
         """Test LazyTensorStorageConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import LazyTensorStorageConfig
 
         cfg = LazyTensorStorageConfig(
@@ -676,6 +725,9 @@ class TestDataConfigs:
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestModuleConfigs:
     """Test cases for modules.py configuration classes."""
 
@@ -687,8 +739,10 @@ class TestModuleConfigs:
         # This is a base class, so it should not have a _target_
         assert not hasattr(cfg, "_target_")
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_mlp_config(self):
         """Test MLPConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.modules import MLPConfig
 
         cfg = MLPConfig(
@@ -723,8 +777,10 @@ class TestModuleConfigs:
         # Note: instantiate() has issues with string class names for MLP
         # This is a known limitation - the MLP constructor expects actual classes
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_convnet_config(self):
         """Test ConvNetConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.modules import (
             ActivationConfig,
             AggregatorConfig,
@@ -785,8 +841,10 @@ class TestModuleConfigs:
         assert cfg.out_keys == ["action"]
         # Note: We can't test instantiation due to missing tensordict dependency
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tanh_normal_model_config(self):
         """Test TanhNormalModelConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             TanhNormalModelConfig,
@@ -817,8 +875,10 @@ class TestModuleConfigs:
         assert cfg.return_log_prob is True
         instantiate(cfg)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tanh_normal_model_config_defaults(self):
         """Test TanhNormalModelConfig with default values."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             TanhNormalModelConfig,
@@ -836,8 +896,10 @@ class TestModuleConfigs:
         assert cfg.exploration_type == "RANDOM"
         instantiate(cfg)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_value_model_config(self):
         """Test ValueModelConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             ValueModelConfig,
@@ -864,11 +926,16 @@ class TestModuleConfigs:
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestCollectorsConfig:
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_collector_config(self, factory, collector):
+        from hydra.utils import instantiate
         from torchrl.collectors import (
             aSyncDataCollector,
             MultiaSyncDataCollector,
@@ -951,10 +1018,12 @@ class TestCollectorsConfig:
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
+@pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestLossConfigs:
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_ppo_loss_config(self, loss_type):
+        from hydra.utils import instantiate
         from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
@@ -994,7 +1063,11 @@ class TestLossConfigs:
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestOptimizerConfigs:
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_adam_config(self):
         """Test AdamConfig."""
         from torchrl.trainers.algorithms.configs.utils import AdamConfig
@@ -1009,6 +1082,9 @@ class TestOptimizerConfigs:
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestTrainerConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
@@ -1123,6 +1199,9 @@ class TestTrainerConfigs:
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestHydraParsing:
     @pytest.fixture(autouse=True, scope="module")
@@ -1599,6 +1678,9 @@ training_env:
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestWeightUpdaterConfigs:
     """Test cases for weight_update.py configuration classes."""

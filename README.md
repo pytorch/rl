@@ -40,6 +40,13 @@ TorchRL now provides a **powerful command-line interface** that lets you train s
 
 ⚠️ **Note**: This is an experimental feature. The API may change in future versions. We welcome feedback and contributions to help improve this implementation!
 
+📋 **Prerequisites**: The training interface requires Hydra for configuration management. Install with:
+```bash
+pip install "torchrl[utils]"
+# or manually:
+pip install hydra-core omegaconf
+```
+
 Check out the [complete CLI documentation](https://github.com/pytorch/rl/tree/main/sota-implementations/ppo_trainer) to get started!
 
 ### LLM API - Complete Framework for Language Model Fine-tuning
@@ -102,6 +109,8 @@ TorchRL now includes an **experimental PPOTrainer** that provides a complete, co
 - 📝 **Minimal Code**: Complete SOTA implementation in [just ~20 lines](sota-implementations/ppo_trainer/train.py)!
 
 **Working Example**: See [`sota-implementations/ppo_trainer/`](sota-implementations/ppo_trainer/) for a complete, working PPO implementation that trains on Pendulum-v1 with full Hydra configuration support.
+
+**Prerequisites**: Requires Hydra for configuration management: `pip install "torchrl[utils]"`
 
 <details>
   <summary>Complete Training Script (sota-implementations/ppo_trainer/train.py)</summary>
@@ -1021,7 +1030,12 @@ install the latest (nightly) PyTorch release or the latest stable version of PyT
 See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
 including `pip3` or other special installation instructions.
 
-TorchRL offers a few pre-defined dependencies such as `"torchrl[tests]"`, `"torchrl[atari]"` etc. 
+TorchRL offers a few pre-defined dependencies such as `"torchrl[tests]"`, `"torchrl[atari]"`, `"torchrl[utils]"` etc. 
+
+For the experimental training interface and configuration system, install:
+```bash
+pip3 install "torchrl[utils]"  # Includes hydra-core and other utilities
+``` 
 
 #### Torchrl
 
