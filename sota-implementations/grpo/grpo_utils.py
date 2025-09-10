@@ -135,7 +135,7 @@ def get_inference_model(
     Raises:
         AssertionError: If the vLLM server or model initialization fails
     """
-    from torchrl.modules.llm.backends.vllm import make_vllm_worker
+    from torchrl.modules.llm.backends import make_vllm_worker
 
     num_devices = cfg.inference_model.num_devices
     if num_devices is None:
