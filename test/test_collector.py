@@ -890,7 +890,7 @@ class EnvThatWaitsFor1Sec(EnvBase):
         return self.full_observation_spec.zero().update(self.full_done_spec.zero())
 
     def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
-        time.sleep(0.1)
+        time.sleep(1)
         return (
             self.full_observation_spec.zero()
             .update(self.full_done_spec.zero())
@@ -902,7 +902,7 @@ class EnvThatWaitsFor1Sec(EnvBase):
 
 if __name__ == "__main__":
     policy = RandomPolicy(EnvThatWaitsFor1Sec().action_spec)
-    c = {collector_cls}([EnvThatWaitsFor1Sec], policy=policy, total_frames=6, frames_per_batch=3)
+    c = {collector_cls}([EnvThatWaitsFor1Sec], policy=policy, total_frames=15, frames_per_batch=5)
     for d in c:
         break
     c.shutdown()
