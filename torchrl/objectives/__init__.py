@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from torchrl.objectives.a2c import A2CLoss
-from torchrl.objectives.common import LossModule
+from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
 from torchrl.objectives.ddpg import DDPGLoss

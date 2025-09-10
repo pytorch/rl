@@ -185,6 +185,133 @@ Trainer and hooks
     UpdateWeights
 
 
+Algorithm-specific trainers (Experimental)
+------------------------------------------
+
+.. warning::
+    The following trainers are experimental/prototype features. The API may change in future versions.
+    Please report any issues or feedback to help improve these implementations.
+
+TorchRL provides high-level, algorithm-specific trainers that combine the modular components
+into complete training solutions with sensible defaults and comprehensive configuration options.
+
+.. currentmodule:: torchrl.trainers.algorithms
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    PPOTrainer
+
+PPOTrainer
+~~~~~~~~~~
+
+The :class:`~torchrl.trainers.algorithms.PPOTrainer` provides a complete PPO training solution
+with configurable defaults and a comprehensive configuration system built on Hydra.
+
+**Key Features:**
+
+- Complete training pipeline with environment setup, data collection, and optimization
+- Extensive configuration system using dataclasses and Hydra
+- Built-in logging for rewards, actions, and training statistics  
+- Modular design built on existing TorchRL components
+- **Minimal code**: Complete SOTA implementation in just ~20 lines!
+
+.. warning::
+    This is an experimental feature. The API may change in future versions. 
+    We welcome feedback and contributions to help improve this implementation!
+
+**Quick Start - Command Line Interface:**
+
+.. code-block:: bash
+
+    # Basic usage - train PPO on Pendulum-v1 with default settings
+    python sota-implementations/ppo_trainer/train.py
+
+**Custom Configuration:**
+
+.. code-block:: bash
+
+    # Override specific parameters via command line
+    python sota-implementations/ppo_trainer/train.py \
+        trainer.total_frames=2000000 \
+        training_env.create_env_fn.base_env.env_name=HalfCheetah-v4 \
+        networks.policy_network.num_cells=[256,256] \
+        optimizer.lr=0.0003
+
+**Environment Switching:**
+
+.. code-block:: bash
+
+    # Switch to a different environment and logger
+    python sota-implementations/ppo_trainer/train.py \
+        env=gym \
+        training_env.create_env_fn.base_env.env_name=Walker2d-v4 \
+        logger=tensorboard
+
+**See All Options:**
+
+.. code-block:: bash
+
+    # View all available configuration options
+    python sota-implementations/ppo_trainer/train.py --help
+
+**Configuration Groups:**
+
+The PPOTrainer configuration is organized into logical groups:
+
+- **Environment**: ``env_cfg__env_name``, ``env_cfg__backend``, ``env_cfg__device``
+- **Networks**: ``actor_network__network__num_cells``, ``critic_network__module__num_cells``
+- **Training**: ``total_frames``, ``clip_norm``, ``num_epochs``, ``optimizer_cfg__lr``
+- **Logging**: ``log_rewards``, ``log_actions``, ``log_observations``
+
+**Working Example:**
+
+The `sota-implementations/ppo_trainer/ <https://github.com/pytorch/rl/tree/main/sota-implementations/ppo_trainer>`_ 
+directory contains a complete, working PPO implementation that demonstrates the simplicity and power of the trainer system:
+
+.. code-block:: python
+
+    import hydra
+    from torchrl.trainers.algorithms.configs import *
+
+    @hydra.main(config_path="config", config_name="config", version_base="1.1")
+    def main(cfg):
+        trainer = hydra.utils.instantiate(cfg.trainer)
+        trainer.train()
+
+    if __name__ == "__main__":
+        main()
+
+*Complete PPO training with full configurability in ~20 lines!*
+
+**Configuration Classes:**
+
+The PPOTrainer uses a hierarchical configuration system with these main config classes.
+
+.. note::
+   The configuration system requires Python 3.10+ due to its use of modern type annotation syntax.
+
+- **Trainer**: :class:`~torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig`
+- **Environment**: :class:`~torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig`, :class:`~torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig`
+- **Networks**: :class:`~torchrl.trainers.algorithms.configs.modules.MLPConfig`, :class:`~torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig`
+- **Data**: :class:`~torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig`, :class:`~torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig`
+- **Objectives**: :class:`~torchrl.trainers.algorithms.configs.objectives.PPOLossConfig`
+- **Optimizers**: :class:`~torchrl.trainers.algorithms.configs.utils.AdamConfig`, :class:`~torchrl.trainers.algorithms.configs.utils.AdamWConfig`
+- **Logging**: :class:`~torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig`, :class:`~torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig`
+
+**Future Development:**
+
+This is the first of many planned algorithm-specific trainers. Future releases will include:
+
+- Additional algorithms: SAC, TD3, DQN, A2C, and more
+- Full integration of all TorchRL components within the configuration system
+- Enhanced configuration validation and error reporting
+- Distributed training support for high-level trainers
+
+See the complete `configuration system documentation <https://github.com/pytorch/rl/tree/main/torchrl/trainers/algorithms/configs>`_ for all available options.
+
+
 Builders
 --------
 

@@ -11,7 +11,7 @@ import os
 import time
 import weakref
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
@@ -331,7 +331,7 @@ class BatchedEnvBase(EnvBase):
             )
 
         create_env_kwargs = {} if create_env_kwargs is None else create_env_kwargs
-        if isinstance(create_env_kwargs, dict):
+        if isinstance(create_env_kwargs, Mapping):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
             ]

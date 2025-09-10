@@ -20,7 +20,7 @@ from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import DataCollectorBase
 from torchrl.data import (
     LazyMemmapStorage,
     MultiStep,
@@ -196,7 +196,7 @@ def make_trainer(
         >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
-        >>> from torchrl.collectors.collectors import SyncDataCollector
+        >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper

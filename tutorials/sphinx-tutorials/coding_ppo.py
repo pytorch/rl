@@ -490,12 +490,12 @@ print("Running value:", value_module(env.reset()))
 # on which ``device`` the policy should be executed, etc. They are also
 # designed to work efficiently with batched and multiprocessed environments.
 #
-# The simplest data collector is the :class:`~torchrl.collectors.collectors.SyncDataCollector`:
+# The simplest data collector is the :class:`~torchrl.collectors.SyncDataCollector`:
 # it is an iterator that you can use to get batches of data of a given length, and
 # that will stop once a total number of frames (``total_frames``) have been
 # collected.
-# Other data collectors (:class:`~torchrl.collectors.collectors.MultiSyncDataCollector` and
-# :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`) will execute
+# Other data collectors (:class:`~torchrl.collectors.MultiSyncDataCollector` and
+# :class:`~torchrl.collectors.MultiaSyncDataCollector`) will execute
 # the same operations in synchronous and asynchronous manner over a
 # set of multiprocessed workers.
 #

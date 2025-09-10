@@ -25,9 +25,33 @@
 
 ## 🚀 What's New
 
+### 🚀 **Command-Line Training Interface** - Train RL Agents Without Writing Code! (Experimental)
+
+TorchRL now provides a **powerful command-line interface** that lets you train state-of-the-art RL agents with simple bash commands! No Python scripting required - just run training with customizable parameters:
+
+- 🎯 **One-Command Training**: `python sota-implementations/ppo_trainer/train.py`
+- ⚙️ **Full Customization**: Override any parameter via command line: `trainer.total_frames=2000000 optimizer.lr=0.0003`
+- 🌍 **Multi-Environment Support**: Switch between Gym, Brax, DM Control, and more with `env=gym training_env.create_env_fn.base_env.env_name=HalfCheetah-v4`
+- 📊 **Built-in Logging**: TensorBoard, Weights & Biases, CSV logging out of the box
+- 🔧 **Hydra-Powered**: Leverages Hydra's powerful configuration system for maximum flexibility
+- 🏃‍♂️ **Production Ready**: Same robust training pipeline as our SOTA implementations
+
+**Perfect for**: Researchers, practitioners, and anyone who wants to train RL agents without diving into implementation details. 
+
+⚠️ **Note**: This is an experimental feature. The API may change in future versions. We welcome feedback and contributions to help improve this implementation!
+
+📋 **Prerequisites**: The training interface requires Hydra for configuration management. Install with:
+```bash
+pip install "torchrl[utils]"
+# or manually:
+pip install hydra-core omegaconf
+```
+
+Check out the [complete CLI documentation](https://github.com/pytorch/rl/tree/main/sota-implementations/ppo_trainer) to get started!
+
 ### LLM API - Complete Framework for Language Model Fine-tuning
 
-TorchRL now includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This new framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
+TorchRL also includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This new framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
 
 - 🤖 **Unified LLM Wrappers**: Seamless integration with Hugging Face models and vLLM inference engines - more to come!
 - 💬 **Conversation Management**: Advanced [`History`](torchrl/data/llm/history.py) class for multi-turn dialogue with automatic chat template detection
@@ -73,6 +97,67 @@ for data in collector:
 ```
 
 </details>
+
+### 🧪 PPOTrainer (Experimental) - High-Level Training Interface
+
+TorchRL now includes an **experimental PPOTrainer** that provides a complete, configurable PPO training solution! This prototype feature combines TorchRL's modular components into a cohesive training system with sensible defaults:
+
+- 🎯 **Complete Training Pipeline**: Handles environment setup, data collection, loss computation, and optimization automatically
+- ⚙️ **Extensive Configuration**: Comprehensive Hydra-based config system for easy experimentation and hyperparameter tuning
+- 📊 **Built-in Logging**: Automatic tracking of rewards, actions, episode completion rates, and training statistics
+- 🔧 **Modular Design**: Built on existing TorchRL components (collectors, losses, replay buffers) for maximum flexibility
+- 📝 **Minimal Code**: Complete SOTA implementation in [just ~20 lines](sota-implementations/ppo_trainer/train.py)!
+
+**Working Example**: See [`sota-implementations/ppo_trainer/`](sota-implementations/ppo_trainer/) for a complete, working PPO implementation that trains on Pendulum-v1 with full Hydra configuration support.
+
+**Prerequisites**: Requires Hydra for configuration management: `pip install "torchrl[utils]"`
+
+<details>
+  <summary>Complete Training Script (sota-implementations/ppo_trainer/train.py)</summary>
+
+```python
+import hydra
+from torchrl.trainers.algorithms.configs import *
+
+@hydra.main(config_path="config", config_name="config", version_base="1.1")
+def main(cfg):
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    trainer.train()
+
+if __name__ == "__main__":
+    main()
+```
+*Complete PPO training in ~20 lines with full configurability.*
+
+</details>
+
+<details>
+  <summary>API Usage Examples</summary>
+
+```bash
+# Basic usage - train PPO on Pendulum-v1 with default settings
+python sota-implementations/ppo_trainer/train.py
+
+# Custom configuration with command-line overrides
+python sota-implementations/ppo_trainer/train.py \
+    trainer.total_frames=2000000 \
+    training_env.create_env_fn.base_env.env_name=HalfCheetah-v4 \
+    networks.policy_network.num_cells=[256,256] \
+    optimizer.lr=0.0003
+
+# Use different environment and logger
+python sota-implementations/ppo_trainer/train.py \
+    env=gym \
+    training_env.create_env_fn.base_env.env_name=Walker2d-v4 \
+    logger=tensorboard
+
+# See all available options
+python sota-implementations/ppo_trainer/train.py --help
+```
+
+</details>
+
+**Future Plans**: Additional algorithm trainers (SAC, TD3, DQN) and full integration of all TorchRL components within the configuration system are planned for upcoming releases.
 
 ## Key features
 
@@ -932,7 +1017,7 @@ source torchrl/bin/activate  # On Windows use: venv\Scripts\activate
 Or create a conda environment where the packages will be installed.
 
 ```
-conda create --name torchrl python=3.9
+conda create --name torchrl python=3.10
 conda activate torchrl
 ```
 
@@ -945,7 +1030,12 @@ install the latest (nightly) PyTorch release or the latest stable version of PyT
 See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
 including `pip3` or other special installation instructions.
 
-TorchRL offers a few pre-defined dependencies such as `"torchrl[tests]"`, `"torchrl[atari]"` etc. 
+TorchRL offers a few pre-defined dependencies such as `"torchrl[tests]"`, `"torchrl[atari]"`, `"torchrl[utils]"` etc. 
+
+For the experimental training interface and configuration system, install:
+```bash
+pip3 install "torchrl[utils]"  # Includes hydra-core and other utilities
+``` 
 
 #### Torchrl
 
@@ -989,7 +1079,7 @@ Importantly, the nightly builds require the nightly builds of PyTorch too.
 Also, a local build of torchrl with the nightly build of tensordict may fail - install both nightlies or both local builds but do not mix them.
 
 
-**Disclaimer**: As of today, TorchRL is roughly compatible with any pytorch version >= 2.1 and installing it will not
+**Disclaimer**: As of today, TorchRL requires Python 3.10+ and is roughly compatible with any pytorch version >= 2.1. Installing it will not
 directly require a newer version of pytorch to be installed. Indirectly though, tensordict still requires the latest
 PyTorch to be installed and we are working hard to loosen that requirement. 
 The C++ binaries of TorchRL (mainly for prioritized replay buffers) will only work with PyTorch 2.7.0 and above.

@@ -60,6 +60,13 @@ try:
     from hydra.core.config_store import ConfigStore
 
     _has_hydra = True
+
+    @pytest.fixture(autouse=True, scope="module")
+    def clear_hydra():
+        from hydra.core.global_hydra import GlobalHydra
+
+        GlobalHydra.instance().clear()
+
 except ImportError:
     _has_hydra = False
 

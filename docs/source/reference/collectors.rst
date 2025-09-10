@@ -1,4 +1,4 @@
-from torchrl.collectors import SyncDataCollector.. currentmodule:: torchrl.collectors
+.. currentmodule:: torchrl.collectors
 
 torchrl.collectors package
 ==========================
