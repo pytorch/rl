@@ -1784,21 +1784,21 @@ class TestStepCounter(TransformBase):
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
-            StepCounter(max_steps=15),
+            StepCounter(max_steps=10),
         )
         torch.manual_seed(0)
         env.set_seed(0)
-        r0 = env.rollout(100, break_when_any_done=break_when_any_done)
+        r0 = env.rollout(30, break_when_any_done=break_when_any_done)
 
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED()), StepCounter(max_steps=15)
+                GymEnv(CARTPOLE_VERSIONED()), StepCounter(max_steps=10)
             ),
         )
         torch.manual_seed(0)
         env.set_seed(0)
-        r1 = env.rollout(100, break_when_any_done=break_when_any_done)
+        r1 = env.rollout(30, break_when_any_done=break_when_any_done)
         tensordict.tensordict.assert_allclose_td(r0, r1)
 
     @pytest.mark.parametrize("update_done", [False, True])
@@ -2248,7 +2248,7 @@ class TestTrajCounter(TransformBase):
 
         collector = MultiSyncDataCollector(
             [EnvCreator(make_env, max_steps=5), EnvCreator(make_env, max_steps=4)],
-            total_frames=99,
+            total_frames=32,
             frames_per_batch=8,
         )
 

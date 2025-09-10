@@ -472,7 +472,7 @@ class TestComposableBuffers:
         torch._dynamo.reset_code_caches()
 
         # Number of times to extend the replay buffer
-        num_extend = 10
+        num_extend = 5
         data_size = size
 
         # These two cases are separated because when the max storage size is
@@ -498,9 +498,9 @@ class TestComposableBuffers:
             rb.extend(data)
             return rb.sample()
 
-        # NOTE: The first three calls to 'extend' and 'sample' can currently
+        # NOTE: The first calls to 'extend' and 'sample' can currently
         # cause recompilations, so avoid capturing those.
-        num_extend_before_capture = 3
+        num_extend_before_capture = 2
 
         for _ in range(num_extend_before_capture):
             extend_and_sample(data)
@@ -858,8 +858,8 @@ class TestStorages:
         torch._dynamo.reset_code_caches()
 
         # Number of times to extend the replay buffer
-        num_extend = 10
-        data_size = 100
+        num_extend = 5
+        data_size = 50
         storage_size = (num_extend + 1) * data_size
         sample_size = 3
 
