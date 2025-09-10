@@ -2873,12 +2873,14 @@
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
                     <span class="p">(</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">cur_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
                 <span class="p">)</span>
+
+            <span class="c1"># Set event only after non-tensor data is sent to avoid race condition</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">cur_td</span>
 
@@ -2905,7 +2907,6 @@
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="c1"># Make sure the root is updated</span>
             <span class="n">root_shared_tensordict</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="nb">input</span><span class="p">))</span>
@@ -2914,6 +2915,9 @@
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
                     <span class="p">(</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">next_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
                 <span class="p">)</span>
+
+            <span class="c1"># Set event only after non-tensor data is sent to avoid race condition</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">next_td</span>
 
@@ -2947,12 +2951,14 @@
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
                 <span class="n">ntd</span> <span class="o">=</span> <span class="n">root_next_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">)</span>
                 <span class="n">ntd</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">td_next</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">))</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">ntd</span><span class="p">))</span>
+
+            <span class="c1"># Set event only after non-tensor data is sent to avoid race condition</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">td</span><span class="p">,</span> <span class="n">root_next_td</span>
 
