@@ -1028,11 +1028,12 @@ def make_async_vllm_engine(
 
     # Create engine args
     kwargs.setdefault("distributed_executor_backend", "ray")
+    # Don't explicitly set enable_prefix_caching to avoid conflicts
+    kwargs.setdefault("enable_prefix_caching", True)
     engine_args = AsyncEngineArgs(
         model=model_name,
         tensor_parallel_size=num_devices,
         worker_cls="torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker",
-        enable_prefix_caching=True,
         **kwargs,
     )
 
