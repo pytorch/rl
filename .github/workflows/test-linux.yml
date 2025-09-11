@@ -101,7 +101,7 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04"
+      docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
