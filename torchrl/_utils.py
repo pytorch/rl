@@ -449,8 +449,8 @@ class implement_for:
     def __init__(
         self,
         module_name: str | Callable,
-        from_version: str = None,
-        to_version: str = None,
+        from_version: str | None = None,
+        to_version: str | None = None,
         *,
         class_method: bool = False,
         compilable: bool = False,
