@@ -48,9 +48,9 @@ from torchrl.data.replay_buffers.utils import (
 )
 
 try:
-    from torch.compiler import is_compiling
+    from torch.compiler import disable as compile_disable, is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling
+    from torch._dynamo import disable as compile_disable, is_compiling
 
 
 class Storage:
@@ -104,7 +104,6 @@ class Storage:
         return _attached_entities_list
 
     # TODO: Check this
-    # @torch.compiler.disable()
     @torch._dynamo.assume_constant_result
     def _attached_entities_iter(self):
         return self._attached_entities
@@ -165,7 +164,7 @@ class Storage:
         ...
 
     # TODO: Without this disable, compiler recompiles due to changing len(self) guards.
-    @torch.compiler.disable()
+    @compile_disable()
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
         if self.ndim == 1:
@@ -702,12 +701,12 @@ class TensorStorage(Storage):
 
     # TODO: Without this disable, compiler recompiles for back-to-back calls.
     # Figuring out a way to avoid this disable would give better performance.
-    @torch.compiler.disable()
+    @compile_disable()
     def _rand_given_ndim(self, batch_size):
         return self._rand_given_ndim_impl(batch_size)
 
     # At the moment, this is separated into its own function so that we can test
-    # it without the `torch._dynamo.disable` and detect if future updates to the
+    # it without the `disable` and detect if future updates to the
     # compiler fix the recompile issue.
     def _rand_given_ndim_impl(self, batch_size):
         if self.ndim == 1:
@@ -978,7 +977,7 @@ class TensorStorage(Storage):
             return tree_map(lambda x: x[index], storage)
 
     # TODO: Without this disable, compiler recompiles due to changing _len_value guards.
-    @torch.compiler.disable()
+    @compile_disable()
     def __len__(self):
         return self._len
 

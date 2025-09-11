@@ -4266,11 +4266,15 @@ class TestSAC(LossModuleTestBase):
             loss_fn_no_vmap.make_value_estimator(td_est)
 
         torch.manual_seed(0)
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
-            loss_no_vmap = loss_fn_no_vmap(td)
-        assert_allclose_td(loss_vmap, loss_no_vmap)
+        with pytest.raises(
+            NotImplementedError,
+            match="This implementation is not supported for torch<2.7",
+        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+            with _check_td_steady(td), pytest.warns(
+                UserWarning, match="No target network updater"
+            ):
+                loss_no_vmap = loss_fn_no_vmap(td)
+            assert_allclose_td(loss_vmap, loss_no_vmap)
 
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -5235,12 +5239,16 @@ class TestDiscreteSAC(LossModuleTestBase):
         if td_est is not None:
             loss_fn_no_vmap.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
-            torch.manual_seed(1)
-            loss_no_vmap = loss_fn_no_vmap(td)
-        assert_allclose_td(loss_vmap, loss_no_vmap)
+        with pytest.raises(
+            NotImplementedError,
+            match="This implementation is not supported for torch<2.7",
+        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+            with _check_td_steady(td), pytest.warns(
+                UserWarning, match="No target network updater"
+            ):
+                torch.manual_seed(1)
+                loss_no_vmap = loss_fn_no_vmap(td)
+            assert_allclose_td(loss_vmap, loss_no_vmap)
 
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
@@ -5979,10 +5987,14 @@ class TestCrossQ(LossModuleTestBase):
         if td_est is not None:
             loss_fn_no_vmap.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
-            torch.manual_seed(1)
-            loss_no_vmap = loss_fn_no_vmap(td)
-        assert_allclose_td(loss_vmap, loss_no_vmap)
+        with pytest.raises(
+            NotImplementedError,
+            match="This implementation is not supported for torch<2.7",
+        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+            with _check_td_steady(td):
+                torch.manual_seed(1)
+                loss_no_vmap = loss_fn_no_vmap(td)
+            assert_allclose_td(loss_vmap, loss_no_vmap)
 
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -7725,12 +7737,16 @@ class TestCQL(LossModuleTestBase):
         if td_est is not None:
             loss_fn_no_vmap.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
-            torch.manual_seed(1)
-            loss_no_vmap = loss_fn_no_vmap(td)
-        assert_allclose_td(loss_vmap, loss_no_vmap)
+        with pytest.raises(
+            NotImplementedError,
+            match="This implementation is not supported for torch<2.7",
+        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+            with _check_td_steady(td), pytest.warns(
+                UserWarning, match="No target network updater"
+            ):
+                torch.manual_seed(1)
+                loss_no_vmap = loss_fn_no_vmap(td)
+            assert_allclose_td(loss_vmap, loss_no_vmap)
 
     @pytest.mark.parametrize("delay_actor", (True,))
     @pytest.mark.parametrize("delay_qvalue", (True,))
@@ -12796,12 +12812,16 @@ class TestIQL(LossModuleTestBase):
         if td_est is not None:
             loss_fn_no_vmap.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ):
-            torch.manual_seed(1)
-            loss_no_vmap = loss_fn_no_vmap(td)
-        assert_allclose_td(loss_vmap, loss_no_vmap)
+        with pytest.raises(
+            NotImplementedError,
+            match="This implementation is not supported for torch<2.7",
+        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+            with _check_td_steady(td), pytest.warns(
+                UserWarning, match="No target network updater"
+            ):
+                torch.manual_seed(1)
+                loss_no_vmap = loss_fn_no_vmap(td)
+            assert_allclose_td(loss_vmap, loss_no_vmap)
 
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -14507,10 +14527,14 @@ class TestValues:
             shifted=False,
             deactivate_vmap=True,
         )
-        with set_recurrent_mode(True):
-            r1 = gae(vals.copy())
-        a1 = r1["advantage"]
-        torch.testing.assert_close(a0, a1)
+        with pytest.raises(
+            NotImplementedError,
+            match="This implementation is not supported for torch<2.7",
+        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+            with set_recurrent_mode(True):
+                r1 = gae(vals.copy())
+            a1 = r1["advantage"]
+            torch.testing.assert_close(a0, a1)
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
