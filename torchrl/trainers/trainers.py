@@ -1051,6 +1051,7 @@ class LogScalar(TrainerHookBase):
     Args:
         key (NestedKey): the key where to find the value in the input batch.
             Can be a string for simple keys or a tuple for nested keys.
+            Default is `torchrl.trainers.trainers.REWARD_KEY` (= `("next", "reward")`).
         logname (str, optional): name of the metric to be logged. If None, will use
             the key as the log name. Default is None.
         log_pbar (bool, optional): if ``True``, the value will be logged on
@@ -1077,7 +1078,7 @@ class LogScalar(TrainerHookBase):
 
     def __init__(
         self,
-        key: NestedKey,
+        key: NestedKey = REWARD_KEY,
         logname: str | None = None,
         log_pbar: bool = False,
         include_std: bool = True,
