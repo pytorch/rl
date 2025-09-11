@@ -5,13 +5,9 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 
 import pytest
 import torch
-
-# Set environment variable for vLLM V0 engine
-os.environ["VLLM_USE_V1"] = "0"
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
