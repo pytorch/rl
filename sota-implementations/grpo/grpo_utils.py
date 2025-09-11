@@ -153,15 +153,54 @@ def get_inference_model(
     compile_model = getattr(
         cfg.inference_model, "compile", False
     )  # Disabled by default for GRPO
-    inference_server = AsyncVLLM.from_pretrained(
-        model_name=model_name,
-        num_devices=num_devices,
-        devices=vllm_devices,
-        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        enforce_eager=cfg.inference_model.enforce_eager,
-        verbose=verbose,
-        compile=compile_model,
-    )
+
+    # Build parameters dict for AsyncVLLM with all config options
+    inference_params = {
+        "model_name": model_name,
+        "num_devices": num_devices,
+        "devices": vllm_devices,
+        "gpu_memory_utilization": cfg.inference_model.gpu_memory_utilization,
+        "enforce_eager": cfg.inference_model.enforce_eager,
+        "verbose": verbose,
+        "compile": compile_model,
+    }
+
+    # CRITICAL FIX: Pass attention implementation from config to prevent Flash Attention errors
+    if hasattr(cfg.inference_model, "attn_implementation"):
+        inference_params["attention_backend"] = cfg.inference_model.attn_implementation
+        torchrl_logger.info(
+            f"Using attention backend: {cfg.inference_model.attn_implementation}"
+        )
+
+    # Add other common vLLM parameters from config if present
+    optional_vllm_params = [
+        "max_model_len",
+        "dtype",
+        "trust_remote_code",
+        "seed",
+        "swap_space",
+        "cpu_offload_gb",
+        "enable_prefix_caching",
+        "tensor_parallel_size",
+        "pipeline_parallel_size",
+    ]
+
+    for param in optional_vllm_params:
+        if hasattr(cfg.inference_model, param):
+            value = getattr(cfg.inference_model, param)
+            if value is not None:
+                inference_params[param] = value
+
+    # Handle torch_dtype specifically (convert string to torch dtype)
+    if hasattr(cfg.inference_model, "torch_dtype"):
+        dtype_str = cfg.inference_model.torch_dtype
+        if dtype_str is not None:
+            if isinstance(dtype_str, str):
+                inference_params["dtype"] = getattr(torch, dtype_str)
+            else:
+                inference_params["dtype"] = dtype_str
+
+    inference_server = AsyncVLLM.from_pretrained(**inference_params)
     assert inference_server is not None
     if tokenizer is None:
         from transformers import AutoTokenizer
