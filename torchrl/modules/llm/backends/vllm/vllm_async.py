@@ -657,6 +657,7 @@ class AsyncVLLM(RLvLLMEngine):
         devices: list[torch.device | int] | None = None,
         num_devices: int | None = None,
         num_replicas: int = 1,
+        verbose: bool = True,
         **kwargs,
     ) -> AsyncVLLM:
         """Create an AsyncVLLM instance from a pretrained model.
@@ -669,6 +670,7 @@ class AsyncVLLM(RLvLLMEngine):
             devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
             num_devices (int, optional): Number of devices to use. Exclusive with devices.
             num_replicas (int): Number of engine replicas to create.
+            verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
             **kwargs: Additional arguments passed to AsyncEngineArgs.
 
         Returns:
@@ -695,6 +697,7 @@ class AsyncVLLM(RLvLLMEngine):
             devices=devices,
             num_devices=num_devices,
             num_replicas=num_replicas,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -967,6 +970,7 @@ def make_async_vllm_engine(
     devices: list[torch.device | int] | None = None,
     num_devices: int | None = None,
     num_replicas: int = 1,
+    verbose: bool = False,
     **kwargs,
 ) -> AsyncVLLM:
     """Create an async vLLM engine service.
@@ -976,6 +980,7 @@ def make_async_vllm_engine(
         devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
         num_devices (int, optional): Number of devices to use. Exclusive with devices.
         num_replicas (int): Number of engine replicas to create.
+        verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to False.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1025,6 +1030,20 @@ def make_async_vllm_engine(
             device_idx = device if isinstance(device, int) else device.index
             if device_idx >= torch.cuda.device_count():
                 raise ValueError(f"Invalid device index: {device_idx}")
+
+    # Configure verbose logging if requested
+    if verbose:
+        import logging
+
+        # Enable vLLM's throughput logging by setting the appropriate log level
+        logging.getLogger("vllm.engine.metrics").setLevel(logging.INFO)
+        logging.getLogger("vllm").setLevel(logging.INFO)
+
+        # vLLM logs throughput stats at INFO level every few seconds
+        # The stats include: prompt throughput, generation throughput, running/pending requests, GPU KV cache usage
+        torchrl_logger.info(
+            "Enabled verbose vLLM logging - throughput statistics will be displayed"
+        )
 
     # Create engine args
     kwargs.setdefault("distributed_executor_backend", "ray")

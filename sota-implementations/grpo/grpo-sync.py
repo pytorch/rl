@@ -13,7 +13,7 @@ from pathlib import Path
 import hydra
 
 from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 
@@ -75,6 +75,7 @@ def train(
     replay_buffer: ReplayBuffer,
     cfg: DictConfig,
     collector: RayLLMCollector,
+    inference_policy,
     devices: list[int] | None = None,
 ):
     """Main training loop for GRPO sync.
@@ -109,29 +110,21 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # Get metadata
-    model_metadata = vLLMUpdater.get_model_metadata(policy_training)
+    # Get vLLM engine from inference policy
+    vllm_engine = (
+        inference_policy.model
+    )  # The model attribute should be an RLvLLMEngine
 
-    # Create weight updater with remote LLM
-    ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
-    weight_updater: vLLMUpdater = make_weight_updater(
-        master_address="localhost"
-        if not ray_managed_externally
-        else ray.util.get_node_ip_address(),
-        master_port=None,  # Will auto-assign an open port
-        model_metadata=model_metadata,
-        vllm_tp_size=cfg.inference_model.num_devices
-        if cfg.inference_model.num_devices is not None
-        else len(cfg.inference_model.get("devices", [1])),
-    )
+    # Create weight updater with vLLM engine
+    weight_updater: vLLMUpdaterV2 = make_weight_updater(vllm_engine=vllm_engine)
     collector.weight_updater = weight_updater
 
     # Initialize the weight updater
-    weight_updater.init(model_metadata=model_metadata)
+    weight_updater.init()
 
     # First update the weights
     with timeit("update_policy_weights"):
-        weight_updater.push_weights(policy_training)
+        weight_updater.push_weights_from_transformers(policy_training)
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
@@ -289,7 +282,7 @@ def train(
         # Update policy weights
         with timeit("update_policy_weights"):
             torchrl_logger.info("Updating policy weights...")
-            weight_updater.push_weights(policy_training)
+            weight_updater.push_weights_from_transformers(policy_training)
             # TODO: do we need this? Does it interfere with other processes?
             # torch.cuda.empty_cache()
             gc.collect()
@@ -436,7 +429,11 @@ def main(cfg):
     # launch training
     ray.get(
         train_handler.remote(
-            rb, cfg, collector, devices=device_config["train_model_devices"]
+            rb,
+            cfg,
+            collector,
+            inference_policy,
+            devices=device_config["train_model_devices"],
         )
     )
 

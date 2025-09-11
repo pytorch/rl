@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from typing import Any, Literal
 
 import torch
@@ -13,7 +12,7 @@ from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
@@ -135,29 +134,29 @@ def get_inference_model(
     Raises:
         AssertionError: If the vLLM server or model initialization fails
     """
-    from torchrl.modules.llm.backends import make_vllm_worker
+    from torchrl.modules.llm.backends.vllm import AsyncVLLM
 
     num_devices = cfg.inference_model.num_devices
     if num_devices is None:
         vllm_devices = devices if devices is not None else [1]
+        num_devices = len(vllm_devices)
     else:
         vllm_devices = None
     torchrl_logger.info(
-        f"Creating inference model with num_devices={num_devices}, devices={vllm_devices}"
+        f"Creating AsyncVLLM inference model with num_devices={num_devices}, devices={vllm_devices}"
     )
 
     model_name = cfg.model.name
 
-    # vLLM handles device mapping internally
-    inference_server = make_vllm_worker(
+    # Use AsyncVLLM for better performance and async processing
+    verbose = getattr(cfg.inference_model, "verbose", True)
+    inference_server = AsyncVLLM.from_pretrained(
         model_name=model_name,
-        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
         num_devices=num_devices,
-        devices=list(vllm_devices)
-        if vllm_devices is not None
-        else None,  # Convert to list for type compatibility
-        make_ray_worker=make_ray_worker,
+        devices=vllm_devices,
+        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
         enforce_eager=cfg.inference_model.enforce_eager,
+        verbose=verbose,
     )
     assert inference_server is not None
     if tokenizer is None:
@@ -415,42 +414,22 @@ def get_hf_model(
 
 
 def make_weight_updater(
-    policy_training=None,
-    master_address=None,
-    master_port=None,
-    model_metadata=None,
-    vllm_tp_size=None,
-) -> vLLMUpdater | Callable[[], vLLMUpdater]:
-    """Creates a vLLM weight updater for the policy.
+    vllm_engine,
+) -> vLLMUpdaterV2:
+    """Creates a vLLM weight updater for the policy using the new V2 API.
 
-    This function can be used in two ways:
-    1. Synchronous mode (grpo.py): Pass policy_training to get an initialized updater with metadata
-    2. Async mode (grpo-async.py): Pass master_address, master_port, model_metadata, and remote_actor
+    The V2 updater is much simpler - it just needs a vLLM engine that implements
+    the RLvLLMEngine interface (like RayLLMWorker, LocalLLMWrapper, or AsyncVLLM).
 
     Args:
-        policy_training (Optional[TransformersWrapper]): The training policy model. Required for sync mode.
-        master_address (Optional[str]): Ray master address for async mode.
-        master_port (Optional[int]): Ray master port for async mode.
-        model_metadata (Optional[dict]): Model metadata for async mode. If not provided but policy_training is,
-            it will be extracted from the policy.
-        vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
+        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface.
+            This is typically obtained from the inference policy's model attribute.
 
     Returns:
-        vLLMUpdater | partial[vLLMUpdater]: An instance of the weight updater configured to update
-            the vLLM worker's weights.
+        vLLMUpdaterV2: An instance of the weight updater configured to update
+            the vLLM worker's weights through the engine's own methods.
     """
-    if model_metadata is None and policy_training is not None:
-        # Extract metadata from training policy
-        model_metadata = {
-            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
-        }
-
-    return vLLMUpdater(
-        master_address=master_address,
-        master_port=master_port,
-        model_metadata=model_metadata,
-        vllm_tp_size=vllm_tp_size,
-    )
+    return vLLMUpdaterV2(vllm_engine=vllm_engine)
 
 
 def compute_device_allocation(cfg):
