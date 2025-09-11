@@ -658,6 +658,7 @@ class AsyncVLLM(RLvLLMEngine):
         num_devices: int | None = None,
         num_replicas: int = 1,
         verbose: bool = True,
+        compile: bool = True,
         **kwargs,
     ) -> AsyncVLLM:
         """Create an AsyncVLLM instance from a pretrained model.
@@ -671,6 +672,7 @@ class AsyncVLLM(RLvLLMEngine):
             num_devices (int, optional): Number of devices to use. Exclusive with devices.
             num_replicas (int): Number of engine replicas to create.
             verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
+            compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
             **kwargs: Additional arguments passed to AsyncEngineArgs.
 
         Returns:
@@ -698,6 +700,7 @@ class AsyncVLLM(RLvLLMEngine):
             num_devices=num_devices,
             num_replicas=num_replicas,
             verbose=verbose,
+            compile=compile,
             **kwargs,
         )
 
@@ -970,7 +973,8 @@ def make_async_vllm_engine(
     devices: list[torch.device | int] | None = None,
     num_devices: int | None = None,
     num_replicas: int = 1,
-    verbose: bool = False,
+    verbose: bool = True,
+    compile: bool = True,
     **kwargs,
 ) -> AsyncVLLM:
     """Create an async vLLM engine service.
@@ -980,7 +984,8 @@ def make_async_vllm_engine(
         devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
         num_devices (int, optional): Number of devices to use. Exclusive with devices.
         num_replicas (int): Number of engine replicas to create.
-        verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to False.
+        verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
+        compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1049,6 +1054,15 @@ def make_async_vllm_engine(
     kwargs.setdefault("distributed_executor_backend", "ray")
     # Don't explicitly set enable_prefix_caching to avoid conflicts
     kwargs.setdefault("enable_prefix_caching", True)
+
+    # Set compilation flag - this controls whether vLLM will compile the model for better performance
+    # Disabled by default in GRPO since it can cause issues during training
+    if "compilation_config" not in kwargs:
+        if compile:
+            kwargs["compilation_config"] = {"enabled": True}
+        else:
+            kwargs["compilation_config"] = {"enabled": False}
+
     engine_args = AsyncEngineArgs(
         model=model_name,
         tensor_parallel_size=num_devices,

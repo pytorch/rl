@@ -150,6 +150,9 @@ def get_inference_model(
 
     # Use AsyncVLLM for better performance and async processing
     verbose = getattr(cfg.inference_model, "verbose", True)
+    compile_model = getattr(
+        cfg.inference_model, "compile", False
+    )  # Disabled by default for GRPO
     inference_server = AsyncVLLM.from_pretrained(
         model_name=model_name,
         num_devices=num_devices,
@@ -157,6 +160,7 @@ def get_inference_model(
         gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
         enforce_eager=cfg.inference_model.enforce_eager,
         verbose=verbose,
+        compile=compile_model,
     )
     assert inference_server is not None
     if tokenizer is None:

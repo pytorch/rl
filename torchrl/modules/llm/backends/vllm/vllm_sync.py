@@ -28,9 +28,19 @@ try:
 
     _has_vllm = True
 except ImportError:
-    LLM = None
-    Worker = None
-    get_open_port = None
+
+    class LLM:
+        """Placeholder for LLM class when vLLM is not installed."""
+
+    class Worker:
+        """Placeholder for Worker class when vLLM is not installed."""
+
+    def get_open_port():
+        """Placeholder for get_open_port function when vLLM is not installed."""
+        raise ImportError(
+            "vllm is not installed. Please install it with `pip install vllm`."
+        )
+
     _has_vllm = False
 
 
