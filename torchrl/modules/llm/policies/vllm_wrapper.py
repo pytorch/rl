@@ -1012,6 +1012,9 @@ class vLLMWrapper(LLMWrapperBase):
                 text_full, prompt_histories, self.chat_template_name, self.tokenizer
             )
             history_chat_flat.response = h_responses
+            history_chat_flat.full = history_chat_flat.prompt.append(
+                h_responses, inplace=False
+            )
         result.set(self.history_key, history_chat)
         return result
 
