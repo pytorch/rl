@@ -54,6 +54,8 @@ except ImportError:
             )
 
 
+TIMEOUT_SECONDS = os.getenv("TORCHRL_VLLM_TIMEOUT_SECONDS", 300)
+
 try:
     import vllm
     from vllm import (
@@ -689,19 +691,19 @@ class AsyncVLLM(RLvLLMEngine):
 
             self.actors.append(actor)
 
-            torchrl_logger.info(f"Waiting for actor {i + 1} to be ready: {actor=}")
-            # Wait for this actor to be ready before creating the next one
-            ready_future = actor.ready.remote()
-            try:
-                ray.get(
-                    ready_future, timeout=300
-                )  # 5 minute timeout for engine initialization
-                torchrl_logger.info(f"✅ Actor {i + 1}/{self.num_replicas} is ready")
-            except Exception as e:
-                torchrl_logger.error(
-                    f"❌ Failed to initialize actor {i + 1}/{self.num_replicas}: {e}"
-                )
-                raise
+        torchrl_logger.info("Waiting for actors to be ready")
+        # Wait for this actor to be ready before creating the next one
+        ready_futures = [actor.ready.remote() for actor in self.actors]
+        try:
+            ray.get(
+                ready_futures, timeout=TIMEOUT_SECONDS
+            )  # 5 minute timeout for engine initialization
+            torchrl_logger.info("✅ Actors are ready")
+        except Exception as e:
+            torchrl_logger.error(
+                f"❌ Failed to initialize actors within {TIMEOUT_SECONDS} seconds: {e}. You can increase the timeout by setting the TORCHRL_VLLM_TIMEOUT_SECONDS environment variable."
+            )
+            raise
 
         # Store the first placement group for backward compatibility
         self._placement_group = (
@@ -712,8 +714,6 @@ class AsyncVLLM(RLvLLMEngine):
         torchrl_logger.info(
             f"✅ Successfully launched {len(self.actors)} async vLLM engine actors"
         )
-        # create a default load balancer
-        self.create_load_balancer("requests")
 
     @classmethod
     def launch(
@@ -732,6 +732,8 @@ class AsyncVLLM(RLvLLMEngine):
         """
         service = cls(engine_args, num_replicas)
         service._launch()
+        # create a default load balancer
+        service.create_load_balancer("requests")
         return service
 
     @classmethod
@@ -1143,7 +1145,7 @@ class AsyncVLLM(RLvLLMEngine):
             strategy: Load balancing strategy - either "requests" or "kv-cache".
 
         Returns:
-            LoadBalancer: Configured load balancer instance.
+            LoadBalancer: Configured load balancer instance. This is stored in the AsyncVLLM instance.
 
         Example:
             >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=3)
@@ -1155,7 +1157,9 @@ class AsyncVLLM(RLvLLMEngine):
                 "AsyncVLLM service must be launched before creating load balancer"
             )
 
-        return LoadBalancer(self, strategy)
+        load_balancer = LoadBalancer(self, strategy)
+        self._load_balancer = load_balancer
+        return load_balancer
 
 
 class LoadBalancer:
