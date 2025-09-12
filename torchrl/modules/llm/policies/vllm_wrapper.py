@@ -457,9 +457,24 @@ class vLLMWrapper(LLMWrapperBase):
                 if hasattr(model, "get_tokenizer"):
                     tokenizer = model.get_tokenizer()
                 else:
-                    warnings.warn(
-                        "No tokenizer provided and no tokenizer found in model."
-                    )
+                    # Try to extract model name and load tokenizer as fallback
+                    model_name = self._extract_model_name(model)
+                    if model_name:
+                        warnings.warn(
+                            f"No tokenizer provided. Attempting to load tokenizer from model name: {model_name}"
+                        )
+                        from transformers import AutoTokenizer
+
+                        try:
+                            tokenizer = AutoTokenizer.from_pretrained(model_name)
+                        except Exception as tokenizer_error:
+                            warnings.warn(
+                                f"Failed to load tokenizer from {model_name}: {tokenizer_error}"
+                            )
+                    else:
+                        warnings.warn(
+                            "No tokenizer provided and no tokenizer found in model."
+                        )
             except Exception as e:
                 warnings.warn(f"Could not get tokenizer from model: {e}")
         self.tokenizer = tokenizer
@@ -708,6 +723,39 @@ class vLLMWrapper(LLMWrapperBase):
         else:
             padding_value = None
         self.padding_value = padding_value
+
+    def _extract_model_name(self, model) -> str | None:
+        """Extract model name from different model types for tokenizer fallback."""
+        try:
+            # For AsyncVLLM, try to get the model name from engine_args
+            if hasattr(model, "engine_args") and hasattr(model.engine_args, "model"):
+                return model.engine_args.model
+
+            # For vllm.LLM, try to get the model name
+            elif hasattr(model, "llm_engine") and hasattr(
+                model.llm_engine, "model_config"
+            ):
+                return getattr(model.llm_engine.model_config, "model", None)
+
+            # For Ray actors, try to get model name via remote call
+            elif hasattr(model, "remote") and hasattr(model, "get_model_name"):
+                import ray
+
+                try:
+                    return ray.get(model.get_model_name.remote())
+                except Exception:
+                    pass
+
+            # Try common attributes that might contain model name
+            for attr in ["model_name", "model", "model_path", "_model_name"]:
+                if hasattr(model, attr):
+                    value = getattr(model, attr)
+                    if isinstance(value, str):
+                        return value
+
+            return None
+        except Exception:
+            return None
 
     def _call_generate(self, *args, **kwargs):
         """Call generate method based on model type."""
@@ -1165,12 +1213,21 @@ class vLLMWrapper(LLMWrapperBase):
         )
 
     def _cat_text(
-        self, text: str | list[str], response_text: str | list[str]
+        self, text: str | list[str], response_text: str | list[str] | None
     ) -> str | list[str]:
         """Concatenate text and response text."""
         assert isinstance(
             text, (str, list)
         ), f"text must be str or list, got {type(text)}"
+
+        # Handle None response_text (when tokenizer is not available)
+        if response_text is None:
+            raise RuntimeError(
+                "response_text is None, likely due to missing tokenizer. "
+                "Cannot decode vLLM response without a tokenizer. "
+                "Please provide a tokenizer explicitly or ensure the model has one available."
+            )
+
         assert isinstance(
             response_text, (str, list)
         ), f"response_text must be str or list, got {type(response_text)}"
