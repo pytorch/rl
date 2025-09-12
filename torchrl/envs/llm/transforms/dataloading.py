@@ -674,10 +674,280 @@ class RayDataLoadingPrimer(TensorDictPrimer):
 
         self._actor = actor
         self._ray = ray
+
+        # Get primers from the remote actor to initialize the local attribute
+        # This is needed for the parent class initialization
+        self.primers = self._ray.get(self._actor.__getattribute__.remote("primers"))
+
         super(torch.nn.Module, self).__init__()
 
-    def __getattr__(self, name):
-        """Delegate all attribute access to the remote actor."""
-        return lambda *args, **kwargs: self._ray.get(
-            getattr(self._actor, name).remote(*args, **kwargs)
+    # Explicit method delegation for DataLoadingPrimer methods
+    def reset_dataloader(self):
+        """Reset the dataloader."""
+        return self._ray.get(self._actor.reset_dataloader.remote())
+
+    def _load_from_dataloader(self, reset=None):
+        """Load data from the dataloader."""
+        return self._ray.get(self._actor._load_from_dataloader.remote(reset))
+
+    def set_container(self, container):
+        """Set the container."""
+        return self._ray.get(self._actor.set_container.remote(container))
+
+    def __repr__(self):
+        """String representation."""
+        return self._ray.get(self._actor.__repr__.remote())
+
+    # Properties - access via generic attribute getter since Ray doesn't support direct property access
+    @property
+    def device(self):
+        """Get device property."""
+        return self._ray.get(self._actor.__getattribute__.remote("device"))
+
+    @device.setter
+    def device(self, value):
+        """Set device property."""
+        self._ray.get(self._actor.__setattr__.remote("device", value))
+
+    @property
+    def dataloader(self):
+        """Get dataloader property."""
+        return self._ray.get(self._actor.__getattribute__.remote("dataloader"))
+
+    @property
+    def endless_dataloader(self):
+        """Get endless_dataloader property."""
+        return self._ray.get(self._actor.__getattribute__.remote("endless_dataloader"))
+
+    @property
+    def stack_method(self):
+        """Get stack_method property."""
+        return self._ray.get(self._actor.__getattribute__.remote("stack_method"))
+
+    @property
+    def repeats(self):
+        """Get repeats property."""
+        return self._ray.get(self._actor.__getattribute__.remote("repeats"))
+
+    @property
+    def batch_size(self):
+        """Get batch_size property."""
+        return self._ray.get(self._actor.__getattribute__.remote("batch_size"))
+
+    @property
+    def auto_batch_size(self):
+        """Get auto_batch_size property."""
+        return self._ray.get(self._actor.__getattribute__.remote("auto_batch_size"))
+
+    @property
+    def data_keys(self):
+        """Get data_keys property."""
+        return self._ray.get(self._actor.__getattribute__.remote("data_keys"))
+
+    @property
+    def primers(self):
+        """Get primers property."""
+        return self._ray.get(self._actor.__getattribute__.remote("primers"))
+
+    @primers.setter
+    def primers(self, value):
+        """Set primers property."""
+        self._ray.get(self._actor.__setattr__.remote("primers", value))
+
+    # TensorDictPrimer methods
+    def init(self, tensordict):
+        """Initialize."""
+        return self._ray.get(self._actor.init.remote(tensordict))
+
+    def _reset_func(self, tensordict, tensordict_reset):
+        """Reset function."""
+        return self._ray.get(
+            self._actor._reset_func.remote(tensordict, tensordict_reset)
         )
+
+    # Transform methods
+    def close(self):
+        """Close the transform."""
+        return self._ray.get(self._actor.close.remote())
+
+    def _apply_transform(self, obs):
+        """Apply transform."""
+        return self._ray.get(self._actor._apply_transform.remote(obs))
+
+    def _call(self, next_tensordict):
+        """Call method."""
+        return self._ray.get(self._actor._call.remote(next_tensordict))
+
+    def forward(self, tensordict):
+        """Forward pass."""
+        return self._ray.get(self._actor.forward.remote(tensordict))
+
+    def _inv_apply_transform(self, state):
+        """Inverse apply transform."""
+        return self._ray.get(self._actor._inv_apply_transform.remote(state))
+
+    def _inv_call(self, tensordict):
+        """Inverse call."""
+        return self._ray.get(self._actor._inv_call.remote(tensordict))
+
+    def inv(self, tensordict):
+        """Inverse."""
+        return self._ray.get(self._actor.inv.remote(tensordict))
+
+    def _step(self, tensordict, next_tensordict):
+        """Step method."""
+        return self._ray.get(self._actor._step.remote(tensordict, next_tensordict))
+
+    def transform_env_device(self, device):
+        """Transform environment device."""
+        return self._ray.get(self._actor.transform_env_device.remote(device))
+
+    def transform_env_batch_size(self, batch_size):
+        """Transform environment batch size."""
+        return self._ray.get(self._actor.transform_env_batch_size.remote(batch_size))
+
+    def transform_output_spec(self, output_spec):
+        """Transform output spec."""
+        return self._ray.get(self._actor.transform_output_spec.remote(output_spec))
+
+    def transform_input_spec(self, input_spec):
+        """Transform input spec."""
+        return self._ray.get(self._actor.transform_input_spec.remote(input_spec))
+
+    def transform_observation_spec(self, observation_spec):
+        """Transform observation spec."""
+        return self._ray.get(
+            self._actor.transform_observation_spec.remote(observation_spec)
+        )
+
+    def transform_reward_spec(self, reward_spec):
+        """Transform reward spec."""
+        return self._ray.get(self._actor.transform_reward_spec.remote(reward_spec))
+
+    def transform_done_spec(self, done_spec):
+        """Transform done spec."""
+        return self._ray.get(self._actor.transform_done_spec.remote(done_spec))
+
+    def transform_action_spec(self, action_spec):
+        """Transform action spec."""
+        return self._ray.get(self._actor.transform_action_spec.remote(action_spec))
+
+    def transform_state_spec(self, state_spec):
+        """Transform state spec."""
+        return self._ray.get(self._actor.transform_state_spec.remote(state_spec))
+
+    def dump(self, **kwargs):
+        """Dump method."""
+        return self._ray.get(self._actor.dump.remote(**kwargs))
+
+    def reset_parent(self):
+        """Reset parent."""
+        return self._ray.get(self._actor.reset_parent.remote())
+
+    def clone(self):
+        """Clone the transform."""
+        # For cloning, we want to create a new instance that shares the same actor
+        new_instance = RayDataLoadingPrimer.__new__(RayDataLoadingPrimer)
+        new_instance._actor = self._actor
+        new_instance._ray = self._ray
+        return new_instance
+
+    def empty_cache(self):
+        """Empty cache."""
+        return self._ray.get(self._actor.empty_cache.remote())
+
+    def set_missing_tolerance(self, mode=False):
+        """Set missing tolerance."""
+        return self._ray.get(self._actor.set_missing_tolerance.remote(mode))
+
+    @property
+    def missing_tolerance(self):
+        """Get missing tolerance."""
+        return self._ray.get(self._actor.missing_tolerance.remote())
+
+    def to(self, *args, **kwargs):
+        """Move to device."""
+        self._ray.get(self._actor.to.remote(*args, **kwargs))
+        # Return self to maintain fluent interface
+        return self
+
+    # Properties that should be accessed from the remote actor
+    @property
+    def in_keys(self):
+        """Get in_keys property."""
+        return self._ray.get(self._actor.__getattribute__.remote("in_keys"))
+
+    @in_keys.setter
+    def in_keys(self, value):
+        """Set in_keys property."""
+        self._ray.get(self._actor.__setattr__.remote("in_keys", value))
+
+    @property
+    def out_keys(self):
+        """Get out_keys property."""
+        return self._ray.get(self._actor.__getattribute__.remote("out_keys"))
+
+    @out_keys.setter
+    def out_keys(self, value):
+        """Set out_keys property."""
+        self._ray.get(self._actor.__setattr__.remote("out_keys", value))
+
+    @property
+    def in_keys_inv(self):
+        """Get in_keys_inv property."""
+        return self._ray.get(self._actor.__getattribute__.remote("in_keys_inv"))
+
+    @in_keys_inv.setter
+    def in_keys_inv(self, value):
+        """Set in_keys_inv property."""
+        self._ray.get(self._actor.__setattr__.remote("in_keys_inv", value))
+
+    @property
+    def out_keys_inv(self):
+        """Get out_keys_inv property."""
+        return self._ray.get(self._actor.__getattribute__.remote("out_keys_inv"))
+
+    @out_keys_inv.setter
+    def out_keys_inv(self, value):
+        """Set out_keys_inv property."""
+        self._ray.get(self._actor.__setattr__.remote("out_keys_inv", value))
+
+    @property
+    def parent(self):
+        """Get parent property."""
+        return self._ray.get(self._actor.__getattribute__.remote("parent"))
+
+    @property
+    def container(self):
+        """Get container property."""
+        return self._ray.get(self._actor.__getattribute__.remote("container"))
+
+    # Generic attribute access for any remaining attributes
+    def __getattr__(self, name):
+        """Get attribute from the remote actor."""
+        # First try to get it as a simple attribute
+        try:
+            return self._ray.get(getattr(self._actor, name).remote())
+        except (AttributeError, TypeError):
+            # If that fails, it might be a callable method
+            try:
+                remote_method = getattr(self._actor, name)
+                return lambda *args, **kwargs: self._ray.get(
+                    remote_method.remote(*args, **kwargs)
+                )
+            except AttributeError:
+                raise AttributeError(
+                    f"'{self.__class__.__name__}' object has no attribute '{name}'"
+                )
+
+    def __setattr__(self, name, value):
+        """Set attribute on the remote actor or locally."""
+        if name in ["_actor", "_ray", "primers"]:  # These are local attributes
+            super().__setattr__(name, value)
+        else:
+            # Try to set on remote actor
+            try:
+                self._ray.get(self._actor.__setattr__.remote(name, value))
+            except Exception:
+                # Fall back to local setting for attributes that can't be set remotely
+                super().__setattr__(name, value)
