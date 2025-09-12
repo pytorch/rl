@@ -375,7 +375,7 @@ class vLLMWrapper(LLMWrapperBase):
 
         self.model = model
         self._remote_calls = not (
-            isinstance(model, vllm.LLM, AsyncVLLM) if vllm else False
+            isinstance(model, (vllm.LLM, AsyncVLLM)) if vllm else False
         )
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
