@@ -534,6 +534,7 @@ class AsyncVLLM(RLvLLMEngine):
         num_replicas: int = 1,
         actor_class=None,
         enable_prefix_caching: bool = False,
+        max_concurrency: int = 128,
     ):
         if not _has_vllm:
             raise ImportError(
@@ -549,6 +550,7 @@ class AsyncVLLM(RLvLLMEngine):
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
+        self.max_concurrency = max_concurrency
         self.actor_class = actor_class or _AsyncLLMEngineActor
         self.actors: list = []
         self._launched = False
@@ -582,6 +584,7 @@ class AsyncVLLM(RLvLLMEngine):
         torchrl_logger.info(f"Creating GPU placement group with {len(bundles)} bundles")
 
         self._placement_group = placement_group(bundles, strategy="PACK")
+        max_concurrency = self.max_concurrency
         torchrl_logger.info(f"Placement group created: {self._placement_group}")
 
         # Avoid indefinite hang if resources are not available
@@ -614,6 +617,7 @@ class AsyncVLLM(RLvLLMEngine):
                 scheduling_strategy=scheduling_strategy,
                 num_gpus=0,
                 num_cpus=0,
+                max_concurrency=max_concurrency,
             ).remote(
                 engine_args=self.engine_args,
                 bundle_indices=bundle_indices,
@@ -654,7 +658,6 @@ class AsyncVLLM(RLvLLMEngine):
     def from_pretrained(
         cls,
         model_name: str,
-        devices: list[torch.device | int] | None = None,
         num_devices: int | None = None,
         num_replicas: int = 1,
         verbose: bool = True,
@@ -668,8 +671,7 @@ class AsyncVLLM(RLvLLMEngine):
 
         Args:
             model_name (str): The model name to pass to vLLM.
-            devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
-            num_devices (int, optional): Number of devices to use. Exclusive with devices.
+            num_devices (int, optional): Number of devices to use, per replica.
             num_replicas (int): Number of engine replicas to create.
             verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
             compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
@@ -696,7 +698,6 @@ class AsyncVLLM(RLvLLMEngine):
         """
         return make_async_vllm_engine(
             model_name=model_name,
-            devices=devices,
             num_devices=num_devices,
             num_replicas=num_replicas,
             verbose=verbose,
@@ -970,7 +971,6 @@ class AsyncVLLM(RLvLLMEngine):
 
 def make_async_vllm_engine(
     model_name: str,
-    devices: list[torch.device | int] | None = None,
     num_devices: int | None = None,
     num_replicas: int = 1,
     verbose: bool = True,
@@ -981,8 +981,7 @@ def make_async_vllm_engine(
 
     Args:
         model_name (str): The model name to pass to vLLM.
-        devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
-        num_devices (int, optional): Number of devices to use. Exclusive with devices.
+        num_devices (int, optional): Number of devices to use, per replica.
         num_replicas (int): Number of engine replicas to create.
         verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
@@ -1017,24 +1016,8 @@ def make_async_vllm_engine(
         )
 
     # Handle device specification
-    if num_devices is not None and devices is not None:
-        raise ValueError("Cannot specify both num_devices and devices")
-    if num_devices is not None:
-        devices = None
-    elif devices is None:
-        devices = [0]  # Default to first GPU
+    if num_devices is None:
         num_devices = 1
-    elif len(devices) > 1:
-        num_devices = len(devices)
-    else:
-        num_devices = len(devices)
-
-    # Validate device indices
-    if devices is not None:
-        for device in devices:
-            device_idx = device if isinstance(device, int) else device.index
-            if device_idx >= torch.cuda.device_count():
-                raise ValueError(f"Invalid device index: {device_idx}")
 
     # Configure verbose logging if requested
     if verbose:
