@@ -685,6 +685,16 @@ class RayDataLoadingPrimer(Transform):
             DataLoadingPrimer
         )
 
+        primers = kwargs.get("primers", None)
+        if hasattr(primers, "device"):
+            self._device = primers.device
+        else:
+            self._device = None  # Initialize device tracking
+        if hasattr(primers, "cpu"):
+            primers = primers.cpu()
+        if primers is not None:
+            kwargs["primers"] = primers
+
         # Create the shared actor, passing factory or dataloader as appropriate
         if dataloader_factory is not None:
             actor = RemoteDataLoadingPrimer.remote(
@@ -694,7 +704,6 @@ class RayDataLoadingPrimer(Transform):
             actor = RemoteDataLoadingPrimer.remote(dataloader=dataloader, **kwargs)
 
         self._actor = actor
-        self._device = None  # Initialize device tracking
 
     # Upward-facing methods (container management) - handled locally, not delegated to remote actor
     def set_container(self, container: Transform | EnvBase) -> None:
