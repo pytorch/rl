@@ -14,11 +14,10 @@ from torchrl.collectors import WeightUpdaterBase
 from torchrl.modules.llm.backends.vllm import RLvLLMEngine
 
 try:
-    import transformers
+    pass
 
     _has_transformers = True
 except ImportError:
-    transformers = None
     _has_transformers = False
 
 
@@ -101,15 +100,24 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         if not _has_transformers:
             raise ImportError("transformers not available")
 
-        # Extract state dict from model
+        # Extract state dict from model, handling LoRA models properly
         if hasattr(transformers_model, "model") and hasattr(
             transformers_model.model, "state_dict"
         ):
             # TorchRL wrapper (e.g., TransformersWrapper)
-            state_dict = transformers_model.model.state_dict()
+            model = transformers_model.model
+            # Check if it's a LoRA model
+            if hasattr(model, "merge_and_unload"):
+                state_dict = model.merge_and_unload().state_dict()
+            else:
+                state_dict = model.state_dict()
         elif hasattr(transformers_model, "state_dict"):
             # Direct transformers model
-            state_dict = transformers_model.state_dict()
+            # Check if it's a LoRA model
+            if hasattr(transformers_model, "merge_and_unload"):
+                state_dict = transformers_model.merge_and_unload().state_dict()
+            else:
+                state_dict = transformers_model.state_dict()
         else:
             raise TypeError(
                 f"Cannot extract state_dict from {type(transformers_model)}"
@@ -156,10 +164,19 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         """
         if hasattr(model, "model") and hasattr(model.model, "state_dict"):
             # TorchRL wrapper (e.g., TransformersWrapper)
-            sd = model.model.state_dict()
+            model_obj = model.model
+            # Check if it's a LoRA model
+            if hasattr(model_obj, "merge_and_unload"):
+                sd = model_obj.merge_and_unload().state_dict()
+            else:
+                sd = model_obj.state_dict()
         elif hasattr(model, "state_dict"):
             # Direct model
-            sd = model.state_dict()
+            # Check if it's a LoRA model
+            if hasattr(model, "merge_and_unload"):
+                sd = model.merge_and_unload().state_dict()
+            else:
+                sd = model.state_dict()
         else:
             raise TypeError(f"Cannot extract state_dict from {type(model)}")
 
