@@ -684,12 +684,10 @@ class AsyncVLLM(RLvLLMEngine):
 
             self.actors.append(actor)
 
-        torchrl_logger.info(f"Waiting for actors to be created: {self.actors=}")
-        ray.get(self.actors)
-        torchrl_logger.info(f"Waiting for actors to be ready: {self.actors=}")
-        # Wait for all actors to be ready
-        ready_futures = [actor.ready.remote() for actor in self.actors]
-        ray.get(ready_futures)
+            torchrl_logger.info(f"Waiting for actor to be ready: {actor=}")
+            # Wait for all actors to be ready
+            ready_future = actor.ready.remote()
+            ray.get(ready_future)
 
         self._launched = True
         torchrl_logger.info(
