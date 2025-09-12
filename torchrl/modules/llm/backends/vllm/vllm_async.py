@@ -831,7 +831,7 @@ class AsyncVLLM(RLvLLMEngine):
                     raise RuntimeError(
                         "LoadBalancer is not created. Create a LoadBalancer using AsyncVLLM.create_load_balancer before calling generate."
                     )
-                actor = self._load_balancer.select_actor()
+                actor = self.actors[self._load_balancer.select_actor()]
         else:
             actor = self.actors[actor_index]
         torchrl_logger.info(f"Using actor {actor=} with {actor_index=}")
