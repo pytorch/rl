@@ -595,6 +595,10 @@ class DataLoadingPrimer(TensorDictPrimer):
         class_name = self.__class__.__name__
         return f"{class_name}(primers={self.primers}, dataloader={self.dataloader})"
 
+    def set_attr(self, name, value):
+        """Set attribute on the remote actor or locally."""
+        setattr(self, name, value)
+
 
 class RayDataLoadingPrimer(Transform):
     """A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.
@@ -703,12 +707,10 @@ class RayDataLoadingPrimer(Transform):
             parent_batch_size = self.parent.batch_size
 
             # Set the batch size directly on the remote actor to override its initialization
-            self._ray.get(
-                self._actor.__setattr__.remote("batch_size", parent_batch_size)
-            )
+            self._ray.get(self._actor.set_attr.remote("batch_size", parent_batch_size))
 
             # Also disable validation on the remote actor since we'll handle consistency locally
-            self._ray.get(self._actor.__setattr__.remote("_validated", True))
+            self._ray.get(self._actor.set_attr.remote("_validated", True))
 
         return result
 
@@ -771,7 +773,7 @@ class RayDataLoadingPrimer(Transform):
     @device.setter
     def device(self, value):
         """Set device property."""
-        self._ray.get(self._actor.__setattr__.remote("device", value))
+        self._ray.get(self._actor.set_attr.remote("device", value))
 
     @property
     def dataloader(self):
@@ -806,7 +808,7 @@ class RayDataLoadingPrimer(Transform):
     @primers.setter
     def primers(self, value):
         """Set primers property."""
-        self._ray.get(self._actor.__setattr__.remote("primers", value))
+        self._ray.get(self._actor.set_attr.remote("primers", value))
 
     # TensorDictPrimer methods
     def init(self, tensordict):
@@ -991,7 +993,7 @@ class RayDataLoadingPrimer(Transform):
         """Set primers."""
         self.__dict__["_primers"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.__setattr__.remote("primers", value))
+            self._ray.get(self._actor.set_attr.remote("primers", value))
 
     def to(self, *args, **kwargs):
         """Move to device."""
@@ -1015,7 +1017,7 @@ class RayDataLoadingPrimer(Transform):
         """Set in_keys property."""
         self.__dict__["_in_keys"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.__setattr__.remote("in_keys", value))
+            self._ray.get(self._actor.set_attr.remote("in_keys", value))
 
     @property
     def out_keys(self):
@@ -1027,7 +1029,7 @@ class RayDataLoadingPrimer(Transform):
         """Set out_keys property."""
         self.__dict__["_out_keys"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.__setattr__.remote("out_keys", value))
+            self._ray.get(self._actor.set_attr.remote("out_keys", value))
 
     @property
     def in_keys_inv(self):
@@ -1039,7 +1041,7 @@ class RayDataLoadingPrimer(Transform):
         """Set in_keys_inv property."""
         self.__dict__["_in_keys_inv"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.__setattr__.remote("in_keys_inv", value))
+            self._ray.get(self._actor.set_attr.remote("in_keys_inv", value))
 
     @property
     def out_keys_inv(self):
@@ -1051,7 +1053,7 @@ class RayDataLoadingPrimer(Transform):
         """Set out_keys_inv property."""
         self.__dict__["_out_keys_inv"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.__setattr__.remote("out_keys_inv", value))
+            self._ray.get(self._actor.set_attr.remote("out_keys_inv", value))
 
     # Generic attribute access for any remaining attributes
     def __getattr__(self, name):
@@ -1151,7 +1153,7 @@ class RayDataLoadingPrimer(Transform):
             # Try to set on remote actor for other attributes
             try:
                 if hasattr(self, "_actor") and self._actor is not None:
-                    self._ray.get(self._actor.__setattr__.remote(name, value))
+                    self._ray.get(self._actor.set_attr.remote(name, value))
                 else:
                     super().__setattr__(name, value)
             except Exception:
