@@ -585,7 +585,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         return f"{class_name}(primers={self.primers}, dataloader={self.dataloader})"
 
 
-class RayDataLoadingPrimer:
+class RayDataLoadingPrimer(TensorDictPrimer):
     """A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.
 
     This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers.
@@ -674,6 +674,7 @@ class RayDataLoadingPrimer:
 
         self._actor = actor
         self._ray = ray
+        super(torch.nn.Module, self).__init__()
 
     def __getattr__(self, name):
         """Delegate all attribute access to the remote actor."""
