@@ -42,6 +42,7 @@ from torchrl.envs.llm import (
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers import AutoTokenizer
 
+_has_ray = importlib.util.find_spec("ray") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -563,11 +564,16 @@ class TestGSM8K:
         assert ("next", "reward") in r
         assert r["next", "reward"].shape == (n_envs, 3, 1, 1)
 
-    def test_gsm8kenv(self):
+    @pytest.mark.parametrize("ray_backend", [True, False], ids=["ray", "local"])
+    def test_gsm8kenv(self, ray_backend):
+        if not _has_ray and ray_backend:
+            pytest.skip("Ray not available")
         import transformers
 
         tokenizer = transformers.AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
-        env = GSM8KEnv(tokenizer=tokenizer, apply_template=True)
+        env = GSM8KEnv(
+            tokenizer=tokenizer, apply_template=True, ray_backend=ray_backend
+        )
         # env.check_env_specs(break_when_any_done="both")
         r = env.reset()
         assert "history" in r

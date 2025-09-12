@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import abc
+
 import importlib.util
 
 import torch
@@ -19,28 +21,11 @@ from torchrl.collectors import WeightUpdaterBase
 from torchrl.modules.llm.backends import stateless_init_process_group
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
-if _has_vllm:
-    from vllm.utils import get_open_port
-else:
-
-    def get_open_port():  # noqa: D103
-        raise ImportError(
-            "vllm is not installed. Please install it with `pip install vllm`."
-        )
-
 
 _has_ray = importlib.util.find_spec("ray") is not None
-if _has_ray:
-    import ray
-else:
-
-    def ray():  # noqa: D103
-        raise ImportError(
-            "ray is not installed. Please install it with `pip install ray`."
-        )
 
 
-class vLLMUpdaterMeta(type(WeightUpdaterBase)):
+class vLLMUpdaterMeta(abc.ABCMeta):
     """Metaclass for vLLMUpdater that allows switching between V1 and V2 implementations.
 
     When instantiating vLLMUpdater with v2=True, returns a vLLMUpdaterV2 instance instead.
@@ -151,6 +136,8 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
     @property
     def master_port(self):
         if self._master_port is None:
+            from vllm.utils import get_open_port
+
             self._master_port = get_open_port()
         return self._master_port
 
@@ -182,6 +169,8 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         return self._model_ref
 
     def _init_group(self):
+        import ray
+
         torchrl_logger.info(f"=> in {type(self).__name__}._init_group")
         weight_sync_world_size = self.vllm_tp_size + 1
         torchrl_logger.info(f"initializing group with {weight_sync_world_size=}...")
@@ -206,6 +195,7 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
             weight_sync_world_size,
             torch.device("cuda:0"),
         )
+
         ray.get(init_weight_update_group_getter)
         torchrl_logger.info("init_weight_update_group getter succeeded")
 
@@ -276,6 +266,8 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
                 stream=torch.cuda.current_stream(),
             )
             del val
+        import ray
+
         ray.get(remotes)
         torchrl_logger.info("done broadcasting")
         torch.cuda.synchronize()

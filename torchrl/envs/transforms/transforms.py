@@ -6536,6 +6536,9 @@ class TensorDictPrimer(Transform):
 
     def _validate_value_tensor(self, value, spec) -> bool:
         if not spec.is_in(value):
+            raise ValueError(
+                f"spec {spec}, spec.shape {spec.shape}, value.shape {value.shape}, spec.device {spec.device}, value.device {value.device}, spec.dtype {spec.dtype}, value.dtype {value.dtype}"
+            )
             raise RuntimeError(f"Value ({value}) is not in the spec domain ({spec}).")
         return True
 
@@ -6609,8 +6612,8 @@ class TensorDictPrimer(Transform):
                 device = parent.device
                 batch_size = parent.batch_size
             else:
-                device = None
-                batch_size = ()
+                device = getattr(self, "device", None)
+                batch_size = getattr(self, "batch_size", ())
             tensordict = TensorDict(device=device, batch_size=batch_size)
         return self._reset_func(tensordict, tensordict)
 

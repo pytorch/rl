@@ -343,4 +343,5 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))
         if compute_reward:
-            self.append_transform(GSM8KRewardParser(tokenizer=tokenizer))
+            t = GSM8KRewardParser(tokenizer=tokenizer)
+            self.append_transform(t)

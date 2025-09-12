@@ -1116,7 +1116,6 @@ to be able to create this other composition:
     ConditionalSkip
     Crop
     DataLoadingPrimer
-    RayDataLoadingPrimer
     DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection

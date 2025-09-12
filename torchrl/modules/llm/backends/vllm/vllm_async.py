@@ -17,7 +17,7 @@ import os
 import random
 import uuid
 from collections.abc import Iterator, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from torchrl._utils import logger as torchrl_logger
@@ -54,123 +54,130 @@ except ImportError:
             )
 
 
+if TYPE_CHECKING:
+    from vllm.engine.async_llm_engine import AsyncEngineArgs
+    from vllm.engine.request import RequestOutput
+    from vllm.engine.sampling_params import SamplingParams
+
 TIMEOUT_SECONDS = os.getenv("TORCHRL_VLLM_TIMEOUT_SECONDS", 300)
 
 try:
     import vllm
-    from vllm import (
-        AsyncEngineArgs,
-        AsyncLLMEngine,
-        envs,
-        RequestOutput,
-        SamplingParams,
-        TokensPrompt,
-    )
-    from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
-    from vllm.distributed.utils import StatelessProcessGroup
-    from vllm.utils import get_open_port
-    from vllm.worker.worker import Worker
 
     _has_vllm = True
 except ImportError:
     vllm = None
-    AsyncEngineArgs = Any
-    AsyncLLMEngine = Any
-    RequestOutput = Any
-    SamplingParams = Any
-    TokensPrompt = Any
-    envs = None
-    get_open_port = None
-    Worker = object  # Use object as base class when vLLM is not available
-    PyNcclCommunicator = None
-    StatelessProcessGroup = None
-
     _has_vllm = False
 
+# All vLLM imports are now local to avoid global dependencies
 
-# stateless_init_process_group_async is now imported from vllm_utils
+
+# stateless_init_process_group_async is imported from vllm_utils
 
 
-class _AsyncvLLMWorker(Worker):
-    """Async vLLM worker for Ray with weight update capabilities.
+def _create_async_vllm_worker_class():
+    """Create the _AsyncvLLMWorker class with proper inheritance."""
+    if not _has_vllm:
+        # Return a dummy class when vLLM is not available
+        class _AsyncvLLMWorker:
+            def __init__(self, *args, **kwargs):
+                raise ImportError(
+                    "vllm is not installed. Please install it with `pip install vllm`."
+                )
 
-    This worker extends the base vLLM Worker to support async operations
-    and weight updates via NCCL communication groups.
-    """
+        return _AsyncvLLMWorker
 
-    def __init__(self, *args, **kwargs):
-        if not _has_vllm:
-            raise ImportError(
-                "vllm is not installed. Please install it with `pip install vllm`."
+    from vllm.worker.worker import Worker
+
+    class _AsyncvLLMWorker(Worker):
+        """Async vLLM worker for Ray with weight update capabilities.
+
+        This worker extends the base vLLM Worker to support async operations
+        and weight updates via NCCL communication groups.
+        """
+
+        def __init__(self, *args, **kwargs):
+            torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
+            torchrl_logger.info(f"visible devices {os.getenv('CUDA_VISIBLE_DEVICES')}")
+            torchrl_logger.info(f"device count {torch.cuda.device_count()}")
+            super().__init__(*args, **kwargs)
+            self.model_update_group = None
+
+        def init_weight_update_group(
+            self,
+            master_address: str,
+            master_port: str,
+            rank_offset: int,
+            world_size: int,
+        ):
+            """Initialize weight update group for this worker.
+
+            Args:
+                master_address (str): The master address for distributed training.
+                master_port (str): The master port for distributed training.
+                rank_offset (int): Rank offset for this worker in the global weight update group.
+                world_size (int): Total number of processes in the weight update group.
+            """
+            from vllm.distributed.parallel_state import get_world_group
+
+            torchrl_logger.info(f"=> in {type(self).__name__}.init_weight_update_group")
+
+            # Get the local rank within the tensor parallel group
+            tp_group = get_world_group()
+            local_rank = tp_group.rank
+            torchrl_logger.info(f"Local rank in tensor parallel group: {local_rank}")
+
+            # Calculate the global rank for weight update group
+            rank = local_rank + rank_offset
+            torchrl_logger.info(
+                f"Initializing {type(self).__name__} weight update group with "
+                f"{master_address=}, {master_port=}, {rank=}, {world_size=}, device={self.device}"
             )
 
-        torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
-        torchrl_logger.info(f"visible devices {os.getenv('CUDA_VISIBLE_DEVICES')}")
-        torchrl_logger.info(f"device count {torch.cuda.device_count()}")
-        super().__init__(*args, **kwargs)
-        self.model_update_group = None
+            self.model_update_group = stateless_init_process_group_async(
+                master_address, master_port, rank, world_size, self.device
+            )
 
-    def init_weight_update_group(
-        self, master_address: str, master_port: str, rank_offset: int, world_size: int
-    ):
-        """Initialize weight update group for this worker.
+            torchrl_logger.info(
+                f"{type(self).__name__}.init_weight_update_group success"
+            )
 
-        Args:
-            master_address (str): The master address for distributed training.
-            master_port (str): The master port for distributed training.
-            rank_offset (int): Rank offset for this worker in the global weight update group.
-            world_size (int): Total number of processes in the weight update group.
-        """
-        from vllm.distributed.parallel_state import get_world_group
+        def update_weight_broadcast(
+            self, name: str, dtype: torch.dtype, shape: torch.Size
+        ):
+            """Update weight via broadcast from rank 0.
 
-        torchrl_logger.info(f"=> in {type(self).__name__}.init_weight_update_group")
+            Args:
+                name (str): Parameter name.
+                dtype (torch.dtype): Parameter dtype.
+                shape (torch.Size): Parameter shape.
+            """
+            if self.model_update_group is None:
+                raise RuntimeError("Weight update group not initialized")
 
-        # Get the local rank within the tensor parallel group
-        tp_group = get_world_group()
-        local_rank = tp_group.rank
-        torchrl_logger.info(f"Local rank in tensor parallel group: {local_rank}")
+            weight = torch.empty(shape, dtype=dtype, device="cuda")
+            self.model_update_group.broadcast(
+                weight, src=0, stream=torch.cuda.current_stream()
+            )
 
-        # Calculate the global rank for weight update group
-        rank = local_rank + rank_offset
-        torchrl_logger.info(
-            f"Initializing {type(self).__name__} weight update group with "
-            f"{master_address=}, {master_port=}, {rank=}, {world_size=}, device={self.device}"
-        )
+            self.model_runner.model.load_weights(weights=[(name, weight)])
+            del weight
 
-        self.model_update_group = stateless_init_process_group_async(
-            master_address, master_port, rank, world_size, self.device
-        )
+        def update_weight(self, name: str, weight: torch.Tensor):
+            """Update weight directly.
 
-        torchrl_logger.info(f"{type(self).__name__}.init_weight_update_group success")
+            Args:
+                name (str): Parameter name.
+                weight (torch.Tensor): Parameter weight.
+            """
+            self.model_runner.model.load_weights(weights=[(name, weight)])
+            del weight
 
-    def update_weight_broadcast(self, name: str, dtype: torch.dtype, shape: torch.Size):
-        """Update weight via broadcast from rank 0.
+    return _AsyncvLLMWorker
 
-        Args:
-            name (str): Parameter name.
-            dtype (torch.dtype): Parameter dtype.
-            shape (torch.Size): Parameter shape.
-        """
-        if self.model_update_group is None:
-            raise RuntimeError("Weight update group not initialized")
 
-        weight = torch.empty(shape, dtype=dtype, device="cuda")
-        self.model_update_group.broadcast(
-            weight, src=0, stream=torch.cuda.current_stream()
-        )
-
-        self.model_runner.model.load_weights(weights=[(name, weight)])
-        del weight
-
-    def update_weight(self, name: str, weight: torch.Tensor):
-        """Update weight directly.
-
-        Args:
-            name (str): Parameter name.
-            weight (torch.Tensor): Parameter weight.
-        """
-        self.model_runner.model.load_weights(weights=[(name, weight)])
-        del weight
+# Create the worker class
+_AsyncvLLMWorker = _create_async_vllm_worker_class()
 
 
 class _AsyncLLMEngine:
@@ -203,6 +210,8 @@ class _AsyncLLMEngine:
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
+
+        from vllm import AsyncLLMEngine
 
         worker_cls = "torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker"
         if engine_args.worker_cls != "auto":
@@ -259,6 +268,8 @@ class _AsyncLLMEngine:
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
+
+        from vllm import RequestOutput, SamplingParams, TokensPrompt
 
         # Track whether input was originally a single prompt
         single_prompt_input = False
@@ -368,6 +379,8 @@ class _AsyncLLMEngine:
             args (tuple): Arguments to pass to the method.
             kwargs (dict | None): Keyword arguments to pass to the method.
         """
+        from vllm import envs
+
         if envs and envs.VLLM_USE_V1:
             return await self.engine.collective_rpc(method, timeout, args, kwargs)
         else:
@@ -1025,6 +1038,8 @@ class AsyncVLLM(RLvLLMEngine):
             f"with {gpus_per_replica} GPUs per replica and {weight_sync_world_size} world size"
         )
 
+        from vllm import envs
+
         refs = []
         for i, actor in enumerate(self.actors):
             rank_offset = 1 + i * gpus_per_replica
@@ -1072,6 +1087,8 @@ class AsyncVLLM(RLvLLMEngine):
         Returns:
             list[Any]: Ray futures for all RPC calls.
         """
+        from vllm import envs
+
         futures = []
         for actor in self.actors:
             if envs and envs.VLLM_USE_V1:
@@ -1143,8 +1160,13 @@ class AsyncVLLM(RLvLLMEngine):
 
     def get_master_port(self) -> int:
         """Get the master port for weight synchronization."""
-        if _has_vllm and callable(get_open_port):
-            return get_open_port()
+        if _has_vllm:
+            try:
+                from vllm.utils import get_open_port
+
+                return get_open_port()
+            except ImportError:
+                return 29500  # Default port if import fails
         else:
             return 29500  # Default port
 
@@ -1835,6 +1857,8 @@ def make_async_vllm_engine(
         raise ImportError(
             "vllm is not installed. Please install it with `pip install vllm`."
         )
+
+    from vllm import AsyncEngineArgs
 
     # Check if CUDA is available since vLLM requires GPU
     if not torch.cuda.is_available():
