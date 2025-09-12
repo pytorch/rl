@@ -213,15 +213,40 @@ class _AsyncLLMEngine:
             os.environ["VLLM_RAY_BUNDLE_INDICES"] = ",".join(map(str, bundle_indices))
 
         engine_args.worker_cls = worker_cls
-
         engine_args.enable_prefix_caching = enable_prefix_caching
 
-        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+        # Store engine args and bundle indices for async initialization
+        self.engine_args = engine_args
         self.bundle_indices = bundle_indices
+        self.engine = None
+        self._initialization_task = None
+        self._ready = False
 
-    def ready(self) -> bool:
+    async def _initialize_engine(self):
+        """Initialize the AsyncLLMEngine asynchronously."""
+        try:
+            torchrl_logger.info("Starting async engine initialization...")
+            self.engine = AsyncLLMEngine.from_engine_args(self.engine_args)
+            self._ready = True
+            torchrl_logger.info("Async engine initialization completed successfully")
+        except Exception as e:
+            torchrl_logger.error(f"Failed to initialize async engine: {e}")
+            raise
+
+    async def ready(self) -> bool:
         """Check if engine is ready for inference."""
-        return True
+        if self._ready:
+            return True
+
+        if self._initialization_task is None:
+            self._initialization_task = asyncio.create_task(self._initialize_engine())
+
+        try:
+            await self._initialization_task
+            return True
+        except Exception as e:
+            torchrl_logger.error(f"Engine initialization failed: {e}")
+            return False
 
     async def generate(
         self,
@@ -246,7 +271,6 @@ class _AsyncLLMEngine:
             prompt_token_ids: Alternative to prompts - token IDs for generation.
             use_tqdm: Whether to show progress bar (not used in async engine).
             lora_request: LoRA request for adapter-based generation.
-            prompt_adapter_request: Prompt adapter request.
             guided_options_request: Guided decoding options.
             timeout_seconds: Timeout for generation in seconds.
 
@@ -257,6 +281,10 @@ class _AsyncLLMEngine:
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
+
+        # Ensure engine is initialized before generation
+        if not await self.ready():
+            raise RuntimeError("Failed to initialize async engine")
 
         # Track whether input was originally a single prompt
         single_prompt_input = False
@@ -349,6 +377,9 @@ class _AsyncLLMEngine:
 
     async def get_tokenizer(self):
         """Get the tokenizer from the engine."""
+        # Ensure engine is initialized before getting tokenizer
+        if not await self.ready():
+            raise RuntimeError("Failed to initialize async engine")
         return await self.engine.get_tokenizer()
 
     async def collective_rpc_v1(
@@ -366,6 +397,10 @@ class _AsyncLLMEngine:
             args (tuple): Arguments to pass to the method.
             kwargs (dict | None): Keyword arguments to pass to the method.
         """
+        # Ensure engine is initialized before RPC call
+        if not await self.ready():
+            raise RuntimeError("Failed to initialize async engine")
+
         if envs and envs.VLLM_USE_V1:
             return await self.engine.collective_rpc(method, timeout, args, kwargs)
         else:
@@ -386,6 +421,10 @@ class _AsyncLLMEngine:
             args (tuple): Arguments to pass to the method.
             kwargs (dict | None): Keyword arguments to pass to the method.
         """
+        # Note: This is a sync method, so we can't await ready() here
+        # The caller should ensure the engine is ready
+        if not self._ready:
+            raise RuntimeError("Engine not initialized - call ready() first")
         return self.engine.engine.collective_rpc(method, timeout, args, kwargs)
 
     def get_num_unfinished_requests(self) -> int:
@@ -394,6 +433,9 @@ class _AsyncLLMEngine:
         Returns:
             int: Number of unfinished requests.
         """
+        if not self._ready:
+            return 0  # Return 0 if engine not ready yet
+
         try:
             # Try to access the method directly if available
             if hasattr(self.engine, "get_num_unfinished_requests"):
@@ -419,6 +461,9 @@ class _AsyncLLMEngine:
         Returns:
             float: Cache usage fraction (0.0 = empty, 1.0 = full).
         """
+        if not self._ready:
+            return 0.0  # Return 0.0 if engine not ready yet
+
         try:
             # Try to get cache usage from the engine
             if hasattr(self.engine, "engine") and hasattr(
@@ -687,7 +732,16 @@ class AsyncVLLM(RLvLLMEngine):
             torchrl_logger.info(f"Waiting for actor to be ready: {actor=}")
             # Wait for all actors to be ready
             ready_future = actor.ready.remote()
-            ray.get(ready_future)
+            try:
+                ray.get(
+                    ready_future, timeout=300
+                )  # 5 minute timeout for engine initialization
+                torchrl_logger.info(f"Actor {i + 1}/{self.num_replicas} is ready")
+            except Exception as e:
+                torchrl_logger.error(
+                    f"Failed to initialize actor {i + 1}/{self.num_replicas}: {e}"
+                )
+                raise
 
         self._launched = True
         torchrl_logger.info(
