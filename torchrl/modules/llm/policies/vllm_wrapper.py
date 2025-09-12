@@ -767,73 +767,6 @@ class vLLMWrapper(LLMWrapperBase):
             # Both sync_vllm and async_vllm have direct generate methods
             return self.model.generate(*args, **kwargs)
 
-    def _call_generate_with_unbinding(
-        self,
-        inputs: list | None = None,
-        sampling_params: Any | None = None,
-        *,
-        prompt_token_ids: list | None = None,
-    ):
-        """Call generate method with proper batch handling for AsyncVLLM.
-
-        For AsyncVLLM, we pass individual items to leverage vLLM's internal batching and routing.
-        For other model types, we pass the batch as-is.
-
-        Args:
-            inputs: List of text prompts (for text mode)
-            sampling_params: SamplingParams object
-            prompt_token_ids: List of token IDs (for tokens mode)
-
-        Returns:
-            RequestOutput or list[RequestOutput]
-        """
-        if self._model_type == "async_vllm":
-            # For AsyncVLLM, always pass the batch to leverage internal batching
-            if inputs is not None:
-                # Text mode
-                return self.model.generate(inputs, sampling_params=sampling_params)
-            elif prompt_token_ids is not None:
-                # Tokens mode
-                return self.model.generate(
-                    prompt_token_ids=prompt_token_ids, sampling_params=sampling_params
-                )
-            else:
-                raise ValueError("Either inputs or prompt_token_ids must be provided")
-        else:
-            # For other model types (sync_vllm, ray_actor), use original batch passing
-            if self._model_type == "ray_actor":
-                import ray
-
-                if inputs is not None:
-                    return ray.get(
-                        self.model.generate.remote(
-                            inputs, sampling_params=sampling_params
-                        )
-                    )
-                elif prompt_token_ids is not None:
-                    return ray.get(
-                        self.model.generate.remote(
-                            prompt_token_ids=prompt_token_ids,
-                            sampling_params=sampling_params,
-                        )
-                    )
-                else:
-                    raise ValueError(
-                        "Either inputs or prompt_token_ids must be provided"
-                    )
-            else:
-                if inputs is not None:
-                    return self.model.generate(inputs, sampling_params=sampling_params)
-                elif prompt_token_ids is not None:
-                    return self.model.generate(
-                        prompt_token_ids=prompt_token_ids,
-                        sampling_params=sampling_params,
-                    )
-                else:
-                    raise ValueError(
-                        "Either inputs or prompt_token_ids must be provided"
-                    )
-
     @set_list_to_stack(True)
     @_batching
     def forward(
@@ -1330,8 +1263,17 @@ class vLLMWrapper(LLMWrapperBase):
             out, TensorDictBase
         ), f"out must be TensorDictBase, got {type(out)}"
 
-        # Call generate based on model type - use unbinding for AsyncVLLM
-        request_output = self._call_generate_with_unbinding(text, sampling_params)
+        generate_kwargs = {"sampling_params": sampling_params}
+        args = ()
+
+        # Convert text to list format
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list):
+            text = text.tolist()
+
+        # Call generate based on model type
+        request_output = self._call_generate(text, *args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1467,10 +1409,14 @@ class vLLMWrapper(LLMWrapperBase):
                 for am in attention_mask_full_unpadded
             ]
 
-        # Generate with vLLM to get prompt_logprobs - use unbinding for AsyncVLLM
-        request_output = self._call_generate_with_unbinding(
-            prompt_token_ids=tokens_full_list, sampling_params=sampling_params
-        )
+        # Convert to list format for vLLM
+        generate_kwargs = {
+            "sampling_params": sampling_params,
+            "prompt_token_ids": tokens_full_list,
+        }
+
+        # Generate with vLLM to get prompt_logprobs
+        request_output = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1580,6 +1526,8 @@ class vLLMWrapper(LLMWrapperBase):
             out, TensorDictBase
         ), f"out must be TensorDictBase, got {type(out)}"
 
+        generate_kwargs = {"sampling_params": sampling_params}
+        args = ()
         empirical_attention_mask = None
 
         if tokens_prompt_unpadded is None:
@@ -1591,11 +1539,10 @@ class vLLMWrapper(LLMWrapperBase):
             )
         else:
             tokens_prompt_list = self._to_list(tokens_prompt_unpadded, None)
+        generate_kwargs.update({"prompt_token_ids": tokens_prompt_list})
 
-        # Call generate based on model type - use unbinding for AsyncVLLM
-        request_output = self._call_generate_with_unbinding(
-            prompt_token_ids=tokens_prompt_list, sampling_params=sampling_params
-        )
+        # Call generate based on model type
+        request_output = self._call_generate(*args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1826,10 +1773,13 @@ class vLLMWrapper(LLMWrapperBase):
         else:
             tokens_full_list = self._to_list(tokens_full_unpadded, None)
 
-        # Generate with vLLM to get prompt_logprobs - use unbinding for AsyncVLLM
-        tokens_out_stuct = self._call_generate_with_unbinding(
-            prompt_token_ids=tokens_full_list, sampling_params=sampling_params
-        )
+        generate_kwargs = {
+            "sampling_params": sampling_params,
+            "prompt_token_ids": tokens_full_list,
+        }
+
+        # Generate with vLLM to get prompt_logprobs
+        tokens_out_stuct = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)
 

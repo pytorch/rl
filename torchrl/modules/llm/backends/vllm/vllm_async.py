@@ -787,6 +787,150 @@ class AsyncVLLM(RLvLLMEngine):
             **kwargs,
         )
 
+    def _is_batch(
+        self, prompts: Any, prompt_token_ids: list[int] | list[list[int]] | None = None
+    ) -> bool:
+        """Check if the input represents a batch of prompts.
+
+        Args:
+            prompts: Input prompts that can be string, TokensPrompt, or list of these
+            prompt_token_ids: Alternative token IDs input
+
+        Returns:
+            bool: True if this represents multiple prompts, False for single prompt
+        """
+        # If prompts is a list, we need to determine if it's a batch or a single prompt
+        if isinstance(prompts, list):
+            # Empty list is not a batch
+            if len(prompts) == 0:
+                return False
+
+            # If all elements are integers, it's a single prompt represented as token IDs
+            # We trust that if one is an int, then all are ints.
+            if any(isinstance(item, int) for item in prompts):
+                return False
+
+            # If it contains strings, TokensPrompt objects, or other non-integer types,
+            # it's a batch of prompts
+            return True
+
+        # If prompt_token_ids is provided and is a list of lists, it's a batch
+        if prompt_token_ids is not None and isinstance(prompt_token_ids, list):
+            if len(prompt_token_ids) > 0 and isinstance(prompt_token_ids[0], list):
+                return True
+
+        return False
+
+    def _iterate(
+        self, prompts: Any, prompt_token_ids: list[int] | list[list[int]] | None = None
+    ):
+        """Iterate over individual prompts in a batch.
+
+        Args:
+            prompts: Input prompts that can be string, TokensPrompt, or list of these
+            prompt_token_ids: Alternative token IDs input
+
+        Yields:
+            tuple: (individual_prompt, individual_prompt_token_ids) for each item
+        """
+        if isinstance(prompts, list):
+            # Check if this is actually a single prompt represented as token IDs
+            if all(isinstance(item, int) for item in prompts):
+                # This is a single prompt as token IDs, not a batch
+                yield prompts, prompt_token_ids
+                return
+
+            # Handle list of prompts (actual batch)
+            if prompt_token_ids is None:
+                for prompt in prompts:
+                    yield prompt, None
+            elif (
+                isinstance(prompt_token_ids, list)
+                and len(prompt_token_ids) > 0
+                and isinstance(prompt_token_ids[0], list)
+            ):
+                # Both prompts and prompt_token_ids are lists
+                for prompt, token_ids in zip(prompts, prompt_token_ids):
+                    yield prompt, token_ids
+            else:
+                # prompts is list, but prompt_token_ids is single list - replicate it
+                for prompt in prompts:
+                    yield prompt, prompt_token_ids
+        else:
+            # Single prompt case
+            if (
+                prompt_token_ids is not None
+                and isinstance(prompt_token_ids, list)
+                and len(prompt_token_ids) > 0
+                and isinstance(prompt_token_ids[0], list)
+            ):
+                # Single prompt but multiple token_ids - replicate prompt
+                for token_ids in prompt_token_ids:
+                    yield prompts, token_ids
+            else:
+                # Single prompt, single (or no) token_ids
+                yield prompts, prompt_token_ids
+
+    def _generate_impl(
+        self,
+        prompt: Any,
+        sampling_params: SamplingParams | None = None,
+        *,
+        prompt_token_ids: list[int] | None = None,
+        use_tqdm: bool = True,
+        lora_request: Any = None,
+        prompt_adapter_request: Any = None,
+        guided_options_request: Any = None,
+        timeout_seconds: float | None = None,
+        actor_index: int | None = None,
+    ):
+        """Generate text for a single prompt and return a Ray future.
+
+        This is the internal implementation that returns a future instead of the result.
+        Used for batched generation to enable parallel execution.
+
+        Args:
+            prompt: Single prompt (string, TokensPrompt, etc.)
+            sampling_params: SamplingParams object for controlling generation behavior
+            prompt_token_ids: Token IDs for a single prompt
+            use_tqdm: Whether to show progress bar (not used in async engine)
+            lora_request: LoRA request for adapter-based generation
+            prompt_adapter_request: Prompt adapter request
+            guided_options_request: Guided decoding options
+            timeout_seconds: Timeout for generation in seconds
+            actor_index: Specific actor to use (random if None)
+
+        Returns:
+            Ray ObjectRef: Future that will resolve to RequestOutput
+        """
+        if actor_index is None:
+            if len(self.actors) == 1:
+                actor = self.actors[0]
+            else:
+                if self._load_balancer is None:
+                    raise RuntimeError(
+                        "LoadBalancer is not created. Create a LoadBalancer using AsyncVLLM.create_load_balancer before calling generate."
+                    )
+                # Extract single prompt for prefix-aware routing
+                single_prompt = self._extract_single_prompt_for_routing(
+                    prompt, prompt_token_ids
+                )
+                actor_index = self._load_balancer.select_actor(prompt=single_prompt)
+                actor = self.actors[actor_index]
+        else:
+            actor = self.actors[actor_index]
+
+        return actor.generate.remote(
+            prompt,
+            sampling_params,
+            prompt_token_ids=prompt_token_ids,
+            use_tqdm=use_tqdm,
+            lora_request=lora_request,
+            prompt_adapter_request=prompt_adapter_request,
+            guided_options_request=guided_options_request,
+            timeout_seconds=timeout_seconds,
+        )
+
     def generate(
         self,
         prompts: Any = None,
@@ -821,53 +965,14 @@ class AsyncVLLM(RLvLLMEngine):
             actor_index (int | None): Specific actor to use (random if None).
 
         Returns:
-            list[RequestOutput]: Generated outputs from vLLM.
+            RequestOutput | list[RequestOutput]: Generated outputs from vLLM.
         """
-        if actor_index is None:
-            if len(self.actors) == 1:
-                actor = self.actors[0]
-            else:
-                if self._load_balancer is None:
-                    raise RuntimeError(
-                        "LoadBalancer is not created. Create a LoadBalancer using AsyncVLLM.create_load_balancer before calling generate."
-                    )
-                # Extract single prompt for prefix-aware routing, if possible
-                single_prompt = self._extract_single_prompt_for_routing(
-                    prompts, prompt_token_ids
-                )
-                actor_index = self._load_balancer.select_actor(prompt=single_prompt)
-                actor = self.actors[actor_index]
-        else:
-            actor = self.actors[actor_index]
-        single_prompt = not isinstance(prompts, list)
-        if prompt_token_ids is not None:
-            if not isinstance(prompt_token_ids, list):
-                raise ValueError("prompt_token_ids must be a list of lists")
-            if not len(prompt_token_ids):
-                raise ValueError("prompt_token_ids must not be empty")
-        single_prompt_token_ids = not isinstance(
-            prompt_token_ids, list
-        ) or not isinstance(prompt_token_ids[0], list)
-        if single_prompt and single_prompt_token_ids:
-            prompts = [prompts]
-            prompt_token_ids = [prompt_token_ids]
-        elif single_prompt:
-            prompts = [prompts] * len(prompt_token_ids)  # type: ignore
-        elif single_prompt_token_ids:
-            prompt_token_ids = [prompt_token_ids] * len(prompts)  # type: ignore
-        if not isinstance(prompts, list):
-            raise ValueError("prompts must be a list")
-        if not isinstance(prompt_token_ids, list):
-            raise ValueError(
-                "prompt_token_ids must be a list of ints or a list of lists of ints"
-            )
-        if len(prompts) != len(prompt_token_ids):
-            raise ValueError(
-                "prompts and prompt_token_ids must have the same length (got {len(prompts)=} and {len(prompt_token_ids)=})"
-            )
-        results = ray.get(
-            [
-                actor.generate.remote(
+        # Check if this is a batch request
+        if self._is_batch(prompts, prompt_token_ids):
+            # Handle batched input by unbinding and sending individual requests
+            futures = []
+            for prompt, prompt_token_ids_i in self._iterate(prompts, prompt_token_ids):
+                future = self._generate_impl(
                     prompt,
                     sampling_params,
                     prompt_token_ids=prompt_token_ids_i,
@@ -876,11 +981,28 @@ class AsyncVLLM(RLvLLMEngine):
                     prompt_adapter_request=prompt_adapter_request,
                     guided_options_request=guided_options_request,
                     timeout_seconds=timeout_seconds,
+                    actor_index=actor_index,
                 )
-                for prompt, prompt_token_ids_i in zip(prompts, prompt_token_ids)
-            ]
-        )
-        return results
+                futures.append(future)
+
+            # Collect all results
+            results = ray.get(futures)
+            return results
+        else:
+            # Single prompt case - call _generate_impt and get result directly
+            future = self._generate_impl(
+                prompts,
+                sampling_params,
+                prompt_token_ids=prompt_token_ids,
+                use_tqdm=use_tqdm,
+                lora_request=lora_request,
+                prompt_adapter_request=prompt_adapter_request,
+                guided_options_request=guided_options_request,
+                timeout_seconds=timeout_seconds,
+                actor_index=actor_index,
+            )
+            result = ray.get(future)
+            return result
 
     def get_random_actor_index(self) -> int:
         """Get a random actor index."""
