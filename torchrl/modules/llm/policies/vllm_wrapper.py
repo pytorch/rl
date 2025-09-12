@@ -25,6 +25,7 @@ from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
+from torchrl.modules.llm.backends.vllm import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
     _batching,
     _extract_responses_from_full_histories,
@@ -50,19 +51,6 @@ except ImportError:
     RequestOutput = Any  # type: ignore
 
 # Import async vLLM engines
-try:
-    from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
-
-    _has_async_vllm = True
-except ImportError:
-
-    class _AsyncLLMEngine:
-        """AsyncLLMEngineExtended is not available."""
-
-    class AsyncVLLM:
-        """AsyncVLLMEngineService is not available."""
-
-    _has_async_vllm = False
 
 
 class vLLMWrapper(LLMWrapperBase):
@@ -342,7 +330,7 @@ class vLLMWrapper(LLMWrapperBase):
             model = AsyncVLLM.from_pretrained(model)
 
         # Validate model type
-        if _has_async_vllm and isinstance(model, AsyncVLLM):
+        if isinstance(model, AsyncVLLM):
             self._model_type = "async_vllm"
         elif vllm is not None and isinstance(model, vllm.LLM):
             self._model_type = "sync_vllm"
