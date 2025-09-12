@@ -29,6 +29,7 @@ import torch
 import tqdm
 
 from grpo_utils import (
+    check_grpo_dependencies,
     compute_device_allocation,
     get_inference_model,
     get_train_model,
@@ -298,6 +299,9 @@ def train(
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
 def main(cfg):
+    # Check for required GRPO dependencies
+    check_grpo_dependencies()
+
     # Force sync mode
     if not cfg.train.sync:
         raise ValueError(

@@ -9,8 +9,8 @@ defaults:
 env:
   dataset: gsm8k  # choices: [gsm8k, ifeval]
   # Number of environments to run in parallel. This determines the batch size passed to vLLM.
-  #  More envs consume more GPU memory.
-  num_envs: 8  # Reduced from 8 to save memory
+  # More envs do not consume more GPU memory but there will be a sync on the call to vLLM.
+  num_envs: 32
   # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
   # Whether to use the reasoning prompt
@@ -87,8 +87,9 @@ inference_model:
     enabled: false  # Enable 4-bit quantization for base model
   attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
-  gpu_memory_utilization: 0.5  # Limit GPU memory usage
-  temperature: 0.8
+  gpu_memory_utilization: 0.9  # Limit GPU memory usage
+  temperature: 1.0
+  top_p: 0.95
   max_tokens: 1024
   include_stop_str_in_output: true
   enforce_eager: false

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Any, Literal
 
 import torch
@@ -18,6 +19,71 @@ from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
+
+
+def check_grpo_dependencies() -> None:
+    """Check for required GRPO dependencies and provide helpful error messages.
+
+    This function checks for critical dependencies needed for GRPO training and
+    provides installation instructions for missing packages.
+    """
+    missing_packages = []
+    missing_optional = []
+
+    # Core required packages
+    required_packages = {
+        "datasets": "pip install datasets",
+        "peft": "pip install peft",
+        "wandb": "pip install wandb",
+        "vllm": "pip install vllm",
+        "transformers": "pip install transformers",
+        "accelerate": "pip install accelerate",
+        "ray": "pip install ray",
+        "tqdm": "pip install tqdm",
+    }
+
+    # Optional but recommended packages
+    optional_packages = {
+        "flash_attn": "pip install flash-attn",
+        "bitsandbytes": "pip install bitsandbytes",
+        "xformers": "pip install xformers",
+    }
+
+    # Check required packages
+    for package, install_cmd in required_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append((package, install_cmd))
+
+    # Check optional packages
+    for package, install_cmd in optional_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_optional.append((package, install_cmd))
+
+    # Report missing required packages
+    if missing_packages:
+        error_msg = (
+            "Missing required packages for GRPO training:\n"
+            + "\n".join(f"  - {pkg}: {cmd}" for pkg, cmd in missing_packages)
+            + "\n\nYou can install all GRPO dependencies with:\n"
+            + "  pip install torchrl[grpo]\n"
+            + "or install individual packages as shown above."
+        )
+        raise ImportError(error_msg)
+
+    # Report missing optional packages as warnings
+    if missing_optional:
+        warning_msg = (
+            "Missing optional packages that may improve GRPO performance:\n"
+            + "\n".join(f"  - {pkg}: {cmd}" for pkg, cmd in missing_optional)
+            + "\n\nThese packages are optional but recommended for optimal performance."
+        )
+        warnings.warn(warning_msg, UserWarning, stacklevel=2)
+
+    torchrl_logger.info("✓ All required GRPO dependencies are available")
 
 
 def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
@@ -237,6 +303,7 @@ def get_inference_model(
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
             "temperature": cfg.inference_model.temperature,
+            "top_p": cfg.inference_model.top_p,
         },
     )
     assert policy.model is not None
