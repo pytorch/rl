@@ -215,38 +215,14 @@ class _AsyncLLMEngine:
         engine_args.worker_cls = worker_cls
         engine_args.enable_prefix_caching = enable_prefix_caching
 
-        # Store engine args and bundle indices for async initialization
-        self.engine_args = engine_args
+        # Create the engine directly - this is the source of the blocking ray.get issue
+        # but we need to handle it differently for multiple replicas
+        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.bundle_indices = bundle_indices
-        self.engine = None
-        self._initialization_task = None
-        self._ready = False
 
-    async def _initialize_engine(self):
-        """Initialize the AsyncLLMEngine asynchronously."""
-        try:
-            torchrl_logger.info("Starting async engine initialization...")
-            self.engine = AsyncLLMEngine.from_engine_args(self.engine_args)
-            self._ready = True
-            torchrl_logger.info("Async engine initialization completed successfully")
-        except Exception as e:
-            torchrl_logger.error(f"Failed to initialize async engine: {e}")
-            raise
-
-    async def ready(self) -> bool:
+    def ready(self) -> bool:
         """Check if engine is ready for inference."""
-        if self._ready:
-            return True
-
-        if self._initialization_task is None:
-            self._initialization_task = asyncio.create_task(self._initialize_engine())
-
-        try:
-            await self._initialization_task
-            return True
-        except Exception as e:
-            torchrl_logger.error(f"Engine initialization failed: {e}")
-            return False
+        return True
 
     async def generate(
         self,
@@ -281,10 +257,6 @@ class _AsyncLLMEngine:
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
-
-        # Ensure engine is initialized before generation
-        if not await self.ready():
-            raise RuntimeError("Failed to initialize async engine")
 
         # Track whether input was originally a single prompt
         single_prompt_input = False
@@ -377,9 +349,6 @@ class _AsyncLLMEngine:
 
     async def get_tokenizer(self):
         """Get the tokenizer from the engine."""
-        # Ensure engine is initialized before getting tokenizer
-        if not await self.ready():
-            raise RuntimeError("Failed to initialize async engine")
         return await self.engine.get_tokenizer()
 
     async def collective_rpc_v1(
@@ -397,10 +366,6 @@ class _AsyncLLMEngine:
             args (tuple): Arguments to pass to the method.
             kwargs (dict | None): Keyword arguments to pass to the method.
         """
-        # Ensure engine is initialized before RPC call
-        if not await self.ready():
-            raise RuntimeError("Failed to initialize async engine")
-
         if envs and envs.VLLM_USE_V1:
             return await self.engine.collective_rpc(method, timeout, args, kwargs)
         else:
@@ -421,10 +386,6 @@ class _AsyncLLMEngine:
             args (tuple): Arguments to pass to the method.
             kwargs (dict | None): Keyword arguments to pass to the method.
         """
-        # Note: This is a sync method, so we can't await ready() here
-        # The caller should ensure the engine is ready
-        if not self._ready:
-            raise RuntimeError("Engine not initialized - call ready() first")
         return self.engine.engine.collective_rpc(method, timeout, args, kwargs)
 
     def get_num_unfinished_requests(self) -> int:
@@ -433,9 +394,6 @@ class _AsyncLLMEngine:
         Returns:
             int: Number of unfinished requests.
         """
-        if not self._ready:
-            return 0  # Return 0 if engine not ready yet
-
         try:
             # Try to access the method directly if available
             if hasattr(self.engine, "get_num_unfinished_requests"):
@@ -461,9 +419,6 @@ class _AsyncLLMEngine:
         Returns:
             float: Cache usage fraction (0.0 = empty, 1.0 = full).
         """
-        if not self._ready:
-            return 0.0  # Return 0.0 if engine not ready yet
-
         try:
             # Try to get cache usage from the engine
             if hasattr(self.engine, "engine") and hasattr(
@@ -681,36 +636,41 @@ class AsyncVLLM(RLvLLMEngine):
             f"Launching {self.num_replicas} async vLLM engine actors..."
         )
 
-        # Create placement groups with GPU allocation
-        bundles = [
-            {"GPU": 1.0, "CPU": 1.0}
-            for _ in range(self.num_replicas * self.engine_args.tensor_parallel_size)
-        ]
-        torchrl_logger.info(f"Creating GPU placement group with {len(bundles)} bundles")
+        # Create placement groups - one per replica to avoid conflicts
+        self._placement_groups = []
 
-        self._placement_group = placement_group(bundles, strategy="PACK")
-        torchrl_logger.info(f"Placement group created: {self._placement_group}")
-
-        # Avoid indefinite hang if resources are not available
-        ray.get(self._placement_group.ready(), timeout=180)
-        torchrl_logger.info(f"Placement group ready: {self._placement_group}")
-
-        # Create actor replicas
+        # Create actor replicas sequentially to avoid race conditions
         for i in range(self.num_replicas):
             torchrl_logger.info(
                 f"Creating async actor replica {i + 1}/{self.num_replicas} ..."
             )
 
+            # Create individual placement group for this replica
+            bundles = [
+                {"GPU": 1.0, "CPU": 1.0}
+                for _ in range(self.engine_args.tensor_parallel_size)
+            ]
+            torchrl_logger.info(
+                f"Creating placement group for replica {i + 1} with {len(bundles)} bundles"
+            )
+
+            placement_group_name = f"vllm-replica-{self._service_id}-{i}"
+            pg = placement_group(bundles, strategy="PACK", name=placement_group_name)
+            self._placement_groups.append(pg)
+            torchrl_logger.info(f"Placement group {placement_group_name} created: {pg}")
+
+            # Wait for placement group to be ready
+            ray.get(pg.ready(), timeout=180)
+            torchrl_logger.info(f"Placement group {placement_group_name} ready")
+
             # Calculate bundle indices for tensor parallelism
             bundle_indices = None
             if self.engine_args.tensor_parallel_size > 1:
-                bundle_indices = _get_bundle_indices(
-                    self._placement_group, i, self.engine_args.tensor_parallel_size
-                )
-            bundle_index = bundle_indices[0] if bundle_indices else i
+                bundle_indices = list(range(self.engine_args.tensor_parallel_size))
+            bundle_index = 0  # Always use first bundle since each replica has its own placement group
 
             scheduling_strategy = PlacementGroupSchedulingStrategy(
-                placement_group=self._placement_group,
+                placement_group=pg,
                 placement_group_capture_child_tasks=True,
                 placement_group_bundle_index=bundle_index,
             )
@@ -729,24 +689,31 @@ class AsyncVLLM(RLvLLMEngine):
 
             self.actors.append(actor)
 
-            torchrl_logger.info(f"Waiting for actor to be ready: {actor=}")
-            # Wait for all actors to be ready
+            torchrl_logger.info(f"Waiting for actor {i + 1} to be ready: {actor=}")
+            # Wait for this actor to be ready before creating the next one
             ready_future = actor.ready.remote()
             try:
                 ray.get(
                     ready_future, timeout=300
                 )  # 5 minute timeout for engine initialization
-                torchrl_logger.info(f"Actor {i + 1}/{self.num_replicas} is ready")
+                torchrl_logger.info(f"✅ Actor {i + 1}/{self.num_replicas} is ready")
             except Exception as e:
                 torchrl_logger.error(
-                    f"Failed to initialize actor {i + 1}/{self.num_replicas}: {e}"
+                    f"❌ Failed to initialize actor {i + 1}/{self.num_replicas}: {e}"
                 )
                 raise
 
+        # Store the first placement group for backward compatibility
+        self._placement_group = (
+            self._placement_groups[0] if self._placement_groups else None
+        )
+
         self._launched = True
         torchrl_logger.info(
-            f"Successfully launched {len(self.actors)} async vLLM engine actors"
+            f"✅ Successfully launched {len(self.actors)} async vLLM engine actors"
         )
+        # create a default load balancer
+        self.create_load_balancer("requests")
 
     @classmethod
     def launch(
@@ -855,9 +822,14 @@ class AsyncVLLM(RLvLLMEngine):
             list[RequestOutput]: Generated outputs from vLLM.
         """
         if actor_index is None:
-            if self._load_balancer is None:
-                raise RuntimeError("LoadBalancer is not created")
-            actor = self._load_balancer.select_actor()
+            if len(self.actors) == 1:
+                actor = self.actors[0]
+            else:
+                if self._load_balancer is None:
+                    raise RuntimeError(
+                        "LoadBalancer is not created. Create a LoadBalancer using AsyncVLLM.create_load_balancer before calling generate."
+                    )
+                actor = self._load_balancer.select_actor()
         else:
             actor = self.actors[actor_index]
         torchrl_logger.info(f"Using actor {actor=} with {actor_index=}")
@@ -998,7 +970,21 @@ class AsyncVLLM(RLvLLMEngine):
         # Clear the actors list
         self.actors.clear()
 
-        # Remove placement group if any
+        # Remove placement groups if any
+        if hasattr(self, "_placement_groups") and self._placement_groups:
+            for i, pg in enumerate(self._placement_groups):
+                try:
+                    remove_placement_group(pg)
+                    torchrl_logger.info(
+                        f"Removed placement group {i + 1}/{len(self._placement_groups)}"
+                    )
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error removing placement group {i + 1}: {e}"
+                    )
+            self._placement_groups = []
+
+        # Remove legacy single placement group if any
         if self._placement_group is not None:
             remove_placement_group(self._placement_group)
         self._placement_group = None
