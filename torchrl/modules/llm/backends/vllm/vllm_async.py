@@ -684,6 +684,9 @@ class AsyncVLLM(RLvLLMEngine):
 
             self.actors.append(actor)
 
+        torchrl_logger.info(f"Waiting for actors to be created: {self.actors=}")
+        ray.get(self.actors)
+        torchrl_logger.info(f"Waiting for actors to be ready: {self.actors=}")
         # Wait for all actors to be ready
         ready_futures = [actor.ready.remote() for actor in self.actors]
         ray.get(ready_futures)
@@ -782,6 +785,8 @@ class AsyncVLLM(RLvLLMEngine):
         compatibility between sync and async engines. It can be used to generate text
         within multiple threads / actors. If `actor_index` is not provided, the load balancer
         will be used to select the actor.
+
+        `generate` is a blocking method, so it will wait for the generation to complete.
 
         Args:
             prompts (String, TokensPrompt, or list of these): Input prompts for generation.
