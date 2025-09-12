@@ -157,8 +157,8 @@ def get_inference_model(
     # Build parameters dict for AsyncVLLM with all config options
     inference_params = {
         "model_name": model_name,
-        "num_devices": num_devices,
-        "devices": vllm_devices,
+        "num_devices": 1,
+        "num_replicas": num_devices,
         "gpu_memory_utilization": cfg.inference_model.gpu_memory_utilization,
         "enforce_eager": cfg.inference_model.enforce_eager,
         "verbose": verbose,
