@@ -565,6 +565,7 @@ class DatasetChatEnv(TransformedEnv):
         )
         self._from_dataloader(
             self,
+            dataloader=None,
             dataloader_factory=dataloader_factory,
             ray_backend=ray_backend,
             repeats=repeats,
@@ -646,7 +647,7 @@ class DatasetChatEnv(TransformedEnv):
         self = cls.__new__(cls)
         return cls._from_dataloader(
             self,
-            dataloader,
+            dataloader=dataloader,
             repeats=repeats,
             device=device,
             group_repeats=group_repeats,
@@ -664,8 +665,8 @@ class DatasetChatEnv(TransformedEnv):
         cls,
         self,
         dataloader=None,
-        dataloader_factory=None,
         *,
+        dataloader_factory=None,
         repeats: int | None = None,
         device: torch.device | None = None,
         group_repeats: bool = False,
