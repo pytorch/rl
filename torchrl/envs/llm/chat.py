@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
+
 from collections.abc import Callable
 
 from typing import Any, Literal, TYPE_CHECKING
@@ -16,7 +18,10 @@ from torchrl.data import Composite, NonTensor
 from torchrl.data.llm.history import History
 from torchrl.envs import EnvBase, TransformedEnv
 
-from torchrl.envs.llm.transforms.dataloading import DataLoadingPrimer
+from torchrl.envs.llm.transforms.dataloading import (
+    DataLoadingPrimer,
+    RayDataLoadingPrimer,
+)
 from torchrl.modules.llm.policies.common import ChatHistory, Text, Tokens
 
 if TYPE_CHECKING:
@@ -501,6 +506,9 @@ class DatasetChatEnv(TransformedEnv):
         data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).
             Defaults to `None` (automatically determined based on the input_mode).
         system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.
+        ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.
+            Using this backend allows for explicit resource control and avoids serialization issues, as well as
+            sharing the same dataloader across multiple environments and actors.
 
     .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a
         :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format
@@ -533,8 +541,8 @@ class DatasetChatEnv(TransformedEnv):
         data_key: str | None = None,
         primers: Composite | None = None,
         system_prompt: str | None = None,
+        ray_backend: bool = False,
     ):
-        from datasets import load_dataset
         from tensordict import list_to_stack
 
         if not list_to_stack():
@@ -544,6 +552,38 @@ class DatasetChatEnv(TransformedEnv):
             )
 
         batch_size = (num_envs,)
+
+        dataloader_factory = functools.partial(
+            self._dataloader_factory,
+            dataset=dataset,
+            name=name,
+            split=split,
+            seed=seed,
+            batch_size_dl=batch_size_dl,
+            shuffle=shuffle,
+            collate_fn=collate_fn,
+        )
+        self._from_dataloader(
+            self,
+            dataloader_factory=dataloader_factory,
+            ray_backend=ray_backend,
+            repeats=repeats,
+            device=device,
+            group_repeats=group_repeats,
+            batch_size=batch_size,
+            primers=primers,
+            tokenizer=tokenizer,
+            template_kwargs=template_kwargs,
+            input_mode=input_mode,
+            data_key=data_key,
+            system_prompt=system_prompt,
+        )
+
+    @staticmethod
+    def _dataloader_factory(
+        dataset, name, split, seed, batch_size_dl, shuffle, collate_fn
+    ):
+        from datasets import load_dataset
 
         dataset_obj = load_dataset(dataset, name)
         if split is None and "train" in dataset_obj:
@@ -563,20 +603,7 @@ class DatasetChatEnv(TransformedEnv):
             collate_fn=collate_fn if collate_fn is not None else _default_collate_fn,
             generator=generator,
         )
-        self._from_dataloader(
-            self,
-            dataloader=dataloader,
-            repeats=repeats,
-            device=device,
-            group_repeats=group_repeats,
-            batch_size=batch_size,
-            primers=primers,
-            tokenizer=tokenizer,
-            template_kwargs=template_kwargs,
-            input_mode=input_mode,
-            data_key=data_key,
-            system_prompt=system_prompt,
-        )
+        return dataloader
 
     @classmethod
     def from_dataloader(
@@ -636,7 +663,8 @@ class DatasetChatEnv(TransformedEnv):
     def _from_dataloader(
         cls,
         self,
-        dataloader,
+        dataloader=None,
+        dataloader_factory=None,
         *,
         repeats: int | None = None,
         device: torch.device | None = None,
@@ -648,9 +676,15 @@ class DatasetChatEnv(TransformedEnv):
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
         system_prompt: str | None = None,
+        ray_backend: bool = False,
     ):
-        primer = DataLoadingPrimer(
+        if ray_backend:
+            cls = RayDataLoadingPrimer
+        else:
+            cls = DataLoadingPrimer
+        primer = cls(
             dataloader=dataloader,
+            dataloader_factory=dataloader_factory,
             repeats=repeats,
             device=device,
             group_repeats=group_repeats,

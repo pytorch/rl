@@ -29,7 +29,10 @@ class vLLMUpdaterV2(WeightUpdaterBase):
     through the engine's own methods.
 
     Args:
-        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface
+        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface.
+
+    .. note:: This class can be created through :class:`torchrl.collectors.llm.vLLMUpdater` with `v2=True`.
+
     """
 
     def __init__(self, vllm_engine: RLvLLMEngine):

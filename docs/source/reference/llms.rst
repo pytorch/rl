@@ -987,6 +987,7 @@ By following these design principles, reward transforms can be effectively integ
     AddThinkingPrompt
     BrowserTransform
     DataLoadingPrimer
+    RayDataLoadingPrimer
     KLComputation
     KLRewardTransform
     MCPToolTransform

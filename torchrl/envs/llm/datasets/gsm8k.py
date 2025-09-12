@@ -165,6 +165,9 @@ class GSM8KEnv(DatasetChatEnv):
             collate function is used. Defaults to `None`.
         max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.
         input_mode (Literal["history", "text", "tokens"], optional): The mode of input to use. Defaults to `"history"`.
+        ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.
+            Using this backend allows for explicit resource control and avoids serialization issues, as well as
+            sharing the same dataloader across multiple environments and actors.
 
     Examples:
         >>> import transformers
@@ -316,6 +319,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
         collate_fn: Callable | None = None,
         max_steps: int = 1,
         input_mode: Literal["history", "text", "tokens"] = "history",
+        ray_backend: bool = False,
     ):
         if collate_fn is None:
             collate_fn = _collate_fn
@@ -334,6 +338,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
             apply_template=apply_template,
             collate_fn=collate_fn,
             input_mode=input_mode,
+            ray_backend=ray_backend,
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

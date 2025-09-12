@@ -85,6 +85,8 @@ class DataLoadingPrimer(TensorDictPrimer):
             It is assumed that the elements retrieved from the dataloader come in batches along the first dimension
             of every tensor, unless `dataloader.batch_size=0`.
             The dataloader must yield mappable data structures (e.g., dictionaries).
+            If a dataloader_factory is provided, it will be used to create a fresh dataloader and this argument can be
+            omitted.
 
     Keyword Args:
         primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.
@@ -104,6 +106,8 @@ class DataLoadingPrimer(TensorDictPrimer):
 
         group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that
             all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.
+        dataloader_factory (Callable[[], Iterable[dict[str, Any]]], optional): A callable that returns a dataloader.
+            This allows for explicit resource control and avoids serialization issues.
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -346,8 +350,9 @@ class DataLoadingPrimer(TensorDictPrimer):
 
     def __init__(
         self,
-        dataloader: Iterable[dict[str, Any]],
+        dataloader: Iterable[dict[str, Any]] | None = None,
         *,
+        dataloader_factory: Callable[[], Iterable[dict[str, Any]]] | None = None,
         primers: Composite | None = None,
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"]
@@ -357,7 +362,24 @@ class DataLoadingPrimer(TensorDictPrimer):
         device: torch.device | None = None,
         group_repeats: bool = False,
     ):
-        self.dataloader = dataloader
+        # Validate arguments: exactly one of dataloader or dataloader_factory must be provided
+        if dataloader is not None and dataloader_factory is not None:
+            raise ValueError(
+                "Cannot provide both 'dataloader' and 'dataloader_factory'. Choose one."
+            )
+        if dataloader is None and dataloader_factory is None:
+            raise ValueError(
+                "Must provide exactly one of 'dataloader' or 'dataloader_factory'."
+            )
+
+        # Initialize dataloader from factory if provided
+        if dataloader_factory is not None:
+            self.dataloader = dataloader_factory()
+            self.dataloader_factory = dataloader_factory
+        else:
+            self.dataloader = dataloader
+            self.dataloader_factory = None
+
         if repeats is None:
             repeats = 0
         self.repeats = repeats
@@ -392,8 +414,15 @@ class DataLoadingPrimer(TensorDictPrimer):
         if batch_size == 0:
             batch_size = torch.Size(())
         if not isinstance(batch_size, (list, tuple)):
-            batch_size = (batch_size,)
-        batch_size = torch.Size(batch_size)
+            if isinstance(batch_size, int):
+                batch_size_tuple = (batch_size,)
+            elif isinstance(batch_size, torch.Size):
+                batch_size_tuple = tuple(batch_size)
+            else:
+                batch_size_tuple = (batch_size,)
+        else:
+            batch_size_tuple = batch_size
+        batch_size = torch.Size(batch_size_tuple)
         auto_batch_size = getattr(dataloader, "batch_size", 1) != 0
 
         if len(batch_size) > 1:
@@ -451,11 +480,15 @@ class DataLoadingPrimer(TensorDictPrimer):
         """Reset the dataloader.
 
         This is useful when the dataloader is not infinite and we want to reset it.
+        If a dataloader_factory was provided, it will be used to create a fresh dataloader.
 
         Returns:
             self: The transform itself.
         """
         self._queue.clear()
+        if self.dataloader_factory is not None:
+            # Create a fresh dataloader from the factory
+            self.dataloader = self.dataloader_factory()
         self.endless_dataloader = self._endless_iter(self.dataloader)
         return self
 
@@ -550,3 +583,100 @@ class DataLoadingPrimer(TensorDictPrimer):
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
         return f"{class_name}(primers={self.primers}, dataloader={self.dataloader})"
+
+
+class RayDataLoadingPrimer:
+    """A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.
+
+    This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers.
+    All method calls are delegated to the remote actor, ensuring that multiple environments iterate over
+    the same shared dataloader.
+
+    Keyword Args:
+        dataloader: A dataloader object to be used directly. Ray will handle serialization.
+        dataloader_factory: A callable that returns a dataloader. This allows for explicit
+            resource control and avoids serialization issues.
+        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor.
+            Defaults to the dataloader's num_workers if available, otherwise 1.
+        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.
+        **kwargs: Additional keyword arguments to pass to DataLoadingPrimer.
+
+    Note:
+        Exactly one of `dataloader` or `dataloader_factory` must be provided.
+
+    Examples:
+        >>> # Option 1: Using a dataloader factory for explicit resource control
+        >>> def create_dataloader():
+        ...     return torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)
+        >>> primer1 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)
+        >>> primer2 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)  # Same shared actor
+
+        >>> # Option 2: Pass dataloader directly (Ray handles serialization)
+        >>> dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)
+        >>> primer1 = RayDataLoadingPrimer(dataloader=dataloader)  # num_cpus=4 inferred from num_workers
+        >>> primer2 = RayDataLoadingPrimer(dataloader=dataloader)  # Same shared actor
+    """
+
+    def __init__(
+        self,
+        *,
+        dataloader=None,
+        dataloader_factory=None,
+        num_cpus=None,
+        num_gpus=0,
+        **kwargs,
+    ):
+        # Validate arguments: exactly one of dataloader or dataloader_factory must be provided
+        if dataloader is not None and dataloader_factory is not None:
+            raise ValueError(
+                "Cannot provide both 'dataloader' and 'dataloader_factory'. Choose one."
+            )
+        if dataloader is None and dataloader_factory is None:
+            raise ValueError(
+                "Must provide exactly one of 'dataloader' or 'dataloader_factory'."
+            )
+
+        # Import ray here to avoid requiring it as a dependency
+        try:
+            import ray
+        except ImportError:
+            raise ImportError(
+                "Ray is required for RayDataLoadingPrimer. Install with: pip install ray"
+            )
+
+        # Infer num_cpus from dataloader if not specified and dataloader is provided
+        if num_cpus is None:
+            if dataloader is not None:
+                num_cpus = getattr(dataloader, "num_workers", 1)
+            elif dataloader_factory is not None:
+                # Create a temporary dataloader to infer num_cpus, then discard it
+                temp_dataloader = dataloader_factory()
+                num_cpus = getattr(temp_dataloader, "num_workers", 1)
+                del temp_dataloader  # Clean up
+            else:
+                num_cpus = 1
+
+            if num_cpus == 0:  # Common case for single-threaded dataloaders
+                num_cpus = 1
+
+        # Create the remote DataLoadingPrimer with resource specifications
+        RemoteDataLoadingPrimer = ray.remote(num_cpus=num_cpus, num_gpus=num_gpus)(
+            DataLoadingPrimer
+        )
+
+        # Create the shared actor, passing factory or dataloader as appropriate
+        if dataloader_factory is not None:
+            actor = RemoteDataLoadingPrimer.remote(
+                dataloader_factory=dataloader_factory, **kwargs
+            )
+        else:
+            actor = RemoteDataLoadingPrimer.remote(dataloader=dataloader, **kwargs)
+
+        self._actor = actor
+        self._ray = ray
+
+    def __getattr__(self, name):
+        """Delegate all attribute access to the remote actor."""
+        return lambda *args, **kwargs: self._ray.get(
+            getattr(self._actor, name).remote(*args, **kwargs)
+        )

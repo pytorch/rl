@@ -638,6 +638,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             num_envs=cfg.env.num_envs,
             max_steps=max_steps,
             device=torch.device("cuda:0") if devices is not None else None,
+            ray_backend=True,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
         # Reward scale is 0.0 to 2.2

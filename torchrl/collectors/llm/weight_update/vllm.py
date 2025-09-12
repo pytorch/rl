@@ -40,7 +40,45 @@ else:
         )
 
 
-class vLLMUpdater(WeightUpdaterBase):
+class vLLMUpdaterMeta(type(WeightUpdaterBase)):
+    """Metaclass for vLLMUpdater that allows switching between V1 and V2 implementations.
+
+    When instantiating vLLMUpdater with v2=True, returns a vLLMUpdaterV2 instance instead.
+    This provides a unified entry point for both updater versions while maintaining
+    backward compatibility.
+    """
+
+    def __call__(cls, *args, v2=False, **kwargs):
+        if v2:
+            # Import V2 here to avoid circular imports
+            from .vllm_v2 import vLLMUpdaterV2
+
+            # V2 has a different signature - it expects a vllm_engine parameter
+            # If the user is providing the old signature, we need to handle this gracefully
+            if args or any(
+                k in kwargs
+                for k in [
+                    "master_address",
+                    "master_port",
+                    "model_metadata",
+                    "vllm_tp_size",
+                ]
+            ):
+                # Old signature detected - we can't auto-convert, user needs to update their code
+                raise TypeError(
+                    "When using v2=True, you must provide a vllm_engine parameter instead of "
+                    "the v1 parameters (master_address, master_port, model_metadata, vllm_tp_size). "
+                    "See vLLMUpdaterV2 documentation for details."
+                )
+
+            # Forward to V2 constructor
+            return vLLMUpdaterV2(*args, **kwargs)
+        else:
+            # Use original V1 constructor
+            return super().__call__(*args, **kwargs)
+
+
+class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
     """A class that sends weights to vLLM workers.
 
     This class handles synchronizing weights between a training policy and vLLM inference workers.
@@ -52,6 +90,9 @@ class vLLMUpdater(WeightUpdaterBase):
         model_metadata (dict[str, tuple[torch.dtype, torch.Size]], optional): Model metadata mapping
             parameter names to their dtype and shape. If not provided, will be extracted from policy.
         vllm_tp_size (int, optional): vLLM tensor parallel size. Defaults to 1.
+        v2 (bool, optional): If True, returns a vLLMUpdaterV2 instance instead. This is an experimental
+            feature that provides better integration with AsyncVLLM engines. When using v2=True, you must
+            provide a vllm_engine parameter instead of the above parameters. Defaults to False.
 
     Methods:
         init: Initialize the updater with model metadata and initialize the group.
@@ -63,6 +104,11 @@ class vLLMUpdater(WeightUpdaterBase):
     .. note::
         This class assumes the policy is a transformers model that can be loaded by vLLM.
         The policy must have a state_dict() method that returns the model weights.
+
+    .. warning::
+        The v2=True option is experimental and may have backward-compatibility breaking changes
+        in future releases. However, it is generally considered a better option for working with
+        AsyncVLLM engines and provides improved performance and reliability.
     """
 
     def __init__(
