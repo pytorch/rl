@@ -16,7 +16,7 @@ import asyncio
 import os
 import random
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any, Literal
 
 import torch
@@ -831,10 +831,14 @@ class AsyncVLLM(RLvLLMEngine):
                     raise RuntimeError(
                         "LoadBalancer is not created. Create a LoadBalancer using AsyncVLLM.create_load_balancer before calling generate."
                     )
-                actor = self.actors[self._load_balancer.select_actor()]
+                # Extract single prompt for prefix-aware routing, if possible
+                single_prompt = self._extract_single_prompt_for_routing(
+                    prompts, prompt_token_ids
+                )
+                actor_index = self._load_balancer.select_actor(prompt=single_prompt)
+                actor = self.actors[actor_index]
         else:
             actor = self.actors[actor_index]
-        torchrl_logger.info(f"Using actor {actor=} with {actor_index=}")
         single_prompt = not isinstance(prompts, list)
         if prompt_token_ids is not None:
             if not isinstance(prompt_token_ids, list):
@@ -1137,59 +1141,178 @@ class AsyncVLLM(RLvLLMEngine):
             return ray.get(futures)
 
     def create_load_balancer(
-        self, strategy: Literal["requests", "kv-cache"]
+        self,
+        strategy: Literal["requests", "kv-cache"]
+        | Sequence[
+            Literal["prefix-aware", "requests", "kv-cache", "round-robin"]
+        ] = "requests",
+        **kwargs,
     ) -> LoadBalancer:
         """Create a load balancer for this AsyncVLLM service.
 
         Args:
-            strategy: Load balancing strategy - either "requests" or "kv-cache".
+            strategy: Load balancing strategy or sequence of strategies in fallback order.
+                Single strategies: "requests", "kv-cache"
+                Strategy sequences: ["prefix-aware", "requests", "round-robin"]
+            **kwargs: Additional arguments passed to LoadBalancer constructor.
 
         Returns:
             LoadBalancer: Configured load balancer instance. This is stored in the AsyncVLLM instance.
 
-        Example:
+        Examples:
             >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=3)
+
+            >>> # Simple strategy
             >>> lb = service.create_load_balancer("requests")
             >>> selected_actor_index = lb.select_actor()
+
+            >>> # Strategy hierarchy with fallbacks
+            >>> lb = service.create_load_balancer(
+            ...     ["prefix-aware", "requests", "round-robin"],
+            ...     prefix_length=16,
+            ...     overload_threshold=2.0
+            ... )
+            >>> selected_actor_index = lb.select_actor(prompt="Hello world")
         """
         if not self._launched:
             raise RuntimeError(
                 "AsyncVLLM service must be launched before creating load balancer"
             )
 
-        load_balancer = LoadBalancer(self, strategy)
+        load_balancer = LoadBalancer(self, strategy, **kwargs)
         self._load_balancer = load_balancer
         return load_balancer
 
+    def _extract_single_prompt_for_routing(
+        self,
+        prompts: Any = None,
+        prompt_token_ids: list[int] | list[list[int]] | None = None,
+    ) -> str | list[int] | None:
+        """Extract a single prompt for load balancer routing, if possible.
+
+        Args:
+            prompts: The prompts argument passed to generate().
+            prompt_token_ids: The prompt_token_ids argument passed to generate().
+
+        Returns:
+            str | list[int] | None: Single prompt for routing, or None if multiple prompts.
+        """
+        try:
+            # Handle prompt_token_ids first (takes precedence over prompts)
+            if prompt_token_ids is not None:
+                if isinstance(prompt_token_ids, list):
+                    if len(prompt_token_ids) == 0:
+                        return None  # Empty list
+                    elif len(prompt_token_ids) == 1:
+                        # Single prompt case - could be tokens directly or nested list
+                        if isinstance(prompt_token_ids[0], int):
+                            # Single token sequence: [token1, token2, ...]
+                            return prompt_token_ids
+                        elif isinstance(prompt_token_ids[0], list):
+                            # Nested list with single prompt: [[token1, token2, ...]]
+                            return prompt_token_ids[0]
+                        else:
+                            return None
+                    else:
+                        # Multiple prompts: [[tokens1...], [tokens2...], ...]
+                        return None
+                else:
+                    # Not a list, invalid format
+                    return None
+
+            # Handle prompts argument
+            if prompts is None:
+                return None
+
+            # Import vLLM types for proper checking
+            try:
+                pass
+            except ImportError:
+                # Fallback if imports fail
+                type(None)
+                type(None)
+
+            # Single string prompt
+            if isinstance(prompts, str):
+                return prompts
+
+            # TokensPrompt object
+            elif hasattr(prompts, "prompt_token_ids"):  # TokensPrompt-like object
+                return prompts.prompt_token_ids
+
+            # TextPrompt object
+            elif hasattr(prompts, "prompt"):  # TextPrompt-like object
+                return prompts.prompt
+
+            # List of prompts
+            elif isinstance(prompts, (list, tuple)):
+                if len(prompts) == 0:
+                    return None  # Empty list
+                elif len(prompts) == 1:
+                    # Single prompt in list - recursively extract
+                    return self._extract_single_prompt_for_routing(prompts[0], None)
+                else:
+                    # Multiple prompts - cannot do prefix routing
+                    return None
+
+            # Other types (shouldn't happen in normal usage)
+            else:
+                torchrl_logger.debug(
+                    f"Unknown prompt type for routing: {type(prompts)}"
+                )
+                return None
+
+        except Exception as e:
+            torchrl_logger.debug(f"Error extracting single prompt for routing: {e}")
+            return None
+
 
 class LoadBalancer:
-    """Load balancer for distributing requests across AsyncVLLM actors.
+    """Load balancer for distributing requests across AsyncVLLM actors with strategy hierarchy.
 
-    This class implements load balancing strategies to optimally distribute requests
-    across multiple AsyncVLLM actors based on either pending request counts or
-    KV cache utilization.
+    This class implements sophisticated load balancing with multiple strategies and intelligent
+    fallback mechanisms. Strategies are tried in order until one succeeds, providing robust
+    request routing even when some strategies fail.
 
     Args:
         actors: Either a single AsyncVLLM instance or a list of Ray actors.
-        strategy: Load balancing strategy - either "requests" or "kv-cache".
+        strategy: Single strategy or sequence of strategies in fallback order.
+            Available strategies:
+            - "prefix-aware": Route based on prompt prefix for cache locality
             - "requests": Select actor with fewest pending requests
             - "kv-cache": Select actor with lowest KV cache utilization
+            - "round-robin": Simple round-robin distribution
+        prefix_length: Number of tokens/words to use for prefix routing (default: 8).
+        overload_threshold: Multiplier for average load to consider actor overloaded (default: 1.5).
 
-    Example:
-        >>> # Create load balancer for request-based routing
+    Examples:
         >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=3)
-        >>> lb = LoadBalancer(service.actors, strategy="requests")
-        >>> selected_actor_index = lb.select_actor()
-        >>>
-        >>> # Create load balancer for cache-aware routing
-        >>> lb_cache = LoadBalancer(service.actors, strategy="kv-cache")
-        >>> selected_actor_index = lb_cache.select_actor()
+
+        >>> # Simple strategy
+        >>> lb = LoadBalancer(service, "requests")
+        >>> actor_idx = lb.select_actor()
+
+        >>> # Strategy hierarchy: try prefix-aware first, fall back to requests, then round-robin
+        >>> lb = LoadBalancer(service, ["prefix-aware", "requests", "round-robin"])
+        >>> actor_idx = lb.select_actor(prompt="Hello world")  # Uses prefix routing
+        >>> actor_idx = lb.select_actor()  # Falls back to requests (no prompt)
+
+        >>> # Custom configuration
+        >>> lb = LoadBalancer(
+        ...     service,
+        ...     ["prefix-aware", "kv-cache"],
+        ...     prefix_length=16,
+        ...     overload_threshold=2.0
+        ... )
     """
 
     def __init__(
         self,
         actors: list[Any] | AsyncVLLM,
-        strategy: Literal["requests", "kv-cache"],
+        strategy: Literal["requests", "kv-cache"]
+        | Sequence[Literal["prefix-aware", "requests", "kv-cache", "round-robin"]],
+        prefix_length: int = 8,
+        overload_threshold: float = 1.5,
     ):
         # Handle both AsyncVLLM instances and direct actor lists
         if hasattr(actors, "actors"):  # AsyncVLLM instance
@@ -1206,15 +1329,40 @@ class LoadBalancer:
         if not self.actors:
             raise ValueError("No actors provided")
 
-        if strategy not in ("requests", "kv-cache"):
-            raise ValueError(
-                f"Invalid strategy '{strategy}'. Must be 'requests' or 'kv-cache'"
-            )
+        # Handle both single strategy and strategy hierarchy
+        if isinstance(strategy, str):
+            self.strategies = [strategy]
+        else:
+            self.strategies = list(strategy)
 
-        self.strategy = strategy
+        # Validate strategies
+        valid_strategies = {"prefix-aware", "requests", "kv-cache", "round-robin"}
+        for s in self.strategies:
+            if s not in valid_strategies:
+                raise ValueError(
+                    f"Invalid strategy '{s}'. Must be one of {valid_strategies}"
+                )
 
-    def select_actor(self) -> int:
-        """Select the optimal actor index based on the configured strategy.
+        if not self.strategies:
+            raise ValueError("At least one strategy must be provided")
+
+        self.strategy = self.strategies[
+            0
+        ]  # Primary strategy for backward compatibility
+        self.prefix_length = prefix_length
+        self.overload_threshold = overload_threshold
+        self._round_robin_index = 0  # For round-robin fallback
+
+    def select_actor(
+        self,
+        prompt: str | list[int] | None = None,
+        request_context: dict[str, Any] | None = None,
+    ) -> int:
+        """Select the optimal actor index based on the configured strategy hierarchy.
+
+        Args:
+            prompt: The input prompt (string or token list) for prefix-aware routing.
+            request_context: Additional context for routing decisions.
 
         Returns:
             int: Index of the selected actor in the actors list.
@@ -1226,21 +1374,49 @@ class LoadBalancer:
         if not self.actors:
             raise ValueError("No actors available for selection")
 
-        try:
-            if self.strategy == "requests":
-                return self._select_by_requests()
-            elif self.strategy == "kv-cache":
-                return self._select_by_cache_usage()
-            else:
-                # This should never happen due to validation in __init__
-                raise ValueError(f"Unknown strategy: {self.strategy}")
+        # Try each strategy in order until one succeeds
+        for i, strategy in enumerate(self.strategies):
+            try:
+                torchrl_logger.debug(
+                    f"Trying strategy {i+1}/{len(self.strategies)}: {strategy}"
+                )
 
-        except Exception as e:
-            torchrl_logger.warning(
-                f"Error in load balancer actor selection: {e}. "
-                f"Falling back to random selection."
-            )
-            return random.randint(0, len(self.actors) - 1)
+                if strategy == "prefix-aware":
+                    if prompt is not None:
+                        return self._select_by_prefix_aware(prompt)
+                    else:
+                        torchrl_logger.debug(
+                            "No prompt provided for prefix-aware routing, trying next strategy"
+                        )
+                        continue
+
+                elif strategy == "requests":
+                    return self._select_by_requests()
+
+                elif strategy == "kv-cache":
+                    return self._select_by_cache_usage()
+
+                elif strategy == "round-robin":
+                    return self._select_round_robin()
+
+                else:
+                    torchrl_logger.warning(
+                        f"Unknown strategy: {strategy}, trying next strategy"
+                    )
+                    continue
+
+            except Exception as e:
+                torchrl_logger.warning(
+                    f"Strategy '{strategy}' failed with error: {e}. "
+                    f"Trying next strategy..."
+                )
+                continue
+
+        # All strategies failed, final fallback to random
+        torchrl_logger.warning(
+            f"All strategies {self.strategies} failed. Falling back to random selection."
+        )
+        return random.randint(0, len(self.actors) - 1)
 
     def _select_by_requests(self) -> int:
         """Select actor with fewest pending requests."""
@@ -1298,6 +1474,148 @@ class LoadBalancer:
 
         return selected_index
 
+    def _select_by_prefix_aware(self, prompt: str | list[int]) -> int:
+        """Select actor based on prompt prefix for cache locality.
+
+        Args:
+            prompt: Input prompt as string or token list.
+
+        Returns:
+            int: Selected actor index.
+
+        Raises:
+            ValueError: If prefix cannot be extracted.
+        """
+        try:
+            # Extract prefix tokens
+            prefix_tokens = self._extract_prefix_tokens(prompt)
+            if not prefix_tokens:
+                raise ValueError("Could not extract meaningful prefix tokens")
+
+            # Create consistent hash from prefix
+            prefix_hash = hash(tuple(prefix_tokens))
+            preferred_actor = prefix_hash % len(self.actors)
+
+            # Check if preferred actor is overloaded
+            if self._is_actor_overloaded(preferred_actor):
+                torchrl_logger.debug(
+                    f"Preferred actor {preferred_actor} is overloaded "
+                    f"(threshold: {self.overload_threshold}), falling back to load-based selection"
+                )
+                # Fall back to requests-based selection
+                return self._select_by_requests()
+
+            torchrl_logger.debug(
+                f"LoadBalancer (prefix-aware): Selected actor {preferred_actor} "
+                f"for prefix hash {prefix_hash} (tokens: {prefix_tokens[:4]}...)"
+            )
+
+            return preferred_actor
+
+        except Exception as e:
+            torchrl_logger.warning(f"Prefix-aware routing failed: {e}")
+            raise
+
+    def _select_round_robin(self) -> int:
+        """Select actor using round-robin strategy."""
+        selected = self._round_robin_index % len(self.actors)
+        self._round_robin_index = (self._round_robin_index + 1) % len(self.actors)
+
+        torchrl_logger.debug(f"LoadBalancer (round-robin): Selected actor {selected}")
+        return selected
+
+    def _extract_prefix_tokens(self, prompt: str | list[int]) -> list[int]:
+        """Extract prefix tokens from prompt (string or token list).
+
+        Args:
+            prompt: Input prompt.
+
+        Returns:
+            list[int]: Prefix tokens (up to self.prefix_length).
+
+        Raises:
+            ValueError: If tokenization fails or prompt is invalid.
+        """
+        if isinstance(prompt, list):
+            # Already tokenized
+            if not prompt:
+                raise ValueError("Empty token list provided")
+            return prompt[: self.prefix_length]
+
+        elif isinstance(prompt, str):
+            # Need to tokenize - this requires access to tokenizer
+            if not prompt.strip():
+                raise ValueError("Empty or whitespace-only string provided")
+
+            # Try to get tokenizer from AsyncVLLM instance
+            if self.async_vllm is not None:
+                try:
+                    # This is a simplistic approach - in practice you'd want to cache the tokenizer
+                    # For now, use a simple heuristic based on string content
+                    return self._simple_string_hash(prompt)
+                except Exception as e:
+                    torchrl_logger.warning(f"Could not tokenize string: {e}")
+                    return self._simple_string_hash(prompt)
+            else:
+                # Fall back to simple string hashing
+                return self._simple_string_hash(prompt)
+        else:
+            raise ValueError(f"Unsupported prompt type: {type(prompt)}")
+
+    def _simple_string_hash(self, text: str) -> list[int]:
+        """Create pseudo-tokens from string for prefix routing.
+
+        This is a fallback when proper tokenization isn't available.
+        """
+        # Use words as pseudo-tokens, limited to prefix_length
+        words = text.strip().split()[: self.prefix_length]
+        if not words:
+            raise ValueError("No words found in text")
+
+        # Convert words to integers using hash
+        pseudo_tokens = [
+            abs(hash(word)) % 50000 for word in words
+        ]  # Simulate vocab size
+        return pseudo_tokens
+
+    def _is_actor_overloaded(self, actor_index: int) -> bool:
+        """Check if an actor is overloaded compared to average load.
+
+        Args:
+            actor_index: Index of actor to check.
+
+        Returns:
+            bool: True if actor is overloaded.
+        """
+        try:
+            if self.async_vllm is not None:
+                request_counts = self.async_vllm.get_num_unfinished_requests()
+            else:
+                futures = [
+                    actor.get_num_unfinished_requests.remote() for actor in self.actors
+                ]
+                request_counts = ray.get(futures)
+
+            if not request_counts:
+                return False
+
+            avg_requests = sum(request_counts) / len(request_counts)
+            actor_requests = request_counts[actor_index]
+
+            is_overloaded = actor_requests > avg_requests * self.overload_threshold
+
+            torchrl_logger.debug(
+                f"Actor {actor_index}: {actor_requests} requests, "
+                f"avg: {avg_requests:.1f}, threshold: {avg_requests * self.overload_threshold:.1f}, "
+                f"overloaded: {is_overloaded}"
+            )
+
+            return is_overloaded
+
+        except Exception as e:
+            torchrl_logger.warning(f"Could not check actor load: {e}")
+            return False  # Assume not overloaded if we can't check
+
     def get_stats(self) -> dict[str, Any]:
         """Get current load balancing statistics for all actors.
 
@@ -1305,8 +1623,12 @@ class LoadBalancer:
             dict: Statistics including request counts and cache usage for all actors.
         """
         stats = {
-            "strategy": self.strategy,
+            "strategies": self.strategies,
+            "primary_strategy": self.strategy,  # For backward compatibility
             "num_actors": len(self.actors),
+            "prefix_length": self.prefix_length,
+            "overload_threshold": self.overload_threshold,
+            "round_robin_index": self._round_robin_index,
             "actor_stats": [],
         }
 
