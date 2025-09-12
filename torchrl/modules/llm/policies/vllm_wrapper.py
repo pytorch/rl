@@ -51,7 +51,7 @@ except ImportError:
 
 # Import async vLLM engines
 try:
-    from torchrl.modules.llm.backends.vllm_async import _AsyncLLMEngine, AsyncVLLM
+    from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 
     _has_async_vllm = True
 except ImportError:
@@ -374,10 +374,8 @@ class vLLMWrapper(LLMWrapperBase):
             )
 
         self.model = model
-        self._remote_calls = (
-            not (isinstance(model, vllm.LLM) if vllm else False)
-            and not self._is_async_engine
-            and not (_has_async_vllm and isinstance(model, AsyncVLLM))
+        self._remote_calls = not (
+            isinstance(model, vllm.LLM, AsyncVLLM) if vllm else False
         )
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key

@@ -1143,9 +1143,8 @@ class AsyncVLLM(RLvLLMEngine):
     def create_load_balancer(
         self,
         strategy: Literal["requests", "kv-cache"]
-        | Sequence[
-            Literal["prefix-aware", "requests", "kv-cache", "round-robin"]
-        ] = None,
+        | Sequence[Literal["prefix-aware", "requests", "kv-cache", "round-robin"]]
+        | None = None,
         **kwargs,
     ) -> LoadBalancer:
         """Create a load balancer for this AsyncVLLM service.
