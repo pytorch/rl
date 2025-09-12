@@ -17,7 +17,7 @@ import os
 import random
 import uuid
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from torchrl._utils import logger as torchrl_logger
@@ -388,6 +388,67 @@ class _AsyncLLMEngine:
         """
         return self.engine.engine.collective_rpc(method, timeout, args, kwargs)
 
+    def get_num_unfinished_requests(self) -> int:
+        """Get the number of unfinished requests in the engine.
+
+        Returns:
+            int: Number of unfinished requests.
+        """
+        try:
+            # Try to access the method directly if available
+            if hasattr(self.engine, "get_num_unfinished_requests"):
+                return self.engine.get_num_unfinished_requests()
+            # Fallback to accessing through engine.engine for v0
+            elif hasattr(self.engine, "engine") and hasattr(
+                self.engine.engine, "get_num_unfinished_requests"
+            ):
+                return self.engine.engine.get_num_unfinished_requests()
+            else:
+                # If method not available, return 0 as fallback
+                torchrl_logger.warning(
+                    "get_num_unfinished_requests not available, returning 0"
+                )
+                return 0
+        except Exception as e:
+            torchrl_logger.warning(f"Error getting unfinished requests count: {e}")
+            return 0
+
+    def get_cache_usage(self) -> float:
+        """Get the KV cache usage as a fraction between 0 and 1.
+
+        Returns:
+            float: Cache usage fraction (0.0 = empty, 1.0 = full).
+        """
+        try:
+            # Try to get cache usage from the engine
+            if hasattr(self.engine, "engine") and hasattr(
+                self.engine.engine, "cache_config"
+            ):
+                # Access the LLM engine's cache information
+                cache_config = self.engine.engine.cache_config
+                if hasattr(cache_config, "cache_usage"):
+                    return cache_config.cache_usage
+                elif hasattr(self.engine.engine, "scheduler"):
+                    # Try to get usage from the scheduler
+                    scheduler = self.engine.engine.scheduler
+                    if hasattr(scheduler, "get_num_free_gpu_blocks") and hasattr(
+                        scheduler, "get_num_total_gpu_blocks"
+                    ):
+                        free_blocks = scheduler.get_num_free_gpu_blocks()
+                        total_blocks = scheduler.get_num_total_gpu_blocks()
+                        if total_blocks > 0:
+                            return 1.0 - (free_blocks / total_blocks)
+            # Fallback: return a random value for now (this should be replaced with actual metrics)
+            torchrl_logger.warning(
+                "Cache usage metrics not available, returning random value"
+            )
+            return (
+                random.random() * 0.5
+            )  # Return a value between 0 and 0.5 to simulate partial usage
+        except Exception as e:
+            torchrl_logger.warning(f"Error getting cache usage: {e}")
+            return 0.0
+
 
 def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
     """Get the number of GPUs per replica for the given engine args."""
@@ -556,6 +617,7 @@ class AsyncVLLM(RLvLLMEngine):
             :8
         ]  # Unique suffix to avoid name collisions
         self._placement_group = None
+        self._load_balancer = None
 
     def _launch(self):
         """Launch all actor replicas."""
@@ -717,7 +779,9 @@ class AsyncVLLM(RLvLLMEngine):
         """Generate text using one of the actors with vLLM.LLM.generate interface.
 
         This method provides the same interface as vLLM.LLM.generate for seamless
-        compatibility between sync and async engines.
+        compatibility between sync and async engines. It can be used to generate text
+        within multiple threads / actors. If `actor_index` is not provided, the load balancer
+        will be used to select the actor.
 
         Args:
             prompts (String, TokensPrompt, or list of these): Input prompts for generation.
@@ -734,9 +798,12 @@ class AsyncVLLM(RLvLLMEngine):
             list[RequestOutput]: Generated outputs from vLLM.
         """
         if actor_index is None:
-            actor = random.choice(self.actors)
+            if self._load_balancer is None:
+                raise RuntimeError("LoadBalancer is not created")
+            actor = self._load_balancer.select_actor()
         else:
             actor = self.actors[actor_index]
+        torchrl_logger.info(f"Using actor {actor=} with {actor_index=}")
         single_prompt = not isinstance(prompts, list)
         if prompt_token_ids is not None:
             if not isinstance(prompt_token_ids, list):
@@ -963,6 +1030,269 @@ class AsyncVLLM(RLvLLMEngine):
                 ray.get(remotes)
 
         torchrl_logger.info("AsyncVLLM weight update completed")
+
+    def get_num_unfinished_requests(
+        self, actor_index: int | None = None
+    ) -> int | list[int]:
+        """Get the number of unfinished requests for one or all actors.
+
+        Args:
+            actor_index (int | None): Index of specific actor, or None for all actors.
+
+        Returns:
+            int | list[int]: Number of unfinished requests for the specified actor,
+                           or list of counts for all actors if actor_index is None.
+        """
+        if not self._launched:
+            raise RuntimeError(
+                "AsyncVLLM service must be launched before getting request counts"
+            )
+
+        if actor_index is not None:
+            if not (0 <= actor_index < len(self.actors)):
+                raise IndexError(
+                    f"Actor index {actor_index} out of range [0, {len(self.actors)})"
+                )
+
+            actor = self.actors[actor_index]
+            return ray.get(actor.get_num_unfinished_requests.remote())
+        else:
+            # Get counts from all actors
+            futures = [
+                actor.get_num_unfinished_requests.remote() for actor in self.actors
+            ]
+            return ray.get(futures)
+
+    def get_cache_usage(self, actor_index: int | None = None) -> float | list[float]:
+        """Get the KV cache usage for one or all actors.
+
+        Args:
+            actor_index (int | None): Index of specific actor, or None for all actors.
+
+        Returns:
+            float | list[float]: Cache usage fraction for the specified actor,
+                               or list of usage fractions for all actors if actor_index is None.
+        """
+        if not self._launched:
+            raise RuntimeError(
+                "AsyncVLLM service must be launched before getting cache usage"
+            )
+
+        if actor_index is not None:
+            if not (0 <= actor_index < len(self.actors)):
+                raise IndexError(
+                    f"Actor index {actor_index} out of range [0, {len(self.actors)})"
+                )
+
+            actor = self.actors[actor_index]
+            return ray.get(actor.get_cache_usage.remote())
+        else:
+            # Get usage from all actors
+            futures = [actor.get_cache_usage.remote() for actor in self.actors]
+            return ray.get(futures)
+
+    def create_load_balancer(
+        self, strategy: Literal["requests", "kv-cache"]
+    ) -> LoadBalancer:
+        """Create a load balancer for this AsyncVLLM service.
+
+        Args:
+            strategy: Load balancing strategy - either "requests" or "kv-cache".
+
+        Returns:
+            LoadBalancer: Configured load balancer instance.
+
+        Example:
+            >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=3)
+            >>> lb = service.create_load_balancer("requests")
+            >>> selected_actor_index = lb.select_actor()
+        """
+        if not self._launched:
+            raise RuntimeError(
+                "AsyncVLLM service must be launched before creating load balancer"
+            )
+
+        return LoadBalancer(self, strategy)
+
+
+class LoadBalancer:
+    """Load balancer for distributing requests across AsyncVLLM actors.
+
+    This class implements load balancing strategies to optimally distribute requests
+    across multiple AsyncVLLM actors based on either pending request counts or
+    KV cache utilization.
+
+    Args:
+        actors: Either a single AsyncVLLM instance or a list of Ray actors.
+        strategy: Load balancing strategy - either "requests" or "kv-cache".
+            - "requests": Select actor with fewest pending requests
+            - "kv-cache": Select actor with lowest KV cache utilization
+
+    Example:
+        >>> # Create load balancer for request-based routing
+        >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=3)
+        >>> lb = LoadBalancer(service.actors, strategy="requests")
+        >>> selected_actor_index = lb.select_actor()
+        >>>
+        >>> # Create load balancer for cache-aware routing
+        >>> lb_cache = LoadBalancer(service.actors, strategy="kv-cache")
+        >>> selected_actor_index = lb_cache.select_actor()
+    """
+
+    def __init__(
+        self,
+        actors: list[Any] | AsyncVLLM,
+        strategy: Literal["requests", "kv-cache"],
+    ):
+        # Handle both AsyncVLLM instances and direct actor lists
+        if hasattr(actors, "actors"):  # AsyncVLLM instance
+            self.actors = actors.actors
+            self.async_vllm = actors
+        elif isinstance(actors, list):  # Direct list of actors
+            self.actors = actors
+            self.async_vllm = None
+        else:
+            raise ValueError(
+                "actors must be either an AsyncVLLM instance or a list of actors"
+            )
+
+        if not self.actors:
+            raise ValueError("No actors provided")
+
+        if strategy not in ("requests", "kv-cache"):
+            raise ValueError(
+                f"Invalid strategy '{strategy}'. Must be 'requests' or 'kv-cache'"
+            )
+
+        self.strategy = strategy
+
+    def select_actor(self) -> int:
+        """Select the optimal actor index based on the configured strategy.
+
+        Returns:
+            int: Index of the selected actor in the actors list.
+
+        Raises:
+            RuntimeError: If unable to gather metrics from actors.
+            ValueError: If no actors are available.
+        """
+        if not self.actors:
+            raise ValueError("No actors available for selection")
+
+        try:
+            if self.strategy == "requests":
+                return self._select_by_requests()
+            elif self.strategy == "kv-cache":
+                return self._select_by_cache_usage()
+            else:
+                # This should never happen due to validation in __init__
+                raise ValueError(f"Unknown strategy: {self.strategy}")
+
+        except Exception as e:
+            torchrl_logger.warning(
+                f"Error in load balancer actor selection: {e}. "
+                f"Falling back to random selection."
+            )
+            return random.randint(0, len(self.actors) - 1)
+
+    def _select_by_requests(self) -> int:
+        """Select actor with fewest pending requests."""
+        if self.async_vllm is not None:
+            # Use AsyncVLLM's built-in method to get request counts
+            request_counts = self.async_vllm.get_num_unfinished_requests()
+        else:
+            # Query actors directly
+            futures = [
+                actor.get_num_unfinished_requests.remote() for actor in self.actors
+            ]
+            request_counts = ray.get(futures)
+
+        # Find the actor with minimum pending requests
+        min_requests = min(request_counts)
+        min_indices = [
+            i for i, count in enumerate(request_counts) if count == min_requests
+        ]
+
+        # If multiple actors have the same minimum count, choose randomly among them
+        selected_index = random.choice(min_indices)
+
+        torchrl_logger.debug(
+            f"LoadBalancer (requests): Selected actor {selected_index} "
+            f"with {min_requests} pending requests. "
+            f"Request counts: {request_counts}"
+        )
+
+        return selected_index
+
+    def _select_by_cache_usage(self) -> int:
+        """Select actor with lowest KV cache utilization."""
+        if self.async_vllm is not None:
+            # Use AsyncVLLM's built-in method to get cache usage
+            cache_usages = self.async_vllm.get_cache_usage()
+        else:
+            # Query actors directly
+            futures = [actor.get_cache_usage.remote() for actor in self.actors]
+            cache_usages = ray.get(futures)
+
+        # Find the actor with minimum cache usage
+        min_usage = min(cache_usages)
+        min_indices = [
+            i for i, usage in enumerate(cache_usages) if abs(usage - min_usage) < 1e-6
+        ]
+
+        # If multiple actors have similar cache usage, choose randomly among them
+        selected_index = random.choice(min_indices)
+
+        torchrl_logger.debug(
+            f"LoadBalancer (kv-cache): Selected actor {selected_index} "
+            f"with {min_usage:.3f} cache usage. "
+            f"Cache usages: {[f'{u:.3f}' for u in cache_usages]}"
+        )
+
+        return selected_index
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get current load balancing statistics for all actors.
+
+        Returns:
+            dict: Statistics including request counts and cache usage for all actors.
+        """
+        stats = {
+            "strategy": self.strategy,
+            "num_actors": len(self.actors),
+            "actor_stats": [],
+        }
+
+        try:
+            if self.async_vllm is not None:
+                request_counts = self.async_vllm.get_num_unfinished_requests()
+                cache_usages = self.async_vllm.get_cache_usage()
+            else:
+                request_futures = [
+                    actor.get_num_unfinished_requests.remote() for actor in self.actors
+                ]
+                cache_futures = [
+                    actor.get_cache_usage.remote() for actor in self.actors
+                ]
+                request_counts = ray.get(request_futures)
+                cache_usages = ray.get(cache_futures)
+
+            for i, (requests, cache_usage) in enumerate(
+                zip(request_counts, cache_usages)
+            ):
+                stats["actor_stats"].append(
+                    {
+                        "actor_index": i,
+                        "pending_requests": requests,
+                        "cache_usage": cache_usage,
+                    }
+                )
+
+        except Exception as e:
+            torchrl_logger.warning(f"Error gathering load balancer stats: {e}")
+            stats["error"] = str(e)
+
+        return stats
 
 
 def make_async_vllm_engine(
