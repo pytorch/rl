@@ -680,10 +680,10 @@ class DatasetChatEnv(TransformedEnv):
         ray_backend: bool = False,
     ):
         if ray_backend:
-            cls = RayDataLoadingPrimer
+            dl_cls = RayDataLoadingPrimer
         else:
-            cls = DataLoadingPrimer
-        primer = cls(
+            dl_cls = DataLoadingPrimer
+        primer = dl_cls(
             dataloader=dataloader,
             dataloader_factory=dataloader_factory,
             repeats=repeats,
