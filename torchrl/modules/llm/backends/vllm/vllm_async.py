@@ -732,8 +732,8 @@ class AsyncVLLM(RLvLLMEngine):
         """
         service = cls(engine_args, num_replicas)
         service._launch()
-        # create a default load balancer
-        service.create_load_balancer("requests")
+        # create a default load balancer with smart routing
+        service.create_load_balancer()
         return service
 
     @classmethod
@@ -1145,14 +1145,15 @@ class AsyncVLLM(RLvLLMEngine):
         strategy: Literal["requests", "kv-cache"]
         | Sequence[
             Literal["prefix-aware", "requests", "kv-cache", "round-robin"]
-        ] = "requests",
+        ] = None,
         **kwargs,
     ) -> LoadBalancer:
         """Create a load balancer for this AsyncVLLM service.
 
         Args:
             strategy: Load balancing strategy or sequence of strategies in fallback order.
-                Single strategies: "requests", "kv-cache"
+                Default: ["prefix-aware", "requests"] - tries cache-aware routing first,
+                then load balancing. Single strategies: "requests", "kv-cache"
                 Strategy sequences: ["prefix-aware", "requests", "round-robin"]
             **kwargs: Additional arguments passed to LoadBalancer constructor.
 
@@ -1162,13 +1163,17 @@ class AsyncVLLM(RLvLLMEngine):
         Examples:
             >>> service = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=3)
 
-            >>> # Simple strategy
+            >>> # Use smart defaults (prefix-aware -> requests)
+            >>> lb = service.create_load_balancer()
+            >>> selected_actor_index = lb.select_actor(prompt="Hello world")
+
+            >>> # Simple single strategy
             >>> lb = service.create_load_balancer("requests")
             >>> selected_actor_index = lb.select_actor()
 
-            >>> # Strategy hierarchy with fallbacks
+            >>> # Custom strategy hierarchy
             >>> lb = service.create_load_balancer(
-            ...     ["prefix-aware", "requests", "round-robin"],
+            ...     ["prefix-aware", "kv-cache", "round-robin"],
             ...     prefix_length=16,
             ...     overload_threshold=2.0
             ... )
@@ -1278,10 +1283,14 @@ class LoadBalancer:
         actors: Either a single AsyncVLLM instance or a list of Ray actors.
         strategy: Single strategy or sequence of strategies in fallback order.
             Available strategies:
+
             - "prefix-aware": Route based on prompt prefix for cache locality
             - "requests": Select actor with fewest pending requests
             - "kv-cache": Select actor with lowest KV cache utilization
             - "round-robin": Simple round-robin distribution
+
+            Default: ["prefix-aware", "requests"]
+
         prefix_length: Number of tokens/words to use for prefix routing (default: 8).
         overload_threshold: Multiplier for average load to consider actor overloaded (default: 1.5).
 
@@ -1310,10 +1319,13 @@ class LoadBalancer:
         self,
         actors: list[Any] | AsyncVLLM,
         strategy: Literal["requests", "kv-cache"]
-        | Sequence[Literal["prefix-aware", "requests", "kv-cache", "round-robin"]],
+        | Sequence[Literal["prefix-aware", "requests", "kv-cache", "round-robin"]]
+        | None = None,
         prefix_length: int = 8,
         overload_threshold: float = 1.5,
     ):
+        if strategy is None:
+            strategy = ["prefix-aware", "requests"]
         # Handle both AsyncVLLM instances and direct actor lists
         if hasattr(actors, "actors"):  # AsyncVLLM instance
             self.actors = actors.actors
