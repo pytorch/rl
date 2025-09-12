@@ -534,7 +534,6 @@ class AsyncVLLM(RLvLLMEngine):
         num_replicas: int = 1,
         actor_class=None,
         enable_prefix_caching: bool = False,
-        max_concurrency: int = 128,
     ):
         if not _has_vllm:
             raise ImportError(
@@ -550,7 +549,6 @@ class AsyncVLLM(RLvLLMEngine):
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
-        self.max_concurrency = max_concurrency
         self.actor_class = actor_class or _AsyncLLMEngineActor
         self.actors: list = []
         self._launched = False
@@ -584,7 +582,6 @@ class AsyncVLLM(RLvLLMEngine):
         torchrl_logger.info(f"Creating GPU placement group with {len(bundles)} bundles")
 
         self._placement_group = placement_group(bundles, strategy="PACK")
-        max_concurrency = self.max_concurrency
         torchrl_logger.info(f"Placement group created: {self._placement_group}")
 
         # Avoid indefinite hang if resources are not available
@@ -617,7 +614,6 @@ class AsyncVLLM(RLvLLMEngine):
                 scheduling_strategy=scheduling_strategy,
                 num_gpus=0,
                 num_cpus=0,
-                max_concurrency=max_concurrency,
             ).remote(
                 engine_args=self.engine_args,
                 bundle_indices=bundle_indices,
