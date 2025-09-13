@@ -824,10 +824,16 @@ class RayDataLoadingPrimer(Transform):
         """Initialize."""
         return self._ray.get(self._actor.init.remote(tensordict))
 
-    def _reset_func(self, tensordict, tensordict_reset):
+    def _reset_func(
+        self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None
+    ) -> TensorDictBase | None:
         """Reset function."""
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
+        if tensordict_reset is not None:
+            tensordict_reset = tensordict_reset.cpu()
         result = self._ray.get(
-            self._actor._reset_func.remote(tensordict.cpu(), tensordict_reset.cpu())
+            self._actor._reset_func.remote(tensordict, tensordict_reset)
         )
         # Cast to local device if one is set
         if hasattr(self, "_device") and self._device is not None:
@@ -849,21 +855,30 @@ class RayDataLoadingPrimer(Transform):
         return result
 
     # Override _reset to ensure proper delegation
-    def _reset(self, tensordict, tensordict_reset):
+    def _reset(
+        self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None
+    ) -> TensorDictBase | None:
         """Reset method for TensorDictPrimer."""
-        result = self._ray.get(
-            self._actor._reset.remote(tensordict.cpu(), tensordict_reset.cpu())
-        )
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
+        if tensordict_reset is not None:
+            tensordict_reset = tensordict_reset.cpu()
+        result = self._ray.get(self._actor._reset.remote(tensordict, tensordict_reset))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device"):
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def _reset_env_preprocess(self, tensordict):
+    def _reset_env_preprocess(
+        self, tensordict: TensorDictBase | None
+    ) -> TensorDictBase | None:
         """Reset environment preprocess - crucial for call_before_env_reset=True."""
-        result = self._ray.get(
-            self._actor._reset_env_preprocess.remote(tensordict.cpu())
-        )
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
+        result = self._ray.get(self._actor._reset_env_preprocess.remote(tensordict))
         # Cast to local device if one is set
         if hasattr(self, "_device") and self._device is not None and result is not None:
             result = result.to(self._device)
@@ -878,58 +893,95 @@ class RayDataLoadingPrimer(Transform):
         """Apply transform."""
         result = self._ray.get(self._actor._apply_transform.remote(obs))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device"):
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def _call(self, next_tensordict):
+    def _call(self, next_tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if next_tensordict is not None:
+            next_tensordict = next_tensordict.cpu()
         """Call method."""
-        result = self._ray.get(self._actor._call.remote(next_tensordict.cpu()))
+        result = self._ray.get(self._actor._call.remote(next_tensordict))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device"):
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def forward(self, tensordict):
+    def forward(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
         """Forward pass."""
-        result = self._ray.get(self._actor.forward.remote(tensordict.cpu()))
+        result = self._ray.get(self._actor.forward.remote(tensordict))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device") and self._device is not None:
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def _inv_apply_transform(self, state):
+    def _inv_apply_transform(
+        self, state: TensorDictBase | None
+    ) -> TensorDictBase | None:
         """Inverse apply transform."""
-        result = self._ray.get(self._actor._inv_apply_transform.remote(state.cpu()))
+        if state is not None:
+            state = state.cpu()
+        result = self._ray.get(self._actor._inv_apply_transform.remote(state))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device") and self._device is not None:
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def _inv_call(self, tensordict):
+    def _inv_call(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
         """Inverse call."""
-        result = self._ray.get(self._actor._inv_call.remote(tensordict.cpu()))
+        result = self._ray.get(self._actor._inv_call.remote(tensordict))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device") and self._device is not None:
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def inv(self, tensordict):
+    def inv(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
         """Inverse."""
-        result = self._ray.get(self._actor.inv.remote(tensordict.cpu()))
+        result = self._ray.get(self._actor.inv.remote(tensordict))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device") and self._device is not None:
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
-    def _step(self, tensordict, next_tensordict):
+    def _step(
+        self, tensordict: TensorDictBase | None, next_tensordict: TensorDictBase | None
+    ) -> TensorDictBase | None:
+        if tensordict is not None:
+            tensordict = tensordict.cpu()
+        if next_tensordict is not None:
+            next_tensordict = next_tensordict.cpu()
         """Step method."""
-        result = self._ray.get(
-            self._actor._step.remote(tensordict.cpu(), next_tensordict.cpu())
-        )
+        result = self._ray.get(self._actor._step.remote(tensordict, next_tensordict))
         # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
+        if hasattr(self, "_device") and self._device is not None:
+            if self._device is not None:
+                result = result.to(self._device)
+            else:
+                result = result.clone().clear_device_()
         return result
 
     def transform_env_device(self, device):
