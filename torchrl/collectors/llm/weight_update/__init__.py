@@ -5,5 +5,6 @@
 from __future__ import annotations
 
 from .vllm import vLLMUpdater
+from .vllm_v2 import vLLMUpdaterV2
 
-__all__ = ["vLLMUpdater"]
+__all__ = ["vLLMUpdater", "vLLMUpdaterV2"]

@@ -8,7 +8,6 @@ import argparse
 import gc
 import importlib.util
 
-import os
 import time
 from functools import partial
 
@@ -19,6 +18,7 @@ from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
+from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
@@ -31,9 +31,6 @@ from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrappe
 from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
 from transformers import AutoTokenizer
 
-
-# Set environment variable for vLLM V0 engine
-os.environ["VLLM_USE_V1"] = "0"
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -63,23 +60,26 @@ def set_list_to_stack_fixture():
 
 
 @pytest.fixture(scope="module")
-def vllm_instance():
+def vllm_instance() -> tuple[
+    vllm.LLM, transformers.AutoTokenizer  # noqa # type: ignore
+]:  # noqa # type: ignore
     """Create vLLM model and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
 
     import vllm.envs as envs
     from vllm import LLM
 
     envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
-    assert os.environ.get("VLLM_USE_V1") == "0"
-
     try:
         model = LLM(
             "Qwen/Qwen2.5-0.5B",
             max_num_batched_tokens=32768,  # Match max_model_len
             max_model_len=32768,
+            gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
         )
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
@@ -89,7 +89,40 @@ def vllm_instance():
 
 
 @pytest.fixture(scope="module")
-def transformers_instance():
+def async_vllm_instance() -> tuple[
+    Any, transformers.AutoTokenizer  # noqa # type: ignore
+]:  # noqa # type: ignore
+    """Create async vLLM engine and tokenizer for testing."""
+    if not _has_vllm:
+        pytest.skip("vllm not available")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
+    import vllm.envs as envs
+
+    envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+    try:
+        # Create async vLLM engine with same parameters as sync version
+        async_engine = AsyncVLLM.from_pretrained(
+            model_name="Qwen/Qwen2.5-0.5B",
+            num_devices=1,
+            num_replicas=1,
+            max_model_len=32768,
+            max_num_batched_tokens=32768,
+            gpu_memory_utilization=0.3,  # Limit to 30% GPU memory to avoid OOM with multiple engines
+        )
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer.pad_token = tokenizer.eos_token
+        return async_engine, tokenizer
+    except Exception as e:
+        pytest.skip(f"Failed to load async vLLM engine: {e}")
+
+
+@pytest.fixture(scope="module")
+def transformers_instance() -> tuple[
+    transformers.AutoModelForCausalLM, transformers.AutoTokenizer  # noqa # type: ignore
+]:  # noqa # type: ignore
     """Create transformers model and tokenizer for testing."""
     if not _has_transformers:
         pytest.skip("transformers not available")
@@ -291,13 +324,21 @@ def check_output_shapes(out, pad_output, requested_log_probs=False):
 
 
 def create_batching_test_wrapper(
-    wrapper_class, vllm_instance, transformers_instance, **kwargs
+    wrapper_class,
+    vllm_instance,
+    transformers_instance,
+    async_vllm_instance=None,
+    use_async=False,
+    **kwargs,
 ):
     """Helper function to create a wrapper for batching tests with proper error handling."""
     # Handle the case where vLLM is not available
     if wrapper_class == vLLMWrapper:
         try:
-            model, tokenizer = vllm_instance
+            if use_async and async_vllm_instance is not None:
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
         except Exception as e:
             if "vLLM compatibility issue" in str(e):
                 pytest.skip("vLLM not available due to compatibility issues")
@@ -426,16 +467,29 @@ class TestWrappers:
     # ================================================
 
     @pytest.mark.parametrize(
-        "wrapper_class",
-        [vLLMWrapper, TransformersWrapperMaxTokens],
-        ids=["vllm", "transformers"],
+        "wrapper_class,engine_instance",
+        [
+            (vLLMWrapper, "vllm_instance"),
+            (vLLMWrapper, "async_vllm_instance"),
+            (TransformersWrapperMaxTokens, "transformers_instance"),
+        ],
+        ids=["vllm_sync", "vllm_async", "transformers"],
     )
     def test_legacy_parameter_names(
-        self, wrapper_class, vllm_instance, transformers_instance
+        self,
+        wrapper_class,
+        engine_instance,
+        vllm_instance,
+        transformers_instance,
+        async_vllm_instance,
     ):
         """Test that legacy parameter names are automatically converted to standardized names."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        if engine_instance == "vllm_instance":
+            model, tokenizer = vllm_instance
+        elif engine_instance == "async_vllm_instance":
+            model, tokenizer = async_vllm_instance
+        else:  # transformers_instance
+            model, tokenizer = transformers_instance
 
         # Test with legacy parameter names
         wrapper = wrapper_class(
@@ -472,16 +526,29 @@ class TestWrappers:
             assert wrapper.generate_kwargs["temperature"] == 0.7
 
     @pytest.mark.parametrize(
-        "wrapper_class",
-        [vLLMWrapper, TransformersWrapperMaxTokens],
-        ids=["vllm", "transformers"],
+        "wrapper_class,engine_instance",
+        [
+            (vLLMWrapper, "vllm_instance"),
+            (vLLMWrapper, "async_vllm_instance"),
+            (TransformersWrapperMaxTokens, "transformers_instance"),
+        ],
+        ids=["vllm_sync", "vllm_async", "transformers"],
     )
     def test_parameter_conflict_resolution(
-        self, wrapper_class, vllm_instance, transformers_instance
+        self,
+        wrapper_class,
+        engine_instance,
+        vllm_instance,
+        transformers_instance,
+        async_vllm_instance,
     ):
         """Test that parameter conflicts are resolved correctly when both legacy and standardized names are used."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        if engine_instance == "vllm_instance":
+            model, tokenizer = vllm_instance
+        elif engine_instance == "async_vllm_instance":
+            model, tokenizer = async_vllm_instance
+        else:  # transformers_instance
+            model, tokenizer = transformers_instance
 
         # Test with conflicting parameters - legacy name should win
         wrapper = wrapper_class(
@@ -522,12 +589,26 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
     def test_parameter_validation(
-        self, wrapper_class, vllm_instance, transformers_instance
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
     ):
         """Test that parameter validation works correctly."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        if wrapper_class == vLLMWrapper:
+            if vllm_backend == "async":
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
+        else:
+            # For transformers, vllm_backend parameter is ignored
+            model, tokenizer = transformers_instance
 
         # Test invalid temperature
         with pytest.raises(ValueError, match="Temperature must be non-negative"):
@@ -590,6 +671,9 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     @pytest.mark.parametrize("batch_size", ["null", 2])
@@ -598,6 +682,8 @@ class TestWrappers:
         wrapper_class,
         vllm_instance,
         transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
         sample_history,
         sample_history_assistant,
         generate,
@@ -607,8 +693,12 @@ class TestWrappers:
         """Test history input mode with various configurations."""
 
         if wrapper_class == vLLMWrapper:
-            model, tokenizer = vllm_instance
+            if vllm_backend == "async":
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
         else:
+            # For transformers, vllm_backend parameter is ignored
             model, tokenizer = transformers_instance
         wrapper = wrapper_class(
             model,
@@ -721,15 +811,28 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
     def test_single_history_item_unsqueeze(
-        self, sample_history, wrapper_class, vllm_instance, transformers_instance
+        self,
+        sample_history,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
     ):
         """Test that the wrapper can handle a single history item."""
         pad_output = False
         generate = True
         if wrapper_class == vLLMWrapper:
-            model, tokenizer = vllm_instance
+            if vllm_backend == "async":
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
         else:
+            # For transformers, vllm_backend parameter is ignored
             model, tokenizer = transformers_instance
         wrapper = wrapper_class(model, tokenizer=tokenizer, input_mode="history")
 
@@ -749,6 +852,9 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     @pytest.mark.parametrize("batch_size", ["null", 2])
@@ -757,17 +863,21 @@ class TestWrappers:
         wrapper_class,
         vllm_instance,
         transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
         sample_text,
         generate,
         pad_output,
         batch_size,
     ):
         """Test text input mode with various configurations."""
-        model, tokenizer = vllm_instance
-
         if wrapper_class == vLLMWrapper:
-            model, tokenizer = vllm_instance
+            if vllm_backend == "async":
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
         else:
+            # For transformers, vllm_backend parameter is ignored
             model, tokenizer = transformers_instance
         wrapper = wrapper_class(
             model,
@@ -832,9 +942,13 @@ class TestWrappers:
     # ================================================
 
     @pytest.mark.parametrize(
-        "wrapper_class",
-        [vLLMWrapper, TransformersWrapperMaxTokens],
-        ids=["vllm", "transformers"],
+        "wrapper_class,engine_instance",
+        [
+            (vLLMWrapper, "vllm_instance"),
+            (vLLMWrapper, "async_vllm_instance"),
+            (TransformersWrapperMaxTokens, "transformers_instance"),
+        ],
+        ids=["vllm_sync", "vllm_async", "transformers"],
     )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
@@ -842,17 +956,21 @@ class TestWrappers:
     def test_tokens_input_mode(
         self,
         wrapper_class,
+        engine_instance,
         vllm_instance,
         transformers_instance,
+        async_vllm_instance,
         sample_tokens,
         generate,
         pad_output,
         batch_size,
     ):
         """Test tokens input mode with various configurations."""
-        if wrapper_class == vLLMWrapper:
+        if engine_instance == "vllm_instance":
             model, tokenizer = vllm_instance
-        else:
+        elif engine_instance == "async_vllm_instance":
+            model, tokenizer = async_vllm_instance
+        else:  # transformers_instance
             model, tokenizer = transformers_instance
 
         input_ids, attention_mask = sample_tokens
@@ -912,16 +1030,25 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
     def test_invalid_input_mode(
         self,
         wrapper_class,
         vllm_instance,
         transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
     ):
         """Test that invalid input_mode raises an error."""
         if wrapper_class == vLLMWrapper:
-            model, tokenizer = vllm_instance
+            if vllm_backend == "async":
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
         else:
+            # For transformers, vllm_backend parameter is ignored
             model, tokenizer = transformers_instance
 
         with pytest.raises(ValueError, match="input_mode must be one of"):
@@ -1374,7 +1501,6 @@ class TestWrappers:
         # Use as_list=True to get lists instead of trying to stack
         text_list = result.get("text", as_list=True)
         tokens_list = result.get("tokens", as_list=True)
-        masks_list = result.get("masks", as_list=True)
         log_probs_list = result.get("log_probs", as_list=True)
 
         # Check that we get lists
@@ -1968,6 +2094,118 @@ class TestLogProbsComparison:
             vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
         )
 
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_sync_async_vllm_strict_equivalence(
+        self, vllm_instance, async_vllm_instance
+    ):
+        """Test strict equivalence between sync vLLM.LLM and async engine in real-world setting."""
+        sync_model, sync_tokenizer = vllm_instance
+        async_model, async_tokenizer = async_vllm_instance
+
+        from tensordict import TensorDict
+        from torchrl.modules.llm.policies.common import Text
+        from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+
+        # Test prompts
+        test_prompts = [
+            "Hello, how are you?",
+            "What is the capital of France?",
+            "Explain quantum computing in simple terms.",
+        ]
+
+        for prompt in test_prompts:
+            # Create wrappers for both engines with deterministic settings
+            sync_wrapper = vLLMWrapper(
+                sync_model,
+                tokenizer=sync_tokenizer,
+                input_mode="text",
+                generate=True,
+                return_log_probs=True,
+                generate_kwargs={
+                    "temperature": 0.0,  # Deterministic
+                    "max_new_tokens": 50,
+                    "top_p": 1.0,
+                    "top_k": 1,
+                },
+            )
+
+            async_wrapper = vLLMWrapper(
+                async_model,
+                tokenizer=async_tokenizer,
+                input_mode="text",
+                generate=True,
+                return_log_probs=True,
+                generate_kwargs={
+                    "temperature": 0.0,  # Deterministic
+                    "max_new_tokens": 50,
+                    "top_p": 1.0,
+                    "top_k": 1,
+                },
+            )
+
+            # Create input tensordict
+            input_text = Text(prompt=prompt)
+            input_td = TensorDict({"text": input_text}, batch_size=[1])
+
+            # Generate with sync engine
+            sync_result = sync_wrapper(input_td)
+            sync_response = sync_result["text"].response[0]
+            sync_tokens = sync_result["tokens"].response[0]
+
+            # Generate with async engine
+            async_result = async_wrapper(input_td)
+            async_response = async_result["text"].response[0]
+            async_tokens = async_result["tokens"].response[0]
+
+            # Verify exact equivalence
+            assert (
+                sync_response == async_response
+            ), f"Text mismatch for prompt '{prompt}': sync='{sync_response}' vs async='{async_response}'"
+
+            # Convert tokens to lists for comparison (in case they're tensors)
+            if hasattr(sync_tokens, "tolist"):
+                sync_tokens_list = sync_tokens.tolist()
+            else:
+                sync_tokens_list = sync_tokens
+
+            if hasattr(async_tokens, "tolist"):
+                async_tokens_list = async_tokens.tolist()
+            else:
+                async_tokens_list = async_tokens
+
+            assert (
+                sync_tokens_list == async_tokens_list
+            ), f"Token mismatch for prompt '{prompt}': sync={sync_tokens_list} vs async={async_tokens_list}"
+
+            # Verify log probabilities are close (allowing for small numerical differences)
+            if (
+                sync_result.get("log_probs") is not None
+                and async_result.get("log_probs") is not None
+            ):
+                sync_logprobs = sync_result["log_probs"].response[0]
+                async_logprobs = async_result["log_probs"].response[0]
+
+                # Convert to tensors for comparison
+                if hasattr(sync_logprobs, "flatten"):
+                    sync_logprobs_flat = sync_logprobs.flatten()
+                else:
+                    sync_logprobs_flat = torch.tensor(sync_logprobs).flatten()
+
+                if hasattr(async_logprobs, "flatten"):
+                    async_logprobs_flat = async_logprobs.flatten()
+                else:
+                    async_logprobs_flat = torch.tensor(async_logprobs).flatten()
+
+                # Allow small numerical differences (1e-6 tolerance)
+                torch.testing.assert_close(
+                    sync_logprobs_flat,
+                    async_logprobs_flat,
+                    rtol=1e-6,
+                    atol=1e-6,
+                    msg=f"Log probabilities mismatch for prompt '{prompt}'",
+                )
+
 
 class TestDistributionMethods:
     """Test the new distribution methods and masking strategies."""
@@ -2259,18 +2497,32 @@ class TestBatching:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
-    def test_batching(self, wrapper_class, vllm_instance, transformers_instance):
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
+    def test_batching(
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
+    ):
         from concurrent.futures import ThreadPoolExecutor, wait
 
         # Handle the case where vLLM is not available
         if wrapper_class == vLLMWrapper:
             try:
-                model, tokenizer = vllm_instance
+                if vllm_backend == "async":
+                    model, tokenizer = async_vllm_instance
+                else:
+                    model, tokenizer = vllm_instance
             except Exception as e:
                 if "vLLM compatibility issue" in str(e):
                     pytest.skip("vLLM not available due to compatibility issues")
                 raise
         else:
+            # For transformers, vllm_backend parameter is ignored
             model, tokenizer = transformers_instance
 
         wrapper = wrapper_class(
@@ -2301,12 +2553,26 @@ class TestBatching:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
-    def test_batching_uneven(self, wrapper_class, vllm_instance, transformers_instance):
+    @pytest.mark.parametrize(
+        "vllm_backend", ["sync", "async"], ids=["sync_vllm", "async_vllm"]
+    )
+    def test_batching_uneven(
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        async_vllm_instance,
+        vllm_backend,
+    ):
         from concurrent.futures import ThreadPoolExecutor, wait
 
         if wrapper_class == vLLMWrapper:
-            model, tokenizer = vllm_instance
+            if vllm_backend == "async":
+                model, tokenizer = async_vllm_instance
+            else:
+                model, tokenizer = vllm_instance
         else:
+            # For transformers, vllm_backend parameter is ignored
             model, tokenizer = transformers_instance
         wrapper = wrapper_class(
             model,
@@ -2603,8 +2869,9 @@ class TestBatching:
         self, wrapper_class, vllm_instance, transformers_instance
     ):
         """Test that standardized generation parameters work across both wrappers."""
-        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
-        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+        model, tokenizer = (
+            vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        )
 
         # Test with standardized parameters
         wrapper = wrapper_class(
@@ -2788,30 +3055,30 @@ class TestBatching:
 
 
 class TestRayWrapper:
-    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    @pytest.mark.parametrize("backend", ["transformers"])
     def test_ray_wrapper(self, sample_text, backend):
         import gc
         from concurrent.futures import ThreadPoolExecutor
 
         from torchrl import logger as torchrl_logger
-        from torchrl.modules.llm.policies import (
-            RemoteTransformersWrapper,
-            RemotevLLMWrapper,
-        )
+        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # check that the wrapper is remote
         if backend == "vllm":
-            cls = RemotevLLMWrapper
+            raise ValueError("vllm backend is not supported")
         elif backend == "transformers":
             cls = RemoteTransformersWrapper
         else:
             raise ValueError(f"Invalid backend: {backend}")
+        num_gpus = 0 if not torch.cuda.is_available() else 1
         model = cls(
             model="Qwen/Qwen2.5-0.5B",
             generate=True,
             input_mode="text",
             batching=True,
             generate_kwargs={"max_new_tokens": 10},
+            num_gpus=num_gpus,
+            num_cpus=1,
         )
         try:
             # check batching
@@ -2838,14 +3105,11 @@ class TestRayWrapper:
 class TestActorSharing:
     """Test actor sharing functionality for Remote wrappers."""
 
-    @pytest.mark.parametrize("backend", ["transformers", "vllm"])
+    @pytest.mark.parametrize("backend", ["transformers"])
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
-        from torchrl.modules.llm.policies import (
-            RemoteTransformersWrapper,
-            RemotevLLMWrapper,
-        )
+        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # Initialize Ray if not already done
         if not ray.is_initialized():
@@ -2853,9 +3117,7 @@ class TestActorSharing:
 
         # Choose the wrapper class based on backend
         if backend == "vllm":
-            if not _has_vllm:
-                pytest.skip("vllm not available")
-            WrapperClass = RemotevLLMWrapper
+            raise ValueError("vllm backend is not supported")
         elif backend == "transformers":
             if not _has_transformers:
                 pytest.skip("transformers not available")

@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import abc
+
 import importlib.util
 
 import torch
@@ -16,31 +18,52 @@ from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors import WeightUpdaterBase
-from torchrl.modules.llm.backends.vllm import stateless_init_process_group
+from torchrl.modules.llm.backends import stateless_init_process_group
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
-if _has_vllm:
-    from vllm.utils import get_open_port
-else:
-
-    def get_open_port():  # noqa: D103
-        raise ImportError(
-            "vllm is not installed. Please install it with `pip install vllm`."
-        )
-
 
 _has_ray = importlib.util.find_spec("ray") is not None
-if _has_ray:
-    import ray
-else:
-
-    def ray():  # noqa: D103
-        raise ImportError(
-            "ray is not installed. Please install it with `pip install ray`."
-        )
 
 
-class vLLMUpdater(WeightUpdaterBase):
+class vLLMUpdaterMeta(abc.ABCMeta):
+    """Metaclass for vLLMUpdater that allows switching between V1 and V2 implementations.
+
+    When instantiating vLLMUpdater with v2=True, returns a vLLMUpdaterV2 instance instead.
+    This provides a unified entry point for both updater versions while maintaining
+    backward compatibility.
+    """
+
+    def __call__(cls, *args, v2=False, **kwargs):
+        if v2:
+            # Import V2 here to avoid circular imports
+            from .vllm_v2 import vLLMUpdaterV2
+
+            # V2 has a different signature - it expects a vllm_engine parameter
+            # If the user is providing the old signature, we need to handle this gracefully
+            if args or any(
+                k in kwargs
+                for k in [
+                    "master_address",
+                    "master_port",
+                    "model_metadata",
+                    "vllm_tp_size",
+                ]
+            ):
+                # Old signature detected - we can't auto-convert, user needs to update their code
+                raise TypeError(
+                    "When using v2=True, you must provide a vllm_engine parameter instead of "
+                    "the v1 parameters (master_address, master_port, model_metadata, vllm_tp_size). "
+                    "See vLLMUpdaterV2 documentation for details."
+                )
+
+            # Forward to V2 constructor
+            return vLLMUpdaterV2(*args, **kwargs)
+        else:
+            # Use original V1 constructor
+            return super().__call__(*args, **kwargs)
+
+
+class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
     """A class that sends weights to vLLM workers.
 
     This class handles synchronizing weights between a training policy and vLLM inference workers.
@@ -52,6 +75,9 @@ class vLLMUpdater(WeightUpdaterBase):
         model_metadata (dict[str, tuple[torch.dtype, torch.Size]], optional): Model metadata mapping
             parameter names to their dtype and shape. If not provided, will be extracted from policy.
         vllm_tp_size (int, optional): vLLM tensor parallel size. Defaults to 1.
+        v2 (bool, optional): If True, returns a vLLMUpdaterV2 instance instead. This is an experimental
+            feature that provides better integration with AsyncVLLM engines. When using v2=True, you must
+            provide a vllm_engine parameter instead of the above parameters. Defaults to False.
 
     Methods:
         init: Initialize the updater with model metadata and initialize the group.
@@ -63,6 +89,11 @@ class vLLMUpdater(WeightUpdaterBase):
     .. note::
         This class assumes the policy is a transformers model that can be loaded by vLLM.
         The policy must have a state_dict() method that returns the model weights.
+
+    .. warning::
+        The v2=True option is experimental and may have backward-compatibility breaking changes
+        in future releases. However, it is generally considered a better option for working with
+        AsyncVLLM engines and provides improved performance and reliability.
     """
 
     def __init__(
@@ -105,6 +136,8 @@ class vLLMUpdater(WeightUpdaterBase):
     @property
     def master_port(self):
         if self._master_port is None:
+            from vllm.utils import get_open_port
+
             self._master_port = get_open_port()
         return self._master_port
 
@@ -136,6 +169,8 @@ class vLLMUpdater(WeightUpdaterBase):
         return self._model_ref
 
     def _init_group(self):
+        import ray
+
         torchrl_logger.info(f"=> in {type(self).__name__}._init_group")
         weight_sync_world_size = self.vllm_tp_size + 1
         torchrl_logger.info(f"initializing group with {weight_sync_world_size=}...")
@@ -160,6 +195,7 @@ class vLLMUpdater(WeightUpdaterBase):
             weight_sync_world_size,
             torch.device("cuda:0"),
         )
+
         ray.get(init_weight_update_group_getter)
         torchrl_logger.info("init_weight_update_group getter succeeded")
 
@@ -230,6 +266,8 @@ class vLLMUpdater(WeightUpdaterBase):
                 stream=torch.cuda.current_stream(),
             )
             del val
+        import ray
+
         ray.get(remotes)
         torchrl_logger.info("done broadcasting")
         torch.cuda.synchronize()

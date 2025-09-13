@@ -15,7 +15,6 @@ mkdir -p logs
 
 # Environment variables
 export LIST_TO_STACK=1
-export VLLM_USE_V1=0
 export RAY_CLUSTER_MANAGED_EXTERNALLY=1
 
 # Run command in Ray cluster

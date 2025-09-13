@@ -20,7 +20,7 @@ from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.envs import AsyncEnvPool, StepCounter
 from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-from torchrl.modules.llm.backends.vllm import make_vllm_worker
+from torchrl.modules.llm.backends import make_vllm_worker
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None

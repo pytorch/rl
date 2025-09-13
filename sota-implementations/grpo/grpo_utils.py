@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+import warnings
 from typing import Any, Literal
 
 import torch
@@ -13,12 +13,77 @@ from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
+
+
+def check_grpo_dependencies() -> None:
+    """Check for required GRPO dependencies and provide helpful error messages.
+
+    This function checks for critical dependencies needed for GRPO training and
+    provides installation instructions for missing packages.
+    """
+    missing_packages = []
+    missing_optional = []
+
+    # Core required packages
+    required_packages = {
+        "datasets": "pip install datasets",
+        "peft": "pip install peft",
+        "wandb": "pip install wandb",
+        "vllm": "pip install vllm",
+        "transformers": "pip install transformers",
+        "accelerate": "pip install accelerate",
+        "ray": "pip install ray",
+        "tqdm": "pip install tqdm",
+    }
+
+    # Optional but recommended packages
+    optional_packages = {
+        "flash_attn": "pip install flash-attn",
+        "bitsandbytes": "pip install bitsandbytes",
+        "xformers": "pip install xformers",
+    }
+
+    # Check required packages
+    for package, install_cmd in required_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append((package, install_cmd))
+
+    # Check optional packages
+    for package, install_cmd in optional_packages.items():
+        try:
+            __import__(package)
+        except ImportError:
+            missing_optional.append((package, install_cmd))
+
+    # Report missing required packages
+    if missing_packages:
+        error_msg = (
+            "Missing required packages for GRPO training:\n"
+            + "\n".join(f"  - {pkg}: {cmd}" for pkg, cmd in missing_packages)
+            + "\n\nYou can install all GRPO dependencies with:\n"
+            + "  pip install torchrl[grpo]\n"
+            + "or install individual packages as shown above."
+        )
+        raise ImportError(error_msg)
+
+    # Report missing optional packages as warnings
+    if missing_optional:
+        warning_msg = (
+            "Missing optional packages that may improve GRPO performance:\n"
+            + "\n".join(f"  - {pkg}: {cmd}" for pkg, cmd in missing_optional)
+            + "\n\nThese packages are optional but recommended for optimal performance."
+        )
+        warnings.warn(warning_msg, UserWarning, stacklevel=2)
+
+    torchrl_logger.info("✓ All required GRPO dependencies are available")
 
 
 def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
@@ -135,30 +200,90 @@ def get_inference_model(
     Raises:
         AssertionError: If the vLLM server or model initialization fails
     """
-    from torchrl.modules.llm.backends.vllm import make_vllm_worker
+    from torchrl.modules.llm.backends.vllm import AsyncVLLM
 
     num_devices = cfg.inference_model.num_devices
     if num_devices is None:
         vllm_devices = devices if devices is not None else [1]
+        num_devices = len(vllm_devices)
     else:
         vllm_devices = None
     torchrl_logger.info(
-        f"Creating inference model with num_devices={num_devices}, devices={vllm_devices}"
+        f"Creating AsyncVLLM inference model with num_devices={num_devices}, devices={vllm_devices}"
     )
 
     model_name = cfg.model.name
 
-    # vLLM handles device mapping internally
-    inference_server = make_vllm_worker(
-        model_name=model_name,
-        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        num_devices=num_devices,
-        devices=list(vllm_devices)
-        if vllm_devices is not None
-        else None,  # Convert to list for type compatibility
-        make_ray_worker=make_ray_worker,
-        enforce_eager=cfg.inference_model.enforce_eager,
-    )
+    # Use AsyncVLLM for better performance and async processing
+    verbose = getattr(cfg.inference_model, "verbose", True)
+    compile_model = getattr(
+        cfg.inference_model, "compile", False
+    )  # Disabled by default for GRPO
+
+    # Build parameters dict for AsyncVLLM with all config options
+    inference_params = {
+        "model_name": model_name,
+        "num_devices": 1,
+        "num_replicas": num_devices,
+        "gpu_memory_utilization": cfg.inference_model.gpu_memory_utilization,
+        "enforce_eager": cfg.inference_model.enforce_eager,
+        "verbose": verbose,
+        "compile": compile_model,
+    }
+
+    # CRITICAL FIX: Configure attention implementation to prevent Flash Attention errors
+    # vLLM doesn't accept attn_implementation directly through AsyncEngineArgs
+    # Instead, we set the VLLM_ATTENTION_BACKEND environment variable
+    if hasattr(cfg.inference_model, "attn_implementation"):
+        import os
+
+        attn_impl = cfg.inference_model.attn_implementation
+
+        # Map common attention implementations to vLLM backend names
+        attn_backend_map = {
+            "flash_attention_2": "FLASH_ATTN",
+            "flash_attn": "FLASH_ATTN",
+            "sdpa": "TORCH_SDPA",
+            "torch_sdpa": "TORCH_SDPA",
+            "xformers": "XFORMERS",
+        }
+
+        vllm_backend = attn_backend_map.get(attn_impl, attn_impl.upper())
+        os.environ["VLLM_ATTENTION_BACKEND"] = vllm_backend
+
+        torchrl_logger.info(
+            f"Setting VLLM_ATTENTION_BACKEND={vllm_backend} (from config: {attn_impl})"
+        )
+
+    # Add other common vLLM parameters from config if present
+    optional_vllm_params = [
+        "max_model_len",
+        "dtype",
+        "trust_remote_code",
+        "seed",
+        "swap_space",
+        "cpu_offload_gb",
+        "enable_prefix_caching",
+        "tensor_parallel_size",
+        "pipeline_parallel_size",
+    ]
+
+    for param in optional_vllm_params:
+        if hasattr(cfg.inference_model, param):
+            value = getattr(cfg.inference_model, param)
+            if value is not None:
+                inference_params[param] = value
+
+    # Handle torch_dtype specifically (convert string to torch dtype)
+    if hasattr(cfg.inference_model, "torch_dtype"):
+        dtype_str = cfg.inference_model.torch_dtype
+        if dtype_str is not None:
+            if isinstance(dtype_str, str):
+                inference_params["dtype"] = getattr(torch, dtype_str)
+            else:
+                inference_params["dtype"] = dtype_str
+
+    inference_server = AsyncVLLM.from_pretrained(**inference_params)
     assert inference_server is not None
     if tokenizer is None:
         from transformers import AutoTokenizer
@@ -178,6 +303,7 @@ def get_inference_model(
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
             "temperature": cfg.inference_model.temperature,
+            "top_p": cfg.inference_model.top_p,
         },
     )
     assert policy.model is not None
@@ -415,42 +541,22 @@ def get_hf_model(
 
 
 def make_weight_updater(
-    policy_training=None,
-    master_address=None,
-    master_port=None,
-    model_metadata=None,
-    vllm_tp_size=None,
-) -> vLLMUpdater | Callable[[], vLLMUpdater]:
-    """Creates a vLLM weight updater for the policy.
+    vllm_engine,
+) -> vLLMUpdaterV2:
+    """Creates a vLLM weight updater for the policy using the new V2 API.
 
-    This function can be used in two ways:
-    1. Synchronous mode (grpo.py): Pass policy_training to get an initialized updater with metadata
-    2. Async mode (grpo-async.py): Pass master_address, master_port, model_metadata, and remote_actor
+    The V2 updater is much simpler - it just needs a vLLM engine that implements
+    the RLvLLMEngine interface (like RayLLMWorker, LocalLLMWrapper, or AsyncVLLM).
 
     Args:
-        policy_training (Optional[TransformersWrapper]): The training policy model. Required for sync mode.
-        master_address (Optional[str]): Ray master address for async mode.
-        master_port (Optional[int]): Ray master port for async mode.
-        model_metadata (Optional[dict]): Model metadata for async mode. If not provided but policy_training is,
-            it will be extracted from the policy.
-        vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
+        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface.
+            This is typically obtained from the inference policy's model attribute.
 
     Returns:
-        vLLMUpdater | partial[vLLMUpdater]: An instance of the weight updater configured to update
-            the vLLM worker's weights.
+        vLLMUpdaterV2: An instance of the weight updater configured to update
+            the vLLM worker's weights through the engine's own methods.
     """
-    if model_metadata is None and policy_training is not None:
-        # Extract metadata from training policy
-        model_metadata = {
-            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
-        }
-
-    return vLLMUpdater(
-        master_address=master_address,
-        master_port=master_port,
-        model_metadata=model_metadata,
-        vllm_tp_size=vllm_tp_size,
-    )
+    return vLLMUpdaterV2(vllm_engine=vllm_engine)
 
 
 def compute_device_allocation(cfg):
@@ -532,6 +638,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             num_envs=cfg.env.num_envs,
             max_steps=max_steps,
             device=torch.device("cuda:0") if devices is not None else None,
+            ray_backend=True,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
         # Reward scale is 0.0 to 2.2

@@ -118,6 +118,9 @@ class IFEvalEnv(DatasetChatEnv):
             collate function is used. Defaults to `None`.
         max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.
         input_mode (Literal["history", "text", "tokens"], optional): The mode of input to use. Defaults to `"history"`.
+        ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.
+            Using this backend allows for explicit resource control and avoids serialization issues, as well as
+            sharing the same dataloader across multiple environments and actors.
 
     Examples:
         >>> import transformers
@@ -237,6 +240,7 @@ I need to analyze what the user is asking for...
         collate_fn: Callable | None = None,
         max_steps: int = 1,
         input_mode: Literal["history", "text", "tokens"] = "history",
+        ray_backend: bool = False,
     ):
         if collate_fn is None:
             collate_fn = _collate_fn
@@ -256,6 +260,7 @@ I need to analyze what the user is asking for...
             input_mode=input_mode,
             data_key="query",
             primers=IFEvalData.default_spec((num_envs,), device),
+            ray_backend=ray_backend,
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

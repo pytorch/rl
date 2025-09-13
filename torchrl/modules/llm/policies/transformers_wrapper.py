@@ -2419,6 +2419,8 @@ class RemoteTransformersWrapper:
             Transformers models are not serializable, so only model names/paths are supported.
         max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
         validate_model (bool, optional): Whether to validate the model. Defaults to True.
+        num_gpus (int, optional): Number of GPUs to use. Defaults to 0.
+        num_cpus (int, optional): Number of CPUs to use. Defaults to 0.
         **kwargs: All other arguments are passed directly to TransformersWrapper.
 
     Example:
@@ -2448,6 +2450,8 @@ class RemoteTransformersWrapper:
         max_concurrency: int = 16,
         validate_model: bool = True,
         actor_name: str = None,
+        num_gpus: int = 1,
+        num_cpus: int = 1,
         **kwargs,
     ):
         import ray
@@ -2479,7 +2483,12 @@ class RemoteTransformersWrapper:
         # Create the remote actor with the unique name
         self._remote_wrapper = (
             ray.remote(TransformersWrapper)
-            .options(max_concurrency=max_concurrency, name=actor_name)
+            .options(
+                max_concurrency=max_concurrency,
+                name=actor_name,
+                num_gpus=num_gpus,
+                num_cpus=num_cpus,
+            )
             .remote(model, **kwargs)
         )
 

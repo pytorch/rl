@@ -4,16 +4,37 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+# Import everything from the vllm subfolder for backwards compatibility
 from .vllm import (
-    LLMOnDevice,
+    # Asynchronous vLLM
+    _AsyncLLMEngine,
+    _AsyncvLLMWorker,
+    AsyncVLLM,
+    # Synchronous vLLM
+    LocalLLMWrapper,
+    make_async_vllm_engine,
     make_vllm_worker,
+    RayLLMWorker,
+    # Base classes and interfaces
+    RLvLLMEngine,
+    # Utilities
     stateless_init_process_group,
-    vLLMWorker,
+    stateless_init_process_group_async,
 )
 
 __all__ = [
-    "vLLMWorker",
-    "stateless_init_process_group",
+    # Base classes
+    "RLvLLMEngine",
+    # Sync vLLM
     "make_vllm_worker",
-    "LLMOnDevice",
+    "RayLLMWorker",
+    "LocalLLMWrapper",
+    # Async vLLM
+    "_AsyncvLLMWorker",
+    "_AsyncLLMEngine",
+    "AsyncVLLM",
+    "make_async_vllm_engine",
+    # Utilities
+    "stateless_init_process_group",
+    "stateless_init_process_group_async",
 ]

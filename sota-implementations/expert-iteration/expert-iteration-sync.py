@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import gc
 import math
-import os
 from functools import partial
 from pathlib import Path
 
@@ -62,8 +61,6 @@ DEFAULT_DIALOG_TURNS_PER_BATCH = 256
 
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
-    if os.getenv("VLLM_USE_V1", "1") != "0":
-        raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for training")
