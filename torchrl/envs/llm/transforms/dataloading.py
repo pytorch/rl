@@ -12,7 +12,7 @@ from typing import Any, Literal
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
 
-from torchrl.data.tensor_specs import Composite
+from torchrl.data.tensor_specs import Composite, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.utils import make_composite_from_td
@@ -639,6 +639,7 @@ class RayDataLoadingPrimer(Transform):
         dataloader_factory=None,
         num_cpus=None,
         num_gpus=0,
+        device: DEVICE_TYPING | None = None,
         **kwargs,
     ):
 
@@ -686,8 +687,15 @@ class RayDataLoadingPrimer(Transform):
         )
 
         primers = kwargs.get("primers", None)
-        if hasattr(primers, "device"):
+        if hasattr(primers, "device") and primers.device is not None:
+            if device is not None and device != primers.device:
+                raise ValueError(
+                    "Device mismatch between primers and device. "
+                    "Use the device argument to set the device."
+                )
             self._device = primers.device
+        elif device is not None:
+            self._device = device
         else:
             self._device = None  # Initialize device tracking
         if hasattr(primers, "cpu"):
