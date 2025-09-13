@@ -7,7 +7,9 @@ from __future__ import annotations
 import warnings
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal
+from functools import wraps
+
+from typing import Any, Literal, TypeVar
 
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
@@ -16,6 +18,8 @@ from torchrl.data.tensor_specs import Composite, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.utils import make_composite_from_td
+
+T = TypeVar("T")
 
 
 def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBase:
@@ -600,6 +604,48 @@ class DataLoadingPrimer(TensorDictPrimer):
         setattr(self, name, value)
 
 
+def _maybe_to_device(r: T, device: DEVICE_TYPING) -> T:
+    if isinstance(r, tuple):
+        return tuple(_maybe_to_device(r_i, device) for r_i in r)
+    if isinstance(r, list):
+        return [_maybe_to_device(r_i, device) for r_i in r]
+    if isinstance(r, dict):
+        return {k: _maybe_to_device(v, device) for k, v in r.items()}
+    if hasattr(r, "to"):
+        return r.to(device)
+    return r
+
+
+def _maybe_clear_device(r: T) -> T:
+    if isinstance(r, tuple):
+        return tuple(_maybe_clear_device(r_i) for r_i in r)
+    if isinstance(r, list):
+        return [_maybe_clear_device(r_i) for r_i in r]
+    if isinstance(r, dict):
+        return {k: _maybe_clear_device(v) for k, v in r.items()}
+    if hasattr(r, "clone"):
+        r = r.clone()
+    if hasattr(r, "clear_device_"):
+        r = r.clear_device_()
+    return r
+
+
+def _map_input_output_device(func: Callable):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        args = _maybe_clear_device(args)
+        kwargs = _maybe_clear_device(kwargs)
+        r = func(self, *args, **kwargs)
+        if hasattr(self, "_device"):
+            if self._device is not None:
+                r = _maybe_to_device(r, self._device)
+            else:
+                r = _maybe_clear_device(r)
+        return r
+
+    return wrapper
+
+
 class RayDataLoadingPrimer(Transform):
     """A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.
 
@@ -863,134 +909,62 @@ class RayDataLoadingPrimer(Transform):
         return result
 
     # Override _reset to ensure proper delegation
+    @_map_input_output_device
     def _reset(
         self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None
     ) -> TensorDictBase | None:
         """Reset method for TensorDictPrimer."""
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
-        if tensordict_reset is not None:
-            tensordict_reset = tensordict_reset.cpu()
-        result = self._ray.get(self._actor._reset.remote(tensordict, tensordict_reset))
-        # Cast to local device if one is set
-        if hasattr(self, "_device"):
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor._reset.remote(tensordict, tensordict_reset))
 
+    @_map_input_output_device
     def _reset_env_preprocess(
         self, tensordict: TensorDictBase | None
     ) -> TensorDictBase | None:
         """Reset environment preprocess - crucial for call_before_env_reset=True."""
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
-        result = self._ray.get(self._actor._reset_env_preprocess.remote(tensordict))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None and result is not None:
-            result = result.to(self._device)
-        return result
+        return self._ray.get(self._actor._reset_env_preprocess.remote(tensordict))
 
-    # Transform methods
     def close(self):
         """Close the transform."""
         return self._ray.get(self._actor.close.remote())
 
+    @_map_input_output_device
     def _apply_transform(self, obs):
         """Apply transform."""
-        result = self._ray.get(self._actor._apply_transform.remote(obs))
-        # Cast to local device if one is set
-        if hasattr(self, "_device"):
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor._apply_transform.remote(obs))
 
+    @_map_input_output_device
     def _call(self, next_tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        if next_tensordict is not None:
-            next_tensordict = next_tensordict.cpu()
         """Call method."""
-        result = self._ray.get(self._actor._call.remote(next_tensordict))
-        # Cast to local device if one is set
-        if hasattr(self, "_device"):
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor._call.remote(next_tensordict))
 
+    @_map_input_output_device
     def forward(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
         """Forward pass."""
-        result = self._ray.get(self._actor.forward.remote(tensordict))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor.forward.remote(tensordict))
 
+    @_map_input_output_device
     def _inv_apply_transform(
         self, state: TensorDictBase | None
     ) -> TensorDictBase | None:
         """Inverse apply transform."""
-        if state is not None:
-            state = state.cpu()
-        result = self._ray.get(self._actor._inv_apply_transform.remote(state))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor._inv_apply_transform.remote(state))
 
+    @_map_input_output_device
     def _inv_call(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
         """Inverse call."""
-        result = self._ray.get(self._actor._inv_call.remote(tensordict))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor._inv_call.remote(tensordict))
 
+    @_map_input_output_device
     def inv(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
         """Inverse."""
-        result = self._ray.get(self._actor.inv.remote(tensordict))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor.inv.remote(tensordict))
 
+    @_map_input_output_device
     def _step(
         self, tensordict: TensorDictBase | None, next_tensordict: TensorDictBase | None
     ) -> TensorDictBase | None:
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
-        if next_tensordict is not None:
-            next_tensordict = next_tensordict.cpu()
         """Step method."""
-        result = self._ray.get(self._actor._step.remote(tensordict, next_tensordict))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            if self._device is not None:
-                result = result.to(self._device)
-            else:
-                result = result.clone().clear_device_()
-        return result
+        return self._ray.get(self._actor._step.remote(tensordict, next_tensordict))
 
     def transform_env_device(self, device):
         """Transform environment device."""
@@ -1000,32 +974,39 @@ class RayDataLoadingPrimer(Transform):
         """Transform environment batch size."""
         return self._ray.get(self._actor.transform_env_batch_size.remote(batch_size))
 
+    @_map_input_output_device
     def transform_output_spec(self, output_spec):
         """Transform output spec."""
         return self._ray.get(self._actor.transform_output_spec.remote(output_spec))
 
+    @_map_input_output_device
     def transform_input_spec(self, input_spec):
         """Transform input spec."""
         return self._ray.get(self._actor.transform_input_spec.remote(input_spec))
 
+    @_map_input_output_device
     def transform_observation_spec(self, observation_spec):
         """Transform observation spec."""
         return self._ray.get(
             self._actor.transform_observation_spec.remote(observation_spec)
         )
 
+    @_map_input_output_device
     def transform_reward_spec(self, reward_spec):
         """Transform reward spec."""
         return self._ray.get(self._actor.transform_reward_spec.remote(reward_spec))
 
+    @_map_input_output_device
     def transform_done_spec(self, done_spec):
         """Transform done spec."""
         return self._ray.get(self._actor.transform_done_spec.remote(done_spec))
 
+    @_map_input_output_device
     def transform_action_spec(self, action_spec):
         """Transform action spec."""
         return self._ray.get(self._actor.transform_action_spec.remote(action_spec))
 
+    @_map_input_output_device
     def transform_state_spec(self, state_spec):
         """Transform state spec."""
         return self._ray.get(self._actor.transform_state_spec.remote(state_spec))
