@@ -626,7 +626,7 @@ def _maybe_clear_device(r: T) -> T:
     if hasattr(r, "clone"):
         r = r.clone()
     if hasattr(r, "clear_device_"):
-        r = r.clear_device_()
+        r = r.cpu().clear_device_()
     return r
 
 
