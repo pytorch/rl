@@ -577,7 +577,16 @@ class TestGSM8K:
             ray.shutdown()
 
     @pytest.mark.parametrize("ray_backend", [True, False], ids=["ray", "local"])
-    @pytest.mark.parametrize("device", [None, torch.device("cpu")], ids=["none", "cpu"])
+    @pytest.mark.parametrize(
+        "device",
+        [
+            None,
+            torch.device("cpu")
+            if not torch.cuda.is_available()
+            else torch.device("cuda:0"),
+        ],
+        ids=["none", "cpu/cuda"],
+    )
     def test_gsm8kenv(self, ray_backend, device, ray_backend_fixture):
         if not _has_ray and ray_backend:
             pytest.skip("Ray not available")
