@@ -54,6 +54,9 @@ train:
   # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
   kl_coef_in_loss: true 
 
+  # Whether to use KL divergence to reference model (requires reference model instantiation)
+  use_kl_to_ref: true
+
   # KL coefficients for the KL divergence to the reference and inference policies
   kl_to_ref_coeff: 1e-2
   kl_to_inference_coeff: 0.0

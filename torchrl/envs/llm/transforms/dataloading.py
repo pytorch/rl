@@ -525,7 +525,9 @@ class DataLoadingPrimer(TensorDictPrimer):
     def device(self, device: torch.device | None):
         self._device = device
 
-    def _load_from_dataloader(self, reset: torch.Tensor | None = None):
+    def _load_from_dataloader(
+        self, reset: torch.Tensor | None = None
+    ) -> TensorDictBase:
         """Loads a single element from the dataloader, or alternatively from the buffer.
 
         If `reset` is passed, then one element per reset will be loaded.
@@ -868,7 +870,9 @@ class RayDataLoadingPrimer(Transform):
         """Reset the dataloader."""
         return self._ray.get(self._actor.reset_dataloader.remote())
 
-    def _load_from_dataloader(self, reset=None):
+    def _load_from_dataloader(
+        self, reset: torch.Tensor | None = None
+    ) -> TensorDictBase:
         """Load data from the dataloader."""
         result = self._ray.get(self._actor._load_from_dataloader.remote(reset))
         # Cast to local device if one is set
@@ -934,12 +938,12 @@ class RayDataLoadingPrimer(Transform):
         return self._ray.get(self._actor.__getattribute__.remote("primers"))
 
     @primers.setter
-    def primers(self, value):
+    def primers(self, value: TensorSpec):
         """Set primers property."""
         self._ray.get(self._actor.set_attr.remote("primers", value))
 
     # TensorDictPrimer methods
-    def init(self, tensordict):
+    def init(self, tensordict: TensorDictBase | None):
         """Initialize."""
         return self._ray.get(self._actor.init.remote(tensordict))
 
@@ -993,7 +997,7 @@ class RayDataLoadingPrimer(Transform):
         return self._ray.get(self._actor.close.remote())
 
     @_map_input_output_device
-    def _apply_transform(self, obs):
+    def _apply_transform(self, obs: torch.Tensor | None) -> torch.Tensor | None:
         """Apply transform."""
         return self._ray.get(self._actor._apply_transform.remote(obs))
 

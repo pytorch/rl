@@ -94,7 +94,9 @@ def train(
     # Setup loss function
     loss_fn = GRPOLoss(
         actor_network=policy_training,
-        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
+        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff
+        if (cfg.train.kl_coef_in_loss and cfg.train.use_kl_to_ref)
+        else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
         # use prompt/response masking for regular training, and assistant masking for reasoning
@@ -334,8 +336,10 @@ def main(cfg):
         raise ValueError(
             "Inference model num_devices must be set via inference_model.num_devices"
         )
-    if cfg.ref_model.num_devices is None:
-        raise ValueError("Ref model num_devices must be set via ref_model.num_devices")
+    if cfg.train.use_kl_to_ref and cfg.ref_model.num_devices is None:
+        raise ValueError(
+            "Ref model num_devices must be set via ref_model.num_devices when use_kl_to_ref is True"
+        )
     if cfg.train_model.num_devices is None:
         raise ValueError(
             "Train model num_devices must be set via train_model.num_devices"
@@ -372,8 +376,11 @@ def main(cfg):
 
     # Create remote collector using RayLLMCollector
     collector_config["num_gpus"] = (
-        # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the inference model
+        # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the ref model
+        # If KL to ref is disabled, we don't need any GPUs for the ref model
         cfg.ref_model.num_devices
+        if cfg.train.use_kl_to_ref
+        else 0
     )
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 

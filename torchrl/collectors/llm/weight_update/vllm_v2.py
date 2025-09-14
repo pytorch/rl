@@ -94,6 +94,9 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         self.vllm_engine.update_weights(weights)
         torchrl_logger.info("Weight update completed")
 
+        # Call post-hooks to increment policy version
+        self._call_post_hooks()
+
     def push_weights_from_transformers(self, transformers_model):
         """Push weights from a transformers model.
 
@@ -154,6 +157,16 @@ class vLLMUpdaterV2(WeightUpdaterBase):
     def all_worker_ids(self):
         """Return list of worker IDs."""
         return [0]
+
+    def register_collector(self, collector):  # noqa: F821
+        """Register a collector and set up policy version increment post-hook.
+
+        Args:
+            collector: The collector to register (DataCollectorBase)
+        """
+        result = super().register_collector(collector)
+        self.register_post_hook(collector.increment_version)
+        return result
 
     @classmethod
     def get_model_metadata(cls, model) -> dict[str, tuple[torch.dtype, torch.Size]]:

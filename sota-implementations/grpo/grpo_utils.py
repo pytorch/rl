@@ -569,13 +569,18 @@ def compute_device_allocation(cfg):
         dict: Updated device configuration containing:
             - train_model_devices: list of devices for training
             - inference_model_devices: list of devices for inference
-            - ref_model_devices: list of devices for reference model
+            - ref_model_devices: list of devices for reference model (empty if not used)
             - ray_num_gpus: number of GPUs to tell Ray about
             - cuda_visible_devices: string for CUDA_VISIBLE_DEVICES
     """
     train_devices = cfg.train_model.num_devices
     inf_devices = cfg.inference_model.num_devices
-    ref_devices = cfg.ref_model.num_devices
+
+    # Only allocate devices for reference model if KL to ref is enabled
+    if cfg.train.use_kl_to_ref:
+        ref_devices = cfg.ref_model.num_devices
+    else:
+        ref_devices = 0
 
     # So we need all GPUs for Ray
     train_start = 0
@@ -589,7 +594,7 @@ def compute_device_allocation(cfg):
     # Create device lists
     train_model_devices = list(range(train_start, train_end))
     inference_model_devices = list(range(inference_start, inference_end))
-    ref_model_devices = list(range(ref_start, ref_end))
+    ref_model_devices = list(range(ref_start, ref_end)) if ref_devices > 0 else []
 
     # Get total unique devices for CUDA_VISIBLE_DEVICES
     all_devices = sorted(
@@ -615,17 +620,19 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     Returns:
         The configured environment
     """
-    # Create reference model with proper device allocation
+    # Create reference model with proper device allocation only if KL to ref is enabled
     # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
 
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(
-        ref_cfg,
-        train_tokenizer,
-        devices=devices,
-    )
+    ref_model = None
+    if cfg.train.use_kl_to_ref:
+        # Create a new config with adjusted device assignments
+        ref_cfg = DictConfig(dict(cfg))
+        ref_model = get_ref_model(
+            ref_cfg,
+            train_tokenizer,
+            devices=devices,
+        )
 
     # Setup environment
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
@@ -668,28 +675,30 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 random_prompt=True,
             ),
         )
-        env = env.append_transform(
-            # RetrieveKL will be lazily initialized in the collector.
-            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-            RetrieveKL(
-                ref_model=ref_model,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-                coeff=cfg.train.kl_to_ref_coeff,
+        if cfg.train.use_kl_to_ref and ref_model is not None:
+            env = env.append_transform(
+                # RetrieveKL will be lazily initialized in the collector.
+                # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
+                # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
+                RetrieveKL(
+                    ref_model=ref_model,
+                    add_to_reward=not cfg.train.kl_coef_in_loss,
+                    coeff=cfg.train.kl_to_ref_coeff,
+                )
             )
-        )
     else:
-        # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-        # we can just use 0 here.
-        device = torch.device("cuda:0")
-        env = env.append_transform(
-            KLRewardTransform(
-                ref_model=ref_model,
-                coef=cfg.train.kl_to_ref_coeff,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-                device=device,
+        if cfg.train.use_kl_to_ref and ref_model is not None:
+            # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+            # we can just use 0 here.
+            device = torch.device("cuda:0")
+            env = env.append_transform(
+                KLRewardTransform(
+                    ref_model=ref_model,
+                    coef=cfg.train.kl_to_ref_coeff,
+                    add_to_reward=not cfg.train.kl_coef_in_loss,
+                    device=device,
+                )
             )
-        )
     return env
 
 
