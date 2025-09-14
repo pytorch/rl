@@ -635,7 +635,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
+            num_envs=1,
             max_steps=max_steps,
             device=torch.device("cuda:0") if devices is not None else None,
             ray_backend=True,
@@ -646,9 +646,10 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
+            num_envs=1,
             max_steps=max_steps,
             device=torch.device("cuda:0") if devices is not None else None,
+            ray_backend=True,
         )
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")

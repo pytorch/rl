@@ -168,6 +168,8 @@ class GSM8KEnv(DatasetChatEnv):
         ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.
             Using this backend allows for explicit resource control and avoids serialization issues, as well as
             sharing the same dataloader across multiple environments and actors.
+        dataloader_actor_name (str, optional): Name of the Ray actor to use for data loading.
+            Defaults to `"gsm8k_dataloader"`.
 
     Examples:
         >>> import transformers
@@ -320,7 +322,10 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
         max_steps: int = 1,
         input_mode: Literal["history", "text", "tokens"] = "history",
         ray_backend: bool = False,
+        dataloader_actor_name: str | None = None,
     ):
+        if ray_backend and dataloader_actor_name is None:
+            dataloader_actor_name = "gsm8k_dataloader"
         if collate_fn is None:
             collate_fn = _collate_fn
         super().__init__(
@@ -339,6 +344,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
             collate_fn=collate_fn,
             input_mode=input_mode,
             ray_backend=ray_backend,
+            dataloader_actor_name=dataloader_actor_name,
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

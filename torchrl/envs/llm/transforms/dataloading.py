@@ -9,10 +9,12 @@ from collections import deque
 from collections.abc import Callable, Iterable, Mapping
 from functools import wraps
 
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, overload, TypeVar
 
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
+
+from tensordict.base import TensorCollection
 
 from torchrl.data.tensor_specs import Composite, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -38,13 +40,14 @@ def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBas
 
     batch_size = list(list_of_tensordicts[0].shape)
     batch_size.insert(0, len(list_of_tensordicts))
-    return list_of_tensordicts[0].apply(
+    result: TensorDictBase = list_of_tensordicts[0].apply(  # type: ignore[assignment]
         _as_nested_tensor, *list_of_tensordicts[1:], batch_size=batch_size
     )
+    return result
 
 
 def as_padded_tensor(
-    list_of_tensordicts: list[[TensorDictBase]], dim=0, stack_dim: int = 0
+    list_of_tensordicts: list[TensorDictBase], dim=0, stack_dim: int = 0
 ) -> TensorDictBase:
     """Stacks a list of tensordicts into a single tensordict with padded tensors.
 
@@ -73,7 +76,7 @@ def as_padded_tensor(
 
     batch_size = list(list_of_tensordicts[0].shape)
     batch_size.insert(dim, len(list_of_tensordicts))
-    result = list_of_tensordicts[0].apply(
+    result: TensorDictBase = list_of_tensordicts[0].apply(  # type: ignore[assignment]
         _stack_tensors, *list_of_tensordicts[1:], batch_size=batch_size
     )
     return result
@@ -604,7 +607,32 @@ class DataLoadingPrimer(TensorDictPrimer):
         setattr(self, name, value)
 
 
+@overload
+def _maybe_to_device(r: tuple, device: DEVICE_TYPING) -> tuple:
+    ...
+
+
+@overload
+def _maybe_to_device(r: list, device: DEVICE_TYPING) -> list:
+    ...
+
+
+@overload
+def _maybe_to_device(r: dict, device: DEVICE_TYPING) -> dict:
+    ...
+
+
+@overload
+def _maybe_to_device(r: TensorCollection, device: DEVICE_TYPING) -> TensorCollection:
+    ...
+
+
+@overload
 def _maybe_to_device(r: T, device: DEVICE_TYPING) -> T:
+    ...
+
+
+def _maybe_to_device(r, device):
     if isinstance(r, tuple):
         return tuple(_maybe_to_device(r_i, device) for r_i in r)
     if isinstance(r, list):
@@ -616,17 +644,42 @@ def _maybe_to_device(r: T, device: DEVICE_TYPING) -> T:
     return r
 
 
+@overload
+def _maybe_clear_device(r: tuple) -> tuple:
+    ...
+
+
+@overload
+def _maybe_clear_device(r: list) -> list:
+    ...
+
+
+@overload
+def _maybe_clear_device(r: dict) -> dict:
+    ...
+
+
+@overload
+def _maybe_clear_device(r: TensorCollection) -> TensorCollection:
+    ...
+
+
+@overload
 def _maybe_clear_device(r: T) -> T:
+    ...
+
+
+def _maybe_clear_device(r):
     if isinstance(r, tuple):
         return tuple(_maybe_clear_device(r_i) for r_i in r)
     if isinstance(r, list):
         return [_maybe_clear_device(r_i) for r_i in r]
     if isinstance(r, dict):
         return {k: _maybe_clear_device(v) for k, v in r.items()}
-    if hasattr(r, "clone"):
-        r = r.clone()
-    if hasattr(r, "clear_device_"):
-        r = r.cpu().clear_device_()
+    if not is_tensor_collection(r):
+        raise ValueError(f"Expected a tensor collection, got {type(r)}")
+    r = r.clone()
+    r = r.cpu().clear_device_()
     return r
 
 
@@ -660,6 +713,7 @@ class RayDataLoadingPrimer(Transform):
         num_cpus (int, optional): Number of CPUs to allocate to the Ray actor.
             Defaults to the dataloader's num_workers if available, otherwise 1.
         num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.
+        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.
         **kwargs: Additional keyword arguments to pass to DataLoadingPrimer.
 
     Note:
@@ -686,6 +740,7 @@ class RayDataLoadingPrimer(Transform):
         num_cpus=None,
         num_gpus=0,
         device: DEVICE_TYPING | None = None,
+        actor_name: str | None = None,
         **kwargs,
     ):
 
@@ -727,11 +782,6 @@ class RayDataLoadingPrimer(Transform):
             if num_cpus == 0:  # Common case for single-threaded dataloaders
                 num_cpus = 1
 
-        # Create the remote DataLoadingPrimer with resource specifications
-        RemoteDataLoadingPrimer = ray.remote(num_cpus=num_cpus, num_gpus=num_gpus)(
-            DataLoadingPrimer
-        )
-
         primers = kwargs.get("primers", None)
         if hasattr(primers, "device") and primers.device is not None:
             if device is not None and device != primers.device:
@@ -748,6 +798,22 @@ class RayDataLoadingPrimer(Transform):
             primers = primers.cpu()
         if primers is not None:
             kwargs["primers"] = primers
+
+        # First attempt to get the actor if it already exists
+        if actor_name is not None:
+            try:
+                existing_actor = ray.get_actor(actor_name)
+                self._actor = existing_actor
+                return
+            except ValueError:
+                pass
+
+        # Create the remote DataLoadingPrimer with resource specifications
+        RemoteDataLoadingPrimer = ray.remote(num_cpus=num_cpus, num_gpus=num_gpus)(
+            DataLoadingPrimer
+        )
+        if actor_name is not None:
+            RemoteDataLoadingPrimer = RemoteDataLoadingPrimer.options(name=actor_name)
 
         # Create the shared actor, passing factory or dataloader as appropriate
         if dataloader_factory is not None:

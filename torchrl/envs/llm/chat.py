@@ -509,6 +509,8 @@ class DatasetChatEnv(TransformedEnv):
         ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.
             Using this backend allows for explicit resource control and avoids serialization issues, as well as
             sharing the same dataloader across multiple environments and actors.
+        dataloader_actor_name (str | None, optional): Name of the Ray actor to use for data loading.
+            Ignored if `ray_backend` is `None`.
 
     .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a
         :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format
@@ -542,6 +544,7 @@ class DatasetChatEnv(TransformedEnv):
         primers: Composite | None = None,
         system_prompt: str | None = None,
         ray_backend: bool = False,
+        dataloader_actor_name: str | None = None,
     ):
         from tensordict import list_to_stack
 
@@ -578,6 +581,7 @@ class DatasetChatEnv(TransformedEnv):
             input_mode=input_mode,
             data_key=data_key,
             system_prompt=system_prompt,
+            dataloader_actor_name=dataloader_actor_name,
         )
 
     @staticmethod
@@ -678,10 +682,17 @@ class DatasetChatEnv(TransformedEnv):
         data_key: str | None = None,
         system_prompt: str | None = None,
         ray_backend: bool = False,
+        dataloader_actor_name: str | None = None,
     ):
         if ray_backend:
-            dl_cls = RayDataLoadingPrimer
+            dl_cls = functools.partial(
+                RayDataLoadingPrimer, actor_name=dataloader_actor_name
+            )
         else:
+            if dataloader_actor_name is not None:
+                raise ValueError(
+                    "dataloader_actor_name must be None if ray_backend is False"
+                )
             dl_cls = DataLoadingPrimer
         primer = dl_cls(
             dataloader=dataloader,
