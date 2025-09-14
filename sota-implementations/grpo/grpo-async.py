@@ -379,7 +379,7 @@ def main(cfg):
 
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
-    for _ in range(cfg.env.num_envs):
+    for _ in tqdm.trange(cfg.env.num_envs, desc="Starting collectors"):
         collector = RayLLMCollector(
             env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
             policy=inference_policy,
