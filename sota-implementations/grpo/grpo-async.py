@@ -379,22 +379,21 @@ def main(cfg):
 
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
-    for _ in tqdm.trange(cfg.env.num_envs, desc="Starting collectors"):
-        collector = RayLLMCollector(
-            env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
-            policy=inference_policy,
-            dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
-            total_dialog_turns=cfg.train.total_dialog_turns,
-            replay_buffer=rb,
-            ray_init_config=None,  # Ray is already initialized
-            weight_updater=None,  # We'll create this after getting the remote LLM
-            track_policy_version=True,
-            remote_config=collector_config,
-            yield_only_last_steps=cfg.env.reasoning,
-            verbose=False,
-        )
-        # Ensure collector is initialized by calling a method that will block until ready
-        ray.get(collector._collector.is_initialized.remote())
+    collector = RayLLMCollector(
+        env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
+        policy=inference_policy,
+        dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
+        total_dialog_turns=cfg.train.total_dialog_turns,
+        replay_buffer=rb,
+        ray_init_config=None,  # Ray is already initialized
+        weight_updater=None,  # We'll create this after getting the remote LLM
+        track_policy_version=True,
+        remote_config=collector_config,
+        yield_only_last_steps=cfg.env.reasoning,
+        verbose=False,
+    )
+    # Ensure collector is initialized by calling a method that will block until ready
+    ray.get(collector._collector.is_initialized.remote())
     torchrl_logger.info(f"Collector: {collector}")
 
     train_handler_config = {
