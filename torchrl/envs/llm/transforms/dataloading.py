@@ -16,7 +16,7 @@ from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictB
 
 from tensordict.base import TensorCollection
 
-from torchrl.data.tensor_specs import Composite, DEVICE_TYPING
+from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.utils import make_composite_from_td
@@ -676,7 +676,7 @@ def _maybe_clear_device(r):
         return [_maybe_clear_device(r_i) for r_i in r]
     if isinstance(r, dict):
         return {k: _maybe_clear_device(v) for k, v in r.items()}
-    if is_tensor_collection(r):
+    if is_tensor_collection(r) or isinstance(r, TensorSpec):
         r = r.clone()
         r = r.cpu().clear_device_()
     return r
