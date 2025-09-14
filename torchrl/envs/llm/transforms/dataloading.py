@@ -784,6 +784,10 @@ class RayDataLoadingPrimer(Transform):
                 num_cpus = 1
 
         primers = kwargs.get("primers", None)
+        if device is not None:
+            self._device = device
+        else:
+            self._device = None  # Initialize device tracking
         if hasattr(primers, "device") and primers.device is not None:
             if device is not None and device != primers.device:
                 raise ValueError(
@@ -791,10 +795,6 @@ class RayDataLoadingPrimer(Transform):
                     "Use the device argument to set the device."
                 )
             self._device = primers.device
-        elif device is not None:
-            self._device = device
-        else:
-            self._device = None  # Initialize device tracking
         if hasattr(primers, "cpu"):
             primers = primers.cpu()
         if primers is not None:
