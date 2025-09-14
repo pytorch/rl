@@ -676,10 +676,9 @@ def _maybe_clear_device(r):
         return [_maybe_clear_device(r_i) for r_i in r]
     if isinstance(r, dict):
         return {k: _maybe_clear_device(v) for k, v in r.items()}
-    if not is_tensor_collection(r):
-        raise ValueError(f"Expected a tensor collection, got {type(r)}")
-    r = r.clone()
-    r = r.cpu().clear_device_()
+    if is_tensor_collection(r):
+        r = r.clone()
+        r = r.cpu().clear_device_()
     return r
 
 

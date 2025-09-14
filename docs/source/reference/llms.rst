@@ -684,6 +684,7 @@ transform, or a boolean to the collector constructor.
     :template: rl_template.rst
 
     vLLMUpdater
+    vLLMUpdaterV2
     LLMCollector
     RayLLMCollector
 
