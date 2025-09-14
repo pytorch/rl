@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
+
 import time
 import warnings
 from typing import Any, Literal
@@ -624,11 +626,12 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
 
-    ref_model = None
+    ref_model_factory = None
     if cfg.train.use_kl_to_ref:
         # Create a new config with adjusted device assignments
         ref_cfg = DictConfig(dict(cfg))
-        ref_model = get_ref_model(
+        ref_model_factory = functools.partial(
+            get_ref_model,
             ref_cfg,
             train_tokenizer,
             devices=devices,
@@ -675,28 +678,30 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 random_prompt=True,
             ),
         )
-        if cfg.train.use_kl_to_ref and ref_model is not None:
+        if cfg.train.use_kl_to_ref and ref_model_factory is not None:
             env = env.append_transform(
                 # RetrieveKL will be lazily initialized in the collector.
                 # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
                 # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
                 RetrieveKL(
-                    ref_model=ref_model,
+                    ref_model_factory=ref_model_factory,
                     add_to_reward=not cfg.train.kl_coef_in_loss,
                     coeff=cfg.train.kl_to_ref_coeff,
+                    use_ray_service=True,
                 )
             )
     else:
-        if cfg.train.use_kl_to_ref and ref_model is not None:
+        if cfg.train.use_kl_to_ref and ref_model_factory is not None:
             # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
             # we can just use 0 here.
             device = torch.device("cuda:0")
             env = env.append_transform(
                 KLRewardTransform(
-                    ref_model=ref_model,
+                    ref_model_factory=ref_model_factory,
                     coef=cfg.train.kl_to_ref_coeff,
                     add_to_reward=not cfg.train.kl_coef_in_loss,
                     device=device,
+                    use_ray_service=True,
                 )
             )
     return env

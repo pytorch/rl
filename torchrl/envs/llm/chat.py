@@ -390,7 +390,9 @@ class ChatEnv(EnvBase):
 
     def _reset(self, tensordict: TensorDictBase | None, **kwargs):
         if tensordict is None:
-            raise RuntimeError(f"{type(self).__name__} expects a tensordict as input")
+            raise RuntimeError(
+                f"{type(self).__name__} expects a tensordict as input. Got `None`."
+            )
         # Find the total text
         content = tensordict.get(self.data_key)
         if content is None:

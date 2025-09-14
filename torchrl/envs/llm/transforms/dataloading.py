@@ -7,17 +7,21 @@ from __future__ import annotations
 import warnings
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
-from functools import wraps
 
-from typing import Any, Literal, overload, TypeVar
+from typing import Any, Literal, TypeVar
 
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
 
-from tensordict.base import TensorCollection
-
 from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec
 from torchrl.envs.common import EnvBase
+
+# Import ray service components
+from torchrl.envs.llm.transforms.ray_service import (
+    _map_input_output_device,
+    _RayServiceMetaClass,
+    RayTransform,
+)
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.utils import make_composite_from_td
 
@@ -82,7 +86,240 @@ def as_padded_tensor(
     return result
 
 
-class DataLoadingPrimer(TensorDictPrimer):
+class RayDataLoadingPrimer(RayTransform):
+    """A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.
+
+    This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers.
+    All method calls are delegated to the remote actor, ensuring that multiple environments iterate over
+    the same shared dataloader.
+
+    Keyword Args:
+        dataloader: A dataloader object to be used directly. Ray will handle serialization.
+        dataloader_factory: A callable that returns a dataloader. This allows for explicit
+            resource control and avoids serialization issues.
+        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor.
+            Defaults to the dataloader's num_workers if available, otherwise 1.
+        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.
+        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.
+        **kwargs: Additional keyword arguments to pass to DataLoadingPrimer.
+
+    Note:
+        Exactly one of `dataloader` or `dataloader_factory` must be provided.
+
+    Examples:
+        >>> # Option 1: Using a dataloader factory for explicit resource control
+        >>> def create_dataloader():
+        ...     return torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)
+        >>> primer1 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)
+        >>> primer2 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)  # Same shared actor
+
+        >>> # Option 2: Pass dataloader directly (Ray handles serialization)
+        >>> dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)
+        >>> primer1 = RayDataLoadingPrimer(dataloader=dataloader)  # num_cpus=4 inferred from num_workers
+        >>> primer2 = RayDataLoadingPrimer(dataloader=dataloader)  # Same shared actor
+    """
+
+    def __init__(
+        self,
+        *,
+        dataloader=None,
+        dataloader_factory=None,
+        num_cpus=None,
+        num_gpus=0,
+        device: DEVICE_TYPING | None = None,
+        actor_name: str | None = None,
+        **kwargs,
+    ):
+        # Validate arguments: exactly one of dataloader or dataloader_factory must be provided
+        if dataloader is not None and dataloader_factory is not None:
+            raise ValueError(
+                "Cannot provide both 'dataloader' and 'dataloader_factory'. Choose one."
+            )
+        if dataloader is None and dataloader_factory is None:
+            raise ValueError(
+                "Must provide exactly one of 'dataloader' or 'dataloader_factory'."
+            )
+
+        # Infer num_cpus from dataloader if not specified
+        if num_cpus is None:
+            if dataloader is not None:
+                num_cpus = getattr(dataloader, "num_workers", 1)
+            elif dataloader_factory is not None:
+                temp_dataloader = dataloader_factory()
+                num_cpus = getattr(temp_dataloader, "num_workers", 1)
+                del temp_dataloader
+            else:
+                num_cpus = 1
+
+            if num_cpus == 0:
+                num_cpus = 1
+
+        # Handle device setup for primers
+        primers = kwargs.get("primers", None)
+        if hasattr(primers, "device") and primers.device is not None:
+            if device is not None and device != primers.device:
+                raise ValueError(
+                    "Device mismatch between primers and device. "
+                    "Use the device argument to set the device."
+                )
+            device = primers.device
+        if hasattr(primers, "cpu"):
+            primers = primers.cpu()
+        elif hasattr(primers, "to"):
+            primers = primers.to("cpu")
+        if primers is not None:
+            kwargs["primers"] = primers
+
+        # Store creation parameters for actor creation
+        self._dataloader = dataloader
+        self._dataloader_factory = dataloader_factory
+        self._creation_kwargs = kwargs
+
+        # Call parent constructor
+        super().__init__(
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            device=device,
+            actor_name=actor_name,
+            **kwargs,
+        )
+
+    # Actor initialization is handled by the parent RayTransform class
+
+    def _create_actor(self, **kwargs):
+        """Create the remote DataLoadingPrimer actor."""
+        # Create the remote DataLoadingPrimer with resource specifications
+        RemoteDataLoadingPrimer = self._ray.remote(
+            num_cpus=self._num_cpus, num_gpus=self._num_gpus
+        )(DataLoadingPrimer)
+
+        if self._actor_name is not None:
+            RemoteDataLoadingPrimer = RemoteDataLoadingPrimer.options(
+                name=self._actor_name
+            )
+
+        # Create the shared actor, passing factory or dataloader as appropriate
+        if self._dataloader_factory is not None:
+            actor = RemoteDataLoadingPrimer.remote(
+                dataloader_factory=self._dataloader_factory, **self._creation_kwargs
+            )
+        else:
+            actor = RemoteDataLoadingPrimer.remote(
+                dataloader=self._dataloader, **self._creation_kwargs
+            )
+
+        return actor
+
+    @property
+    def dataloader(self):
+        """Get dataloader property."""
+        raise NotImplementedError(
+            "dataloader is not implemented for RayDataLoadingPrimer"
+        )
+
+    @property
+    def endless_dataloader(self):
+        """Get endless_dataloader property."""
+        raise NotImplementedError(
+            "endless_dataloader is not implemented for RayDataLoadingPrimer"
+        )
+
+    def __repr__(self):
+        """String representation."""
+        try:
+            if hasattr(self, "_actor") and self._actor is not None:
+                return self._ray.get(self._actor.__repr__.remote())
+            else:
+                return "RayDataLoadingPrimer(actor=None)"
+        except Exception:
+            return f"RayDataLoadingPrimer(actor={getattr(self, '_actor', 'None')})"
+
+    @property
+    def stack_method(self):
+        """Get stack_method property."""
+        raise NotImplementedError(
+            "stack_method is not implemented for RayDataLoadingPrimer"
+        )
+
+    @property
+    def repeats(self):
+        """Get repeats property."""
+        return self._ray.get(self._actor.__getattribute__.remote("repeats"))
+
+    @property
+    def data_keys(self):
+        """Get data_keys property."""
+        return self._ray.get(self._actor.__getattribute__.remote("data_keys"))
+
+    @property
+    def primers(self):
+        """Get primers property."""
+        return self._ray.get(self._actor.__getattribute__.remote("primers"))
+
+    @primers.setter
+    def primers(self, value: TensorSpec):
+        """Set primers property."""
+        self._ray.get(self._actor.set_attr.remote("primers", value))
+
+    # TensorDictPrimer methods
+    def init(self, tensordict: TensorDictBase | None):
+        """Initialize."""
+        return self._ray.get(self._actor.init.remote(tensordict))
+
+    def reset_dataloader(self):
+        """Reset the dataloader."""
+        return self._delegate_method_call("reset_dataloader")
+
+    @_map_input_output_device
+    def _load_from_dataloader(
+        self, reset: torch.Tensor | None = None
+    ) -> TensorDictBase:
+        """Load data from the dataloader."""
+        result = self._delegate_method_call("_load_from_dataloader", reset)
+
+        # Ensure proper batch dimensions: if result is scalar (ndim=0), unsqueeze to add batch dim
+        # This matches the behavior in the original DataLoadingPrimer._load_from_dataloader
+        if hasattr(result, "ndim") and not result.ndim:
+            result = result.unsqueeze(0)
+
+        return result
+
+    @property
+    def primers(self):
+        """Get primers property."""
+        return self._delegate_property_get("primers")
+
+    @primers.setter
+    def primers(self, value: TensorSpec):
+        """Set primers property."""
+        self._delegate_property_set("primers", value)
+
+    @_map_input_output_device
+    def _reset_func(
+        self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None
+    ) -> TensorDictBase | None:
+        """Reset function."""
+        result = super()._reset_func(tensordict, tensordict_reset)
+
+        # Handle batch size expansion locally since remote actor lacks parent context
+        # This mimics the batch expansion logic from TensorDictPrimer._reset_func
+        if (
+            self.parent
+            and self.parent.batch_locked
+            and hasattr(result, "apply")  # Check if it's a TensorDict-like object
+        ):
+            # Ensure result has proper batch dimensions to match parent
+            expected_batch_size = self.parent.batch_size
+            if result.batch_size != expected_batch_size:
+                # Expand result to match expected batch size
+                result = result.expand(expected_batch_size)
+
+        return result
+
+    # Additional methods and properties are handled by the parent RayTransform class
+
+
+class DataLoadingPrimer(TensorDictPrimer, metaclass=_RayServiceMetaClass):
     """A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``.
 
     Args:
@@ -115,6 +352,9 @@ class DataLoadingPrimer(TensorDictPrimer):
             all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.
         dataloader_factory (Callable[[], Iterable[dict[str, Any]]], optional): A callable that returns a dataloader.
             This allows for explicit resource control and avoids serialization issues.
+        use_ray_service (bool, optional): if ``True``, returns a :class:`RayDataLoadingPrimer` instance instead,
+            which creates a Ray actor for shared dataloader access across multiple environments.
+            Defaults to ``False``.
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -122,6 +362,17 @@ class DataLoadingPrimer(TensorDictPrimer):
         stack_method (Callable[[Any], Any]): The method to use for stacking the data.
 
     .. seealso:: :class:`~torchrl.envs.LLMEnv` and :class:`~torchrl.envs.LLMEnv.from_dataloader`.
+
+    Examples:
+        Using the regular DataLoadingPrimer:
+
+        >>> dataloader = torch.utils.data.DataLoader(dataset, batch_size=32)
+        >>> primer = DataLoadingPrimer(dataloader=dataloader)  # Regular implementation
+
+        Using the Ray-based implementation for shared dataloader access:
+
+        >>> primer = DataLoadingPrimer(dataloader=dataloader, use_ray_service=True)  # Returns RayDataLoadingPrimer
+        >>> # Multiple environments can now share the same dataloader through the Ray actor
 
     Example of a dataloader yielding strings:
         >>> import random
@@ -355,6 +606,8 @@ class DataLoadingPrimer(TensorDictPrimer):
 
     """
 
+    _RayServiceClass = RayDataLoadingPrimer
+
     def __init__(
         self,
         dataloader: Iterable[dict[str, Any]] | None = None,
@@ -368,6 +621,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         repeats: int | None = None,
         device: torch.device | None = None,
         group_repeats: bool = False,
+        use_ray_service: bool = False,
     ):
         # Validate arguments: exactly one of dataloader or dataloader_factory must be provided
         if dataloader is not None and dataloader_factory is not None:
@@ -607,680 +861,3 @@ class DataLoadingPrimer(TensorDictPrimer):
     def set_attr(self, name, value):
         """Set attribute on the remote actor or locally."""
         setattr(self, name, value)
-
-
-@overload
-def _maybe_to_device(r: tuple, device: DEVICE_TYPING) -> tuple:
-    ...
-
-
-@overload
-def _maybe_to_device(r: list, device: DEVICE_TYPING) -> list:
-    ...
-
-
-@overload
-def _maybe_to_device(r: dict, device: DEVICE_TYPING) -> dict:
-    ...
-
-
-@overload
-def _maybe_to_device(r: TensorCollection, device: DEVICE_TYPING) -> TensorCollection:
-    ...
-
-
-@overload
-def _maybe_to_device(r: T, device: DEVICE_TYPING) -> T:
-    ...
-
-
-def _maybe_to_device(r, device):
-    if isinstance(r, tuple):
-        return tuple(_maybe_to_device(r_i, device) for r_i in r)
-    if isinstance(r, list):
-        return [_maybe_to_device(r_i, device) for r_i in r]
-    if isinstance(r, dict):
-        return {k: _maybe_to_device(v, device) for k, v in r.items()}
-    if hasattr(r, "to"):
-        return r.to(device)
-    return r
-
-
-@overload
-def _maybe_clear_device(r: tuple) -> tuple:
-    ...
-
-
-@overload
-def _maybe_clear_device(r: list) -> list:
-    ...
-
-
-@overload
-def _maybe_clear_device(r: dict) -> dict:
-    ...
-
-
-@overload
-def _maybe_clear_device(r: TensorCollection) -> TensorCollection:
-    ...
-
-
-@overload
-def _maybe_clear_device(r: T) -> T:
-    ...
-
-
-def _maybe_clear_device(r):
-    if isinstance(r, tuple):
-        return tuple(_maybe_clear_device(r_i) for r_i in r)
-    if isinstance(r, list):
-        return [_maybe_clear_device(r_i) for r_i in r]
-    if isinstance(r, dict):
-        return {k: _maybe_clear_device(v) for k, v in r.items()}
-    if is_tensor_collection(r) or isinstance(r, TensorSpec):
-        r = r.clone()
-        r = r.cpu().clear_device_()
-    return r
-
-
-def _map_input_output_device(func: Callable):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        args = _maybe_clear_device(args)
-        kwargs = _maybe_clear_device(kwargs)
-        r = func(self, *args, **kwargs)
-        if hasattr(self, "_device"):
-            if self._device is not None:
-                r = _maybe_to_device(r, self._device)
-            else:
-                r = _maybe_clear_device(r)
-        return r
-
-    return wrapper
-
-
-class RayDataLoadingPrimer(Transform):
-    """A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.
-
-    This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers.
-    All method calls are delegated to the remote actor, ensuring that multiple environments iterate over
-    the same shared dataloader.
-
-    Keyword Args:
-        dataloader: A dataloader object to be used directly. Ray will handle serialization.
-        dataloader_factory: A callable that returns a dataloader. This allows for explicit
-            resource control and avoids serialization issues.
-        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor.
-            Defaults to the dataloader's num_workers if available, otherwise 1.
-        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.
-        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.
-        **kwargs: Additional keyword arguments to pass to DataLoadingPrimer.
-
-    Note:
-        Exactly one of `dataloader` or `dataloader_factory` must be provided.
-
-    Examples:
-        >>> # Option 1: Using a dataloader factory for explicit resource control
-        >>> def create_dataloader():
-        ...     return torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)
-        >>> primer1 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)
-        >>> primer2 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)  # Same shared actor
-
-        >>> # Option 2: Pass dataloader directly (Ray handles serialization)
-        >>> dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)
-        >>> primer1 = RayDataLoadingPrimer(dataloader=dataloader)  # num_cpus=4 inferred from num_workers
-        >>> primer2 = RayDataLoadingPrimer(dataloader=dataloader)  # Same shared actor
-    """
-
-    def __init__(
-        self,
-        *,
-        dataloader=None,
-        dataloader_factory=None,
-        num_cpus=None,
-        num_gpus=0,
-        device: DEVICE_TYPING | None = None,
-        actor_name: str | None = None,
-        **kwargs,
-    ):
-
-        # Import ray here to avoid requiring it as a dependency
-        try:
-            import ray
-        except ImportError:
-            raise ImportError(
-                "Ray is required for RayDataLoadingPrimer. Install with: pip install ray"
-            )
-        self._ray = ray
-
-        super().__init__(
-            in_keys=kwargs.get("in_keys", []), out_keys=kwargs.get("out_keys", [])
-        )
-
-        # Validate arguments: exactly one of dataloader or dataloader_factory must be provided
-        if dataloader is not None and dataloader_factory is not None:
-            raise ValueError(
-                "Cannot provide both 'dataloader' and 'dataloader_factory'. Choose one."
-            )
-        if dataloader is None and dataloader_factory is None:
-            raise ValueError(
-                "Must provide exactly one of 'dataloader' or 'dataloader_factory'."
-            )
-
-        # Infer num_cpus from dataloader if not specified and dataloader is provided
-        if num_cpus is None:
-            if dataloader is not None:
-                num_cpus = getattr(dataloader, "num_workers", 1)
-            elif dataloader_factory is not None:
-                # Create a temporary dataloader to infer num_cpus, then discard it
-                temp_dataloader = dataloader_factory()
-                num_cpus = getattr(temp_dataloader, "num_workers", 1)
-                del temp_dataloader  # Clean up
-            else:
-                num_cpus = 1
-
-            if num_cpus == 0:  # Common case for single-threaded dataloaders
-                num_cpus = 1
-
-        primers = kwargs.get("primers", None)
-        if device is not None:
-            self._device = device
-        else:
-            self._device = None  # Initialize device tracking
-        if hasattr(primers, "device") and primers.device is not None:
-            if device is not None and device != primers.device:
-                raise ValueError(
-                    "Device mismatch between primers and device. "
-                    "Use the device argument to set the device."
-                )
-            self._device = primers.device
-        if hasattr(primers, "cpu"):
-            primers = primers.cpu()
-        if primers is not None:
-            kwargs["primers"] = primers
-
-        # First attempt to get the actor if it already exists
-        if actor_name is not None:
-            try:
-                existing_actor = ray.get_actor(actor_name)
-                self._actor = existing_actor
-                return
-            except ValueError:
-                pass
-
-        # Create the remote DataLoadingPrimer with resource specifications
-        RemoteDataLoadingPrimer = ray.remote(num_cpus=num_cpus, num_gpus=num_gpus)(
-            DataLoadingPrimer
-        )
-        if actor_name is not None:
-            RemoteDataLoadingPrimer = RemoteDataLoadingPrimer.options(name=actor_name)
-
-        # Create the shared actor, passing factory or dataloader as appropriate
-        if dataloader_factory is not None:
-            actor = RemoteDataLoadingPrimer.remote(
-                dataloader_factory=dataloader_factory, **kwargs
-            )
-        else:
-            actor = RemoteDataLoadingPrimer.remote(dataloader=dataloader, **kwargs)
-
-        self._actor = actor
-
-    # Upward-facing methods (container management) - handled locally, not delegated to remote actor
-    def set_container(self, container: Transform | EnvBase) -> None:
-        """Set the container for this transform. This is handled locally."""
-        result = super().set_container(container)
-
-        # After setting the container locally, provide batch size information to the remote actor
-        # This ensures the remote actor has the right batch size for proper shape handling
-        if self.parent is not None:
-            parent_batch_size = self.parent.batch_size
-
-            # Set the batch size directly on the remote actor to override its initialization
-            self._ray.get(self._actor.set_attr.remote("batch_size", parent_batch_size))
-
-            # Also disable validation on the remote actor since we'll handle consistency locally
-            self._ray.get(self._actor.set_attr.remote("_validated", True))
-
-        return result
-
-    def reset_parent(self) -> None:
-        """Reset the parent. This is handled locally."""
-        return super().reset_parent()
-
-    @property
-    def container(self) -> EnvBase | None:
-        """Returns the env containing the transform. This is handled locally."""
-        return super().container
-
-    @property
-    def parent(self) -> EnvBase | None:
-        """Returns the parent env of the transform. This is handled locally."""
-        return super().parent
-
-    @property
-    def base_env(self):
-        """Returns the base environment. This traverses the parent chain locally."""
-        return (
-            getattr(self.parent, "base_env", None) if self.parent is not None else None
-        )
-
-    # Explicit method delegation for DataLoadingPrimer methods
-    def reset_dataloader(self):
-        """Reset the dataloader."""
-        return self._ray.get(self._actor.reset_dataloader.remote())
-
-    def _load_from_dataloader(
-        self, reset: torch.Tensor | None = None
-    ) -> TensorDictBase:
-        """Load data from the dataloader."""
-        result = self._ray.get(self._actor._load_from_dataloader.remote(reset))
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            result = result.to(self._device)
-
-        # Ensure proper batch dimensions: if result is scalar (ndim=0), unsqueeze to add batch dim
-        # This matches the behavior in the original DataLoadingPrimer._load_from_dataloader
-        if hasattr(result, "ndim") and not result.ndim:
-            result = result.unsqueeze(0)
-
-        return result
-
-    def __repr__(self):
-        """String representation."""
-        try:
-            if hasattr(self, "_actor") and self._actor is not None:
-                return self._ray.get(self._actor.__repr__.remote())
-            else:
-                return "RayDataLoadingPrimer(actor=None)"
-        except Exception:
-            return f"RayDataLoadingPrimer(actor={getattr(self, '_actor', 'None')})"
-
-    # Properties - access via generic attribute getter since Ray doesn't support direct property access
-    @property
-    def device(self):
-        """Get device property."""
-        return self._ray.get(self._actor.__getattribute__.remote("device"))
-
-    @device.setter
-    def device(self, value):
-        """Set device property."""
-        self._ray.get(self._actor.set_attr.remote("device", value))
-
-    @property
-    def dataloader(self):
-        """Get dataloader property."""
-        return self._ray.get(self._actor.__getattribute__.remote("dataloader"))
-
-    @property
-    def endless_dataloader(self):
-        """Get endless_dataloader property."""
-        return self._ray.get(self._actor.__getattribute__.remote("endless_dataloader"))
-
-    @property
-    def stack_method(self):
-        """Get stack_method property."""
-        return self._ray.get(self._actor.__getattribute__.remote("stack_method"))
-
-    @property
-    def repeats(self):
-        """Get repeats property."""
-        return self._ray.get(self._actor.__getattribute__.remote("repeats"))
-
-    @property
-    def data_keys(self):
-        """Get data_keys property."""
-        return self._ray.get(self._actor.__getattribute__.remote("data_keys"))
-
-    @property
-    def primers(self):
-        """Get primers property."""
-        return self._ray.get(self._actor.__getattribute__.remote("primers"))
-
-    @primers.setter
-    def primers(self, value: TensorSpec):
-        """Set primers property."""
-        self._ray.get(self._actor.set_attr.remote("primers", value))
-
-    # TensorDictPrimer methods
-    def init(self, tensordict: TensorDictBase | None):
-        """Initialize."""
-        return self._ray.get(self._actor.init.remote(tensordict))
-
-    def _reset_func(
-        self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None
-    ) -> TensorDictBase | None:
-        """Reset function."""
-        if tensordict is not None:
-            tensordict = tensordict.cpu()
-        if tensordict_reset is not None:
-            tensordict_reset = tensordict_reset.cpu()
-        result = self._ray.get(
-            self._actor._reset_func.remote(tensordict, tensordict_reset)
-        )
-        # Cast to local device if one is set
-        if hasattr(self, "_device") and self._device is not None:
-            result = result.to(self._device)
-
-        # Handle batch size expansion locally since remote actor lacks parent context
-        # This mimics the batch expansion logic from TensorDictPrimer._reset_func
-        if (
-            self.parent
-            and self.parent.batch_locked
-            and hasattr(result, "apply")  # Check if it's a TensorDict-like object
-        ):
-            # Ensure result has proper batch dimensions to match parent
-            expected_batch_size = self.parent.batch_size
-            if result.batch_size != expected_batch_size:
-                # Expand result to match expected batch size
-                result = result.expand(expected_batch_size)
-
-        return result
-
-    # Override _reset to ensure proper delegation
-    @_map_input_output_device
-    def _reset(
-        self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None
-    ) -> TensorDictBase | None:
-        """Reset method for TensorDictPrimer."""
-        return self._ray.get(self._actor._reset.remote(tensordict, tensordict_reset))
-
-    @_map_input_output_device
-    def _reset_env_preprocess(
-        self, tensordict: TensorDictBase | None
-    ) -> TensorDictBase | None:
-        """Reset environment preprocess - crucial for call_before_env_reset=True."""
-        return self._ray.get(self._actor._reset_env_preprocess.remote(tensordict))
-
-    def close(self):
-        """Close the transform."""
-        return self._ray.get(self._actor.close.remote())
-
-    @_map_input_output_device
-    def _apply_transform(self, obs: torch.Tensor | None) -> torch.Tensor | None:
-        """Apply transform."""
-        return self._ray.get(self._actor._apply_transform.remote(obs))
-
-    @_map_input_output_device
-    def _call(self, next_tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        """Call method."""
-        return self._ray.get(self._actor._call.remote(next_tensordict))
-
-    @_map_input_output_device
-    def forward(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        """Forward pass."""
-        return self._ray.get(self._actor.forward.remote(tensordict))
-
-    @_map_input_output_device
-    def _inv_apply_transform(
-        self, state: TensorDictBase | None
-    ) -> TensorDictBase | None:
-        """Inverse apply transform."""
-        return self._ray.get(self._actor._inv_apply_transform.remote(state))
-
-    @_map_input_output_device
-    def _inv_call(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        """Inverse call."""
-        return self._ray.get(self._actor._inv_call.remote(tensordict))
-
-    @_map_input_output_device
-    def inv(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
-        """Inverse."""
-        return self._ray.get(self._actor.inv.remote(tensordict))
-
-    @_map_input_output_device
-    def _step(
-        self, tensordict: TensorDictBase | None, next_tensordict: TensorDictBase | None
-    ) -> TensorDictBase | None:
-        """Step method."""
-        return self._ray.get(self._actor._step.remote(tensordict, next_tensordict))
-
-    def transform_env_device(self, device):
-        """Transform environment device."""
-        return self._ray.get(self._actor.transform_env_device.remote(device))
-
-    def transform_env_batch_size(self, batch_size):
-        """Transform environment batch size."""
-        return self._ray.get(self._actor.transform_env_batch_size.remote(batch_size))
-
-    @_map_input_output_device
-    def transform_output_spec(self, output_spec):
-        """Transform output spec."""
-        return self._ray.get(self._actor.transform_output_spec.remote(output_spec))
-
-    @_map_input_output_device
-    def transform_input_spec(self, input_spec):
-        """Transform input spec."""
-        return self._ray.get(self._actor.transform_input_spec.remote(input_spec))
-
-    @_map_input_output_device
-    def transform_observation_spec(self, observation_spec):
-        """Transform observation spec."""
-        return self._ray.get(
-            self._actor.transform_observation_spec.remote(observation_spec)
-        )
-
-    @_map_input_output_device
-    def transform_reward_spec(self, reward_spec):
-        """Transform reward spec."""
-        return self._ray.get(self._actor.transform_reward_spec.remote(reward_spec))
-
-    @_map_input_output_device
-    def transform_done_spec(self, done_spec):
-        """Transform done spec."""
-        return self._ray.get(self._actor.transform_done_spec.remote(done_spec))
-
-    @_map_input_output_device
-    def transform_action_spec(self, action_spec):
-        """Transform action spec."""
-        return self._ray.get(self._actor.transform_action_spec.remote(action_spec))
-
-    @_map_input_output_device
-    def transform_state_spec(self, state_spec):
-        """Transform state spec."""
-        return self._ray.get(self._actor.transform_state_spec.remote(state_spec))
-
-    def dump(self, **kwargs):
-        """Dump method."""
-        return self._ray.get(self._actor.dump.remote(**kwargs))
-
-    def clone(self):
-        """Clone the transform."""
-        # Use the parent's clone method to properly copy all Transform attributes
-        new_instance = super().clone()
-        # Then copy our specific Ray attributes to share the same actor
-        new_instance._actor = self._actor
-        new_instance._ray = self._ray
-        new_instance._device = getattr(self, "_device", None)  # Copy device state
-        return new_instance
-
-    def empty_cache(self):
-        """Empty cache."""
-        super().empty_cache()
-        return self._ray.get(self._actor.empty_cache.remote())
-
-    def set_missing_tolerance(self, mode=False):
-        """Set missing tolerance."""
-        return self._ray.get(self._actor.set_missing_tolerance.remote(mode))
-
-    @property
-    def missing_tolerance(self):
-        """Get missing tolerance."""
-        return self._ray.get(self._actor.missing_tolerance.remote())
-
-    @property
-    def primers(self):
-        """Get primers."""
-        return self._ray.get(self._actor.__getattribute__.remote("primers"))
-
-    @primers.setter
-    def primers(self, value):
-        """Set primers."""
-        self.__dict__["_primers"] = value
-        if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("primers", value))
-
-    def to(self, *args, **kwargs):
-        """Move to device."""
-        # Parse the device from args/kwargs like torch does
-        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
-            *args, **kwargs
-        )
-        if device is not None:
-            self._device = device
-        # Don't delegate to remote actor - just register device locally
-        return super().to(*args, **kwargs)
-
-    # Properties that should be accessed from the remote actor
-    @property
-    def in_keys(self):
-        """Get in_keys property."""
-        return self._ray.get(self._actor.__getattribute__.remote("in_keys"))
-
-    @in_keys.setter
-    def in_keys(self, value):
-        """Set in_keys property."""
-        self.__dict__["_in_keys"] = value
-        if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("in_keys", value))
-
-    @property
-    def out_keys(self):
-        """Get out_keys property."""
-        return self._ray.get(self._actor.__getattribute__.remote("out_keys"))
-
-    @out_keys.setter
-    def out_keys(self, value):
-        """Set out_keys property."""
-        self.__dict__["_out_keys"] = value
-        if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("out_keys", value))
-
-    @property
-    def in_keys_inv(self):
-        """Get in_keys_inv property."""
-        return self._ray.get(self._actor.__getattribute__.remote("in_keys_inv"))
-
-    @in_keys_inv.setter
-    def in_keys_inv(self, value):
-        """Set in_keys_inv property."""
-        self.__dict__["_in_keys_inv"] = value
-        if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("in_keys_inv", value))
-
-    @property
-    def out_keys_inv(self):
-        """Get out_keys_inv property."""
-        return self._ray.get(self._actor.__getattribute__.remote("out_keys_inv"))
-
-    @out_keys_inv.setter
-    def out_keys_inv(self, value):
-        """Set out_keys_inv property."""
-        self.__dict__["_out_keys_inv"] = value
-        if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("out_keys_inv", value))
-
-    # Generic attribute access for any remaining attributes
-    def __getattr__(self, name):
-        """Get attribute from the remote actor.
-
-        This method should only be called for attributes that don't exist locally
-        and should be delegated to the remote actor (inward-facing).
-
-        Outward-facing attributes (parent, container, base_env, etc.) should be handled
-        by the Transform base class and never reach this method.
-        """
-        # Upward-facing attributes that should never be delegated to remote actor
-        upward_attrs = {"parent", "container", "base_env", "_parent", "_container"}
-
-        if name in upward_attrs:
-            # These should be handled by the local Transform implementation
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{name}'"
-            )
-
-        # Only delegate to remote actor if we're sure this is an inward-facing attribute
-        # and the actor is properly initialized
-        actor = self.__dict__.get("_actor", None)
-        if actor is None:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{name}'"
-            )
-
-        # Only delegate specific DataLoadingPrimer methods/attributes to the remote actor
-        # This is a whitelist approach to be more conservative
-        delegated_methods = {
-            # DataLoadingPrimer methods that should be called on the remote actor
-            "_call",
-            "_reset",
-            "_inv_call",
-            "forward",
-            "inv",
-            "_apply_transform",
-            "_inv_apply_transform",
-            "_reset_func",
-            "init",  # TensorDictPrimer specific methods
-            "primers",
-            "dataloader",  # Properties
-            # Add other specific methods that should be delegated as needed
-        }
-
-        if name in delegated_methods:
-            try:
-                result = self._ray.get(getattr(actor, name).remote())
-                # If it's a method, wrap it to make remote calls
-                if callable(result):
-                    return lambda *args, **kwargs: self._ray.get(
-                        getattr(actor, name).remote(*args, **kwargs)
-                    )
-                return result
-            except (AttributeError, TypeError):
-                # If that fails, it might be a callable method
-                try:
-                    remote_method = getattr(actor, name)
-                    return lambda *args, **kwargs: self._ray.get(
-                        remote_method.remote(*args, **kwargs)
-                    )
-                except AttributeError:
-                    pass
-
-        # If not in our whitelist, don't delegate to remote actor
-        raise AttributeError(
-            f"'{self.__class__.__name__}' object has no attribute '{name}'"
-        )
-
-    def __setattr__(self, name, value):
-        """Set attribute on the remote actor or locally."""
-        # Local attributes that should never be delegated to remote actor
-        local_attrs = {
-            "_actor",
-            "_ray",
-            "_parent",
-            "_container",
-            "_missing_tolerance",
-            "_in_keys",
-            "_out_keys",
-            "_in_keys_inv",
-            "_out_keys_inv",
-            "in_keys",
-            "out_keys",
-            "in_keys_inv",
-            "out_keys_inv",
-            "_modules",
-            "_parameters",
-            "_buffers",
-            "_device",
-        }
-
-        if name in local_attrs:
-            super().__setattr__(name, value)
-        else:
-            # Try to set on remote actor for other attributes
-            try:
-                if hasattr(self, "_actor") and self._actor is not None:
-                    self._ray.get(self._actor.set_attr.remote(name, value))
-                else:
-                    super().__setattr__(name, value)
-            except Exception:
-                # Fall back to local setting for attributes that can't be set remotely
-                super().__setattr__(name, value)

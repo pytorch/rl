@@ -16,6 +16,7 @@ from tensordict.utils import _zip_strict, is_seq_of_nested_key, logger as torchr
 from torch.nn.utils.rnn import pad_sequence
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase, Transform
+from torchrl.envs.llm.transforms.ray_service import _RayServiceMetaClass, RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import LLMWrapperBase
@@ -24,7 +25,14 @@ if TYPE_CHECKING:
     import transformers
 
 
-class KLRewardTransform(Transform):
+class RayKLRewardTransform(RayTransform):
+    """Placeholder for RayKLRewardTransform.
+
+    This class is a placeholder for the RayKLRewardTransform class.
+    """
+
+
+class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     """A legacy transform for computing KL divergence-based rewards.
 
     **Deprecated**: This transform is maintained for backward compatibility but is no longer
@@ -70,6 +78,7 @@ class KLRewardTransform(Transform):
     """
 
     DEFAULT_IN_KEYS = ["reward"]
+    _RayServiceClass = RayKLRewardTransform
 
     def __init__(
         self,
@@ -654,7 +663,14 @@ class RetrieveLogProb(Transform):
         return observation_spec
 
 
-class RetrieveKL(Compose):
+class RayRetrieveKL(RayTransform):
+    """Placeholder for RayRetrieveKL.
+
+    This class is a placeholder for the RayRetrieveKL class.
+    """
+
+
+class RetrieveKL(Compose, metaclass=_RayServiceMetaClass):
     """A transform to retrieve the KL divergence between two models' log-probabilities.
 
     This transform combines two :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb` instances
@@ -779,6 +795,8 @@ class RetrieveKL(Compose):
         :class:`~torchrl.envs.llm.transforms.kl.KLComputation`: The transform that computes KL divergence between two log-prob tensors.
         :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).
     """
+
+    _RayServiceClass = RayKLRewardTransform
 
     def __init__(
         self,
