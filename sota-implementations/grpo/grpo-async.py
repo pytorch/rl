@@ -361,12 +361,13 @@ def main(cfg):
     torchrl_logger.info(f"Replay buffer: {rb}")
 
     collector_config["num_gpus"] = 0
+    collector_config["num_cpus"] = 2
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
     collectors = []
-    for i in range(cfg.env.num_envs):
+    for i in tqdm.trange(cfg.env.num_envs, desc="Starting collectors"):
         collector = RayLLMCollector(
             env=partial(make_env, cfg, single_env=True),
             policy=inference_policy,
