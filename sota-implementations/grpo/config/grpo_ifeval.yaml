@@ -61,10 +61,10 @@ train:
   use_kl_to_ref: true
 
   # KL coefficients for the KL divergence to the reference and inference policies
-  kl_to_ref_coeff: 1.0
-  kl_to_inference_coeff: 0.0
-  entropy_coeff: 0.001
-  
+  kl_to_ref_coeff: 0.0
+  kl_to_inference_coeff: 1e-2
+  entropy_coeff: 1e-4  
+
   # Fields used only by grpo-async.py / grpo-sync.py
   logging_frequency: 1  # Log metrics every N steps - here at each optimization step
 
