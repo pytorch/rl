@@ -58,7 +58,7 @@ train:
   kl_coef_in_loss: true 
 
   # Whether to use KL divergence to reference model (requires reference model instantiation)
-  use_kl_to_ref: true
+  use_kl_to_ref: false
 
   # KL coefficients for the KL divergence to the reference and inference policies
   kl_to_ref_coeff: 0.0

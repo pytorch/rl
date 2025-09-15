@@ -176,7 +176,13 @@ def train(
         pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 
         with timeit("sampling"):
-            batch = replay_buffer.sample(cfg.train.optim_batch_size).to(train_device)
+            # Sample the correct batch size for gradient accumulation
+            # The replay buffer is configured with batch_size = optim_batch_size // gradient_accumulation_steps
+            # So we should sample that amount per step, not the full optim_batch_size
+            batch_size_per_step = (
+                cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
+            )
+            batch = replay_buffer.sample(batch_size_per_step).to(train_device)
             history: History = batch.view(-1)[0]["history", "full"]
             history_str: list[str] | str = history.apply_chat_template(
                 tokenizer=train_tokenizer
