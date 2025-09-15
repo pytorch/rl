@@ -1239,11 +1239,12 @@ class AsyncVLLM(RLvLLMEngine):
 
         t0 = time.time()
 
-        # Move all weights to GPU first
+        # Move all weights to cuda:0 (matching NCCL communicator device)
         gpu_weights = {}
         for name, weight in weights_dict.items():
-            if not weight.is_cuda:
-                gpu_weights[name] = weight.cuda(non_blocking=True)
+            # Ensure weight is on cuda:0 (matching NCCL communicator)
+            if weight.device != torch.device("cuda:0"):
+                gpu_weights[name] = weight.to("cuda:0", non_blocking=True)
             else:
                 gpu_weights[name] = weight
 
@@ -1262,10 +1263,12 @@ class AsyncVLLM(RLvLLMEngine):
 
         # Now broadcast each weight from master (rank 0) - like V1 does
         torchrl_logger.info("Broadcasting weights from master (rank 0)...")
-        for weight in gpu_weights.values():
-            self._nccl_master_group.broadcast(
-                weight, src=0, stream=torch.cuda.current_stream()
-            )
+        # Ensure we're on the correct CUDA device for the stream
+        with torch.cuda.device(0):
+            for weight in gpu_weights.values():
+                self._nccl_master_group.broadcast(
+                    weight, src=0, stream=torch.cuda.current_stream()
+                )
 
         # Wait for all workers to complete
         if ray is not None:
