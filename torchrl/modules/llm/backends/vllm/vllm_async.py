@@ -116,6 +116,9 @@ class _AsyncvLLMWorker(Worker):
         from vllm.distributed.parallel_state import get_world_group
 
         torchrl_logger.info(f"=> in {type(self).__name__}.init_weight_update_group")
+        if self.model_update_group is not None:
+            torchrl_logger.info("Model update group already initialized")
+            return
 
         # Get the local rank within the tensor parallel group
         tp_group = get_world_group()
@@ -1268,7 +1271,7 @@ class AsyncVLLM(RLvLLMEngine):
 
         with torch.cuda.device(0):  # Ensure we're on the correct CUDA device
             for i, (name, weight) in enumerate(gpu_weights.items()):
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"Processing weight {i+1}/{len(gpu_weights)}: {name} {weight.shape}"
                 )
 
@@ -1279,11 +1282,11 @@ class AsyncVLLM(RLvLLMEngine):
                 remotes.extend(worker_remotes)
 
                 # Step 2: Immediately broadcast this weight from master (rank 0)
-                torchrl_logger.info(f"Broadcasting weight {name} from master...")
+                torchrl_logger.debug(f"Broadcasting weight {name} from master...")
                 self._nccl_master_group.broadcast(
                     weight, src=0, stream=torch.cuda.current_stream()
                 )
-                torchrl_logger.info(f"Master broadcast completed for {name}")
+                torchrl_logger.debug(f"Master broadcast completed for {name}")
 
         # Wait for all workers to complete all weight updates
         torchrl_logger.info("Waiting for all worker updates to complete...")
