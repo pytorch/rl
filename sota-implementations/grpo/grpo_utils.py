@@ -14,7 +14,7 @@ import torch
 from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
@@ -715,6 +715,7 @@ def add_kl_transforms_to_replay_buffer(replay_buffer, cfg: DictConfig):
     replay_buffer.append_transform(kl_transform, invert=True)
 
 
+@timeit("Logging metrics")
 def log_training_metrics(
     wandb_logger,
     replay_buffer,

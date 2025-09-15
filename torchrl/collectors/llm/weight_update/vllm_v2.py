@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import time
+
 from collections.abc import Iterator
 
 import torch
@@ -105,7 +107,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         """
         if not _has_transformers:
             raise ImportError("transformers not available")
-
+        t0 = time.time()
         # Extract state dict from model, handling LoRA models properly
         if hasattr(transformers_model, "model") and hasattr(
             transformers_model.model, "state_dict"
@@ -129,9 +131,12 @@ class vLLMUpdaterV2(WeightUpdaterBase):
                 f"Cannot extract state_dict from {type(transformers_model)}"
             )
 
+        t1 = time.time()
+        torchrl_logger.info(f"Time to extract state_dict: {t1 - t0}")
         # Convert to iterator for memory efficiency
         weights_iter = iter(state_dict.items())
         self.push_weights(weights_iter)
+        torchrl_logger.info(f"Time to push weights: {time.time() - t1}")
 
     # Required WeightUpdaterBase methods
     def _sync_weights_with_worker(self, *, worker_id=None, server_weights=None):
