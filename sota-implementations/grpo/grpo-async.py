@@ -72,7 +72,7 @@ def setup_environment() -> None:
 def train(
     replay_buffer: ReplayBuffer,
     cfg: DictConfig,
-    collector: RayLLMCollector,
+    collectors: list[RayLLMCollector],
     inference_policy,
     devices: list[int] | None = None,
 ):
@@ -85,7 +85,7 @@ def train(
     Args:
         replay_buffer: The replay buffer to store experiences
         cfg: The configuration object containing training parameters
-        collector: The collector object.
+        collectors: The collectors objects.
         devices: The devices to use for the training model.
     """
     # Setup training model and tokenizer
@@ -111,7 +111,8 @@ def train(
 
     vllm_engine = inference_policy.model
     weight_updater: vLLMUpdaterV2 = make_weight_updater(vllm_engine=vllm_engine)
-    collector.weight_updater = weight_updater
+    for collector in collectors:
+        collector.weight_updater = weight_updater
 
     weight_updater.init()
     with timeit("update_policy_weights"):
@@ -119,7 +120,8 @@ def train(
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
-    collector.start()
+    for collector in collectors:
+        collector.start()
     while not replay_buffer.write_count:
         time.sleep(1)
 
@@ -162,8 +164,8 @@ def train(
     start_time = time.time()
 
     for step in range(total_steps):
-        if not collector.is_running():
-            torchrl_logger.info("Collector stopped, stopping training")
+        if not any(collector.is_running() for collector in collectors):
+            torchrl_logger.info("Collectors stopped, stopping training")
             break
         pbar.update(1)
         pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
@@ -225,10 +227,11 @@ def train(
                 grad_norm=grad_norm,
                 global_step=step,
                 data_read_count=data_read_count,
-                collector=collector,
+                collector=collectors[0],
                 start_time=start_time,
                 gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
                 history_str=history_str,
+                use_kl_to_ref=cfg.train.use_kl_to_ref,
             )
 
         if step % cfg.train.weight_update_frequency == 0:
@@ -362,21 +365,24 @@ def main(cfg):
 
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
-    collector = RayLLMCollector(
-        env=partial(make_env, cfg),
-        policy=inference_policy,
-        dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
-        total_dialog_turns=cfg.train.total_dialog_turns,
-        replay_buffer=rb,
-        ray_init_config=None,
-        weight_updater=None,
-        track_policy_version=True,
-        remote_config=collector_config,
-        yield_only_last_steps=cfg.env.reasoning,
-        verbose=False,
-    )
-    ray.get(collector._collector.is_initialized.remote())
-    torchrl_logger.info(f"Collector: {collector}")
+    collectors = []
+    for i in range(cfg.env.num_envs):
+        collector = RayLLMCollector(
+            env=partial(make_env, cfg, single_env=True),
+            policy=inference_policy,
+            dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
+            total_dialog_turns=cfg.train.total_dialog_turns,
+            replay_buffer=rb,
+            ray_init_config=None,
+            weight_updater=None,
+            track_policy_version=True,
+            remote_config=collector_config,
+            yield_only_last_steps=cfg.env.reasoning,
+            verbose=False,
+        )
+        ray.get(collector._collector.is_initialized.remote())
+        torchrl_logger.info(f"Collector {i}: {collector}")
+        collectors.append(collector)
 
     train_handler_config = {
         "num_cpus": train_handler_config.get("num_cpus", 1),
@@ -392,7 +398,7 @@ def main(cfg):
         train_handler.remote(
             rb,
             cfg,
-            collector,
+            collectors,
             inference_policy,
             devices=device_config["train_model_devices"],
         )

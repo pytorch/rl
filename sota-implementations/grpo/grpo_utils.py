@@ -603,7 +603,7 @@ def compute_device_allocation(cfg):
     }
 
 
-def make_env(cfg: DictConfig):
+def make_env(cfg: DictConfig, single_env: bool = False):
     """Create the environment.
 
     Args:
@@ -622,7 +622,7 @@ def make_env(cfg: DictConfig):
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
+            num_envs=cfg.env.num_envs if not single_env else 1,
             max_steps=max_steps,
             device=torch.device("cpu"),
             ray_backend=True,
@@ -633,7 +633,7 @@ def make_env(cfg: DictConfig):
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
+            num_envs=cfg.env.num_envs if not single_env else 1,
             max_steps=max_steps,
             device=torch.device("cpu"),
             ray_backend=True,
@@ -727,6 +727,7 @@ def log_training_metrics(
     start_time,
     gradient_accumulation_steps,
     history_str=None,
+    use_kl_to_ref=True,
 ):
     """Log training metrics to wandb.
 
@@ -753,9 +754,6 @@ def log_training_metrics(
             "step_count from buffer": float(step_count),
             "reward from buffer": float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
-            ),
-            "kl_penalty (inference to ref) from buffer": float(
-                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
             ),
             "seq_length from buffer": float(
                 torch.tensor(
@@ -800,6 +798,10 @@ def log_training_metrics(
                 global_step / (time.time() - start_time)
             ),
         }
+        if use_kl_to_ref:
+            metrics["kl_penalty (inference to ref) from buffer"] = float(
+                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
+            )
 
         for name, value in metrics.items():
             wandb_logger.log_scalar(name, value, step=global_step)

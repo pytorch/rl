@@ -247,6 +247,7 @@ def train(
                         start_time=start_time,
                         gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
                         history_str=history_str,
+                        use_kl_to_ref=cfg.train.use_kl_to_ref,
                     )
 
                 # Checkpointing disabled to prevent disk space issues
