@@ -1214,13 +1214,14 @@ class AsyncVLLM(RLvLLMEngine):
         )
 
         # Broadcast weights using collective RPC (simplified approach)
+        remotes = []
         for name, weight in weights_dict.items():
             # Send weight directly to actors
-            remotes = self.collective_rpc(
-                "update_weight", args=(name, weight.to("cuda:0"))
+            remotes.append(
+                self.collective_rpc("update_weight", args=(name, weight.to("cuda:0")))
             )
-            if ray is not None:
-                ray.get(remotes)
+        if ray is not None:
+            ray.get(remotes)
 
         torchrl_logger.info("AsyncVLLM weight update completed")
 
