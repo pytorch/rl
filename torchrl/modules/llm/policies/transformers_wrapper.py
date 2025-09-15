@@ -1225,12 +1225,15 @@ class TransformersWrapper(LLMWrapperBase):
                 padding_value=0,
                 padding_side="left",
             )
-            log_probs_full_padded = pad_sequence(
-                log_probs_full_unpadded.unbind(0),
-                batch_first=True,
-                padding_value=0.0,
-                padding_side="left",
-            )
+            if log_probs_full_unpadded is not None:
+                log_probs_full_padded = pad_sequence(
+                    log_probs_full_unpadded.unbind(0),
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side="left",
+                )
+            else:
+                log_probs_full_padded = None
             logits_full_padded = pad_sequence(
                 logits_full_unpadded.unbind(0),
                 batch_first=True,
@@ -1805,12 +1808,15 @@ class TransformersWrapper(LLMWrapperBase):
                 padding_value=0,
                 padding_side="left",
             )
-            log_probs_full_padded = pad_sequence(
-                log_probs_full_unpadded.unbind(0),
-                batch_first=True,
-                padding_value=0.0,
-                padding_side="left",
-            )
+            if log_probs_full_unpadded is not None:
+                log_probs_full_padded = pad_sequence(
+                    log_probs_full_unpadded.unbind(0),
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side="left",
+                )
+            else:
+                log_probs_full_padded = None
             logits_full_padded = pad_sequence(
                 logits_full_unpadded.unbind(0),
                 batch_first=True,

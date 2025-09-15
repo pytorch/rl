@@ -169,7 +169,7 @@ def get_train_model(
         return_log_probs=True,
         pad_output=False,
         device=torch.device("cuda:0"),
-        # Use packing
+        # Enable packing when cfg.train.packing=True by disabling padding
         pad_model_input=not cfg.train.packing,
     )
     # Ensure model stays in eval mode after wrapping
