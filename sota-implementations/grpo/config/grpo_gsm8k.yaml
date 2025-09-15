@@ -37,7 +37,7 @@ train:
   total_dialog_turns: 100_000
 
   # Whether to use packing instead of padding for the model input.
-  packing: true
+  packing: false
 
   # Number of steps in each batch. Higher values will cause the inference step to be slower, but won't use more GPU memory.
   #  If multi-turn, the actual number available may be lower as the buffer will only write trajectories which prompts have been
@@ -52,7 +52,7 @@ train:
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
 
   # Batch size for optimization. Higher values will use more GPU memory.
-  optim_batch_size: 32
+  optim_batch_size: 16
 
   # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
   kl_coef_in_loss: true 
@@ -61,9 +61,9 @@ train:
   use_kl_to_ref: true
 
   # KL coefficients for the KL divergence to the reference and inference policies
-  kl_to_ref_coeff: 1e-2
-  kl_to_inference_coeff: 0.0
-  entropy_coeff: 0.01
+  kl_to_ref_coeff: 0.0
+  kl_to_inference_coeff: 1e-2
+  entropy_coeff: 1e-4
   
   # Fields used only by grpo-async.py / grpo-sync.py
   logging_frequency: 10  # Log metrics every N steps

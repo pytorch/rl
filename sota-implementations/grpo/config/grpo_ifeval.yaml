@@ -49,7 +49,7 @@ train:
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
 
   # Whether to use packing instead of padding for the model input.
-  packing: true
+  packing: false
 
   # Batch size for optimization. Higher values will use more GPU memory.
   optim_batch_size: 16
