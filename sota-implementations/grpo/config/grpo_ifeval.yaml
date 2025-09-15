@@ -43,7 +43,7 @@ train:
 
   # Number of gradient accumulation steps. Higher values will use less GPU memory (comparing with bigger batches and lower gradient_accumulation_steps), 
   # but will make the optimization step slower.
-  gradient_accumulation_steps: 16
+  gradient_accumulation_steps: 8
 
   # Fields used by both scripts but with different semantics
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
@@ -52,7 +52,7 @@ train:
   packing: false
 
   # Batch size for optimization. Higher values will use more GPU memory.
-  optim_batch_size: 16
+  optim_batch_size: 32
 
   # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
   kl_coef_in_loss: false
