@@ -1291,7 +1291,7 @@ class AsyncVLLM(RLvLLMEngine):
             ray.get(remotes)
         torchrl_logger.info("All worker updates completed")
 
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         t2 = time.time()
         torchrl_logger.info(
             f"NCCL broadcast time: {t2 - t1:.3f}s, total time: {t2 - t0:.3f}s"
