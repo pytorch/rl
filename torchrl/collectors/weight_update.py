@@ -68,7 +68,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
 
     """
 
-    _collector_wr: Any = None
+    _collector_wrs: list[Any] = None
     _post_hooks: list[Callable[[], Any]] | None = None
 
     @property
@@ -104,17 +104,38 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
             collector (DataCollectorBase): The collector to register.
 
         """
-        if self._collector_wr is not None:
-            raise RuntimeError("Cannot register collector twice.")
-        self._collector_wr = weakref.ref(collector)
+        if self._collector_wrs is None:
+            self._collector_wrs = []
+        self._collector_wrs.append(weakref.ref(collector))
 
     @property
-    def collector(self):  # noqa
+    def collector(self) -> Any | None:  # noqa
         """The collector or container of the receiver.
 
         Returns `None` if the container is out-of-scope or not set.
         """
-        return self._collector_wr() if self._collector_wr is not None else None
+        if self._collector_wrs is None:
+            return None
+        if len(self._collector_wrs) > 1:
+            raise ValueError("Cannot access `collector` with multiple collectors.")
+        if self._collector_wrs:
+            collector = self._collector_wrs[0]()
+        else:
+            collector = None
+        return collector
+
+    @property
+    def collectors(self) -> list[Any] | None:
+        """The collectors or container of the receiver."""
+        if self._collector_wrs is None:
+            return None
+        if self._collector_wrs:
+            collectors = [
+                wr() if wr is not None else None for wr in self._collector_wrs
+            ]
+        else:
+            collectors = None
+        return collectors
 
     def _push_weights(
         self,
@@ -303,7 +324,8 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
 
     def increment_version(self):
         """Increment the policy version."""
-        self.collector.increment_version()
+        for collector in self.collectors:
+            collector.increment_version()
 
 
 # Specialized classes
