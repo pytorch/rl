@@ -24,7 +24,7 @@ from torchrl._utils import logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
-from .vllm_utils import stateless_init_process_group_async
+from .vllm_utils import stateless_init_process_group, stateless_init_process_group_async
 
 try:
     import ray
@@ -1305,8 +1305,6 @@ class AsyncVLLM(RLvLLMEngine):
     def _setup_nccl_master_group(self) -> None:
         """Set up NCCL communication group for the master node (rank 0)."""
         try:
-            from .vllm_utils import stateless_init_process_group_async
-
             # Calculate world size (should match what workers use)
             gpus_per_replica = _gpus_per_replica(self.engine_args)
             weight_sync_world_size = self.num_replicas * gpus_per_replica + 1
@@ -1319,8 +1317,8 @@ class AsyncVLLM(RLvLLMEngine):
                 f"address={master_address}:{master_port}"
             )
 
-            # Initialize master as rank 0 in the NCCL group
-            self._nccl_master_group = stateless_init_process_group_async(
+            # Initialize master as rank 0 in the NCCL group (use synchronous version)
+            self._nccl_master_group = stateless_init_process_group(
                 master_address=master_address,
                 master_port=str(master_port),
                 rank=0,  # Master is always rank 0
