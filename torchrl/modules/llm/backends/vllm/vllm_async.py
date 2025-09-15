@@ -1255,7 +1255,7 @@ class AsyncVLLM(RLvLLMEngine):
         # Tell workers to prepare for broadcast (like V1 does with update_weight_broadcast)
         remotes = []
         for name, weight in gpu_weights.items():
-            remotes.append(
+            remotes.extend(
                 self.collective_rpc(
                     "update_weight_broadcast", args=(name, weight.dtype, weight.shape)
                 )
