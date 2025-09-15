@@ -771,9 +771,7 @@ def log_training_metrics(
             "kl_to_inference (train to inference - differentiable), from loss": float(
                 loss.kl_to_inference.mean()
             ),
-            "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
             "loss_kl_to_inference, from loss": float(loss.loss_kl_to_inference.mean()),
-            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref.mean()),
             "entropy loss, from loss": float(loss.loss_entropy.mean()),
             "grad_norm": float(grad_norm)
             if global_step % gradient_accumulation_steps == 0
@@ -802,6 +800,8 @@ def log_training_metrics(
             metrics["kl_penalty (inference to ref) from buffer"] = float(
                 torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
             )
+            metrics["kl_to_ref, from loss"] = float(loss.kl_to_ref.mean())
+            metrics["loss_kl_to_ref, from loss"] = float(loss.loss_kl_to_ref.mean())
 
         for name, value in metrics.items():
             wandb_logger.log_scalar(name, value, step=global_step)
