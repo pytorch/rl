@@ -1186,10 +1186,13 @@ class AsyncVLLM(RLvLLMEngine):
         if ray is not None:
             ray.get(refs)
 
+        # Initialize the master NCCL group for efficient weight broadcasting
+        self._setup_nccl_master_group()
+
         torchrl_logger.info("AsyncVLLM weight update group initialized")
 
     def update_weights(self, weights: Iterator[tuple[str, torch.Tensor]]) -> None:
-        """Update model weights across all replicas.
+        """Update model weights across all replicas using NCCL broadcast.
 
         Args:
             weights: Iterator yielding (parameter_name, tensor) tuples
@@ -1206,24 +1209,131 @@ class AsyncVLLM(RLvLLMEngine):
             torchrl_logger.warning("No weights provided for update")
             return
 
-        # This is a simplified implementation - the full implementation would require
-        # setting up NCCL communication groups and broadcasting weights
-        # For now, we'll use the collective_rpc mechanism
         torchrl_logger.info(
-            f"Updating {len(weights_dict)} parameters across {len(self.actors)} replicas"
+            f"Updating {len(weights_dict)} parameters across {len(self.actors)} replicas using NCCL broadcast"
         )
 
-        # Broadcast weights using collective RPC (simplified approach)
+        # Use NCCL broadcast instead of Ray RPC for much better performance
+        self._update_weights_with_nccl_broadcast(weights_dict)
+
+        torchrl_logger.info("AsyncVLLM NCCL weight update completed")
+
+    def _update_weights_with_nccl_broadcast(
+        self, weights_dict: dict[str, torch.Tensor]
+    ) -> None:
+        """Update weights using NCCL broadcast for optimal performance.
+
+        This method sets up a master node (rank 0) and broadcasts weights to all worker replicas
+        using NCCL instead of Ray RPC, which is much faster for large models.
+
+        Args:
+            weights_dict: Dictionary of parameter names to weight tensors
+        """
+        import time
+
+        try:
+            if (
+                not hasattr(self, "_nccl_master_group")
+                or self._nccl_master_group is None
+            ):
+                torchrl_logger.warning(
+                    "NCCL master group not initialized, falling back to Ray RPC"
+                )
+                self._update_weights_fallback(weights_dict)
+                return
+
+            t0 = time.time()
+
+            # Move all weights to GPU first for efficient broadcasting
+            gpu_weights = {}
+            for name, weight in weights_dict.items():
+                if not weight.is_cuda:
+                    gpu_weights[name] = weight.cuda(non_blocking=True)
+                else:
+                    gpu_weights[name] = weight
+
+            torch.cuda.synchronize()  # Ensure all GPU transfers are complete
+            t1 = time.time()
+            torchrl_logger.info(f"GPU weight transfer time: {t1 - t0:.3f}s")
+
+            # Broadcast each weight using NCCL
+            broadcast_futures = []
+            for name, weight in gpu_weights.items():
+                # Initiate broadcast on workers - they will receive the weight
+                remotes = self.collective_rpc(
+                    "update_weight_broadcast", args=(name, weight.dtype, weight.shape)
+                )
+                broadcast_futures.append((name, weight, remotes))
+
+            # Now perform the actual NCCL broadcasts from master (rank 0)
+            for _, weight, _ in broadcast_futures:
+                # Broadcast from master (rank 0) to all workers
+                self._nccl_master_group.broadcast(
+                    weight, src=0, stream=torch.cuda.current_stream()
+                )
+
+            # Wait for all workers to complete
+            if ray is not None:
+                all_remotes = []
+                for _, _, remotes in broadcast_futures:
+                    all_remotes.extend(remotes)
+                ray.get(all_remotes)
+
+            torch.cuda.synchronize()  # Ensure all broadcasts are complete
+            t2 = time.time()
+            torchrl_logger.info(
+                f"NCCL broadcast time: {t2 - t1:.3f}s, total time: {t2 - t0:.3f}s"
+            )
+
+        except Exception as e:
+            torchrl_logger.error(f"NCCL broadcast failed: {e}, falling back to Ray RPC")
+            self._update_weights_fallback(weights_dict)
+
+    def _update_weights_fallback(self, weights_dict: dict[str, torch.Tensor]) -> None:
+        """Fallback weight update using the original Ray RPC method."""
+        torchrl_logger.info("Using Ray RPC fallback for weight updates")
+
         remotes = []
         for name, weight in weights_dict.items():
-            # Send weight directly to actors
+            # Send weight directly to actors (original method)
             remotes.append(
                 self.collective_rpc("update_weight", args=(name, weight.to("cuda:0")))
             )
         if ray is not None:
             ray.get(remotes)
 
-        torchrl_logger.info("AsyncVLLM weight update completed")
+    def _setup_nccl_master_group(self) -> None:
+        """Set up NCCL communication group for the master node (rank 0)."""
+        try:
+            from .vllm_utils import stateless_init_process_group_async
+
+            # Calculate world size (should match what workers use)
+            gpus_per_replica = _gpus_per_replica(self.engine_args)
+            weight_sync_world_size = self.num_replicas * gpus_per_replica + 1
+
+            master_address = self.get_master_address()
+            master_port = self.get_master_port()
+
+            torchrl_logger.info(
+                f"Setting up NCCL master group: rank=0, world_size={weight_sync_world_size}, "
+                f"address={master_address}:{master_port}"
+            )
+
+            # Initialize master as rank 0 in the NCCL group
+            self._nccl_master_group = stateless_init_process_group_async(
+                master_address=master_address,
+                master_port=str(master_port),
+                rank=0,  # Master is always rank 0
+                world_size=weight_sync_world_size,
+                device=torch.device("cuda:0"),
+            )
+
+            torchrl_logger.info("NCCL master group initialized successfully")
+
+        except Exception as e:
+            torchrl_logger.error(f"Failed to initialize NCCL master group: {e}")
+            torchrl_logger.warning("Weight updates will fall back to Ray RPC")
+            self._nccl_master_group = None
 
     def get_num_unfinished_requests(
         self, actor_index: int | None = None

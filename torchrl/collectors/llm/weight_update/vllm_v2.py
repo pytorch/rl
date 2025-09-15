@@ -138,6 +138,81 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         self.push_weights(weights_iter)
         torchrl_logger.info(f"Time to push weights: {time.time() - t1}")
 
+    def push_weights_from_transformers_optimized(
+        self, transformers_model, batch_size=50
+    ):
+        """Optimized version of push_weights_from_transformers with GPU pre-loading.
+
+        This method provides several optimizations:
+        1. Pre-loads all weights to GPU before transfer
+        2. Optionally batches weights for better memory management
+        3. Uses non-blocking transfers when possible
+
+        Args:
+            transformers_model: A transformers PreTrainedModel or TorchRL wrapper
+            batch_size: Number of weights to transfer in each batch (0 = no batching)
+        """
+        if not _has_transformers:
+            raise ImportError("transformers not available")
+
+        t0 = time.time()
+
+        # Extract state dict from model, handling LoRA models properly
+        if hasattr(transformers_model, "model") and hasattr(
+            transformers_model.model, "state_dict"
+        ):
+            # TorchRL wrapper (e.g., TransformersWrapper)
+            model = transformers_model.model
+            if hasattr(model, "merge_and_unload"):
+                state_dict = model.merge_and_unload().state_dict()
+            else:
+                state_dict = model.state_dict()
+        elif hasattr(transformers_model, "state_dict"):
+            # Direct transformers model
+            if hasattr(transformers_model, "merge_and_unload"):
+                state_dict = transformers_model.merge_and_unload().state_dict()
+            else:
+                state_dict = transformers_model.state_dict()
+        else:
+            raise TypeError(
+                f"Cannot extract state_dict from {type(transformers_model)}"
+            )
+
+        t1 = time.time()
+        torchrl_logger.info(f"Time to extract state_dict: {t1 - t0:.3f}s")
+
+        # Pre-load all weights to GPU for faster transfer
+        gpu_weights = {}
+        with torch.device("cuda:0"):  # Ensure we're using the right GPU
+            for name, weight in state_dict.items():
+                if not weight.is_cuda:
+                    gpu_weights[name] = weight.cuda(non_blocking=True)
+                else:
+                    gpu_weights[name] = weight
+
+        # Synchronize to ensure all transfers are complete
+        torch.cuda.synchronize()
+        t2 = time.time()
+        torchrl_logger.info(f"Time to move weights to GPU: {t2 - t1:.3f}s")
+
+        # Transfer weights (optionally in batches)
+        if batch_size > 0:
+            weight_items = list(gpu_weights.items())
+            for i in range(0, len(weight_items), batch_size):
+                batch = weight_items[i : i + batch_size]
+                self.push_weights(iter(batch))
+                torchrl_logger.info(
+                    f"Transferred batch {i//batch_size + 1}/{(len(weight_items) + batch_size - 1)//batch_size}"
+                )
+        else:
+            # Transfer all at once
+            self.push_weights(iter(gpu_weights.items()))
+
+        t3 = time.time()
+        torchrl_logger.info(
+            f"Time to push weights: {t3 - t2:.3f}s, total time: {t3 - t0:.3f}s"
+        )
+
     # Required WeightUpdaterBase methods
     def _sync_weights_with_worker(self, *, worker_id=None, server_weights=None):
         """Sync weights with worker (delegates to push_weights)."""
