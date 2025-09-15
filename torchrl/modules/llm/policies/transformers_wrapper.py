@@ -2292,7 +2292,7 @@ class TransformersWrapper(LLMWrapperBase):
         flat_input_ids: torch.Tensor,
         pad: bool = True,
         logits_only: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
         """Unpack outputs using nested tensors - zero syncs."""
         # use cross_entropy to compute log_probs
         log_probs, logits = self._compute_log_probs_from_model_output(
@@ -2332,11 +2332,16 @@ class TransformersWrapper(LLMWrapperBase):
             lengths=sequence_lengths,
         )
 
-        if pad:
-            return nested_logprobs.to_padded_tensor(
-                padding=0.0
-            ), nested_logits.to_padded_tensor(padding=0.0)
-        return nested_logprobs, nested_logits
+        if logits_only:
+            if pad:
+                return None, nested_logits.to_padded_tensor(padding=0.0)
+            return None, nested_logits
+        else:
+            if pad:
+                return nested_logprobs.to_padded_tensor(
+                    padding=0.0
+                ), nested_logits.to_padded_tensor(padding=0.0)
+            return nested_logprobs, nested_logits
 
     def _create_block_diagonal_attention_mask(
         self, sequence_lengths: torch.Tensor
