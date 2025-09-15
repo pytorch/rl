@@ -1154,15 +1154,18 @@ class AsyncVLLM(RLvLLMEngine):
 
     def get_master_port(self) -> int:
         """Get the master port for weight synchronization."""
-        if _has_vllm:
-            try:
-                from vllm.utils import get_open_port
+        # Cache the port like V1 does to ensure consistency
+        if not hasattr(self, "_cached_master_port"):
+            if _has_vllm:
+                try:
+                    from vllm.utils import get_open_port
 
-                return get_open_port()
-            except ImportError:
-                return 29500  # Default port if import fails
-        else:
-            return 29500  # Default port
+                    self._cached_master_port = get_open_port()
+                except ImportError:
+                    self._cached_master_port = 29500  # Default port if import fails
+            else:
+                self._cached_master_port = 29500  # Default port
+        return self._cached_master_port
 
     def init_weight_update_group(self) -> None:
         """Initialize the weight update communication group (RLvLLMEngine interface)."""
@@ -1174,15 +1177,16 @@ class AsyncVLLM(RLvLLMEngine):
         master_address = self.get_master_address()
         master_port = self.get_master_port()
 
-        # Call the internal method with the auto-detected parameters
+        # Call the internal method with the auto-detected parameters (like V1)
         refs = self._init_weight_update_group_internal(master_address, master_port)
 
-        if ray is not None:
-            ray.get(refs)
-
-        # Initialize the master NCCL group (like V1 does) - training process as rank 0
+        # CRITICAL: Initialize master NCCL group immediately (like V1) - don't wait for workers
         torchrl_logger.info("Setting up master NCCL group (rank 0)...")
         self._setup_nccl_master_group()
+
+        # Now wait for workers to complete (like V1 does)
+        if ray is not None:
+            ray.get(refs)
 
         torchrl_logger.info("AsyncVLLM weight update group initialized")
 
@@ -1304,17 +1308,6 @@ class AsyncVLLM(RLvLLMEngine):
         )
 
         torchrl_logger.info("NCCL master group initialized successfully")
-
-        # Verify the group is working by testing a dummy tensor
-        test_tensor = torch.ones(1, device="cuda:0")
-        try:
-            self._nccl_master_group.broadcast(
-                test_tensor, src=0, stream=torch.cuda.current_stream()
-            )
-            torch.cuda.synchronize()
-            torchrl_logger.info("NCCL master group verification successful")
-        except Exception as e:
-            raise RuntimeError(f"NCCL master group verification failed: {e}")
 
     def get_num_unfinished_requests(
         self, actor_index: int | None = None
