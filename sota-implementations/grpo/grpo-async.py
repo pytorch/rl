@@ -114,6 +114,10 @@ def train(
     for collector in tqdm.tqdm(collectors, desc="Setting weight updater"):
         collector.weight_updater = weight_updater
 
+    for i, collector in enumerate(collectors):
+        torchrl_logger.info(f"Starting collector {i}...")
+        collector.start()
+
     torchrl_logger.info("Initializing weight updater...")
     weight_updater.init()
     with timeit("update_policy_weights"):
@@ -121,10 +125,6 @@ def train(
     torchrl_logger.info("Completed first update_policy_weights. Starting collectors...")
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
-
-    for i, collector in enumerate(collectors):
-        torchrl_logger.info(f"Starting collector {i}...")
-        collector.start()
 
     while not replay_buffer.write_count:
         torchrl_logger.info("Waiting for replay buffer...")
