@@ -149,12 +149,19 @@ class _AsyncvLLMWorker(Worker):
         if self.model_update_group is None:
             raise RuntimeError("Weight update group not initialized")
 
+        torchrl_logger.info(
+            f"Worker: Preparing to receive weight {name} {shape} {dtype}"
+        )
+
         # Workers receive broadcast from master (rank 0)
         weight = torch.empty(shape, dtype=dtype, device="cuda")
+        torchrl_logger.info(f"Worker: Calling broadcast for {name}...")
         self.model_update_group.broadcast(
             weight, src=0, stream=torch.cuda.current_stream()
         )
+        torchrl_logger.info(f"Worker: Received weight {name}, loading into model...")
         self.model_runner.model.load_weights(weights=[(name, weight)])
+        torchrl_logger.info(f"Worker: Successfully loaded weight {name}")
         del weight
 
     def update_weight(self, name: str, weight: torch.Tensor):
@@ -1252,27 +1259,37 @@ class AsyncVLLM(RLvLLMEngine):
         t1 = time.time()
         torchrl_logger.info(f"GPU weight transfer time: {t1 - t0:.3f}s")
 
-        # Tell workers to prepare for broadcast (like V1 does with update_weight_broadcast)
+        # CRITICAL FIX: Process weights one by one to maintain sequencing
+        # This ensures workers receive broadcasts in the same order as RPC calls
         remotes = []
-        for name, weight in gpu_weights.items():
-            remotes.extend(
-                self.collective_rpc(
+        torchrl_logger.info(
+            f"Broadcasting {len(gpu_weights)} weights from master (rank 0)..."
+        )
+
+        with torch.cuda.device(0):  # Ensure we're on the correct CUDA device
+            for i, (name, weight) in enumerate(gpu_weights.items()):
+                torchrl_logger.info(
+                    f"Processing weight {i+1}/{len(gpu_weights)}: {name} {weight.shape}"
+                )
+
+                # Step 1: Tell workers to prepare for this specific weight
+                worker_remotes = self.collective_rpc(
                     "update_weight_broadcast", args=(name, weight.dtype, weight.shape)
                 )
-            )
+                remotes.extend(worker_remotes)
 
-        # Now broadcast each weight from master (rank 0) - like V1 does
-        torchrl_logger.info("Broadcasting weights from master (rank 0)...")
-        # Ensure we're on the correct CUDA device for the stream
-        with torch.cuda.device(0):
-            for weight in gpu_weights.values():
+                # Step 2: Immediately broadcast this weight from master (rank 0)
+                torchrl_logger.info(f"Broadcasting weight {name} from master...")
                 self._nccl_master_group.broadcast(
                     weight, src=0, stream=torch.cuda.current_stream()
                 )
+                torchrl_logger.info(f"Master broadcast completed for {name}")
 
-        # Wait for all workers to complete
+        # Wait for all workers to complete all weight updates
+        torchrl_logger.info("Waiting for all worker updates to complete...")
         if ray is not None:
             ray.get(remotes)
+        torchrl_logger.info("All worker updates completed")
 
         torch.cuda.synchronize()
         t2 = time.time()
