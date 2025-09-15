@@ -357,7 +357,9 @@ def main(cfg):
             else cfg.env.repeats * cfg.env.num_envs,
         ),
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
-        batch_size=cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps,
+        batch_size=max(
+            1, cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
+        ),
         remote_config=replay_buffer_config,
     )
 

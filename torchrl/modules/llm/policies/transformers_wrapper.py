@@ -2303,6 +2303,7 @@ class TransformersWrapper(LLMWrapperBase):
             logits_only=logits_only,
         )
         # check shapes: [1, L] for log_probs, [1, L, vocab_size] for logits
+        sequence_lengths = packing_metadata["sequence_lengths"]
         if logits_only:
             log_probs = None
         else:
@@ -2314,7 +2315,6 @@ class TransformersWrapper(LLMWrapperBase):
                 raise ValueError(f"Log probs shape {log_probs.shape=} is not 2D")
             if logits.ndim != 3:
                 raise ValueError(f"Logits shape {logits.shape=} is not 3D")
-            sequence_lengths = packing_metadata["sequence_lengths"]
             if log_probs.shape[1] != sequence_lengths.sum():
                 raise ValueError(
                     f"Log probs shape {log_probs.shape=} does not match sequence lengths {sequence_lengths.sum()=}"
