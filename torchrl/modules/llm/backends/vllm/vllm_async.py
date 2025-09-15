@@ -149,19 +149,19 @@ class _AsyncvLLMWorker(Worker):
         if self.model_update_group is None:
             raise RuntimeError("Weight update group not initialized")
 
-        torchrl_logger.info(
-            f"Worker: Preparing to receive weight {name} {shape} {dtype}"
+        torchrl_logger.debug(
+            f"Worker: Preparing to receive weight {name} {shape} {dtype} on device {self.device}"
         )
 
         # Workers receive broadcast from master (rank 0)
         weight = torch.empty(shape, dtype=dtype, device="cuda")
-        torchrl_logger.info(f"Worker: Calling broadcast for {name}...")
+        torchrl_logger.debug(f"Worker: Calling broadcast for {name}...")
         self.model_update_group.broadcast(
             weight, src=0, stream=torch.cuda.current_stream()
         )
-        torchrl_logger.info(f"Worker: Received weight {name}, loading into model...")
+        torchrl_logger.debug(f"Worker: Received weight {name}, loading into model...")
         self.model_runner.model.load_weights(weights=[(name, weight)])
-        torchrl_logger.info(f"Worker: Successfully loaded weight {name}")
+        torchrl_logger.debug(f"Worker: Successfully loaded weight {name}")
         del weight
 
     def update_weight(self, name: str, weight: torch.Tensor):

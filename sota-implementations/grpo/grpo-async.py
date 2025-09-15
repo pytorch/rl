@@ -118,12 +118,16 @@ def train(
     weight_updater.init()
     with timeit("update_policy_weights"):
         weight_updater.push_weights_from_transformers(policy_training)
+    torchrl_logger.info("Completed first update_policy_weights. Starting collectors...")
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
-    for collector in collectors:
+    for i, collector in enumerate(collectors):
+        torchrl_logger.info(f"Starting collector {i}...")
         collector.start()
+
     while not replay_buffer.write_count:
+        torchrl_logger.info("Waiting for replay buffer...")
         time.sleep(1)
 
     # Make optimizer
