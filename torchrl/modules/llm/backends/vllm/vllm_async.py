@@ -141,39 +141,25 @@ class _AsyncvLLMWorker(Worker):
 
         torchrl_logger.info(f"{type(self).__name__}.init_weight_update_group success")
 
-    def update_weight_broadcast(self, name: str, dtype: torch.dtype, shape: torch.Size):
-        """Update weight via broadcast from master (rank 0) - like V1.
+    def update_weight(self, name: str, dtype_name: str, shape: tuple[int, ...]):
+        """Update weight via broadcast from master (rank 0) - periodic-mono pattern.
 
         Args:
             name (str): Parameter name.
-            dtype (torch.dtype): Parameter dtype.
-            shape (torch.Size): Parameter shape.
+            dtype_name (str): Parameter dtype name (e.g., 'bfloat16').
+            shape (tuple[int, ...]): Parameter shape.
         """
         if self.model_update_group is None:
             raise RuntimeError("Weight update group not initialized")
 
-        torchrl_logger.debug(
-            f"Worker: Preparing to receive weight {name} {shape} {dtype} on device {self.device}"
-        )
+        # Convert dtype name to dtype (like periodic-mono)
+        dtype = getattr(torch, dtype_name)
 
         # Workers receive broadcast from master (rank 0)
         weight = torch.empty(shape, dtype=dtype, device="cuda")
-        torchrl_logger.debug(f"Worker: Calling broadcast for {name}...")
         self.model_update_group.broadcast(
             weight, src=0, stream=torch.cuda.current_stream()
         )
-        torchrl_logger.debug(f"Worker: Received weight {name}, loading into model...")
-        self.model_runner.model.load_weights(weights=[(name, weight)])
-        torchrl_logger.debug(f"Worker: Successfully loaded weight {name}")
-        del weight
-
-    def update_weight(self, name: str, weight: torch.Tensor):
-        """Update weight directly.
-
-        Args:
-            name (str): Parameter name.
-            weight (torch.Tensor): Parameter weight.
-        """
         self.model_runner.model.load_weights(weights=[(name, weight)])
         del weight
 
@@ -1222,7 +1208,6 @@ class AsyncVLLM(RLvLLMEngine):
             f"Updating {len(weights_dict)} parameters across {len(self.actors)} replicas using NCCL broadcast"
         )
 
-        # Use simple NCCL broadcast like V1 (but with multiple replicas)
         self._update_weights_with_nccl_broadcast_simple(weights_dict)
 
         torchrl_logger.info("AsyncVLLM NCCL weight update completed")
@@ -1258,47 +1243,37 @@ class AsyncVLLM(RLvLLMEngine):
             else:
                 gpu_weights[name] = weight
 
-        torch.cuda.synchronize()
-        t1 = time.time()
-        torchrl_logger.info(f"GPU weight transfer time: {t1 - t0:.3f}s")
-
-        # CRITICAL FIX: Use V1 batch pattern for fast, non-blocking updates
-        # 1. Send all worker RPC calls first (like V1 lines 244-249)
-        # 2. Then broadcast all weights in order (like V1 lines 261-268)
-        # 3. Then wait for workers (like V1 line 271)
-
-        # Step 1: Create ordered list to ensure consistent sequencing
-        weight_items = list(gpu_weights.items())  # Fix order for both loops
-
-        # Step 2: Send all worker RPC calls in batch (preserves order)
-        torchrl_logger.info(f"Sending RPC calls for {len(weight_items)} weights...")
-        remotes = []
-        for name, weight in weight_items:
-            worker_remotes = self.collective_rpc(
-                "update_weight_broadcast", args=(name, weight.dtype, weight.shape)
-            )
-            remotes.extend(worker_remotes)
-
-        # Step 3: Broadcast all weights in batch using SAME order (fast like V1)
+        # Use periodic-mono pattern: individual weight updates with immediate RPC->NCCL
         torchrl_logger.info(
-            f"Broadcasting {len(weight_items)} weights from master (rank 0)..."
+            f"Updating {len(gpu_weights)} weights using periodic-mono pattern..."
         )
+
+        updated_weights = 0
         with torch.cuda.device(0):  # Ensure we're on the correct CUDA device
-            for _, weight in weight_items:  # Same order as RPC calls
+            for name, weight in gpu_weights.items():
+                # Convert dtype to string name (like periodic-mono)
+                dtype_name = str(weight.dtype).split(".")[
+                    -1
+                ]  # "torch.bfloat16" -> "bfloat16"
+
+                # Step 1: Send RPC to workers for this weight
+                futures = self.collective_rpc(
+                    "update_weight", args=(name, dtype_name, tuple(weight.shape))
+                )
+
+                # Step 2: Immediately broadcast this weight (like periodic-mono)
                 self._nccl_master_group.broadcast(
                     weight, src=0, stream=torch.cuda.current_stream()
                 )
 
-        # Step 3: Wait for all workers to complete (like V1)
-        torchrl_logger.info("Waiting for all worker updates to complete...")
-        if ray is not None:
-            ray.get(remotes)
-        torchrl_logger.info("All worker updates completed")
+                # Step 3: Wait for workers to complete this weight
+                ray.get(futures)
+                updated_weights += 1
 
-        # torch.cuda.synchronize()
+        torch.cuda.synchronize()
         t2 = time.time()
         torchrl_logger.info(
-            f"NCCL broadcast time: {t2 - t1:.3f}s, total time: {t2 - t0:.3f}s"
+            f"Successfully updated {updated_weights}/{len(gpu_weights)} weights in {t2 - t0:.3f}s"
         )
 
     def _setup_nccl_master_group(self) -> None:
