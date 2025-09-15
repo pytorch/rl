@@ -562,7 +562,7 @@ def make_weight_updater(
 
 
 def compute_device_allocation(cfg):
-    """Compute device allocations and Ray GPU config based on sync mode.
+    """Compute device allocations and Ray GPU config.
 
     Args:
         cfg: The configuration object
@@ -571,50 +571,40 @@ def compute_device_allocation(cfg):
         dict: Updated device configuration containing:
             - train_model_devices: list of devices for training
             - inference_model_devices: list of devices for inference
-            - ref_model_devices: list of devices for reference model (empty if not used)
             - ray_num_gpus: number of GPUs to tell Ray about
             - cuda_visible_devices: string for CUDA_VISIBLE_DEVICES
     """
     train_devices = cfg.train_model.num_devices
     inf_devices = cfg.inference_model.num_devices
 
-    # Only allocate devices for reference model if KL to ref is enabled
-    if cfg.train.use_kl_to_ref:
-        ref_devices = cfg.ref_model.num_devices
-    else:
-        ref_devices = 0
-
-    # So we need all GPUs for Ray
     train_start = 0
     train_end = train_devices
     inference_start = 0
     inference_end = inf_devices
-    ref_start = inference_end
-    ref_end = ref_start + ref_devices
+
+    ref_devices = cfg.ref_model.num_devices if cfg.train.use_kl_to_ref else 0
     ray_num_gpus = train_devices + inf_devices + ref_devices
 
-    # Create device lists
     train_model_devices = list(range(train_start, train_end))
     inference_model_devices = list(range(inference_start, inference_end))
-    ref_model_devices = list(range(ref_start, ref_end)) if ref_devices > 0 else []
 
-    # Get total unique devices for CUDA_VISIBLE_DEVICES
-    all_devices = sorted(
-        set(train_model_devices + inference_model_devices + ref_model_devices)
-    )
+    all_devices = sorted(set(train_model_devices + inference_model_devices))
+    if cfg.train.use_kl_to_ref:
+        ref_device_start = max(all_devices) + 1 if all_devices else 0
+        ref_devices_list = list(range(ref_device_start, ref_device_start + ref_devices))
+        all_devices.extend(ref_devices_list)
     cuda_visible_devices = ",".join(map(str, all_devices))
 
     return {
         "train_model_devices": train_model_devices,
         "inference_model_devices": inference_model_devices,
-        "ref_model_devices": ref_model_devices,
         "ray_num_gpus": ray_num_gpus,
         "cuda_visible_devices": cuda_visible_devices,
     }
 
 
-def make_env(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
+def make_env(cfg: DictConfig):
+    """Create the environment.
 
     Args:
         cfg: The configuration object
@@ -622,20 +612,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     Returns:
         The configured environment
     """
-    # Create reference model with proper device allocation only if KL to ref is enabled
-    # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
-
-    ref_model_factory = None
-    if cfg.train.use_kl_to_ref:
-        # Create a new config with adjusted device assignments
-        ref_cfg = DictConfig(dict(cfg))
-        ref_model_factory = functools.partial(
-            get_ref_model,
-            ref_cfg,
-            train_tokenizer,
-            devices=devices,
-        )
 
     # Setup environment
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
@@ -647,7 +624,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=max_steps,
-            device=torch.device("cuda:0") if devices is not None else None,
+            device=torch.device("cpu"),
             ray_backend=True,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
@@ -658,11 +635,12 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=max_steps,
-            device=torch.device("cuda:0") if devices is not None else None,
+            device=torch.device("cpu"),
             ray_backend=True,
         )
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
+
     if cfg.env.reasoning:
         env = env.append_transform(
             AddThinkingPrompt(
@@ -678,33 +656,63 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 random_prompt=True,
             ),
         )
-        if cfg.train.use_kl_to_ref and ref_model_factory is not None:
-            env = env.append_transform(
-                # RetrieveKL will be lazily initialized in the collector.
-                # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-                # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-                RetrieveKL(
-                    ref_model_factory=ref_model_factory,
-                    add_to_reward=not cfg.train.kl_coef_in_loss,
-                    coeff=cfg.train.kl_to_ref_coeff,
-                    use_ray_service=True,
-                )
-            )
-    else:
-        if cfg.train.use_kl_to_ref and ref_model_factory is not None:
-            # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-            # we can just use 0 here.
-            device = torch.device("cuda:0")
-            env = env.append_transform(
-                KLRewardTransform(
-                    ref_model_factory=ref_model_factory,
-                    coef=cfg.train.kl_to_ref_coeff,
-                    add_to_reward=not cfg.train.kl_coef_in_loss,
-                    device=device,
-                    use_ray_service=True,
-                )
-            )
     return env
+
+
+def make_ref_model_factory(cfg: DictConfig) -> functools.partial | None:
+    """Create a factory for the reference model if KL to ref is enabled.
+
+    Args:
+        cfg: The configuration object
+
+    Returns:
+        A partial function that creates the reference model, or None if KL to ref is disabled
+    """
+    if not cfg.train.use_kl_to_ref:
+        return None
+
+    train_tokenizer = get_tokenizer(cfg)
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model_factory = functools.partial(
+        get_ref_model,
+        ref_cfg,
+        train_tokenizer,
+        devices=[0],
+    )
+    return ref_model_factory
+
+
+def add_kl_transforms_to_replay_buffer(replay_buffer, cfg: DictConfig):
+    """Add KL transforms to replay buffer.
+
+    Args:
+        replay_buffer: The replay buffer to add transforms to
+        cfg: The configuration object
+    """
+    if not cfg.train.use_kl_to_ref:
+        return
+
+    ref_model_factory = make_ref_model_factory(cfg)
+    if ref_model_factory is None:
+        return
+
+    if cfg.env.reasoning:
+        kl_transform = RetrieveKL(
+            ref_model_factory=ref_model_factory,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            coeff=cfg.train.kl_to_ref_coeff,
+            use_ray_service=True,
+        )
+    else:
+        kl_transform = KLRewardTransform(
+            ref_model_factory=ref_model_factory,
+            coef=cfg.train.kl_to_ref_coeff,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            device=torch.device("cuda:0"),
+            use_ray_service=True,
+        )
+
+    replay_buffer.append_transform(kl_transform, invert=True)
 
 
 def log_training_metrics(

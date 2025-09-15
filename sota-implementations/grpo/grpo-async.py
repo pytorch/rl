@@ -28,6 +28,7 @@ import torch
 import tqdm
 
 from grpo_utils import (
+    add_kl_transforms_to_replay_buffer,
     check_grpo_dependencies,
     compute_device_allocation,
     get_inference_model,
@@ -89,7 +90,7 @@ def train(
     """
     # Setup training model and tokenizer
     policy_training, train_tokenizer = get_train_model(cfg, devices=devices)
-    train_device = devices[0]  # Use first device for batch processing
+    train_device = torch.device(f"cuda:{devices[0]}" if devices else "cuda:0")
 
     # Setup loss function
     loss_fn = GRPOLoss(
@@ -99,7 +100,6 @@ def train(
         else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        # use prompt/response masking for regular training, and assistant masking for reasoning
         masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )
@@ -109,28 +109,17 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # Get vLLM engine from inference policy
-    vllm_engine = (
-        inference_policy.model
-    )  # The model attribute should be an RLvLLMEngine
-
-    # Create weight updater with vLLM engine
+    vllm_engine = inference_policy.model
     weight_updater: vLLMUpdaterV2 = make_weight_updater(vllm_engine=vllm_engine)
     collector.weight_updater = weight_updater
 
-    # Initialize the weight updater
     weight_updater.init()
-
-    # First update the weights
     with timeit("update_policy_weights"):
         weight_updater.push_weights_from_transformers(policy_training)
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
-    # Start collector
     collector.start()
-
-    # Wait for initial data
     while not replay_buffer.write_count:
         time.sleep(1)
 
@@ -180,10 +169,7 @@ def train(
         pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 
         with timeit("sampling"):
-            # Sample batch and move to device
             batch = replay_buffer.sample(cfg.train.optim_batch_size).to(train_device)
-            # For logging purposes, we get the last element of the history
-            # and convert it to a string
             history: History = batch.view(-1)[0]["history", "full"]
             history_str: list[str] | str = history.apply_chat_template(
                 tokenizer=train_tokenizer
@@ -194,7 +180,6 @@ def train(
             data_read_count += batch.numel()
 
         with timeit("forward_pass"):
-            # Forward pass with mixed precision
             with autocast("cuda", enabled=cfg.train.mixed_precision):
                 loss = loss_fn(batch)
                 loss_val = (
@@ -202,14 +187,12 @@ def train(
                 )
 
         with timeit("backward_pass"):
-            # Backward pass
             if cfg.train.mixed_precision and cfg.train_model.torch_dtype == "float16":
                 scaler = GradScaler(enabled=True)
                 scaler.scale(loss_val).backward()
             else:
                 loss_val.backward()
 
-        # Optimization step
         if (step + 1) % cfg.train.gradient_accumulation_steps == 0:
             with timeit("optim_step"):
                 if (
@@ -233,7 +216,6 @@ def train(
                     optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
-        # Update metrics
         if (step % cfg.train.logging_frequency) == 0:
             log_training_metrics(
                 wandb_logger=wandb_logger,
@@ -249,7 +231,6 @@ def train(
                 history_str=history_str,
             )
 
-        # Update policy weights
         if step % cfg.train.weight_update_frequency == 0:
             with timeit("update_policy_weights"):
                 torchrl_logger.info("Updating policy weights...")
@@ -279,7 +260,6 @@ def train(
                 wandb_logger.log_scalar(f"timeit/{key}", val)
             timeit.reset()
 
-        # Clear memory
         del loss_val
         # TODO: do we need this? Does it interfere with other processes?
         # torch.cuda.empty_cache()
@@ -372,34 +352,29 @@ def main(cfg):
         batch_size=cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps,
         remote_config=replay_buffer_config,
     )
+
+    add_kl_transforms_to_replay_buffer(rb, cfg)
+
     torchrl_logger.info(f"Replay buffer: {rb}")
 
-    # Create remote collector using RayLLMCollector
-    collector_config["num_gpus"] = (
-        # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the ref model
-        # If KL to ref is disabled, we don't need any GPUs for the ref model
-        cfg.ref_model.num_devices
-        if cfg.train.use_kl_to_ref
-        else 0
-    )
+    collector_config["num_gpus"] = 0
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
     collector = RayLLMCollector(
-        env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
+        env=partial(make_env, cfg),
         policy=inference_policy,
         dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
         total_dialog_turns=cfg.train.total_dialog_turns,
         replay_buffer=rb,
-        ray_init_config=None,  # Ray is already initialized
-        weight_updater=None,  # We'll create this after getting the remote LLM
+        ray_init_config=None,
+        weight_updater=None,
         track_policy_version=True,
         remote_config=collector_config,
         yield_only_last_steps=cfg.env.reasoning,
         verbose=False,
     )
-    # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())
     torchrl_logger.info(f"Collector: {collector}")
 
