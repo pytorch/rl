@@ -24,7 +24,7 @@ from torchrl._utils import logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
-from .vllm_utils import stateless_init_process_group, stateless_init_process_group_async
+from .vllm_utils import stateless_init_process_group
 
 try:
     import ray
@@ -134,7 +134,10 @@ def _create_async_vllm_worker_class():
                 f"{master_address=}, {master_port=}, {rank=}, {world_size=}, device={self.device}"
             )
 
-            self.model_update_group = stateless_init_process_group_async(
+            # Import synchronous version for workers too
+            from .vllm_utils import stateless_init_process_group
+
+            self.model_update_group = stateless_init_process_group(
                 master_address, master_port, rank, world_size, self.device
             )
 
@@ -172,6 +175,12 @@ def _create_async_vllm_worker_class():
             """
             self.model_runner.model.load_weights(weights=[(name, weight)])
             del weight
+
+        def check_nccl_group_ready(self):
+            """Check if NCCL group is ready for communication."""
+            ready = self.model_update_group is not None
+            torchrl_logger.info(f"Worker NCCL group ready: {ready}")
+            return ready
 
     return _AsyncvLLMWorker
 
@@ -1186,11 +1195,12 @@ class AsyncVLLM(RLvLLMEngine):
         if ray is not None:
             ray.get(refs)
 
-        # Initialize the master NCCL group for efficient weight broadcasting
-        # Wait a bit for workers to be ready before setting up master group
-        import time
+        # Verify workers completed NCCL initialization
+        self._verify_workers_nccl_ready()
 
-        time.sleep(1.0)  # Give workers time to initialize their groups
+        # Initialize the master NCCL group for efficient weight broadcasting
+
+        torchrl_logger.info("Setting up master NCCL group...")
         self._setup_nccl_master_group()
 
         torchrl_logger.info("AsyncVLLM weight update group initialized")
@@ -1333,6 +1343,23 @@ class AsyncVLLM(RLvLLMEngine):
             torchrl_logger.info("NCCL master group verification successful")
         except Exception as e:
             raise RuntimeError(f"NCCL master group verification failed: {e}")
+
+    def _verify_workers_nccl_ready(self) -> None:
+        """Verify that all workers have completed NCCL group initialization."""
+        torchrl_logger.info("Verifying workers NCCL readiness...")
+
+        # Add a simple RPC call to verify workers are responsive and ready
+        try:
+            remotes = self.collective_rpc("check_nccl_group_ready")
+            if ray is not None:
+                results = ray.get(remotes)
+                torchrl_logger.info(f"Worker NCCL readiness: {results}")
+        except Exception as e:
+            torchrl_logger.warning(f"Could not verify worker readiness: {e}")
+            # Add a longer wait time if verification fails
+            import time
+
+            time.sleep(5.0)
 
     def get_num_unfinished_requests(
         self, actor_index: int | None = None
