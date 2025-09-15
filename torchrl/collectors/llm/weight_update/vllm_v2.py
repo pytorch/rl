@@ -197,3 +197,9 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             raise TypeError(f"Cannot extract state_dict from {type(model)}")
 
         return {k: (v.dtype, v.shape) for k, v in sd.items()}
+
+    # Remove the weakrefs from the updater for serialization
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_collector_wrs"] = None
+        return state
