@@ -97,7 +97,9 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         torchrl_logger.info("Weight update completed")
 
         # Call post-hooks to increment policy version
+        torchrl_logger.info("Calling post-hooks...")
         self._call_post_hooks()
+        torchrl_logger.info("Post-hooks completed")
 
     def push_weights_from_transformers(self, transformers_model):
         """Push weights from a transformers model.
@@ -245,8 +247,32 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             collector: The collector to register (DataCollectorBase)
         """
         result = super().register_collector(collector)
-        self.register_post_hook(collector.increment_version)
+
+        # Only register the increment_version post-hook once for the first collector
+        # This avoids N^2 complexity where each weight update calls increment_version
+        # on all collectors N times (once per registered collector)
+        if len(self.post_hooks) == 0:
+            torchrl_logger.info("Registering policy version increment post-hook")
+            self.register_post_hook(self._increment_all_collector_versions)
+
         return result
+
+    def _increment_all_collector_versions(self):
+        """Increment version for all registered collectors efficiently."""
+        torchrl_logger.info(
+            f"Incrementing policy version for {len(self.collectors)} collectors..."
+        )
+        for i, collector in enumerate(self.collectors):
+            try:
+                collector.increment_version()
+                torchrl_logger.debug(
+                    f"Incremented version for collector {i+1}/{len(self.collectors)}"
+                )
+            except Exception as e:
+                torchrl_logger.warning(
+                    f"Failed to increment version for collector {i+1}: {e}"
+                )
+        torchrl_logger.info("All collector versions incremented")
 
     @classmethod
     def get_model_metadata(cls, model) -> dict[str, tuple[torch.dtype, torch.Size]]:
