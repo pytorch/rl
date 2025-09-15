@@ -368,7 +368,7 @@ def main(cfg):
     if cfg.train.sync_iter is not None:
         raise ValueError("sync_iter is not supported in async mode.")
     collectors = []
-    for _ in tqdm.trange(cfg.env.num_envs, desc="Starting collectors"):
+    for i in tqdm.trange(cfg.env.num_envs, desc="Starting collectors"):
         collector = RayLLMCollector(
             env=partial(make_env, cfg, single_env=True),
             policy=inference_policy,
@@ -383,11 +383,16 @@ def main(cfg):
             verbose=False,
         )
         collectors.append(collector)
-    for i, collector in tqdm.tqdm(
-        enumerate(collectors), desc="Checking collector initialization"
+        if i == 0:
+            # wait for the first collector to initialize
+            ray.get(collector._collector.is_initialized.remote())
+    inits = []
+    for collector in tqdm.tqdm(
+        collectors[1:], desc="Checking collector initialization"
     ):
-        ray.get(collector._collector.is_initialized.remote())
-        torchrl_logger.info(f"Collector {i}: {collector}")
+        inits.append(collector._collector.is_initialized.remote())
+    ray.get(inits)
+    torchrl_logger.info("All collectors initialized")
 
     train_handler_config = {
         "num_cpus": train_handler_config.get("num_cpus", 1),
