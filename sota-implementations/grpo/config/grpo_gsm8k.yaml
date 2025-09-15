@@ -134,11 +134,11 @@ ray:
       object_store_full_delay_ms: 100  # Delay when store is full
       object_store_full_max_retries: 3  # Max retries when store is full
   collector_config:
-    num_cpus: 24  # CPUs for inference and ref model
+    num_cpus: 4  # CPUs for inference and ref model
   train_handler_config:
-    num_cpus: 24  # Dedicated CPUs for training
+    num_cpus: 4  # Dedicated CPUs for training
   replay_buffer_config:
-    num_cpus: 24  # CPUs for replay buffer
+    num_cpus: 4  # CPUs for replay buffer
     num_gpus: 0.0  # No GPU needed for replay buffer
 
 # Logging configuration
