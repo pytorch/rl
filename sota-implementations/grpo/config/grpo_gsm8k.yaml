@@ -36,6 +36,9 @@ train:
   # Total number of dialog turns to collect during training.
   total_dialog_turns: 100_000
 
+  # Whether to use packing instead of padding for the model input.
+  packing: true
+
   # Number of steps in each batch. Higher values will cause the inference step to be slower, but won't use more GPU memory.
   #  If multi-turn, the actual number available may be lower as the buffer will only write trajectories which prompts have been
   #  repeated `env.repeats` times.

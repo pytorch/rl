@@ -169,6 +169,8 @@ def get_train_model(
         return_log_probs=True,
         pad_output=False,
         device=torch.device("cuda:0"),
+        # Use packing
+        pad_model_input=not cfg.train_model.packing,
     )
     # Ensure model stays in eval mode after wrapping
     policy_training.model.eval()
