@@ -146,25 +146,28 @@ def _create_async_vllm_worker_class():
             )
 
         def update_weight_broadcast(
-            self, name: str, dtype: torch.dtype, shape: torch.Size
+            self, name: str, dtype: torch.dtype, shape: torch.Size, src_rank: int = 1
         ):
-            """Update weight via broadcast from rank 0.
+            """Update weight via broadcast from coordinator worker.
 
             Args:
                 name (str): Parameter name.
                 dtype (torch.dtype): Parameter dtype.
                 shape (torch.Size): Parameter shape.
+                src_rank (int): Source rank for broadcast (default: 1, first worker)
             """
             if self.model_update_group is None:
                 raise RuntimeError("Weight update group not initialized")
 
-            weight = torch.empty(shape, dtype=dtype, device="cuda")
-            self.model_update_group.broadcast(
-                weight, src=0, stream=torch.cuda.current_stream()
-            )
-
-            self.model_runner.model.load_weights(weights=[(name, weight)])
-            del weight
+            # Only receive if this is not the source worker
+            if self.model_update_group.rank != src_rank:
+                weight = torch.empty(shape, dtype=dtype, device="cuda")
+                self.model_update_group.broadcast(
+                    weight, src=src_rank, stream=torch.cuda.current_stream()
+                )
+                self.model_runner.model.load_weights(weights=[(name, weight)])
+                del weight
+            # Source worker already has the weight loaded by coordinator method
 
         def update_weight(self, name: str, weight: torch.Tensor):
             """Update weight directly.
@@ -181,6 +184,100 @@ def _create_async_vllm_worker_class():
             ready = self.model_update_group is not None
             torchrl_logger.info(f"Worker NCCL group ready: {ready}")
             return ready
+
+        def prepare_for_weight_broadcast(
+            self, weight_metadata: list[tuple[str, torch.dtype, torch.Size]]
+        ):
+            """Prepare this worker to receive weight broadcasts.
+
+            Args:
+                weight_metadata: List of (name, dtype, shape) for expected weights
+            """
+            if self.model_update_group is None:
+                raise RuntimeError("NCCL group not initialized")
+
+            self.pending_weights = weight_metadata
+            torchrl_logger.info(
+                f"Worker prepared to receive {len(weight_metadata)} weight broadcasts"
+            )
+            return True
+
+        def coordinate_weight_broadcast(
+            self, weight_items: list[tuple[str, torch.Tensor]]
+        ):
+            """Coordinate NCCL broadcast of weights to all workers.
+
+            This worker acts as the coordinator (source) for NCCL broadcasts.
+            Other workers should already be prepared to receive via prepare_for_weight_broadcast.
+
+            Args:
+                weight_items: List of (name, weight) tuples to broadcast
+            """
+            if self.model_update_group is None:
+                raise RuntimeError("NCCL group not initialized")
+
+            torchrl_logger.info(
+                f"Coordinator broadcasting {len(weight_items)} weights via NCCL..."
+            )
+
+            # Process weights in the same order as the metadata sent to other workers
+            for name, weight in weight_items:
+                # Ensure weight is on the right device
+                if not weight.is_cuda:
+                    weight = weight.cuda()
+
+                # Load into this coordinator worker's model
+                self.model_runner.model.load_weights(weights=[(name, weight)])
+
+                # Broadcast this weight to other workers via NCCL
+                # This worker is the source (src=rank of this worker)
+                self.model_update_group.broadcast(
+                    weight,
+                    src=self.model_update_group.rank,
+                    stream=torch.cuda.current_stream(),
+                )
+
+            # Synchronize to ensure all broadcasts complete
+            torch.cuda.synchronize()
+            torchrl_logger.info("Coordinator NCCL broadcast completed")
+
+            return len(weight_items)  # Return number of weights broadcasted
+
+        def receive_weight_broadcasts(self):
+            """Receive weight broadcasts from coordinator (for non-coordinator workers)."""
+            if self.model_update_group is None:
+                raise RuntimeError("NCCL group not initialized")
+
+            if not hasattr(self, "pending_weights") or not self.pending_weights:
+                torchrl_logger.warning("No pending weights to receive")
+                return 0
+
+            torchrl_logger.info(
+                f"Receiving {len(self.pending_weights)} weight broadcasts..."
+            )
+
+            # Determine coordinator rank (assumed to be rank 1, first worker)
+            coordinator_rank = 1
+
+            for name, dtype, shape in self.pending_weights:
+                # Create empty tensor to receive broadcast
+                weight = torch.empty(shape, dtype=dtype, device="cuda")
+
+                # Receive broadcast from coordinator
+                self.model_update_group.broadcast(
+                    weight, src=coordinator_rank, stream=torch.cuda.current_stream()
+                )
+
+                # Load into this worker's model
+                self.model_runner.model.load_weights(weights=[(name, weight)])
+                del weight
+
+            torch.cuda.synchronize()
+            received_count = len(self.pending_weights)
+            self.pending_weights = []  # Clear pending weights
+
+            torchrl_logger.info(f"Received {received_count} weight broadcasts")
+            return received_count
 
     return _AsyncvLLMWorker
 
@@ -1198,10 +1295,10 @@ class AsyncVLLM(RLvLLMEngine):
         # Verify workers completed NCCL initialization
         self._verify_workers_nccl_ready()
 
-        # Initialize the master NCCL group for efficient weight broadcasting
-
-        torchrl_logger.info("Setting up master NCCL group...")
-        self._setup_nccl_master_group()
+        # Don't create master NCCL group - use coordinator pattern instead
+        torchrl_logger.info(
+            "Workers NCCL groups ready - using coordinator pattern for weight updates"
+        )
 
         torchrl_logger.info("AsyncVLLM weight update group initialized")
 
@@ -1227,33 +1324,29 @@ class AsyncVLLM(RLvLLMEngine):
             f"Updating {len(weights_dict)} parameters across {len(self.actors)} replicas using NCCL broadcast"
         )
 
-        # Use NCCL broadcast instead of Ray RPC for much better performance
-        self._update_weights_with_nccl_broadcast(weights_dict)
+        # Use NCCL coordinator pattern for efficient weight updates
+        self._update_weights_with_coordinator_pattern(weights_dict)
 
         torchrl_logger.info("AsyncVLLM NCCL weight update completed")
 
-    def _update_weights_with_nccl_broadcast(
+    def _update_weights_with_coordinator_pattern(
         self, weights_dict: dict[str, torch.Tensor]
     ) -> None:
-        """Update weights using NCCL broadcast for optimal performance.
+        """Update weights using coordinator pattern with NCCL broadcasts.
 
-        This method sets up a master node (rank 0) and broadcasts weights to all worker replicas
-        using NCCL instead of Ray RPC, which is much faster for large models.
+        In this pattern:
+        1. Training process sends weights to coordinator worker (rank 1)
+        2. Coordinator worker broadcasts to all other workers via NCCL
+        3. Much faster than Ray RPC, avoids master joining worker NCCL group
 
         Args:
             weights_dict: Dictionary of parameter names to weight tensors
         """
         import time
 
-        # Ensure NCCL master group is initialized
-        if not hasattr(self, "_nccl_master_group") or self._nccl_master_group is None:
-            raise RuntimeError(
-                "NCCL master group not initialized. This is a bug in the setup process."
-            )
-
         t0 = time.time()
 
-        # Move all weights to GPU first for efficient broadcasting
+        # Move all weights to GPU first for efficient transfer
         gpu_weights = {}
         for name, weight in weights_dict.items():
             if not weight.is_cuda:
@@ -1265,40 +1358,56 @@ class AsyncVLLM(RLvLLMEngine):
         t1 = time.time()
         torchrl_logger.info(f"GPU weight transfer time: {t1 - t0:.3f}s")
 
-        # Broadcast each weight using NCCL
-        broadcast_futures = []
-        for name, weight in gpu_weights.items():
-            # Initiate broadcast on workers - they will receive the weight
-            remotes = self.collective_rpc(
-                "update_weight_broadcast", args=(name, weight.dtype, weight.shape)
-            )
-            broadcast_futures.append((name, weight, remotes))
+        # Send all weights to coordinator worker (first worker, rank 1 in NCCL group)
+        coordinator_actor = self.actors[0]  # Use first actor as coordinator
 
-        # Now perform the actual NCCL broadcasts from master (rank 0)
-        for _, weight, _ in broadcast_futures:
-            # Broadcast from master (rank 0) to all workers
-            self._nccl_master_group.broadcast(
-                weight, src=0, stream=torch.cuda.current_stream()
-            )
+        # Send weights to coordinator with instruction to broadcast
+        torchrl_logger.info(
+            "Sending weights to coordinator worker for NCCL broadcast..."
+        )
+        from vllm import envs
 
-        # Wait for all workers to complete - fix the Ray ObjectRef issue
+        if envs and envs.VLLM_USE_V1:
+            coordinator_rpc = coordinator_actor.collective_rpc_v1
+        else:
+            coordinator_rpc = coordinator_actor.collective_rpc_v0
+
+        # First, tell all workers (including coordinator) to prepare for weight broadcast
+        weight_metadata = [
+            (name, weight.dtype, weight.shape) for name, weight in gpu_weights.items()
+        ]
+        prepare_futures = self.collective_rpc(
+            "prepare_for_weight_broadcast", args=(weight_metadata,)
+        )
+
+        # Wait for all workers to be ready
         if ray is not None:
-            all_remotes = []
-            for _, _, remotes in broadcast_futures:
-                # collective_rpc returns a list of futures
-                if isinstance(remotes, list):
-                    all_remotes.extend(remotes)
+            ray.get(prepare_futures)
+
+        # Start receiving on non-coordinator workers in parallel
+        receive_futures = []
+        for i, actor in enumerate(self.actors):
+            if i != 0:  # Skip coordinator (first actor)
+                if envs and envs.VLLM_USE_V1:
+                    actor_rpc = actor.collective_rpc_v1
                 else:
-                    all_remotes.append(remotes)
+                    actor_rpc = actor.collective_rpc_v0
+                receive_futures.append(actor_rpc.remote("receive_weight_broadcasts"))
 
-            # All remotes should be Ray ObjectRefs - just call ray.get()
-            if all_remotes:
-                ray.get(all_remotes)
+        # Now send weights to coordinator to start broadcasting
+        coordinator_remote = coordinator_rpc.remote(
+            "coordinate_weight_broadcast", args=(list(gpu_weights.items()),)
+        )
 
-        torch.cuda.synchronize()  # Ensure all broadcasts are complete
+        # Wait for coordinator and all receivers to complete
+        if ray is not None:
+            all_futures = [coordinator_remote] + receive_futures
+            ray.get(all_futures)
+
+        torch.cuda.synchronize()  # Ensure all operations are complete
         t2 = time.time()
         torchrl_logger.info(
-            f"NCCL broadcast time: {t2 - t1:.3f}s, total time: {t2 - t0:.3f}s"
+            f"Coordinator broadcast time: {t2 - t1:.3f}s, total time: {t2 - t0:.3f}s"
         )
 
     def _setup_nccl_master_group(self) -> None:
