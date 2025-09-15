@@ -111,9 +111,10 @@ def train(
 
     vllm_engine = inference_policy.model
     weight_updater: vLLMUpdaterV2 = make_weight_updater(vllm_engine=vllm_engine)
-    for collector in collectors:
+    for collector in tqdm.tqdm(collectors, desc="Setting weight updater"):
         collector.weight_updater = weight_updater
 
+    torchrl_logger.info("Initializing weight updater...")
     weight_updater.init()
     with timeit("update_policy_weights"):
         weight_updater.push_weights_from_transformers(policy_training)
