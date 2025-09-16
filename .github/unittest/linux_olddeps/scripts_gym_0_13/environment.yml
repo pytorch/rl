@@ -21,7 +21,7 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - mujoco
+    - mujoco<3.3.6
     - patchelf
     - pyopengl==3.1.4
     - ray
