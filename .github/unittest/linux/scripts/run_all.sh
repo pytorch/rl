@@ -107,7 +107,6 @@ if [[ "$PYTHON_VERSION" == "3.12" ]]; then
 else
   pip3 install "gymnasium[atari,mujoco]>=1.1" mo-gymnasium[mujoco]
 fi
-pip3 install "mujoco" -U
 
 # sanity check: remove?
 python3 -c """

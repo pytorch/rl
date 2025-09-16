@@ -24,7 +24,7 @@ import pytest
 
 import tensordict.tensordict
 import torch
-
+from packaging import version
 from tensordict import (
     assert_close,
     LazyStackedTensorDict,
@@ -205,6 +205,7 @@ else:
     mp_ctx = "fork"
 
 TIMEOUT = 100.0
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -7309,6 +7310,9 @@ class TestUnsqueezeTransform(TransformBase):
         else:
             assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     def test_transform_inverse(self):
         env = TransformedEnv(
@@ -7590,6 +7594,9 @@ class TestSqueezeTransform(TransformBase):
         else:
             assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_inverse(self):
         env = TransformedEnv(
@@ -13772,6 +13779,9 @@ class TestActionDiscretizer(TransformBase):
             partial(EnvWithScalarAction, singleton=True),
             partial(EnvWithScalarAction, singleton=False),
         ],
+    )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
     )
     def test_transform_env(self, env_cls, interval_as_tensor, categorical, sampling):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

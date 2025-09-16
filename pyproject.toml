@@ -90,6 +90,25 @@ llm = [
     "einops",
     "safetensors",
 ]
+grpo = [
+    # Core dependencies for GRPO training
+    "datasets",
+    "peft",
+    "wandb",
+    "vllm",
+    "transformers",
+    "accelerate",
+    "ray",
+    "tqdm",
+    # Optional but recommended dependencies
+    "flash-attn",
+    "bitsandbytes",
+    "xformers",
+    # LLM-related dependencies that may be needed
+    "nltk",
+    "langdetect", 
+    "immutabledict",
+]
 dev = [
     "pre-commit",
     "autoflake",

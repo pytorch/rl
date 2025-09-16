@@ -8,11 +8,6 @@ from .llm import KLRewardTransform
 from .r3m import R3MTransform
 from .rb_transforms import MultiStepTransform
 
-# Import DataLoadingPrimer from llm transforms
-try:
-    from ..llm.transforms.dataloading import DataLoadingPrimer
-except ImportError:
-    pass
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
@@ -95,7 +90,6 @@ __all__ = [
     "Compose",
     "ConditionalSkip",
     "Crop",
-    "DataLoadingPrimer",
     "DTypeCastTransform",
     "DeviceCastTransform",
     "DiscreteActionProjection",

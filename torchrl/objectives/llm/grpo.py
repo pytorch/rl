@@ -295,7 +295,7 @@ class GRPOLoss(ClipPPOLoss):
             if name.startswith("loss_")
             else value,
         )
-        if self.kl_to_ref_coeff is not None:
+        if self.kl_to_ref_coeff is not None and self.kl_to_ref_coeff > 0:
             # FIXME: parameterize this
             loss_kl, kl_penalty = self._kl_to_ref(
                 tensordict,

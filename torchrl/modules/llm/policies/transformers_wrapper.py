@@ -1225,12 +1225,15 @@ class TransformersWrapper(LLMWrapperBase):
                 padding_value=0,
                 padding_side="left",
             )
-            log_probs_full_padded = pad_sequence(
-                log_probs_full_unpadded.unbind(0),
-                batch_first=True,
-                padding_value=0.0,
-                padding_side="left",
-            )
+            if log_probs_full_unpadded is not None:
+                log_probs_full_padded = pad_sequence(
+                    log_probs_full_unpadded.unbind(0),
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side="left",
+                )
+            else:
+                log_probs_full_padded = None
             logits_full_padded = pad_sequence(
                 logits_full_unpadded.unbind(0),
                 batch_first=True,
@@ -1805,12 +1808,15 @@ class TransformersWrapper(LLMWrapperBase):
                 padding_value=0,
                 padding_side="left",
             )
-            log_probs_full_padded = pad_sequence(
-                log_probs_full_unpadded.unbind(0),
-                batch_first=True,
-                padding_value=0.0,
-                padding_side="left",
-            )
+            if log_probs_full_unpadded is not None:
+                log_probs_full_padded = pad_sequence(
+                    log_probs_full_unpadded.unbind(0),
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side="left",
+                )
+            else:
+                log_probs_full_padded = None
             logits_full_padded = pad_sequence(
                 logits_full_unpadded.unbind(0),
                 batch_first=True,
@@ -2292,7 +2298,7 @@ class TransformersWrapper(LLMWrapperBase):
         flat_input_ids: torch.Tensor,
         pad: bool = True,
         logits_only: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
         """Unpack outputs using nested tensors - zero syncs."""
         # use cross_entropy to compute log_probs
         log_probs, logits = self._compute_log_probs_from_model_output(
@@ -2303,6 +2309,7 @@ class TransformersWrapper(LLMWrapperBase):
             logits_only=logits_only,
         )
         # check shapes: [1, L] for log_probs, [1, L, vocab_size] for logits
+        sequence_lengths = packing_metadata["sequence_lengths"]
         if logits_only:
             log_probs = None
         else:
@@ -2314,7 +2321,6 @@ class TransformersWrapper(LLMWrapperBase):
                 raise ValueError(f"Log probs shape {log_probs.shape=} is not 2D")
             if logits.ndim != 3:
                 raise ValueError(f"Logits shape {logits.shape=} is not 3D")
-            sequence_lengths = packing_metadata["sequence_lengths"]
             if log_probs.shape[1] != sequence_lengths.sum():
                 raise ValueError(
                     f"Log probs shape {log_probs.shape=} does not match sequence lengths {sequence_lengths.sum()=}"
@@ -2332,11 +2338,16 @@ class TransformersWrapper(LLMWrapperBase):
             lengths=sequence_lengths,
         )
 
-        if pad:
-            return nested_logprobs.to_padded_tensor(
-                padding=0.0
-            ), nested_logits.to_padded_tensor(padding=0.0)
-        return nested_logprobs, nested_logits
+        if logits_only:
+            if pad:
+                return None, nested_logits.to_padded_tensor(padding=0.0)
+            return None, nested_logits
+        else:
+            if pad:
+                return nested_logprobs.to_padded_tensor(
+                    padding=0.0
+                ), nested_logits.to_padded_tensor(padding=0.0)
+            return nested_logprobs, nested_logits
 
     def _create_block_diagonal_attention_mask(
         self, sequence_lengths: torch.Tensor
@@ -2419,6 +2430,8 @@ class RemoteTransformersWrapper:
             Transformers models are not serializable, so only model names/paths are supported.
         max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
         validate_model (bool, optional): Whether to validate the model. Defaults to True.
+        num_gpus (int, optional): Number of GPUs to use. Defaults to 0.
+        num_cpus (int, optional): Number of CPUs to use. Defaults to 0.
         **kwargs: All other arguments are passed directly to TransformersWrapper.
 
     Example:
@@ -2448,6 +2461,8 @@ class RemoteTransformersWrapper:
         max_concurrency: int = 16,
         validate_model: bool = True,
         actor_name: str = None,
+        num_gpus: int = 1,
+        num_cpus: int = 1,
         **kwargs,
     ):
         import ray
@@ -2479,7 +2494,12 @@ class RemoteTransformersWrapper:
         # Create the remote actor with the unique name
         self._remote_wrapper = (
             ray.remote(TransformersWrapper)
-            .options(max_concurrency=max_concurrency, name=actor_name)
+            .options(
+                max_concurrency=max_concurrency,
+                name=actor_name,
+                num_gpus=num_gpus,
+                num_cpus=num_cpus,
+            )
             .remote(model, **kwargs)
         )
 

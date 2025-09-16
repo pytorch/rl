@@ -27,7 +27,7 @@ dependencies:
     - imageio==2.26.0
     - wandb
     - dm_control
-    - mujoco
+    - mujoco<3.3.6
     - mlflow
     - av
     - coverage

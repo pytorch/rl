@@ -3741,7 +3741,7 @@ class TestPolicyFactory:
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_weight_update(self):
         device = "cuda:0"
-        env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        env_maker = lambda: GymEnv(PENDULUM_VERSIONED(), device="cpu")
         policy_factory = lambda: TensorDictModule(
             nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
         ).to(device)

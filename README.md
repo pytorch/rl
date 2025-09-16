@@ -17,7 +17,7 @@
   <img src="docs/source/_static/img/icon.png"  width="200" >
 </p>
 
-[**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
+[**What's New**](#-whats-new) | [**LLM API**](#llm-api---complete-framework-for-language-model-fine-tuning) | [**Getting Started**](#getting-started) | [**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
 [**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Citation**](#citation) | [**Installation**](#installation) |
 [**Asking a question**](#asking-a-question) | [**Contributing**](#contributing)
 
@@ -49,54 +49,37 @@ pip install hydra-core omegaconf
 
 Check out the [complete CLI documentation](https://github.com/pytorch/rl/tree/main/sota-implementations/ppo_trainer) to get started!
 
-### LLM API - Complete Framework for Language Model Fine-tuning
+### 🚀 **vLLM Revamp** - Major Enhancement to LLM Infrastructure (v0.10)
 
-TorchRL also includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This new framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
+This release introduces a comprehensive revamp of TorchRL's vLLM integration, delivering significant improvements in performance, scalability, and usability for large language model inference and training workflows:
 
-- 🤖 **Unified LLM Wrappers**: Seamless integration with Hugging Face models and vLLM inference engines - more to come!
-- 💬 **Conversation Management**: Advanced [`History`](torchrl/data/llm/history.py) class for multi-turn dialogue with automatic chat template detection
-- 🛠️ **Tool Integration**: [Built-in support](torchrl/envs/llm/transforms/) for Python code execution, function calling, and custom tool transforms
-- 🎯 **Specialized Objectives**: [GRPO](torchrl/objectives/llm/grpo.py) (Group Relative Policy Optimization) and [SFT](torchrl/objectives/llm/sft.py) loss functions optimized for language models
-- ⚡ **High-Performance Collectors**: [Async data collection](torchrl/collectors/llm/) with distributed training support
-- 🔄 **Flexible Environments**: Transform-based architecture for reward computation, data loading, and conversation augmentation
-
-The LLM API follows TorchRL's modular design principles, allowing you to mix and match components for your specific use case. Check out the [complete documentation](https://pytorch.org/rl/main/reference/llms.html) and [GRPO implementation example](https://github.com/pytorch/rl/tree/main/sota-implementations/grpo) to get started!
-
-<details>
-  <summary>Quick LLM API Example</summary>
+- 🔥 **AsyncVLLM Service**: Production-ready distributed vLLM inference with multi-replica scaling and automatic Ray actor management
+- ⚖️ **Multiple Load Balancing Strategies**: Routing strategies including prefix-aware, request-based, and KV-cache load balancing for optimal performance
+- 🏗️ **Unified vLLM Architecture**: New `RLvLLMEngine` interface standardizing all vLLM backends with simplified `vLLMUpdaterV2` for seamless weight updates
+- 🌐 **Distributed Data Loading**: New `RayDataLoadingPrimer` for shared, distributed data loading across multiple environments
+- 📈 **Enhanced Performance**: Native vLLM batching, concurrent request processing, and optimized resource allocation via Ray placement groups
 
 ```python
-from torchrl.envs.llm import ChatEnv
-from torchrl.modules.llm import TransformersWrapper
-from torchrl.objectives.llm import GRPOLoss
-from torchrl.collectors.llm import LLMCollector
+# Simple AsyncVLLM usage - production ready!
+from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
 
-# Create environment with Python tool execution
-env = ChatEnv(
-    tokenizer=tokenizer,
-    system_prompt="You are an assistant that can execute Python code.",
-    batch_size=[1]
-).append_transform(PythonInterpreter())
-
-# Wrap your language model
-llm = TransformersWrapper(
-    model=model,
-    tokenizer=tokenizer,
-    input_mode="history"
+# Create distributed vLLM service with load balancing
+service = AsyncVLLM.from_pretrained(
+    "Qwen/Qwen2.5-7B",
+    num_devices=2,      # Tensor parallel across 2 GPUs
+    num_replicas=4,     # 4 replicas for high throughput
+    max_model_len=4096
 )
 
-# Set up GRPO training
-loss_fn = GRPOLoss(llm, critic, gamma=0.99)
-collector = LLMCollector(env, llm, frames_per_batch=100)
+# Use with TorchRL's LLM wrappers
+wrapper = vLLMWrapper(service, input_mode="history")
 
-# Training loop
-for data in collector:
-    loss = loss_fn(data)
-    loss.backward()
-    optimizer.step()
+# Simplified weight updates
+from torchrl.collectors.llm import vLLMUpdaterV2
+updater = vLLMUpdaterV2(service)  # Auto-configures from engine
 ```
 
-</details>
+This revamp positions TorchRL as the leading platform for scalable LLM inference and training, providing production-ready tools for both research and deployment scenarios.
 
 ### 🧪 PPOTrainer (Experimental) - High-Level Training Interface
 
@@ -158,6 +141,55 @@ python sota-implementations/ppo_trainer/train.py --help
 </details>
 
 **Future Plans**: Additional algorithm trainers (SAC, TD3, DQN) and full integration of all TorchRL components within the configuration system are planned for upcoming releases.
+
+## LLM API - Complete Framework for Language Model Fine-tuning
+
+TorchRL includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
+
+- 🤖 **Unified LLM Wrappers**: Seamless integration with Hugging Face models and vLLM inference engines
+- 💬 **Conversation Management**: Advanced [`History`](torchrl/data/llm/history.py) class for multi-turn dialogue with automatic chat template detection
+- 🛠️ **Tool Integration**: [Built-in support](torchrl/envs/llm/transforms/) for Python code execution, function calling, and custom tool transforms
+- 🎯 **Specialized Objectives**: [GRPO](torchrl/objectives/llm/grpo.py) (Group Relative Policy Optimization) and [SFT](torchrl/objectives/llm/sft.py) loss functions optimized for language models
+- ⚡ **High-Performance Collectors**: [Async data collection](torchrl/collectors/llm/) with distributed training support
+- 🔄 **Flexible Environments**: Transform-based architecture for reward computation, data loading, and conversation augmentation
+
+The LLM API follows TorchRL's modular design principles, allowing you to mix and match components for your specific use case. Check out the [complete documentation](https://pytorch.org/rl/main/reference/llms.html) and [GRPO implementation example](https://github.com/pytorch/rl/tree/main/sota-implementations/grpo) to get started!
+
+<details>
+  <summary>Quick LLM API Example</summary>
+
+```python
+from torchrl.envs.llm import ChatEnv
+from torchrl.modules.llm import TransformersWrapper
+from torchrl.objectives.llm import GRPOLoss
+from torchrl.collectors.llm import LLMCollector
+
+# Create environment with Python tool execution
+env = ChatEnv(
+    tokenizer=tokenizer,
+    system_prompt="You are an assistant that can execute Python code.",
+    batch_size=[1]
+).append_transform(PythonInterpreter())
+
+# Wrap your language model
+llm = TransformersWrapper(
+    model=model,
+    tokenizer=tokenizer,
+    input_mode="history"
+)
+
+# Set up GRPO training
+loss_fn = GRPOLoss(llm, critic, gamma=0.99)
+collector = LLMCollector(env, llm, frames_per_batch=100)
+
+# Training loop
+for data in collector:
+    loss = loss_fn(data)
+    loss.backward()
+    optimizer.step()
+```
+
+</details>
 
 ## Key features
 
