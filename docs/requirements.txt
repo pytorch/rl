@@ -15,7 +15,7 @@ sphinx_design
 
 torchvision
 dm_control
-mujoco
+mujoco<3.3.6
 gym[classic_control,accept-rom-license,ale-py,atari]
 pygame
 tqdm
