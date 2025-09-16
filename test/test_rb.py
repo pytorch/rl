@@ -3049,6 +3049,9 @@ class TestSamplers:
             assert rb._sampler._max_priority[0] == 21
             assert rb._sampler._max_priority[1] == 0
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     def test_prb_serialization(self, tmpdir):
         rb = ReplayBuffer(
             storage=LazyMemmapStorage(max_size=10),
@@ -3092,6 +3095,9 @@ class TestSamplers:
         assert rb.sampler._max_priority[0] == rb2.sampler._max_priority[0]
         assert rb.sampler._max_priority[1] == rb2.sampler._max_priority[1]
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     def test_prb_new_sampler_with_loaded_storage(self, tmpdir):
         """Test that creating a new PrioritizedSampler with loaded storage works correctly.
 

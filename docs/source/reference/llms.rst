@@ -624,10 +624,8 @@ Utils
 
     make_async_vllm_engine
     stateless_init_process_group_async
-    LLMOnDevice
     make_vllm_worker
     stateless_init_process_group
-    vLLMWorker
 
 Collectors
 ----------
@@ -988,12 +986,12 @@ By following these design principles, reward transforms can be effectively integ
     AddThinkingPrompt
     BrowserTransform
     DataLoadingPrimer
-    RayDataLoadingPrimer
     KLComputation
     KLRewardTransform
     MCPToolTransform
     PolicyVersion
     PythonInterpreter
+    RayDataLoadingPrimer
     RetrieveKL
     RetrieveLogProb
     TemplateTransform

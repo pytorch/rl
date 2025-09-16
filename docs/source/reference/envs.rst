@@ -1115,7 +1115,6 @@ to be able to create this other composition:
     ConditionalPolicySwitch
     ConditionalSkip
     Crop
-    DataLoadingPrimer
     DTypeCastTransform
     DeviceCastTransform
     DiscreteActionProjection

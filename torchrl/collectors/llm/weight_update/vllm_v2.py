@@ -10,7 +10,7 @@ import time
 from collections.abc import Iterator
 
 import torch
-from tensordict.base import TensorCollection
+from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import WeightUpdaterBase
 from torchrl.modules.llm.backends.vllm import RLvLLMEngine
@@ -79,14 +79,14 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         torchrl_logger.info("Weight update group initialized")
 
     def push_weights(
-        self, weights: Iterator[tuple[str, torch.Tensor]] | TensorCollection
+        self, weights: Iterator[tuple[str, torch.Tensor]] | TensorDictBase
     ):
         """Push weights to the vLLM engine.
 
         Args:
-            weights: Either an iterator of (name, tensor) pairs or a TensorCollection
+            weights: Either an iterator of (name, tensor) pairs or a TensorDictBase
         """
-        if isinstance(weights, TensorCollection):
+        if isinstance(weights, TensorDictBase):
             weights = iter(weights.flatten_keys(".").items())
 
         if self.initialized_group is None:

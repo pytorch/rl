@@ -159,6 +159,8 @@ else:
         rollout_consistency_assertion,
     )
 
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
@@ -1995,6 +1997,9 @@ if _has_gym:
     IS_OSX,
     reason="rendering unstable on osx, skipping (mujoco.FatalError: gladLoadGL error)",
 )
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
 @pytest.mark.parametrize("env_lib,env_args,env_kwargs", params)
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     if (
@@ -2042,6 +2047,9 @@ if _has_gym:
     [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
 )
 class TestCollectorLib:
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
         env_args = tuple(arg() if callable(arg) else arg for arg in env_args)
         if not _has_dmc and env_lib is DMControlEnv:
