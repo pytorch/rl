@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+hold_out_params
+===============
+
+.. autoclass:: hold_out_params
+    :members:

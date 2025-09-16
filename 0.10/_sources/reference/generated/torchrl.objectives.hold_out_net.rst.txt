@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+hold_out_net
+============
+
+.. autoclass:: hold_out_net
+    :members:

@@ -1,0 +1,1340 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.objectives.llm.grpo &mdash; torchrl 0.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">0.0 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.objectives.llm.grpo</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.objectives.llm.grpo</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">deque</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">is_tensor_collection</span><span class="p">,</span>
+    <span class="n">NestedKey</span><span class="p">,</span>
+    <span class="n">TensorClass</span><span class="p">,</span>
+    <span class="n">TensorDict</span><span class="p">,</span>
+    <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="n">TensorDictParams</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span>
+    <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
+    <span class="n">TensorDictModule</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_as_right</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMWrapperBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.ppo</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClipPPOLoss</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_reduce</span><span class="p">,</span> <span class="n">_sum_td_features</span>
+
+
+<div class="viewcode-block" id="GRPOLossOutput"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GRPOLossOutput</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;GRPO Loss Output.&quot;&quot;&quot;</span>
+
+    <span class="n">loss_objective</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">clip_fraction</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">kl_approx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">ESS</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">entropy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">loss_entropy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">loss_kl_to_ref</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">kl_to_ref</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">loss_kl_to_inference</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">kl_to_inference</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="GRPOLoss"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GRPOLoss</span><span class="p">(</span><span class="n">ClipPPOLoss</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;GRPO loss.</span>
+
+<span class="sd">    The clipped importance weighted loss is computed as follows:</span>
+<span class="sd">        loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        actor_network (LLMWrapperBase): policy operator.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        It is critical to keep your model in eval mode during GRPO training to ensure deterministic behavior and correct</span>
+<span class="sd">        importance sampling. A mismatch between train and eval modes is a common cause of instability or failure to learn</span>
+<span class="sd">        in RL post-training.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        The Effective Sample Size (ESS) is a key diagnostic metric in GRPO. ESS measures the effective number of samples</span>
+<span class="sd">        in the batch, computed as the inverse of the sum of the squared importance weights.</span>
+<span class="sd">        A value of 1 indicates that all importance weights are equal (ideal case). If ESS drops or increases significantly,</span>
+<span class="sd">        it usually indicates a problem with the model configuration, such as a train/eval mode mismatch or a large policy update.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        The masking_strategy parameter is crucial for LLM training scenarios. It determines which tokens are included</span>
+<span class="sd">        in the loss computation:</span>
+<span class="sd">        - &quot;sft&quot;: Only response tokens (excludes prompt tokens) - suitable for single-turn conversations</span>
+<span class="sd">        - &quot;rlhf&quot;: Only assistant tokens (excludes user/system tokens) - suitable for multi-turn conversations</span>
+<span class="sd">        - &quot;generic&quot;: All valid tokens (excludes padding tokens) - suitable for generic scenarios</span>
+
+<span class="sd">        The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.</span>
+<span class="sd">            default: 0.2</span>
+<span class="sd">        entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the</span>
+<span class="sd">            loss to favour exploratory policies.</span>
+<span class="sd">        samples_mc_entropy (int, optional): if the distribution retrieved from the policy</span>
+<span class="sd">            operator does not have a closed form</span>
+<span class="sd">            formula for the entropy, a Monte-Carlo estimate will be used.</span>
+<span class="sd">            ``samples_mc_entropy`` will control how many</span>
+<span class="sd">            samples will be used to compute this estimate.</span>
+<span class="sd">            Defaults to ``1``.</span>
+<span class="sd">        entropy_coeff (scalar, optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">            Defaults to ``0.01``.</span>
+<span class="sd">        advantage_key (str, optional): [Deprecated, use set_keys(advantage_key=advantage_key) instead]</span>
+<span class="sd">            The input tensordict key where the advantage is</span>
+<span class="sd">            expected to be written. Defaults to ``&quot;advantage&quot;``.</span>
+<span class="sd">        reduction (str, optional): Specifies the reduction to apply to the output:</span>
+<span class="sd">            ``&quot;none&quot;`` | ``&quot;mean&quot;`` | ``&quot;sum&quot;``. ``&quot;none&quot;``: no reduction will be applied,</span>
+<span class="sd">            ``&quot;mean&quot;``: the sum of the output will be divided by the number of</span>
+<span class="sd">            elements in the output, ``&quot;sum&quot;``: the output will be summed. Default: ``&quot;mean&quot;``.</span>
+<span class="sd">        clip_value (bool or float, optional): If a ``float`` is provided, it will be used to compute a clipped</span>
+<span class="sd">            version of the value prediction with respect to the input tensordict value estimate and use it to</span>
+<span class="sd">            calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,</span>
+<span class="sd">            helping stabilize training and preventing large updates. However, it will have no impact if the value</span>
+<span class="sd">            estimate was done by the current version of the value estimator. If instead ``True`` is provided, the</span>
+<span class="sd">            ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no</span>
+<span class="sd">            clipping will be performed. Defaults to ``False``.</span>
+<span class="sd">        kl_to_ref_coeff (float, optional): coefficient for the KL divergence to the reference policy. Defaults to ``None`` (no KL divergence).</span>
+<span class="sd">        kl_to_inference_coeff (float, optional): coefficient for the KL divergence to the inference policy. Defaults to ``None`` (no KL divergence).</span>
+<span class="sd">        device (torch.device, optional): device of the buffers. Defaults to ``None``.</span>
+<span class="sd">        masking_strategy (Literal[&quot;sft&quot;, &quot;rlhf&quot;, &quot;generic&quot;], optional): The masking strategy to use for distribution creation.</span>
+<span class="sd">            - &quot;sft&quot;: Use prompt masking (response tokens only, suitable for single-turn)</span>
+<span class="sd">            - &quot;rlhf&quot;: Use assistant masking (assistant tokens only, suitable for multi-turn)</span>
+<span class="sd">            - &quot;generic&quot;: Use attention masking (all valid tokens)</span>
+<span class="sd">            Defaults to &quot;sft&quot; since we can&#39;t guarantee assistant masks are available.</span>
+
+<span class="sd">            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that</span>
+<span class="sd">                the storages match the ones that are passed to other components, such as data collectors.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">actor_network</span><span class="p">:</span> <span class="n">LLMWrapperBase</span>
+    <span class="n">critic_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
+    <span class="n">actor_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span>
+    <span class="n">critic_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span>
+    <span class="n">target_actor_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span>
+    <span class="n">target_critic_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span>
+
+    <span class="nd">@dataclass</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">_AcceptedKeys</span><span class="p">(</span><span class="n">ClipPPOLoss</span><span class="o">.</span><span class="n">_AcceptedKeys</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Maintains default values for all configurable tensordict keys.</span>
+
+<span class="sd">        This class defines which tensordict keys can be set using &#39;.set_keys(key_name=key_value)&#39; and their</span>
+<span class="sd">        default values</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">ref_log_probs</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;ref_log_probs&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">clip_epsilon</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">clip_value</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">kl_to_ref_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">kl_to_inference_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">masking_strategy</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;sft&quot;</span><span class="p">,</span> <span class="s2">&quot;rlhf&quot;</span><span class="p">,</span> <span class="s2">&quot;generic&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;sft&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Define clipping of the value loss</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clip_value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="n">clip_value</span> <span class="o">=</span> <span class="n">clip_epsilon</span> <span class="k">if</span> <span class="n">clip_value</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">actor_network</span><span class="p">,</span>
+            <span class="n">critic_network</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">entropy_bonus</span><span class="o">=</span><span class="n">entropy_bonus</span><span class="p">,</span>
+            <span class="n">samples_mc_entropy</span><span class="o">=</span><span class="n">samples_mc_entropy</span><span class="p">,</span>
+            <span class="n">entropy_coeff</span><span class="o">=</span><span class="n">entropy_coeff</span><span class="p">,</span>
+            <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
+            <span class="n">separate_losses</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">reduction</span><span class="o">=</span><span class="n">reduction</span><span class="p">,</span>
+            <span class="n">clip_value</span><span class="o">=</span><span class="n">clip_value</span><span class="p">,</span>
+            <span class="n">functional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># We don&#39;t want to use the string action but the tokens</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_in_keys</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">masking_strategy</span> <span class="o">=</span> <span class="n">masking_strategy</span>
+        <span class="c1"># Always use the full tokens for the action</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;log_probs&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span> <span class="n">action</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">))</span>
+        <span class="c1"># TODO: make this a buffer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_ref_coeff</span> <span class="o">=</span> <span class="n">kl_to_ref_coeff</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_inference_coeff</span> <span class="o">=</span> <span class="n">kl_to_inference_coeff</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_cur_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Override to use LLM-specific distribution with explicit masking strategy.</span>
+
+<span class="sd">        This ensures that the loss is computed with the correct masking strategy,</span>
+<span class="sd">        and provides helpful error messages when there are shape mismatches.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">),</span>
+        <span class="p">)</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;get_dist&quot;</span><span class="p">):</span>
+            <span class="c1"># Use the specified masking strategy</span>
+            <span class="c1">#  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always</span>
+            <span class="c1">#  be a MaskedCategorical</span>
+            <span class="c1"># TODO: eventually, we want to always use `get_dist` and just pass the key of the mask</span>
+            <span class="c1">#  Masks should contain: prompt and response masks, assistant, and attention.</span>
+            <span class="c1">#  Additionally, we should make sure that the masks are properly updated when log-probs is called (using vllm and transformers)</span>
+            <span class="c1">#  because in some instances it looks like they can be overwritten with None values.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">masking_strategy</span> <span class="o">==</span> <span class="s2">&quot;sft&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;_get_sft_dist&quot;</span>
+            <span class="p">):</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">_get_sft_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">masking_strategy</span> <span class="o">==</span> <span class="s2">&quot;rlhf&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;_get_rlhf_dist&quot;</span>
+            <span class="p">):</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">_get_rlhf_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">masking_strategy</span> <span class="o">==</span> <span class="s2">&quot;generic&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;_get_generic_dist&quot;</span>
+            <span class="p">):</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">_get_generic_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="s2">&quot;get_dist&quot;</span><span class="p">):</span>
+                <span class="c1"># Fallback to generic distribution method</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span>
+                    <span class="n">tensordict</span><span class="p">,</span>
+                    <span class="n">logits_key</span><span class="o">=</span><span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Actor network must have get_dist method or the appropriate method for &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;masking strategy &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">masking_strategy</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=-</span><span class="mi">100</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Only probabilistic modules from tensordict.nn are currently supported. &quot;</span>
+                <span class="s2">&quot;If you need to implement a custom logic to retrieve the log-probs (to compute &quot;</span>
+                <span class="s2">&quot;the PPO objective) or the distribution (for the PPO entropy), please augment &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2"> by implementing your own logic in _get_cur_log_prob.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">log_prob</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="GRPOLoss.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GRPOLossOutput</span><span class="p">:</span>
+        <span class="c1"># Some sanity checks and housekeeping:</span>
+        <span class="c1"># - We may not have the tokens yet. If not, we will use the tokenizer of the actor to tokenize the text.</span>
+        <span class="c1">#   We default to history rather than text because the history will account for multiturn, or multimodal inputs.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span>
+
+        <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">advantage</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">log_weight</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">kl_approx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_weight</span><span class="p">(</span>
+            <span class="n">tensordict</span><span class="p">,</span> <span class="n">adv_shape</span><span class="o">=</span><span class="n">advantage</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">mask</span>
+        <span class="c1"># ESS for logging</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="c1"># In theory, ESS should be computed on particles sampled from the same source. Here we sample according</span>
+            <span class="c1"># to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights&#39;</span>
+            <span class="c1"># dispersion.</span>
+            <span class="n">lw</span> <span class="o">=</span> <span class="n">log_weight</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="n">mask</span><span class="p">]</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="n">ess</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">lw</span><span class="o">.</span><span class="n">logsumexp</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">lw</span><span class="p">)</span><span class="o">.</span><span class="n">logsumexp</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">advantage</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="n">log_weight</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;advantage and log_weight must have the same number of dimensions, got </span><span class="si">{</span><span class="n">advantage</span><span class="o">.</span><span class="n">ndim</span><span class="si">=}</span><span class="s2"> and </span><span class="si">{</span><span class="n">log_weight</span><span class="o">.</span><span class="n">ndim</span><span class="si">=}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">gain1</span> <span class="o">=</span> <span class="n">log_weight</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">*</span> <span class="n">advantage</span>
+
+        <span class="n">log_weight_clip</span> <span class="o">=</span> <span class="n">log_weight</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_clip_bounds</span><span class="p">)</span>
+        <span class="n">clip_fraction</span> <span class="o">=</span> <span class="p">(</span><span class="n">log_weight_clip</span> <span class="o">!=</span> <span class="n">log_weight</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">log_weight</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="n">ratio</span> <span class="o">=</span> <span class="n">log_weight_clip</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+        <span class="n">gain2</span> <span class="o">=</span> <span class="n">ratio</span> <span class="o">*</span> <span class="n">advantage</span>
+
+        <span class="n">gain</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">gain1</span><span class="p">,</span> <span class="n">gain2</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;loss_objective&quot;</span><span class="p">:</span> <span class="o">-</span><span class="n">gain</span><span class="p">})</span>
+        <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;clip_fraction&quot;</span><span class="p">,</span> <span class="n">clip_fraction</span><span class="p">)</span>
+        <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;kl_approx&quot;</span><span class="p">,</span> <span class="n">kl_approx</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entropy_bonus</span><span class="p">:</span>
+            <span class="n">entropy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_entropy</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">adv_shape</span><span class="o">=</span><span class="n">advantage</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">entropy</span><span class="p">):</span>
+                <span class="c1"># Reports the entropy of each action head.</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;composite_entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
+                <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coeff</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
+            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;value_clip_fraction&quot;</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">)</span>
+
+        <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;ESS&quot;</span><span class="p">,</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">ess</span> <span class="o">/</span> <span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">))</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">_reduce</span><span class="p">(</span>
+                <span class="n">value</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;loss_&quot;</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">value</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_ref_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_ref_coeff</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># FIXME: parameterize this</span>
+            <span class="n">loss_kl</span><span class="p">,</span> <span class="n">kl_penalty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kl_to_ref</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+                <span class="n">dist</span><span class="o">=</span><span class="n">dist</span><span class="p">,</span>
+                <span class="n">ref_log_prob</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_probs</span><span class="p">,</span>
+                    <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                    <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">td_out</span><span class="p">[</span><span class="s2">&quot;loss_kl_to_ref&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">loss_kl</span>
+            <span class="n">td_out</span><span class="p">[</span><span class="s2">&quot;kl_to_ref&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kl_penalty</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_inference_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loss_kl</span><span class="p">,</span> <span class="n">kl_penalty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kl_to_ref</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span>
+                <span class="n">coeff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kl_to_inference_coeff</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+                <span class="n">dist</span><span class="o">=</span><span class="n">dist</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">td_out</span><span class="p">[</span><span class="s2">&quot;loss_kl_to_inference&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">loss_kl</span>
+            <span class="n">td_out</span><span class="p">[</span><span class="s2">&quot;kl_to_inference&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kl_penalty</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">del</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;_cur_log_prob&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">GRPOLossOutput</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td_out</span><span class="p">)</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_kl_to_ref</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;ref_log_prob&quot;</span><span class="p">),</span>
+        <span class="n">ref_log_prob</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dist</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">Distribution</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">coeff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">coeff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_ref_coeff</span>
+        <span class="c1"># TODO: customize this</span>
+        <span class="k">if</span> <span class="n">ref_log_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ref_log_prob</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">ref_log_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Couldn&#39;t find the ref log-prob </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> in the input data (</span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span><span class="si">=}</span><span class="s2">).&quot;</span>
+                <span class="p">)</span>
+            <span class="n">ref_log_prob</span> <span class="o">=</span> <span class="n">ref_log_prob</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">cur_log_prob</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_cur_log_prob&quot;</span><span class="p">)</span>
+        <span class="c1"># TODO: remove this</span>
+        <span class="k">if</span> <span class="n">cur_log_prob</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">ref_log_prob</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;cur_log_prob and ref_log_prob must have the same shape, got </span><span class="si">{</span><span class="n">cur_log_prob</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2"> and </span><span class="si">{</span><span class="n">ref_log_prob</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ref_log_prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">expand_as_right</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">ref_log_prob</span><span class="p">),</span> <span class="n">ref_log_prob</span><span class="p">,</span> <span class="mf">0.0</span>
+            <span class="p">)</span>
+            <span class="n">cur_log_prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">expand_as_right</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">cur_log_prob</span><span class="p">),</span> <span class="n">cur_log_prob</span><span class="p">,</span> <span class="mf">0.0</span>
+            <span class="p">)</span>
+        <span class="n">diff</span> <span class="o">=</span> <span class="n">ref_log_prob</span> <span class="o">-</span> <span class="n">cur_log_prob</span>
+        <span class="n">kl_penalty</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff</span><span class="o">.</span><span class="n">expm1</span><span class="p">()</span> <span class="o">-</span> <span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">coeff</span> <span class="o">*</span> <span class="n">kl_penalty</span><span class="p">,</span> <span class="n">kl_penalty</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_log_weight</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">adv_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">Distribution</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+
+        <span class="n">cur_log_prob</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">is_composite</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_cur_log_prob</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+        <span class="n">prev_log_prob</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span>
+            <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+            <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">prev_log_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Couldn&#39;t find the log-prob </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="si">}</span><span class="s2"> in the input data.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">prev_log_prob</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;tensordict stored </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="si">}</span><span class="s2"> requires grad.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check for shape mismatches and provide helpful error messages</span>
+        <span class="k">if</span> <span class="n">cur_log_prob</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">prev_log_prob</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="c1"># Try to provide helpful debugging information</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Shape mismatch detected in GRPOLoss: current log-prob shape </span><span class="si">{</span><span class="n">cur_log_prob</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;!= previous log-prob shape </span><span class="si">{</span><span class="n">prev_log_prob</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;This usually indicates a mismatch between the masking strategy used for &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;advantage computation and the masking strategy used for loss computation.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Current masking strategy: &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">masking_strategy</span><span class="si">}</span><span class="s2">&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Possible solutions:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;1. If using RLHF (multi-turn conversations), set masking_strategy=&#39;rlhf&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;2. If using SFT (single-turn conversations), set masking_strategy=&#39;sft&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;3. If using generic scenarios, set masking_strategy=&#39;generic&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;4. Ensure the advantage was computed with the same masking strategy as the loss&quot;</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
+        <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">mask</span>
+        <span class="n">cur_log_prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">expand_as_right</span><span class="p">(</span><span class="n">attention_mask</span><span class="p">,</span> <span class="n">cur_log_prob</span><span class="p">),</span> <span class="n">cur_log_prob</span><span class="p">,</span> <span class="mf">0.0</span>
+        <span class="p">)</span>
+        <span class="n">prev_log_prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">expand_as_right</span><span class="p">(</span><span class="n">attention_mask</span><span class="p">,</span> <span class="n">prev_log_prob</span><span class="p">),</span> <span class="n">prev_log_prob</span><span class="p">,</span> <span class="mf">0.0</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">is_composite</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+        <span class="n">log_weight</span> <span class="o">=</span> <span class="p">(</span><span class="n">cur_log_prob</span> <span class="o">-</span> <span class="n">prev_log_prob</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_weight</span><span class="p">):</span>
+            <span class="n">log_weight</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">log_weight</span><span class="p">)</span>
+            <span class="n">log_weight</span> <span class="o">=</span> <span class="n">log_weight</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">adv_shape</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">kl_approx</span> <span class="o">=</span> <span class="p">(</span><span class="n">prev_log_prob</span> <span class="o">-</span> <span class="n">cur_log_prob</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">kl_approx</span><span class="p">):</span>
+            <span class="n">kl_approx</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">kl_approx</span><span class="p">)</span>
+
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_cur_log_prob&quot;</span><span class="p">,</span> <span class="n">cur_log_prob</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">log_weight</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">kl_approx</span></div>
+
+
+<div class="viewcode-block" id="MCAdvantage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MCAdvantage</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Monte-Carlo advantage computation engine.</span>
+
+<span class="sd">    When writing on a replay buffer, this transform keeps track of the existing trajectories with a similar</span>
+<span class="sd">    initial prompt and holds a queue for that particular prompt in memory.</span>
+<span class="sd">    When that queue hits a certain length, the advantage is computed by normalizing the rewards across all the</span>
+<span class="sd">    steps of all the trajectories.</span>
+
+<span class="sd">    This transform assumes that :meth:`~torchrl.data.ReplayBuffer.add` and :meth:`~torchrl.data.ReplayBuffer.extend`</span>
+<span class="sd">    are executed with completed trajectories (i.e., trajectories that end up with a done state). If this is not the</span>
+<span class="sd">    case, an exception is raised.</span>
+
+<span class="sd">    .. warning:: This transform will flatten the input tensordicts and therefore is not compatible yet with replay</span>
+<span class="sd">        buffers hosting storages of more than one dimension.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        grpo_size (int): Number of trajectories to keep in memory for the advantage computation.</span>
+<span class="sd">        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to (&quot;text&quot;, &quot;prompt&quot;).</span>
+<span class="sd">        rewards_key (NestedKey): Key to the rewards in the tensordict. Defaults to (&quot;next&quot;, &quot;reward&quot;).</span>
+<span class="sd">        advantage_key (NestedKey): Key to the advantage in the tensordict. Defaults to &quot;advantage&quot;.</span>
+<span class="sd">        done_key (NestedKey): Key to the done state in the tensordict. Defaults to (&quot;next&quot;, &quot;done&quot;).</span>
+<span class="sd">        verbose (bool): Whether to print verbose information. Defaults to `False`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">grpo_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">prompt_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;query&quot;</span><span class="p">,</span>
+        <span class="n">rewards_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+        <span class="n">advantage_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;advantage&quot;</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">prompt_key</span><span class="p">,</span> <span class="n">rewards_key</span><span class="p">,</span> <span class="n">done_key</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">advantage_key</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prompt_key</span> <span class="o">=</span> <span class="n">prompt_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rewards_key</span> <span class="o">=</span> <span class="n">rewards_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">advantage_key</span> <span class="o">=</span> <span class="n">advantage_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queues</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="n">grpo_size</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grpo_size</span> <span class="o">=</span> <span class="n">grpo_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+
+<div class="viewcode-block" id="MCAdvantage.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GRPOLossOutput</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Invoking MCAdvantage.</span><span class="se">\n</span><span class="s2">Data size: </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.</span><span class="se">\n</span><span class="s2">Current queue size: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="se">\n</span><span class="s2">Total queue content: </span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="o">.</span><span class="n">values</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Tensordict can be any number of dims, but it must contain entire trajectories</span>
+        <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Check how many done states we have</span>
+            <span class="n">num_done</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">num_done</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">done_idx</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">]</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="n">splits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">done_idx</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,)),</span> <span class="n">done_idx</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">diff</span><span class="p">()</span>
+                <span class="n">tensordicts</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">splits</span><span class="p">)</span>
+                <span class="n">tensordicts</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_inv_call</span><span class="p">(</span><span class="n">td</span><span class="p">)</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tensordicts</span><span class="p">]</span>
+                <span class="n">tensordicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">td</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tensordicts</span> <span class="k">if</span> <span class="n">td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+                <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">)</span> <span class="k">if</span> <span class="n">tensordicts</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="c1"># Then we have a single trajectory</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">]</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Expected the trajectory to be done.&quot;</span><span class="p">)</span>
+            <span class="n">prompt</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">prompt_key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected a string as prompt, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">])</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">grpo_size</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing advantage for </span><span class="si">{</span><span class="n">prompt</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="c1"># Cat is the most robust way to combine the trajs</span>
+                <span class="n">tds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">]),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">]</span>
+                <span class="c1"># Collect rewards</span>
+                <span class="n">reward</span> <span class="o">=</span> <span class="n">tds</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rewards_key</span><span class="p">,</span> <span class="n">as_nested_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">reward_mean</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">values</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                <span class="n">reward_scale</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">values</span><span class="p">()</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+                <span class="n">advantage</span> <span class="o">=</span> <span class="p">(</span><span class="n">reward</span> <span class="o">-</span> <span class="n">reward_mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">reward_scale</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1e-6</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Advantage: </span><span class="si">{</span><span class="n">reward_mean</span><span class="si">=}</span><span class="s2"> </span><span class="si">{</span><span class="n">reward_scale</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">tds</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">advantage_key</span><span class="p">,</span> <span class="n">advantage</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">tds</span>
+            <span class="k">return</span>
+        <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="c1"># keep the time dim at the end</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">trajs</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="c1"># Iterate over the trajectories</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">traj</span> <span class="ow">in</span> <span class="n">trajs</span><span class="p">:</span>
+            <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_call</span><span class="p">(</span><span class="n">traj</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">td_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">td_out</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

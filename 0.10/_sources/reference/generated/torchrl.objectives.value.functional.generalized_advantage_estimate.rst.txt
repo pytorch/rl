@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value.functional
+
+
+generalized_advantage_estimate
+==============================
+
+.. autoclass:: generalized_advantage_estimate
+    :members:

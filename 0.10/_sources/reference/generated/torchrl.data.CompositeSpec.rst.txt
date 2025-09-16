@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+CompositeSpec
+=============
+
+.. autoclass:: CompositeSpec
+    :members:
+    :inherited-members:
