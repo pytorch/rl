@@ -29,3 +29,6 @@ onnxscript
 onnxruntime
 onnx
 psutil
+hydra-core>=1.1
+omegaconf
+hydra-submitit-launcher
