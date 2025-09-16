@@ -13,8 +13,9 @@ together to create a complete reinforcement learning pipeline for language model
    tokens, log-probabilities, and text.
 
 2. **LLM Wrapper API** (`Modules`_): Unified interfaces for different LLM backends, including :class:`~torchrl.modules.llm.TransformersWrapper` for 
-   Hugging Face models and :class:`~torchrl.modules.llm.vLLMWrapper` for vLLM inference. These wrappers provide consistent input/output formats across 
-   different backends and an integrated interface for loss computation, data storage, grading, weight synchronization, etc.
+   Hugging Face models, :class:`~torchrl.modules.llm.vLLMWrapper` for vLLM inference, and :class:`~torchrl.modules.llm.AsyncVLLM` for high-performance 
+   distributed vLLM inference (recommended). These wrappers provide consistent input/output formats across different backends and an integrated 
+   interface for loss computation, data storage, grading, weight synchronization, etc.
 
 3. **Environments** (`Environments`_): The orchestration layer that manages data loading, tool execution, reward computation, and formatting. This includes 
    :class:`~torchrl.envs.llm.ChatEnv` for conversation management, dataset environments, and various transforms for tool integration.
@@ -437,17 +438,127 @@ The main goal of these primitives is to:
     TransformersWrapper
     vLLMWrapper
     RemoteTransformersWrapper
-    RemotevLLMWrapper
+    AsyncVLLM
     ChatHistory
     Text
     LogProbs
     Masks
     Tokens
 
+Async vLLM Engine (Recommended)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:class:`~torchrl.modules.llm.AsyncVLLM` is the recommended approach for high-performance vLLM inference in TorchRL. 
+It provides a distributed, async-capable inference service built on Ray that offers superior performance and resource utilization compared to synchronous vLLM engines.
+
+**Key Features:**
+
+- **Distributed Architecture**: Runs multiple vLLM engine replicas as Ray actors for horizontal scaling
+- **Load Balancing**: Automatically distributes requests across available replicas
+- **Native vLLM Batching**: Leverages vLLM's optimized batching for maximum throughput.
+  Every thread or actor in your code will be able to make requests to the vLLM engine(s), put the query in
+  the queue and let the engine handle the batching.
+- **Resource Management**: Automatic GPU allocation and cleanup through Ray placement groups
+- **Simple API**: Single-import convenience with :meth:`~torchrl.modules.llm.AsyncVLLM.from_pretrained`
+
+**Basic Usage:**
+
+.. code-block:: python
+
+    from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
+    from vllm import SamplingParams
+    
+    # Create async vLLM service (recommended)
+    async_engine = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-7B",
+        num_devices=2,       # Use 2 GPUs per replica (tensor parallel)
+        num_replicas=2,      # Create 2 replicas for higher throughput
+        max_model_len=4096
+    )
+    
+    # Use with vLLMWrapper for TorchRL integration
+    wrapper = vLLMWrapper(async_engine, input_mode="history", generate=True)
+    
+    # Direct generation (also supported)
+    sampling_params = SamplingParams(temperature=0.7, max_tokens=100)
+    result = async_engine.generate("Hello, world!", sampling_params)
+    
+    # Cleanup when done
+    async_engine.shutdown()
+
+These objects (AsyncVLLM and vLLMWrapper) can be shared across multiple collectors, environments, or workers efficiently.
+They can be directly passed from one worker to another: under the hood, Ray will handle the handler sharing and remote execution.
+
+**Performance Benefits:**
+
+- **Higher Throughput**: Multiple replicas process requests concurrently
+- **Better GPU Utilization**: Ray ensures optimal GPU allocation and co-location
+- **Reduced Latency**: Native batching reduces per-request overhead
+- **Fault Tolerance**: Ray provides automatic error recovery and resource management
+
+**Resource Sharing:**
+
+AsyncVLLM instances can be shared across multiple collectors, environments, or workers efficiently:
+
+.. code-block:: python
+
+    from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
+    from torchrl.collectors.llm import LLMCollector
+    
+    # Create a shared AsyncVLLM service
+    shared_async_engine = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-7B",
+        num_devices=2,
+        num_replicas=4,  # High throughput for multiple consumers
+        max_model_len=4096
+    )
+    
+    # Multiple wrappers can use the same AsyncVLLM service
+    wrapper1 = vLLMWrapper(shared_async_engine, input_mode="history")
+    wrapper2 = vLLMWrapper(shared_async_engine, input_mode="text")
+    
+    # Multiple collectors can share the same service
+    collector1 = LLMCollector(env1, policy=wrapper1)
+    collector2 = LLMCollector(env2, policy=wrapper2)
+    
+    # The AsyncVLLM service automatically load-balances across replicas
+    # No additional coordination needed between consumers
+
+This approach is more efficient than creating separate vLLM instances for each consumer, as it:
+
+- **Reduces Memory Usage**: Single model loading shared across consumers
+- **Automatic Load Balancing**: Requests are distributed across replicas
+- **Better Resource Utilization**: GPUs are used more efficiently
+- **Simplified Management**: Single service to monitor and manage
+
+.. note::
+    **AsyncVLLM vs. Traditional Actor Sharing**
+    
+    Unlike traditional Ray actor sharing patterns where you manually create named actors and share references,
+    AsyncVLLM handles the distributed architecture internally. You simply create one AsyncVLLM service and 
+    pass it to multiple consumers. The service automatically:
+    
+    - Creates and manages multiple Ray actors (replicas) internally
+    - Load-balances requests across replicas without manual coordination
+    - Handles actor lifecycle and resource cleanup
+    
+    This eliminates the need for manual actor name management and reference sharing that was required 
+    with the previous `RemotevLLMWrapper` approach.
+
 Remote Wrappers
 ^^^^^^^^^^^^^^^
 
 TorchRL provides remote wrapper classes that enable distributed execution of LLM wrappers using Ray. These wrappers provide a simplified interface that doesn't require explicit `remote()` and `get()` calls, making them easy to use in distributed settings.
+
+.. note::
+    **For vLLM: Use AsyncVLLM Instead**
+    
+    For vLLM-based inference, we recommend using :class:`~torchrl.modules.llm.AsyncVLLM` directly rather than 
+    remote wrappers. AsyncVLLM provides better performance, resource utilization, and built-in load balancing.
+    See the `Async vLLM Engine (Recommended)`_ section above for details.
+    
+    Remote wrappers are primarily intended for Transformers-based models or other use cases where AsyncVLLM 
+    is not applicable.
 
 **Key Features:**
 
@@ -460,15 +571,18 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
 
 **Model Parameter Requirements:**
 
-- **RemotevLLMWrapper**: Accepts string model names/paths (recommended) or remote vLLM LLM objects with ray handles. Local vLLM models are not serializable.
 - **RemoteTransformersWrapper**: Only accepts string model names/paths. Transformers models are not serializable.
+
+**Supported Backends:**
+
+Currently, only Transformers-based models are supported through remote wrappers. For vLLM models, use :class:`~torchrl.modules.llm.AsyncVLLM` instead.
 
 **Usage Examples:**
 
 .. code-block:: python
 
     import ray
-    from torchrl.modules.llm.policies import RemotevLLMWrapper, RemoteTransformersWrapper
+    from torchrl.modules.llm.policies import RemoteTransformersWrapper
     from torchrl.data.llm import History
     from torchrl.modules.llm.policies import ChatHistory, Text
     from tensordict import TensorDict
@@ -477,27 +591,8 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
     if not ray.is_initialized():
         ray.init()
 
-    # Use context manager for proper cleanup (recommended)
-    with RemotevLLMWrapper(
-        model="gpt2",
-        max_concurrency=16,  # Control concurrent calls
-        input_mode="history",
-        generate=True,
-        generate_kwargs={"max_new_tokens": 50, "temperature": 0.7}
-    ) as remote_wrapper:
-        
-        # Create test input
-        history = History.from_chats([[
-            {"role": "user", "content": "Hello, how are you?"}
-        ]])
-        chat_history = ChatHistory(prompt=history)
-        tensordict_input = TensorDict(history=chat_history, batch_size=(1,))
-        
-        # Use like a regular wrapper (no remote/get calls needed!)
-        result = remote_wrapper(tensordict_input)
-        print(result["text"].response)
-
     # Transformers wrapper (only string models supported)
+    # The remote wrappers implement context managers for proper resource cleanup:
     with RemoteTransformersWrapper(
         model="gpt2",
         max_concurrency=16,
@@ -509,25 +604,6 @@ TorchRL provides remote wrapper classes that enable distributed execution of LLM
         text_input = TensorDict({"text": Text(prompt="Hello world")}, batch_size=(1,))
         result = remote_transformers(text_input)
         print(result["text"].response)
-
-**Cleanup and Resource Management:**
-
-The remote wrappers implement context managers for proper resource cleanup:
-
-.. code-block:: python
-
-    # Context manager (recommended)
-    with RemotevLLMWrapper(model="gpt2") as wrapper:
-        result = wrapper(input_data)
-        # Cleanup is automatic when exiting the context
-
-    # Manual cleanup
-    wrapper = RemotevLLMWrapper(model="gpt2")
-    try:
-        result = wrapper(input_data)
-    finally:
-        wrapper.cleanup_batching()  # Important: prevents hanging
-
 **Performance Considerations:**
 
 - **Network Overhead**: Remote execution adds network communication overhead
@@ -546,10 +622,10 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    LLMOnDevice
+    make_async_vllm_engine
+    stateless_init_process_group_async
     make_vllm_worker
     stateless_init_process_group
-    vLLMWorker
 
 Collectors
 ----------
@@ -606,6 +682,7 @@ transform, or a boolean to the collector constructor.
     :template: rl_template.rst
 
     vLLMUpdater
+    vLLMUpdaterV2
     LLMCollector
     RayLLMCollector
 
@@ -914,6 +991,7 @@ By following these design principles, reward transforms can be effectively integ
     MCPToolTransform
     PolicyVersion
     PythonInterpreter
+    RayDataLoadingPrimer
     RetrieveKL
     RetrieveLogProb
     TemplateTransform

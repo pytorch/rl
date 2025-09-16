@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-RemotevLLMWrapper
-=================
-
-.. autoclass:: RemotevLLMWrapper
-    :members:
-    :inherited-members:

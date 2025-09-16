@@ -490,7 +490,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">_collector_wr</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_collector_wrs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_post_hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
@@ -517,7 +517,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="kc">None</span></div>
 
-<div class="viewcode-block" id="WeightUpdaterBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa</span>
+<div class="viewcode-block" id="WeightUpdaterBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">):</span>  <span class="c1"># noqa</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector in the updater.</span>
 
 <span class="sd">        Once registered, the updater will not accept another collector.</span>
@@ -526,17 +526,38 @@
 <span class="sd">            collector (DataCollectorBase): The collector to register.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot register collector twice.&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wr</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">collector</span><span class="p">))</span></div>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">DataCollectorBase</span><span class="p">:</span>  <span class="c1"># noqa</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The collector or container of the receiver.</span>
 
 <span class="sd">        Returns `None` if the container is out-of-scope or not set.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wr</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot access `collector` with multiple collectors.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">:</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">collector</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The collectors or container of the receiver.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">:</span>
+            <span class="n">collectors</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">wr</span><span class="p">()</span> <span class="k">if</span> <span class="n">wr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">wr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">collectors</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">collectors</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_push_weights</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -725,7 +746,8 @@
 
 <div class="viewcode-block" id="WeightUpdaterBase.increment_version"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.increment_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the policy version.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span></div></div>
+        <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectors</span><span class="p">:</span>
+            <span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span></div></div>
 
 
 <span class="c1"># Specialized classes</span>
@@ -775,7 +797,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="o">=</span> <span class="n">weight_getter</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_local_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
@@ -789,7 +811,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span></div>
@@ -835,7 +857,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span>
@@ -851,6 +873,59 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">server_weights</span></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RemoteModuleWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A weight updater for remote nn.Modules that requires explicit weight passing.</span>
+
+<span class="sd">    This weight updater is designed for scenarios where the master collector doesn&#39;t have</span>
+<span class="sd">    direct access to worker weights (e.g., when using policy_factory). It enforces that</span>
+<span class="sd">    weights must be passed explicitly when calling update_policy_weights_().</span>
+
+<span class="sd">    This updater does not try to retrieve weights from the server or workers automatically.</span>
+<span class="sd">    Instead, it raises an exception if weights are not provided, ensuring that the weight</span>
+<span class="sd">    synchronization is handled explicitly by the user.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RuntimeError: If update_policy_weights_() is called without providing weights.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This weight updater is primarily used to suppress warnings in tests and scenarios</span>
+<span class="sd">        where the weight synchronization is handled externally or the workers manage</span>
+<span class="sd">        their own weight updates.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns None since this updater doesn&#39;t manage server weights.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raises an error if weights are not provided explicitly.</span>
+
+<span class="sd">        Since this updater is for remote modules where the master doesn&#39;t have access</span>
+<span class="sd">        to worker weights, it enforces that weights must be passed explicitly.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;RemoteModuleWeightUpdater requires weights to be passed explicitly. &quot;</span>
+                <span class="s2">&quot;Call update_policy_weights_(weights) with the weights to be synchronized.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># If weights are provided, we assume the synchronization is handled elsewhere</span>
+        <span class="c1"># This is a no-op updater that just validates the weight passing pattern</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns None since this updater doesn&#39;t manage specific workers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="RayWeightUpdater"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RayWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>

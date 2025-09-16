@@ -432,7 +432,7 @@
 <h1>DataLoadingPrimer<a class="headerlink" href="#dataloadingprimer" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.DataLoadingPrimer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">DataLoadingPrimer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">primers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><span class="pre">Composite</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'as_nested_tensor'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'as_padded_tensor'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><span class="pre">torch.Size</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">repeats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_repeats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/dataloading.html#DataLoadingPrimer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.DataLoadingPrimer" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">DataLoadingPrimer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ray_service</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/dataloading.html#DataLoadingPrimer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.DataLoadingPrimer" title="Permalink to this definition">¶</a></dt>
 <dd><p>A primer that loads data from a dataloader and converts it into a tensordict using <code class="docutils literal notranslate"><span class="pre">stack_method</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -441,7 +441,9 @@ During collection, we will attempt to convert it into a tensordict using <code c
 similar function.
 It is assumed that the elements retrieved from the dataloader come in batches along the first dimension
 of every tensor, unless <cite>dataloader.batch_size=0</cite>.
-The dataloader must yield mappable data structures (e.g., dictionaries).</p>
+The dataloader must yield mappable data structures (e.g., dictionaries).
+If a dataloader_factory is provided, it will be used to create a fresh dataloader and this argument can be
+omitted.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -464,6 +466,11 @@ wrapper around <code class="xref py py-class docutils literal notranslate"><span
 </p></li>
 <li><p><strong>group_repeats</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch-size is multiplied by the number of repeats such that
 all repeats are grouped in a single batch collected from the buffer. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>dataloader_factory</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Iterable</em><em>[</em><em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em><em>]</em><em>]</em><em>, </em><em>optional</em>) – A callable that returns a dataloader.
+This allows for explicit resource control and avoids serialization issues.</p></li>
+<li><p><strong>use_ray_service</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns a <a class="reference internal" href="torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer" title="torchrl.envs.llm.transforms.RayDataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayDataLoadingPrimer</span></code></a> instance instead,
+which creates a Ray actor for shared dataloader access across multiple environments.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
@@ -477,6 +484,17 @@ all repeats are grouped in a single batch collected from the buffer. Defaults to
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMEnv</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">from_dataloader</span></code>.</p>
+</div>
+<p class="rubric">Examples</p>
+<p>Using the regular DataLoadingPrimer:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">primer</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span><span class="p">(</span><span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">)</span>  <span class="c1"># Regular implementation</span>
+</pre></div>
+</div>
+<p>Using the Ray-based implementation for shared dataloader access:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">primer</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span><span class="p">(</span><span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">use_ray_service</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># Returns RayDataLoadingPrimer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Multiple environments can now share the same dataloader through the Ray actor</span>
+</pre></div>
 </div>
 <dl>
 <dt>Example of a dataloader yielding strings:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
@@ -1835,7 +1853,8 @@ parameters in this module. Default: <code class="docutils literal notranslate"><
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.DataLoadingPrimer.reset_dataloader">
 <span class="sig-name descname"><span class="pre">reset_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/dataloading.html#DataLoadingPrimer.reset_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.DataLoadingPrimer.reset_dataloader" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reset the dataloader.</p>
-<p>This is useful when the dataloader is not infinite and we want to reset it.</p>
+<p>This is useful when the dataloader is not infinite and we want to reset it.
+If a dataloader_factory was provided, it will be used to create a fresh dataloader.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The transform itself.</p>
@@ -1844,6 +1863,12 @@ parameters in this module. Default: <code class="docutils literal notranslate"><
 <dd class="field-even"><p>self</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.llm.transforms.DataLoadingPrimer.set_attr">
+<span class="sig-name descname"><span class="pre">set_attr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/dataloading.html#DataLoadingPrimer.set_attr"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.DataLoadingPrimer.set_attr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set attribute on the remote actor or locally.</p>
 </dd></dl>
 
 <dl class="py method">

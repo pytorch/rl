@@ -428,6 +428,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">nullcontext</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
@@ -437,7 +438,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">is_seq_of_nested_key</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.utils.rnn</span><span class="w"> </span><span class="kn">import</span> <span class="n">pad_sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">Transform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.ray_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">_RayServiceMetaClass</span><span class="p">,</span> <span class="n">RayTransform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Compose</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_set_missing_tolerance</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMWrapperBase</span>
@@ -446,7 +449,135 @@
     <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
 
 
-<div class="viewcode-block" id="KLRewardTransform"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">KLRewardTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RayKLRewardTransform</span><span class="p">(</span><span class="n">RayTransform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A Ray-based implementation of :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`.</span>
+
+<span class="sd">    This class creates a Ray remote actor from KLRewardTransform that can be shared across multiple workers.</span>
+<span class="sd">    All method calls are delegated to the remote actor, ensuring that multiple environments can</span>
+<span class="sd">    share the same KL computation resources.</span>
+
+<span class="sd">    To avoid serialization issues with large models, this class supports model factories</span>
+<span class="sd">    that create models on the remote actor rather than passing full models through Ray channels.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ref_model (LLMWrapperBase, optional): the reference model. Prefer using a model factory instead</span>
+<span class="sd">            to avoid serialization issues.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues.</span>
+<span class="sd">        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor. Defaults to 1.</span>
+<span class="sd">        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.</span>
+<span class="sd">        device (torch.device, optional): Device to use on the remote Ray actor for tensor operations.</span>
+<span class="sd">            The local Ray transform will handle CPU serialization and device restoration automatically.</span>
+<span class="sd">            Defaults to None.</span>
+<span class="sd">        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.</span>
+<span class="sd">        **kwargs: Additional keyword arguments to pass to KLRewardTransform.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        When using model factories, the corresponding model argument (ref_model) should be None.</span>
+<span class="sd">        Model factories are preferred for large models to avoid serialization overhead.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Option 1: Using model factory for explicit resource control</span>
+<span class="sd">        &gt;&gt;&gt; def create_ref_model():</span>
+<span class="sd">        ...     return TransformersWrapper(ref_model, tokenizer=tokenizer, generate=False, return_log_probs=True)</span>
+<span class="sd">        &gt;&gt;&gt; transform = RayKLRewardTransform(</span>
+<span class="sd">        ...     ref_model=None,</span>
+<span class="sd">        ...     ref_model_factory=create_ref_model,</span>
+<span class="sd">        ...     num_gpus=1,</span>
+<span class="sd">        ...     device=torch.device(&quot;cuda&quot;)</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">        &gt;&gt;&gt; # Option 2: Pass model directly (Ray handles serialization)</span>
+<span class="sd">        &gt;&gt;&gt; transform = RayKLRewardTransform(ref_model=ref_model, device=torch.device(&quot;cuda&quot;))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ref_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">ref_model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LLMWrapperBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_cpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Validate arguments: model and factory should not both be provided</span>
+        <span class="k">if</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">ref_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;ref_model&#39; and &#39;ref_model_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">ref_model_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide exactly one of &#39;ref_model&#39; or &#39;ref_model_factory&#39;.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Store creation parameters for actor creation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model</span> <span class="o">=</span> <span class="n">ref_model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model_factory</span> <span class="o">=</span> <span class="n">ref_model_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+        <span class="c1"># Store device separately for passing to remote actor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_remote_device</span> <span class="o">=</span> <span class="n">device</span>
+
+        <span class="c1"># Default num_cpus</span>
+        <span class="k">if</span> <span class="n">num_cpus</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_cpus</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># Call parent constructor without device (Ray transform handles CPU/device mapping)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="n">num_cpus</span><span class="p">,</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Don&#39;t store device locally</span>
+            <span class="n">actor_name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_actor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the remote KLRewardTransform actor.&quot;&quot;&quot;</span>
+        <span class="c1"># Create the remote KLRewardTransform with resource specifications</span>
+        <span class="n">RemoteKLRewardTransform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_cpus</span><span class="p">,</span> <span class="n">num_gpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_gpus</span>
+        <span class="p">)(</span><span class="n">KLRewardTransform</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">RemoteKLRewardTransform</span> <span class="o">=</span> <span class="n">RemoteKLRewardTransform</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Determine how to create model on the remote actor</span>
+        <span class="n">ref_model_arg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model</span>
+
+        <span class="c1"># If we have factory, we&#39;ll pass it and set model to None</span>
+        <span class="n">creation_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">creation_kwargs</span><span class="p">[</span><span class="s2">&quot;ref_model_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model_factory</span>
+            <span class="n">ref_model_arg</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Pass device to the remote actor</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">creation_kwargs</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_device</span>
+
+        <span class="c1"># Create the shared actor</span>
+        <span class="n">actor</span> <span class="o">=</span> <span class="n">RemoteKLRewardTransform</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">ref_model</span><span class="o">=</span><span class="n">ref_model_arg</span><span class="p">,</span> <span class="o">**</span><span class="n">creation_kwargs</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">actor</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_actor&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__repr__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;RayKLRewardTransform(actor=None)&quot;</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;RayKLRewardTransform(actor=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_actor&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;None&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+
+<div class="viewcode-block" id="KLRewardTransform"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">KLRewardTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_RayServiceMetaClass</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A legacy transform for computing KL divergence-based rewards.</span>
 
 <span class="sd">    **Deprecated**: This transform is maintained for backward compatibility but is no longer</span>
@@ -467,15 +598,20 @@
 <span class="sd">    - More modular and composable architecture</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        gen_model (LLMWrapperBase): the generation model.</span>
 <span class="sd">        ref_model (LLMWrapperBase): the reference model.</span>
 
 <span class="sd">    Keyword Args:</span>
+<span class="sd">        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.</span>
 <span class="sd">        assistant_only (bool): whether to only compute KL on assistant tokens. Defaults to `True`.</span>
 <span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.</span>
 <span class="sd">        detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.</span>
-<span class="sd">        device (torch.device): the device to use. Defaults to `None`.</span>
+<span class="sd">        device (torch.device): the device to cast the tensors to. This is not the device of the specs, but the device</span>
+<span class="sd">            onto which the tensors will be moved. It allows to keep the model on a different device</span>
+<span class="sd">            than the upcoming data. When using Ray service, this device will be used on the remote actor.</span>
+<span class="sd">            Defaults to `None`.</span>
 <span class="sd">        padding_side (str): the side of the padding when using pad_sequence. Defaults to `&quot;left&quot;`.</span>
+<span class="sd">        use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.</span>
+<span class="sd">        actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; # Legacy usage (not recommended for new code)</span>
@@ -492,11 +628,13 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">DEFAULT_IN_KEYS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+    <span class="n">_RayServiceClass</span> <span class="o">=</span> <span class="n">RayKLRewardTransform</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">ref_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span><span class="p">,</span>
+        <span class="n">ref_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">ref_model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LLMWrapperBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coef</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -506,7 +644,20 @@
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">assistant_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+        <span class="n">use_ray_service</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="c1"># Handle model factory - create model if factory is provided</span>
+        <span class="k">if</span> <span class="n">ref_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot provide both &#39;ref_model&#39; and &#39;ref_model_factory&#39;. Choose one.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">ref_model</span> <span class="o">=</span> <span class="n">ref_model_factory</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide exactly one of &#39;ref_model&#39; or &#39;ref_model_factory&#39;.&quot;</span>
+            <span class="p">)</span>
+
         <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_IN_KEYS</span>
         <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -615,7 +766,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">original_device</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">original_device</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
             <span class="n">next_tensordict</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="c1"># tensordict = self._get_text_response(tensordict, next_tensordict)</span>
@@ -638,7 +791,7 @@
             <span class="n">ref_log_prob_padded</span> <span class="o">=</span> <span class="n">ref_log_prob_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_full_key</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">ref_log_prob_unpadded</span> <span class="o">=</span> <span class="n">ref_log_prob_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># type: ignore[misc]</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">assistant_only</span><span class="p">:</span>
             <span class="c1"># Get the assistant mask</span>
@@ -654,9 +807,9 @@
                     <span class="c1"># simple case: just take the prompt length</span>
                     <span class="n">prompt_length</span> <span class="o">=</span> <span class="p">[</span>
                         <span class="n">t</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
                     <span class="p">]</span>
-                    <span class="n">mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_attention_mask&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="n">mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_attention_mask&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
                     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">prompt_length</span><span class="p">)):</span>
                         <span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
                         <span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="n">prompt_length</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
@@ -690,7 +843,7 @@
             <span class="n">curr_log_prob_padded</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_full_key</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">curr_log_prob_unpadded</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># type: ignore[misc]</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">assistant_only</span><span class="p">:</span>
             <span class="c1"># we want to keep the batch dimension</span>
@@ -751,6 +904,8 @@
             <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">reward</span><span class="p">)</span>
         <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">kl</span><span class="p">)</span>
         <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">ref_log_prob</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">original_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">next_tensordict</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">original_device</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">next_tensordict</span>
 
 <div class="viewcode-block" id="KLRewardTransform.forward"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
@@ -784,7 +939,7 @@
                 <span class="n">shape</span> <span class="o">=</span> <span class="n">output_spec</span><span class="o">.</span><span class="n">shape</span>
                 <span class="n">reward_key</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
             <span class="c1"># For LLMs, the shape of the reward is (batch, -1, 1)</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
             <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">output_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
@@ -800,9 +955,9 @@
 
             <span class="n">shape</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
             <span class="c1"># For LLMs, the shape of the reward is (batch, -1, 1)</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
             <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">shape</span>
 
             <span class="c1"># then we need to populate the output keys</span>
             <span class="n">observation_spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reward_spec</span>
@@ -811,9 +966,9 @@
             <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span>
 
             <span class="n">shape</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
             <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">shape</span>
 
             <span class="c1"># then we need to populate the output keys</span>
             <span class="n">observation_spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reward_spec</span>
@@ -1027,8 +1182,8 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nullcontext</span><span class="p">():</span>
             <span class="c1"># Get assistant mask</span>
-            <span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="n">log_probs</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">lp_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
+            <span class="n">log_probs</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">lp_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
             <span class="n">log_probs</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span><span class="n">lp</span><span class="p">,</span> <span class="o">~</span><span class="n">mask</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">log_probs</span><span class="p">,</span> <span class="n">assistant_masks</span><span class="p">)</span>
@@ -1076,7 +1231,148 @@
         <span class="k">return</span> <span class="n">observation_spec</span></div></div>
 
 
-<div class="viewcode-block" id="RetrieveKL"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RetrieveKL</span><span class="p">(</span><span class="n">Compose</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RayRetrieveKL</span><span class="p">(</span><span class="n">RayTransform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A Ray-based implementation of :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL`.</span>
+
+<span class="sd">    This class creates a Ray remote actor from RetrieveKL that can be shared across multiple workers.</span>
+<span class="sd">    All method calls are delegated to the remote actor, ensuring that multiple environments can</span>
+<span class="sd">    share the same KL computation resources.</span>
+
+<span class="sd">    To avoid serialization issues with large models, this class supports model factories</span>
+<span class="sd">    that create models on the remote actor rather than passing full models through Ray channels.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        gen_model (LLMWrapperBase | Literal[&quot;from_collector&quot;]): the generation model, or &quot;from_collector&quot; for lazy initialization.</span>
+<span class="sd">            Prefer using a model factory instead to avoid serialization issues.</span>
+<span class="sd">        ref_model (LLMWrapperBase | None): the reference model. Prefer using a model factory instead</span>
+<span class="sd">            to avoid serialization issues.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        gen_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a generation model.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues.</span>
+<span class="sd">        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues.</span>
+<span class="sd">        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor. Defaults to 1.</span>
+<span class="sd">        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.</span>
+<span class="sd">        device (torch.device, optional): Device to use on the remote Ray actor for tensor operations.</span>
+<span class="sd">            The local Ray transform will handle CPU serialization and device restoration automatically.</span>
+<span class="sd">            Defaults to None.</span>
+<span class="sd">        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.</span>
+<span class="sd">        **kwargs: Additional keyword arguments to pass to RetrieveKL.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        When using model factories, the corresponding model arguments (gen_model, ref_model) should be None.</span>
+<span class="sd">        Model factories are preferred for large models to avoid serialization overhead.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Option 1: Using model factories for explicit resource control</span>
+<span class="sd">        &gt;&gt;&gt; def create_gen_model():</span>
+<span class="sd">        ...     return TransformersWrapper(model, tokenizer=tokenizer, generate=False, return_log_probs=True)</span>
+<span class="sd">        &gt;&gt;&gt; def create_ref_model():</span>
+<span class="sd">        ...     return TransformersWrapper(ref_model, tokenizer=tokenizer, generate=False, return_log_probs=True)</span>
+<span class="sd">        &gt;&gt;&gt; transform = RayRetrieveKL(</span>
+<span class="sd">        ...     gen_model=None, ref_model=None,</span>
+<span class="sd">        ...     gen_model_factory=create_gen_model,</span>
+<span class="sd">        ...     ref_model_factory=create_ref_model,</span>
+<span class="sd">        ...     num_gpus=1,</span>
+<span class="sd">        ...     device=torch.device(&quot;cuda&quot;)</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">        &gt;&gt;&gt; # Option 2: Pass models directly (Ray handles serialization)</span>
+<span class="sd">        &gt;&gt;&gt; transform = RayRetrieveKL(gen_model=gen_model, ref_model=ref_model, device=torch.device(&quot;cuda&quot;))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">gen_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;from_collector&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;from_collector&quot;</span><span class="p">,</span>
+        <span class="n">ref_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">gen_model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LLMWrapperBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ref_model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LLMWrapperBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_cpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Validate arguments: models and factories should not both be provided</span>
+        <span class="k">if</span> <span class="n">gen_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">gen_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;gen_model&#39; and &#39;gen_model_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">ref_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;ref_model&#39; and &#39;ref_model_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Store creation parameters for actor creation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_gen_model</span> <span class="o">=</span> <span class="n">gen_model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model</span> <span class="o">=</span> <span class="n">ref_model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_gen_model_factory</span> <span class="o">=</span> <span class="n">gen_model_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model_factory</span> <span class="o">=</span> <span class="n">ref_model_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+        <span class="c1"># Store device separately for passing to remote actor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_remote_device</span> <span class="o">=</span> <span class="n">device</span>
+
+        <span class="c1"># Default num_cpus</span>
+        <span class="k">if</span> <span class="n">num_cpus</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_cpus</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># Call parent constructor without device (Ray transform handles CPU/device mapping)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="n">num_cpus</span><span class="p">,</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Don&#39;t store device locally</span>
+            <span class="n">actor_name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_actor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the remote RetrieveKL actor.&quot;&quot;&quot;</span>
+        <span class="c1"># Create the remote RetrieveKL with resource specifications</span>
+        <span class="n">RemoteRetrieveKL</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_cpus</span><span class="p">,</span> <span class="n">num_gpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_gpus</span>
+        <span class="p">)(</span><span class="n">RetrieveKL</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">RemoteRetrieveKL</span> <span class="o">=</span> <span class="n">RemoteRetrieveKL</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span><span class="p">)</span>
+
+        <span class="c1"># Determine how to create models on the remote actor</span>
+        <span class="n">gen_model_arg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gen_model</span>
+        <span class="n">ref_model_arg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model</span>
+
+        <span class="c1"># If we have factories, we&#39;ll pass them and set models to None</span>
+        <span class="n">creation_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gen_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">creation_kwargs</span><span class="p">[</span><span class="s2">&quot;gen_model_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gen_model_factory</span>
+            <span class="n">gen_model_arg</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">creation_kwargs</span><span class="p">[</span><span class="s2">&quot;ref_model_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_model_factory</span>
+            <span class="n">ref_model_arg</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Pass device to the remote actor</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">creation_kwargs</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_device</span>
+
+        <span class="c1"># Create the shared actor</span>
+        <span class="n">actor</span> <span class="o">=</span> <span class="n">RemoteRetrieveKL</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">gen_model</span><span class="o">=</span><span class="n">gen_model_arg</span><span class="p">,</span> <span class="n">ref_model</span><span class="o">=</span><span class="n">ref_model_arg</span><span class="p">,</span> <span class="o">**</span><span class="n">creation_kwargs</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">actor</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_actor&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__repr__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;RayRetrieveKL(actor=None)&quot;</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;RayRetrieveKL(actor=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_actor&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;None&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+
+<div class="viewcode-block" id="RetrieveKL"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RetrieveKL</span><span class="p">(</span><span class="n">Compose</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_RayServiceMetaClass</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform to retrieve the KL divergence between two models&#39; log-probabilities.</span>
 
 <span class="sd">    This transform combines two :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb` instances</span>
@@ -1095,6 +1391,10 @@
 <span class="sd">        ref_model (LLMWrapperBase): the reference model, wrapped in such a way that it does not generate but computes the log-probs.</span>
 
 <span class="sd">    Keyword Args:</span>
+<span class="sd">        gen_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a generation model.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues when using Ray.</span>
+<span class="sd">        ref_model_factory (Callable[[], LLMWrapperBase], optional): A callable that returns a reference model.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues when using Ray.</span>
 <span class="sd">        assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history</span>
 <span class="sd">            where the role is `&quot;assistant&quot;`). Defaults to `True`.</span>
 
@@ -1109,13 +1409,20 @@
 <span class="sd">            To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.</span>
 <span class="sd">            Defaults to `{&quot;return_assistant_tokens_mask&quot;: True, &quot;tokenize&quot;: True, &quot;return_tensors&quot;: &quot;pt&quot;, &quot;padding&quot;: True, &quot;add_generation_prompt&quot;: False}`.</span>
 <span class="sd">        detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.</span>
-<span class="sd">        device (torch.device): the device to use for tensor creation. Defaults to `None`.</span>
+<span class="sd">        device (torch.device): the device to cast the tensors to. This is not the device of the specs, but the device</span>
+<span class="sd">            onto which the tensors will be moved. It allows to keep the model on a different device</span>
+<span class="sd">            than the upcoming data itself. When using Ray service, this device will be used on the remote actor.</span>
+<span class="sd">            Defaults to `None`.</span>
 <span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.</span>
 <span class="sd">        padding_side (str): the side of the padding when using pad_sequence. Defaults to `&quot;left&quot;`.</span>
 <span class="sd">        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `&quot;kl_penalty&quot;`.</span>
 <span class="sd">        add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.</span>
 <span class="sd">        coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.</span>
 <span class="sd">        padding_side (str): the side of the padding when using pad_sequence. Defaults to `&quot;left&quot;`.</span>
+<span class="sd">        use_ray_service (bool, optional): if ``True``, returns a :class:`RayRetrieveKL` instance instead,</span>
+<span class="sd">            which creates a Ray actor for shared KL computation across multiple environments.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.</span>
 <span class="sd">        **kwargs: additional arguments to pass to the `RetrieveLogProb` transform.</span>
 
 <span class="sd">    Examples:</span>
@@ -1202,12 +1509,16 @@
 <span class="sd">        :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">_RayServiceClass</span> <span class="o">=</span> <span class="n">RayRetrieveKL</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">gen_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;from_collector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;from_collector&quot;</span><span class="p">,</span>
         <span class="n">ref_model</span><span class="p">:</span> <span class="n">LLMWrapperBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">assistant_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">gen_model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LLMWrapperBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ref_model_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LLMWrapperBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">assistant_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">history_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
         <span class="n">tokenizer_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">detach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -1219,13 +1530,31 @@
         <span class="n">kl_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;kl_penalty&quot;</span><span class="p">,</span>
         <span class="n">add_to_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">use_ray_service</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="c1"># Handle model factories - create models if factories are provided</span>
+        <span class="k">if</span> <span class="n">gen_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">gen_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">gen_model</span> <span class="o">!=</span> <span class="s2">&quot;from_collector&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot provide both &#39;gen_model&#39; and &#39;gen_model_factory&#39;. Choose one.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">gen_model</span> <span class="o">=</span> <span class="n">gen_model_factory</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">ref_model_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot provide both &#39;ref_model&#39; and &#39;ref_model_factory&#39;. Choose one.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">ref_model</span> <span class="o">=</span> <span class="n">ref_model_factory</span><span class="p">()</span>
+
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gen_model</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">gen_model</span> <span class="o">==</span> <span class="s2">&quot;from_collector&quot;</span><span class="p">:</span>
             <span class="c1"># Lazy init</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="s2">&quot;ref_model&quot;</span><span class="p">:</span> <span class="n">ref_model</span><span class="p">,</span>
+                <span class="s2">&quot;gen_model_factory&quot;</span><span class="p">:</span> <span class="n">gen_model_factory</span><span class="p">,</span>
+                <span class="s2">&quot;ref_model_factory&quot;</span><span class="p">:</span> <span class="n">ref_model_factory</span><span class="p">,</span>
                 <span class="s2">&quot;assistant_only&quot;</span><span class="p">:</span> <span class="n">assistant_only</span><span class="p">,</span>
                 <span class="s2">&quot;history_key&quot;</span><span class="p">:</span> <span class="n">history_key</span><span class="p">,</span>
                 <span class="s2">&quot;tokenizer_kwargs&quot;</span><span class="p">:</span> <span class="n">tokenizer_kwargs</span><span class="p">,</span>
@@ -1277,6 +1606,11 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;The generation and reference models must have different `log_prob_key` values to use the `RetrieveKL` transform.&quot;</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="n">gen_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;gen_model cannot be None when not using &#39;from_collector&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ref_model cannot be None&quot;</span><span class="p">)</span>
+
         <span class="n">t1</span> <span class="o">=</span> <span class="n">RetrieveLogProb</span><span class="p">(</span>
             <span class="n">gen_model</span><span class="p">,</span>
             <span class="n">log_probs_full_key</span><span class="o">=</span><span class="n">gen_log_probs_full_key</span><span class="p">,</span>
@@ -1551,8 +1885,8 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># Get log-probs</span>
-        <span class="n">gen_log_probs</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gen_log_probs_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">ref_log_probs</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_log_probs_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">gen_log_probs</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gen_log_probs_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
+        <span class="n">ref_log_probs</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_log_probs_full_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
 
         <span class="k">if</span> <span class="n">gen_log_probs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">ref_log_probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1585,7 +1919,7 @@
 
         <span class="c1"># Add to reward if requested</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_to_reward</span><span class="p">:</span>
-            <span class="n">reward</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
             <span class="k">if</span> <span class="n">reward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">reward</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="n">kl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
@@ -1625,9 +1959,9 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_to_reward</span><span class="p">:</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
             <span class="c1"># For LLMs, the shape of the reward is (batch, -1, 1)</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
             <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-            <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">shape</span>
         <span class="k">return</span> <span class="n">reward_spec</span></div></div>
 </pre></div>
 

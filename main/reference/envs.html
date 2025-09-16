@@ -1480,7 +1480,7 @@ to be able to create this other composition:</p>
 <td><p>Base class for environment transforms, which modify or create new data in a tensordict.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A transformed_in environment.</p></td>
+<td><p>A transformed environment.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer" title="torchrl.envs.transforms.ActionDiscretizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActionDiscretizer</span></code></a>(num_intervals[, ...])</p></td>
 <td><p>A transform to discretize a continuous action space.</p></td>
@@ -1515,7 +1515,7 @@ to be able to create this other composition:</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ClipTransform.html#torchrl.envs.transforms.ClipTransform" title="torchrl.envs.transforms.ClipTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipTransform</span></code></a>([in_keys, out_keys, ...])</p></td>
 <td><p>A transform to clip input (state, action) or output (observation, reward) values.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose" title="torchrl.envs.transforms.Compose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Compose</span></code></a>(*transforms)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose" title="torchrl.envs.transforms.Compose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Compose</span></code></a>(transforms)</p></td>
 <td><p>Composes a chain of transforms.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ConditionalPolicySwitch.html#torchrl.envs.transforms.ConditionalPolicySwitch" title="torchrl.envs.transforms.ConditionalPolicySwitch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConditionalPolicySwitch</span></code></a>(policy, condition)</p></td>
@@ -1876,11 +1876,11 @@ in the relevant functions:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="n">gymnasium</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">gym_backend</span><span class="p">())</span>
 <span class="gp">... </span>    <span class="n">env1</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="go">&lt;module &#39;gymnasium&#39; from &#39;/path/to/venv/python3.9/site-packages/gymnasium/__init__.py&#39;&gt;</span>
+<span class="go">&lt;module &#39;gymnasium&#39; from &#39;/path/to/venv/python3.10/site-packages/gymnasium/__init__.py&#39;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="n">gym</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">gym_backend</span><span class="p">())</span>
 <span class="gp">... </span>    <span class="n">env2</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="go">&lt;module &#39;gym&#39; from &#39;/path/to/venv/python3.9/site-packages/gym/__init__.py&#39;&gt;</span>
+<span class="go">&lt;module &#39;gym&#39; from &#39;/path/to/venv/python3.10/site-packages/gym/__init__.py&#39;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env1</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
 <span class="go">&lt;gymnasium.envs.classic_control.pendulum.PendulumEnv at 0x15147e190&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env2</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
@@ -1898,15 +1898,15 @@ the current gym backend or any of its modules:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">wrappers</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s1">&#39;wrappers&#39;</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">wrappers</span><span class="p">)</span>
-<span class="go">&lt;module &#39;gym.wrappers&#39; from &#39;/path/to/venv/python3.9/site-packages/gym/wrappers/__init__.py&#39;&gt;</span>
+<span class="go">&lt;module &#39;gym.wrappers&#39; from &#39;/path/to/venv/python3.10/site-packages/gym/wrappers/__init__.py&#39;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">wrappers</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">(</span><span class="s1">&#39;wrappers&#39;</span><span class="p">)</span>
 <span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">wrappers</span><span class="p">)</span>
-<span class="go">&lt;module &#39;gymnasium.wrappers&#39; from &#39;/path/to/venv/python3.9/site-packages/gymnasium/wrappers/__init__.py&#39;&gt;</span>
+<span class="go">&lt;module &#39;gymnasium.wrappers&#39; from &#39;/path/to/venv/python3.10/site-packages/gymnasium/wrappers/__init__.py&#39;&gt;</span>
 </pre></div>
 </div>
 <p>Another tool that comes in handy with gym and other external dependencies is
-the <a class="reference internal" href="generated/torchrl.implement_for.html#torchrl.implement_for" title="torchrl._utils.implement_for"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl._utils.implement_for</span></code></a> class. Decorating a function
+the <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl._utils.implement_for</span></code> class. Decorating a function
 with <code class="docutils literal notranslate"><span class="pre">&#64;implement_for</span></code> will tell torchrl that, depending on the version
 indicated, a specific behavior is to be expected. This allows us to easily
 support multiple versions of gym without requiring any effort from the user side.

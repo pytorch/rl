@@ -479,7 +479,7 @@ provides an interface to set that vmap mode from the outside through <cite>loss.
 <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.vmap_randomness" title="torchrl.objectives.LossModule.vmap_randomness"><code class="xref py py-meth docutils literal notranslate"><span class="pre">vmap_randomness()</span></code></a> for more information.</p>
 <p><code class="docutils literal notranslate"><span class="pre">LossModule.vmap_randomness</span></code> defaults to <cite>“error”</cite> if no random module is detected, and to <cite>“different”</cite> in
 other cases. By default, only a limited number of modules are listed as random, but the list can be extended
-using the <code class="xref py py-func docutils literal notranslate"><span class="pre">add_random_module()</span></code> function.</p>
+using the <a class="reference internal" href="generated/torchrl.objectives.add_random_module.html#torchrl.objectives.add_random_module" title="torchrl.objectives.common.add_random_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">add_random_module()</span></code></a> function.</p>
 </section>
 <section id="training-value-functions">
 <h2>Training value functions<a class="headerlink" href="#training-value-functions" title="Permalink to this heading">¶</a></h2>
@@ -532,6 +532,9 @@ auto-completion to make their choice.</p>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LossModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A parent class for RL losses.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.add_random_module.html#torchrl.objectives.add_random_module" title="torchrl.objectives.add_random_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_random_module</span></code></a>(module)</p></td>
+<td><p>Adds a random module to the list of modules that will be detected by <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.vmap_randomness" title="torchrl.objectives.LossModule.vmap_randomness"><code class="xref py py-meth docutils literal notranslate"><span class="pre">vmap_randomness()</span></code></a> as random.</p></td>
 </tr>
 </tbody>
 </table>

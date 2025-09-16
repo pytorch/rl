@@ -460,6 +460,11 @@ template applied to the chat history is consistent with the format required by t
 collate function is used. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>max_steps</strong> (<em>int</em><em>, </em><em>optional</em>) – The maximum number of steps allowed in an episode. Defaults to <cite>1</cite>.</p></li>
 <li><p><strong>input_mode</strong> (<em>Literal</em><em>[</em><em>&quot;history&quot;</em><em>, </em><em>&quot;text&quot;</em><em>, </em><em>&quot;tokens&quot;</em><em>]</em><em>, </em><em>optional</em>) – The mode of input to use. Defaults to <cite>“history”</cite>.</p></li>
+<li><p><strong>ray_backend</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use the Ray backend for data loading. Defaults to <cite>False</cite>.
+Using this backend allows for explicit resource control and avoids serialization issues, as well as
+sharing the same dataloader across multiple environments and actors.</p></li>
+<li><p><strong>dataloader_actor_name</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of the Ray actor to use for data loading.
+Defaults to <cite>“ifeval_dataloader”</cite>.</p></li>
 </ul>
 </dd>
 </dl>

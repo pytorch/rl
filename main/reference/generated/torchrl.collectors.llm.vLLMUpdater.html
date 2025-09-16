@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="LLMCollector" href="torchrl.collectors.llm.LLMCollector.html" />
-    <link rel="prev" title="vLLMWorker" href="torchrl.modules.llm.vLLMWorker.html" />
+    <link rel="next" title="vLLMUpdaterV2" href="torchrl.collectors.llm.vLLMUpdaterV2.html" />
+    <link rel="prev" title="stateless_init_process_group" href="torchrl.modules.llm.stateless_init_process_group.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -432,7 +432,7 @@
 <h1>vLLMUpdater<a class="headerlink" href="#vllmupdater" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.llm.</span></span><span class="sig-name descname"><span class="pre">vLLMUpdater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">master_address</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><span class="pre">torch.dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vllm_tp_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.llm.</span></span><span class="sig-name descname"><span class="pre">vLLMUpdater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater" title="Permalink to this definition">¶</a></dt>
 <dd><p>A class that sends weights to vLLM workers.</p>
 <p>This class handles synchronizing weights between a training policy and vLLM inference workers.
 It supports both local vLLM instances and remote Ray actors.</p>
@@ -444,6 +444,9 @@ It supports both local vLLM instances and remote Ray actors.</p>
 <li><p><strong>model_metadata</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>tuple</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.8)"><em>torch.dtype</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.8)"><em>torch.Size</em></a><em>]</em><em>]</em><em>, </em><em>optional</em>) – Model metadata mapping
 parameter names to their dtype and shape. If not provided, will be extracted from policy.</p></li>
 <li><p><strong>vllm_tp_size</strong> (<em>int</em><em>, </em><em>optional</em>) – vLLM tensor parallel size. Defaults to 1.</p></li>
+<li><p><strong>v2</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, returns a vLLMUpdaterV2 instance instead. This is an experimental
+feature that provides better integration with AsyncVLLM engines. When using v2=True, you must
+provide a vllm_engine parameter instead of the above parameters. Defaults to False.</p></li>
 </ul>
 </dd>
 </dl>
@@ -482,6 +485,12 @@ parameter names to their dtype and shape. If not provided, will be extracted fro
 <p>This class assumes the policy is a transformers model that can be loaded by vLLM.
 The policy must have a state_dict() method that returns the model weights.</p>
 </div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The v2=True option is experimental and may have backward-compatibility breaking changes
+in future releases. However, it is generally considered a better option for working with
+AsyncVLLM engines and provides improved performance and reliability.</p>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="id0">
 <span class="sig-name descname"><span class="pre">all_worker_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.all_worker_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id0" title="Permalink to this definition">¶</a></dt>
@@ -490,9 +499,15 @@ The policy must have a state_dict() method that returns the model weights.</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.collector">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.collector.DataCollectorBase</span></em><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.collector" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.collector" title="Permalink to this definition">¶</a></dt>
 <dd><p>The collector or container of the receiver.</p>
 <p>Returns <cite>None</cite> if the container is out-of-scope or not set.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.collectors">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collectors</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.collectors" title="Permalink to this definition">¶</a></dt>
+<dd><p>The collectors or container of the receiver.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -615,10 +630,10 @@ parameter names to their dtype and shape.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.collectors.llm.LLMCollector.html" class="btn btn-neutral float-right" title="LLMCollector" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.collectors.llm.vLLMUpdaterV2.html" class="btn btn-neutral float-right" title="vLLMUpdaterV2" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.llm.vLLMWorker.html" class="btn btn-neutral" title="vLLMWorker" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.modules.llm.stateless_init_process_group.html" class="btn btn-neutral" title="stateless_init_process_group" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

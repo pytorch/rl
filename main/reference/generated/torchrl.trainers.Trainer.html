@@ -453,10 +453,11 @@ TensorDict where every key points to a different loss component.</p></li>
 <li><p><strong>optimizer</strong> (<em>optim.Optimizer</em>) – An optimizer that trains the parameters
 of the model.</p></li>
 <li><p><strong>logger</strong> (<em>Logger</em><em>, </em><em>optional</em>) – a Logger that will handle the logging.</p></li>
-<li><p><strong>optim_steps_per_batch</strong> (<em>int</em>) – number of optimization steps
+<li><p><strong>optim_steps_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – number of optimization steps
 per collection of data. An trainer works as follows: a main loop
 collects batches of data (epoch loop), and a sub-loop (training
-loop) performs model updates in between two collections of data.</p></li>
+loop) performs model updates in between two collections of data.
+If <cite>None</cite>, the trainer will use the number of workers as the number of optimization steps.</p></li>
 <li><p><strong>clip_grad_norm</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, the gradients will be clipped
 based on the total norm of the model parameters. If False,
 all the partial derivatives will be clamped to

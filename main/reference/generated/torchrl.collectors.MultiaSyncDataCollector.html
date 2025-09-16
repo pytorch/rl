@@ -551,6 +551,8 @@ pickled directly), the <a href="#id1"><span class="problematic" id="id2">:arg:`p
 collectors.</p>
 </div>
 </p></li>
+<li><p><strong>num_workers</strong> (<em>int</em><em>, </em><em>optional</em>) – number of workers to use. If <cite>create_env_fn</cite> is a list, this will be ignored.
+Defaults to <cite>None</cite> (workers determined by the <cite>create_env_fn</cite> length).</p></li>
 <li><p><strong>frames_per_batch</strong> (<em>int</em><em>, </em><em>Sequence</em><em>[</em><em>int</em><em>]</em>) – A keyword-only argument representing the
 total number of elements in a batch. If a sequence is provided, represents the number of elements in a
 batch per worker. Total number of elements in a batch is then the sum over the sequence.</p></li>

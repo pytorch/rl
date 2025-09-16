@@ -429,15 +429,25 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Mapping</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_tensor_collection</span><span class="p">,</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span><span class="p">,</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+
+<span class="c1"># Import ray service components</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.ray_service</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_map_input_output_device</span><span class="p">,</span>
+    <span class="n">_RayServiceMetaClass</span><span class="p">,</span>
+    <span class="n">RayTransform</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_composite_from_td</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="as_nested_tensor"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">as_nested_tensor</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
@@ -456,13 +466,14 @@
 
     <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
     <span class="n">batch_size</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>  <span class="c1"># type: ignore[assignment]</span>
         <span class="n">_as_nested_tensor</span><span class="p">,</span> <span class="o">*</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
-    <span class="p">)</span></div>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span></div>
 
 
 <div class="viewcode-block" id="as_padded_tensor"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">as_padded_tensor</span><span class="p">(</span>
-    <span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stack_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stack_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Stacks a list of tensordicts into a single tensordict with padded tensors.</span>
 
@@ -491,13 +502,246 @@
 
     <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
     <span class="n">batch_size</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">))</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>  <span class="c1"># type: ignore[assignment]</span>
         <span class="n">_stack_tensors</span><span class="p">,</span> <span class="o">*</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">result</span></div>
 
 
-<div class="viewcode-block" id="DataLoadingPrimer"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DataLoadingPrimer</span><span class="p">(</span><span class="n">TensorDictPrimer</span><span class="p">):</span>
+<div class="viewcode-block" id="RayDataLoadingPrimer"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RayDataLoadingPrimer</span><span class="p">(</span><span class="n">RayTransform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.</span>
+
+<span class="sd">    This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers.</span>
+<span class="sd">    All method calls are delegated to the remote actor, ensuring that multiple environments iterate over</span>
+<span class="sd">    the same shared dataloader.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        dataloader: A dataloader object to be used directly. Ray will handle serialization.</span>
+<span class="sd">        dataloader_factory: A callable that returns a dataloader. This allows for explicit</span>
+<span class="sd">            resource control and avoids serialization issues.</span>
+<span class="sd">        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor.</span>
+<span class="sd">            Defaults to the dataloader&#39;s num_workers if available, otherwise 1.</span>
+<span class="sd">        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.</span>
+<span class="sd">        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.</span>
+<span class="sd">        **kwargs: Additional keyword arguments to pass to DataLoadingPrimer.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Exactly one of `dataloader` or `dataloader_factory` must be provided.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Option 1: Using a dataloader factory for explicit resource control</span>
+<span class="sd">        &gt;&gt;&gt; def create_dataloader():</span>
+<span class="sd">        ...     return torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)</span>
+<span class="sd">        &gt;&gt;&gt; primer1 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)</span>
+<span class="sd">        &gt;&gt;&gt; primer2 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)  # Same shared actor</span>
+
+<span class="sd">        &gt;&gt;&gt; # Option 2: Pass dataloader directly (Ray handles serialization)</span>
+<span class="sd">        &gt;&gt;&gt; dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)</span>
+<span class="sd">        &gt;&gt;&gt; primer1 = RayDataLoadingPrimer(dataloader=dataloader)  # num_cpus=4 inferred from num_workers</span>
+<span class="sd">        &gt;&gt;&gt; primer2 = RayDataLoadingPrimer(dataloader=dataloader)  # Same shared actor</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">dataloader_factory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_cpus</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Validate arguments: exactly one of dataloader or dataloader_factory must be provided</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;dataloader&#39; and &#39;dataloader_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide exactly one of &#39;dataloader&#39; or &#39;dataloader_factory&#39;.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Infer num_cpus from dataloader if not specified</span>
+        <span class="k">if</span> <span class="n">num_cpus</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">temp_dataloader</span> <span class="o">=</span> <span class="n">dataloader_factory</span><span class="p">()</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">temp_dataloader</span><span class="p">,</span> <span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">del</span> <span class="n">temp_dataloader</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="k">if</span> <span class="n">num_cpus</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># Handle device setup for primers</span>
+        <span class="n">primers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">primers</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span> <span class="o">!=</span> <span class="n">primers</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Device mismatch between primers and device. &quot;</span>
+                    <span class="s2">&quot;Use the device argument to set the device.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">):</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">primers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;primers&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">primers</span>
+
+        <span class="c1"># Store creation parameters for actor creation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span> <span class="o">=</span> <span class="n">dataloader_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+
+        <span class="c1"># Call parent constructor</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="n">num_cpus</span><span class="p">,</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">actor_name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Actor initialization is handled by the parent RayTransform class</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_actor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the remote DataLoadingPrimer actor.&quot;&quot;&quot;</span>
+        <span class="c1"># Create the remote DataLoadingPrimer with resource specifications</span>
+        <span class="n">RemoteDataLoadingPrimer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_cpus</span><span class="p">,</span> <span class="n">num_gpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_gpus</span>
+        <span class="p">)(</span><span class="n">DataLoadingPrimer</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">RemoteDataLoadingPrimer</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Create the shared actor, passing factory or dataloader as appropriate</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">actor</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">dataloader_factory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">actor</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">dataloader</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataloader</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">actor</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get dataloader property.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;dataloader is not implemented for RayDataLoadingPrimer&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">endless_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get endless_dataloader property.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;endless_dataloader is not implemented for RayDataLoadingPrimer&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_actor&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__repr__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;RayDataLoadingPrimer(actor=None)&quot;</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;RayDataLoadingPrimer(actor=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_actor&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;None&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stack_method</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get stack_method property.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;stack_method is not implemented for RayDataLoadingPrimer&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">repeats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get repeats property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;repeats&quot;</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">data_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get data_keys property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;data_keys&quot;</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get primers property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">))</span>
+
+    <span class="nd">@primers</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set primers property.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">set_attr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+
+    <span class="c1"># TensorDictPrimer methods</span>
+<div class="viewcode-block" id="RayDataLoadingPrimer.init"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.init">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="RayDataLoadingPrimer.reset_dataloader"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.reset_dataloader">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">reset_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the dataloader.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_method_call</span><span class="p">(</span><span class="s2">&quot;reset_dataloader&quot;</span><span class="p">)</span></div>
+
+    <span class="nd">@_map_input_output_device</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_from_dataloader</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load data from the dataloader.&quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_method_call</span><span class="p">(</span><span class="s2">&quot;_load_from_dataloader&quot;</span><span class="p">,</span> <span class="n">reset</span><span class="p">)</span>
+
+        <span class="c1"># Ensure proper batch dimensions: if result is scalar (ndim=0), unsqueeze to add batch dim</span>
+        <span class="c1"># This matches the behavior in the original DataLoadingPrimer._load_from_dataloader</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="s2">&quot;ndim&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">result</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get primers property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_property_get</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">)</span>
+
+    <span class="nd">@primers</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set primers property.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_property_set</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@_map_input_output_device</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_func</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset function.&quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset_func</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">)</span>
+
+        <span class="c1"># Handle batch size expansion locally since remote actor lacks parent context</span>
+        <span class="c1"># This mimics the batch expansion logic from TensorDictPrimer._reset_func</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">batch_locked</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="s2">&quot;apply&quot;</span><span class="p">)</span>  <span class="c1"># Check if it&#39;s a TensorDict-like object</span>
+        <span class="p">):</span>
+            <span class="c1"># Ensure result has proper batch dimensions to match parent</span>
+            <span class="n">expected_batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="n">expected_batch_size</span><span class="p">:</span>
+                <span class="c1"># Expand result to match expected batch size</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">expected_batch_size</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span></div>
+
+    <span class="c1"># Additional methods and properties are handled by the parent RayTransform class</span>
+
+
+<div class="viewcode-block" id="DataLoadingPrimer"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DataLoadingPrimer</span><span class="p">(</span><span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_RayServiceMetaClass</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``.</span>
 
 <span class="sd">    Args:</span>
@@ -507,6 +751,8 @@
 <span class="sd">            It is assumed that the elements retrieved from the dataloader come in batches along the first dimension</span>
 <span class="sd">            of every tensor, unless `dataloader.batch_size=0`.</span>
 <span class="sd">            The dataloader must yield mappable data structures (e.g., dictionaries).</span>
+<span class="sd">            If a dataloader_factory is provided, it will be used to create a fresh dataloader and this argument can be</span>
+<span class="sd">            omitted.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.</span>
@@ -526,6 +772,11 @@
 
 <span class="sd">        group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that</span>
 <span class="sd">            all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.</span>
+<span class="sd">        dataloader_factory (Callable[[], Iterable[dict[str, Any]]], optional): A callable that returns a dataloader.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues.</span>
+<span class="sd">        use_ray_service (bool, optional): if ``True``, returns a :class:`RayDataLoadingPrimer` instance instead,</span>
+<span class="sd">            which creates a Ray actor for shared dataloader access across multiple environments.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        dataloader (Iterable[Any]): The dataloader to load data from.</span>
@@ -533,6 +784,17 @@
 <span class="sd">        stack_method (Callable[[Any], Any]): The method to use for stacking the data.</span>
 
 <span class="sd">    .. seealso:: :class:`~torchrl.envs.LLMEnv` and :class:`~torchrl.envs.LLMEnv.from_dataloader`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Using the regular DataLoadingPrimer:</span>
+
+<span class="sd">        &gt;&gt;&gt; dataloader = torch.utils.data.DataLoader(dataset, batch_size=32)</span>
+<span class="sd">        &gt;&gt;&gt; primer = DataLoadingPrimer(dataloader=dataloader)  # Regular implementation</span>
+
+<span class="sd">        Using the Ray-based implementation for shared dataloader access:</span>
+
+<span class="sd">        &gt;&gt;&gt; primer = DataLoadingPrimer(dataloader=dataloader, use_ray_service=True)  # Returns RayDataLoadingPrimer</span>
+<span class="sd">        &gt;&gt;&gt; # Multiple environments can now share the same dataloader through the Ray actor</span>
 
 <span class="sd">    Example of a dataloader yielding strings:</span>
 <span class="sd">        &gt;&gt;&gt; import random</span>
@@ -766,10 +1028,13 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">_RayServiceClass</span> <span class="o">=</span> <span class="n">RayDataLoadingPrimer</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">dataloader</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">dataloader</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">dataloader_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
         <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span>
@@ -778,8 +1043,26 @@
         <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_ray_service</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
+        <span class="c1"># Validate arguments: exactly one of dataloader or dataloader_factory must be provided</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;dataloader&#39; and &#39;dataloader_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide exactly one of &#39;dataloader&#39; or &#39;dataloader_factory&#39;.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Initialize dataloader from factory if provided</span>
+        <span class="k">if</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader_factory</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span> <span class="o">=</span> <span class="n">dataloader_factory</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span> <span class="o">=</span> <span class="kc">None</span>
+
         <span class="k">if</span> <span class="n">repeats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">repeats</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">repeats</span> <span class="o">=</span> <span class="n">repeats</span>
@@ -814,8 +1097,15 @@
         <span class="k">if</span> <span class="n">batch_size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(())</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
-            <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,)</span>
-        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">):</span>
+                <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">batch_size_tuple</span><span class="p">)</span>
         <span class="n">auto_batch_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span>
 
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -873,11 +1163,15 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the dataloader.</span>
 
 <span class="sd">        This is useful when the dataloader is not infinite and we want to reset it.</span>
+<span class="sd">        If a dataloader_factory was provided, it will be used to create a fresh dataloader.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            self: The transform itself.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Create a fresh dataloader from the factory</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span></div>
 
@@ -907,7 +1201,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_load_from_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_from_dataloader</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a single element from the dataloader, or alternatively from the buffer.</span>
 
 <span class="sd">        If `reset` is passed, then one element per reset will be loaded.</span>
@@ -969,9 +1265,24 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_primers_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent_batch_size</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update the primers to match the parent&#39;s batch size.</span>
+
+<span class="sd">        This method is called remotely to ensure the remote actor&#39;s primers</span>
+<span class="sd">        have the correct batch dimensions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;expand&quot;</span><span class="p">):</span>
+            <span class="c1"># Expand primers to match the parent batch size</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">parent_batch_size</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">primers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">parent_batch_size</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">class_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">(primers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="si">}</span><span class="s2">, dataloader=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">(primers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="si">}</span><span class="s2">, dataloader=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+<div class="viewcode-block" id="DataLoadingPrimer.set_attr"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer.set_attr">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set attribute on the remote actor or locally.&quot;&quot;&quot;</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div></div>
 </pre></div>
 
              </article>

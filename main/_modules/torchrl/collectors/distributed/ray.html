@@ -438,10 +438,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">as_remote</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DataCollectorBase</span><span class="p">,</span>
     <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
+    <span class="n">MultiaSyncDataCollector</span><span class="p">,</span>
     <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
     <span class="n">SyncDataCollector</span><span class="p">,</span>
 <span class="p">)</span>
@@ -690,7 +690,7 @@
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
 <span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.collectors.collectors import SyncDataCollector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.collectors.distributed import RayCollector</span>
 <span class="sd">        &gt;&gt;&gt; env_maker = lambda: GymEnv(&quot;Pendulum-v1&quot;, device=&quot;cpu&quot;)</span>
 <span class="sd">        &gt;&gt;&gt; policy = TensorDictModule(nn.Linear(3, 1), in_keys=[&quot;observation&quot;], out_keys=[&quot;action&quot;])</span>

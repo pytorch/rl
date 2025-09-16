@@ -181,8 +181,8 @@ print(sample)
 # ----------
 #
 # - You can have look at other multiprocessed
-#   collectors such as :class:`~torchrl.collectors.collectors.MultiSyncDataCollector` or
-#   :class:`~torchrl.collectors.collectors.MultiaSyncDataCollector`.
+#   collectors such as :class:`~torchrl.collectors.MultiSyncDataCollector` or
+#   :class:`~torchrl.collectors.MultiaSyncDataCollector`.
 # - TorchRL also offers distributed collectors if you have multiple nodes to
 #   use for inference. Check them out in the
 #   :ref:`API reference <ref_collectors>`.

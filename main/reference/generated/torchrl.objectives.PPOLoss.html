@@ -485,10 +485,12 @@ formula for the entropy, a Monte-Carlo estimate will be used.
 <code class="docutils literal notranslate"><span class="pre">samples_mc_entropy</span></code> will control how many
 samples will be used to compute this estimate.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
-<li><p><strong>entropy_coeff</strong> – scalar | Mapping[NestedKey, scalar], optional): entropy multiplier when computing the total loss.
+<li><p><strong>entropy_coeff</strong> – <p>scalar | Mapping[NestedKey, scalar], optional): entropy multiplier when computing the total loss.
 * <strong>Scalar</strong>: one value applied to the summed entropy of every action head.
 * <strong>Mapping</strong> <code class="docutils literal notranslate"><span class="pre">{head_name:</span> <span class="pre">coeff}</span></code> gives an individual coefficient for each action-head’s entropy.
-Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p></li>
+Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p>
+<p>See <span class="xref std std-ref">ppo_entropy_coefficients</span> for detailed usage examples and troubleshooting.</p>
+</p></li>
 <li><p><strong>log_explained_variance</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the explained variance of the critic
 predictions w.r.t. value targets will be computed and logged as <code class="docutils literal notranslate"><span class="pre">&quot;explained_variance&quot;</span></code>.
 This can help monitor critic quality during training. Best possible score is 1.0, lower values are worse. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
@@ -610,7 +612,7 @@ value network to the PPO loss module:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">action</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
 <span class="gp">... </span>        <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">action</span><span class="p">,</span>
-<span class="gp">... </span>        <span class="s2">&quot;sample_log_prob&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+<span class="gp">... </span>        <span class="s2">&quot;action_log_prob&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
 <span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
 <span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
 <span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
@@ -620,6 +622,8 @@ value network to the PPO loss module:</p>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
 <span class="go">        entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        explained_variance: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        kl_approx: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
 <span class="go">        loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
@@ -673,6 +677,20 @@ The output keys can also be filtered using <code class="xref py py-meth docutils
 <span class="gp">&gt;&gt;&gt; </span><span class="n">loss_objective</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
 </pre></div>
 </div>
+<dl>
+<dt><strong>Simple Entropy Coefficient Examples</strong>:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Scalar entropy coefficient (default behavior)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">PPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">,</span> <span class="n">entropy_coeff</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Per-head entropy coefficients (for composite action spaces)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">entropy_coeff</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;action_log_prob&quot;</span><span class="p">):</span> <span class="mf">0.01</span><span class="p">,</span>  <span class="c1"># Low exploration</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;action_log_prob&quot;</span><span class="p">):</span> <span class="mf">0.05</span><span class="p">,</span>  <span class="c1"># High exploration</span>
+<span class="gp">... </span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">PPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">,</span> <span class="n">entropy_coeff</span><span class="o">=</span><span class="n">entropy_coeff</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+</dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>There is an exception regarding compatibility with non-tensordict-based modules.
@@ -680,6 +698,57 @@ If the actor network is probabilistic and uses a <code class="xref py py-class d
 this class must be used with tensordicts and cannot function as a tensordict-independent module.
 This is because composite action spaces inherently rely on the structured representation of data provided by
 tensordicts to handle their actions.</p>
+</div>
+<div class="admonition note" id="ppo-entropy-coefficients">
+<p class="admonition-title">Note</p>
+<p><strong>Entropy Bonus and Coefficient Management</strong></p>
+<p>The entropy bonus encourages exploration by adding the negative entropy of the policy to the loss.
+This can be configured in two ways:</p>
+<dl>
+<dt><strong>Scalar Coefficient (Default)</strong>: Use a single coefficient for all action heads:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">PPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">,</span> <span class="n">entropy_coeff</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt><strong>Per-Head Coefficients</strong>: Use different coefficients for different action components:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># For a robot with movement and gripper actions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">entropy_coeff</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent0&quot;</span><span class="p">,</span> <span class="s2">&quot;action_log_prob&quot;</span><span class="p">):</span> <span class="mf">0.01</span><span class="p">,</span>  <span class="c1"># Movement: low exploration</span>
+<span class="gp">... </span>    <span class="p">(</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="s2">&quot;action_log_prob&quot;</span><span class="p">):</span> <span class="mf">0.05</span><span class="p">,</span>  <span class="c1"># Gripper: high exploration</span>
+<span class="gp">... </span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">PPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">,</span> <span class="n">entropy_coeff</span><span class="o">=</span><span class="n">entropy_coeff</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+<p><strong>Key Requirements</strong>: When using per-head coefficients, you must provide the full nested key
+path to each action head’s log probability (e.g., <cite>(“agent0”, “action_log_prob”)</cite>).</p>
+<p><strong>Monitoring Entropy Loss</strong>:</p>
+<p>When using composite action spaces, the loss output includes:
+- <cite>“entropy”</cite>: Summed entropy across all action heads (for logging)
+- <cite>“composite_entropy”</cite>: Individual entropy values for each action head
+- <cite>“loss_entropy”</cite>: The weighted entropy loss term</p>
+<dl>
+<dt>Example output:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;entropy&quot;</span><span class="p">])</span>           <span class="c1"># Total entropy: 2.34</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;composite_entropy&quot;</span><span class="p">])</span> <span class="c1"># Per-head: {&quot;movement&quot;: 1.2, &quot;gripper&quot;: 1.14}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">])</span>      <span class="c1"># Weighted loss: -0.0234</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+<p><strong>Common Issues</strong>:</p>
+<dl class="simple">
+<dt><strong>KeyError: “Missing entropy coeff for head ‘head_name’”</strong>:</dt><dd><ul class="simple">
+<li><p>Ensure you provide coefficients for ALL action heads</p></li>
+<li><p>Use full nested keys: <cite>(“head_name”, “action_log_prob”)</cite></p></li>
+<li><p>Check that your action space structure matches the coefficient mapping</p></li>
+</ul>
+</dd>
+<dt><strong>Incorrect Entropy Calculation</strong>:</dt><dd><ul class="simple">
+<li><p>Call <cite>set_composite_lp_aggregate(False).set()</cite> before creating your policy</p></li>
+<li><p>Verify that your action space uses <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></p></li>
+</ul>
+</dd>
+</dl>
 </div>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrl.objectives.PPOLoss.default_keys">

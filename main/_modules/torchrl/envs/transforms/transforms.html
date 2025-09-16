@@ -442,7 +442,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntEnum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">overload</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -1255,12 +1255,12 @@
 
 
 <div class="viewcode-block" id="TransformedEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TransformedEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_TEnvPostInit</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transformed_in environment.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transformed environment.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        env (EnvBase): original environment to be transformed_in.</span>
+<span class="sd">        base_env (EnvBase): original environment to be transformed.</span>
 <span class="sd">        transform (Transform or callable, optional): transform to apply to the tensordict resulting</span>
-<span class="sd">            from :obj:`env.step(td)`. If none is provided, an empty Compose</span>
+<span class="sd">            from :obj:`base_env.step(td)`. If none is provided, an empty Compose</span>
 <span class="sd">            placeholder in an eval mode is used.</span>
 
 <span class="sd">            .. note:: If ``transform`` is a callable, it must receive as input a single tensordict</span>
@@ -1277,7 +1277,7 @@
 
 <span class="sd">        cache_specs (bool, optional): if ``True``, the specs will be cached once</span>
 <span class="sd">            and for all after the first call (i.e. the specs will be</span>
-<span class="sd">            transformed_in only once). If the transform changes during</span>
+<span class="sd">            transformed only once). If the transform changes during</span>
 <span class="sd">            training, the original spec transform may not be valid anymore,</span>
 <span class="sd">            in which case this value should be set  to `False`. Default is</span>
 <span class="sd">            `True`.</span>
@@ -1300,28 +1300,94 @@
 <span class="sd">        &gt;&gt;&gt; # The inner env has been unwrapped</span>
 <span class="sd">        &gt;&gt;&gt; assert isinstance(transformed_env.base_env, GymEnv)</span>
 
+<span class="sd">    .. note::</span>
+<span class="sd">        The first argument was renamed from ``env`` to ``base_env`` for clarity.</span>
+<span class="sd">        The old ``env`` argument is still supported for backward compatibility</span>
+<span class="sd">        but will be removed in v0.12. A deprecation warning will be shown when</span>
+<span class="sd">        using the old argument name.</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="nd">@overload</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
+        <span class="n">base_env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
         <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cache_specs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">auto_unwrap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">base_env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cache_specs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">auto_unwrap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>  <span class="c1"># type: ignore[misc]  # deprecated</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cache_specs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">auto_unwrap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="c1"># Backward compatibility: handle both old and new syntax</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># New syntax: TransformedEnv(base_env, transform, ...)</span>
+            <span class="n">base_env</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">cache_specs</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_specs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_unwrap&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="s2">&quot;env&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="c1"># Old syntax: TransformedEnv(env=..., transform=...)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;env&#39; argument is deprecated and will be removed in v0.12. &quot;</span>
+                <span class="s2">&quot;Use &#39;base_env&#39; instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">base_env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;env&quot;</span><span class="p">)</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">cache_specs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_specs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_unwrap&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="s2">&quot;base_env&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="c1"># New syntax with keyword arguments: TransformedEnv(base_env=..., transform=...)</span>
+            <span class="n">base_env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;base_env&quot;</span><span class="p">)</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">cache_specs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_specs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_unwrap&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;TransformedEnv requires a base_env argument&quot;</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">device</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">base_env</span> <span class="o">=</span> <span class="n">base_env</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">device</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">base_env</span><span class="o">.</span><span class="n">device</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">allow_done_after_reset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="c1"># Type matching must be exact here, because subtyping could introduce differences in behavior that must</span>
         <span class="c1"># be contained within the subclass.</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">env</span><span class="p">)</span> <span class="ow">is</span> <span class="n">TransformedEnv</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="ow">is</span> <span class="n">TransformedEnv</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">base_env</span><span class="p">)</span> <span class="ow">is</span> <span class="n">TransformedEnv</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="ow">is</span> <span class="n">TransformedEnv</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">auto_unwrap</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="n">auto_unwrap_transformed_env</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">auto_unwrap</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1339,7 +1405,7 @@
             <span class="n">auto_unwrap</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">if</span> <span class="n">auto_unwrap</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_set_env</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_env</span><span class="p">(</span><span class="n">base_env</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">Compose</span><span class="p">:</span>
                 <span class="c1"># we don&#39;t use isinstance as some transforms may be subclassed from</span>
                 <span class="c1"># Compose but with other features that we don&#39;t want to lose.</span>
@@ -1358,7 +1424,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transform</span><span class="p">:</span>
                     <span class="n">t</span><span class="o">.</span><span class="n">reset_parent</span><span class="p">()</span>
-            <span class="n">env_transform</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">env_transform</span> <span class="o">=</span> <span class="n">base_env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
             <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">env_transform</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">Compose</span><span class="p">:</span>
                 <span class="n">env_transform</span> <span class="o">=</span> <span class="p">[</span><span class="n">env_transform</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
@@ -1366,7 +1432,7 @@
                     <span class="n">t</span><span class="o">.</span><span class="n">reset_parent</span><span class="p">()</span>
             <span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">(</span><span class="o">*</span><span class="n">env_transform</span><span class="p">,</span> <span class="o">*</span><span class="n">transform</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_set_env</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_env</span><span class="p">(</span><span class="n">base_env</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">()</span>
 
@@ -1857,15 +1923,44 @@
 
 <span class="sd">    :class:`~torchrl.envs.transforms.Transform` or ``callable``s are accepted.</span>
 
+<span class="sd">    The class can be instantiated in several ways:</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        *transforms (Transform): Variable number of transforms to compose.</span>
+<span class="sd">        transforms (list[Transform], optional): A list of transforms to compose.</span>
+<span class="sd">            This can be passed as a keyword argument.</span>
+
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v0&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; transforms = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]</span>
-<span class="sd">        &gt;&gt;&gt; transforms = Compose(*transforms)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Method 1: Using positional arguments</span>
+<span class="sd">        &gt;&gt;&gt; transforms = Compose(RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0))</span>
+<span class="sd">        &gt;&gt;&gt; transformed_env = TransformedEnv(env, transforms)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Method 2: Using a list with positional argument</span>
+<span class="sd">        &gt;&gt;&gt; transform_list = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]</span>
+<span class="sd">        &gt;&gt;&gt; transforms = Compose(transform_list)</span>
+<span class="sd">        &gt;&gt;&gt; transformed_env = TransformedEnv(env, transforms)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Method 3: Using keyword argument</span>
+<span class="sd">        &gt;&gt;&gt; transforms = Compose(transforms=[RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)])</span>
 <span class="sd">        &gt;&gt;&gt; transformed_env = TransformedEnv(env, transforms)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">transforms</span><span class="p">:</span> <span class="n">Transform</span><span class="p">):</span>
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">transforms</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Transform</span><span class="p">]):</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">trsfs</span><span class="p">:</span> <span class="n">Transform</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">trsfs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="s2">&quot;transforms&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">transforms</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;transforms&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">trsfs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">trsfs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">transforms</span> <span class="o">=</span> <span class="n">trsfs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">transforms</span> <span class="o">=</span> <span class="n">trsfs</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected keyword arguments: </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">map_transform</span><span class="p">(</span><span class="n">trsf</span><span class="p">):</span>
@@ -6863,6 +6958,9 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_validate_value_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;spec </span><span class="si">{</span><span class="n">spec</span><span class="si">}</span><span class="s2">, spec.shape </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, value.shape </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">, spec.device </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">, value.device </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">, spec.dtype </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">, value.dtype </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Value (</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">) is not in the spec domain (</span><span class="si">{</span><span class="n">spec</span><span class="si">}</span><span class="s2">).&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span>
 
@@ -6936,8 +7034,8 @@
                 <span class="n">device</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">device</span>
                 <span class="n">batch_size</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">device</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="n">batch_size</span> <span class="o">=</span> <span class="p">()</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="p">())</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reset_func</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">)</span>
 

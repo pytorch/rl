@@ -4350,9 +4350,9 @@
                 <span class="s2">&quot;Make sure only keywords arguments are used when calling `super().__init__`.&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">frame_skip</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;frame_skip&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="k">if</span> <span class="s2">&quot;frame_skip&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="k">del</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;frame_skip&quot;</span><span class="p">]</span>
+        <span class="n">frame_skip</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;frame_skip&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">frame_skip</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;frame_skip must be an integer, got </span><span class="si">{</span><span class="n">frame_skip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span> <span class="o">=</span> <span class="n">frame_skip</span>
         <span class="c1"># this value can be changed if frame_skip is passed during env construction</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_frame_skip</span> <span class="o">=</span> <span class="n">frame_skip</span>

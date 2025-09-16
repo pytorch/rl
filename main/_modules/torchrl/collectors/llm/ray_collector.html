@@ -480,6 +480,8 @@
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
 <span class="sd">        ray_init_config (dict[str, Any], optional): keyword arguments to pass to ray.init().</span>
 <span class="sd">        remote_config (dict[str, Any], optional): keyword arguments to pass to cls.as_remote().</span>
+<span class="sd">        num_cpus (int, optional): Number of CPUs of the actor. Defaults to `None` (taken from remote_config).</span>
+<span class="sd">        num_gpus (int, optional): Number of GPUs of the actor. Defaults to `None` (taken from remote_config).</span>
 <span class="sd">        sync_iter (bool, optional): if `True`, items yeilded by the collector will be synced to the local process.</span>
 <span class="sd">            If `False`, the collector will collect the next batch of data in between yielding.</span>
 <span class="sd">            This has no effect when data is collected through the :meth:`start` method.</span>
@@ -523,6 +525,8 @@
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">PolicyVersion</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">sync_iter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">num_cpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -537,6 +541,10 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">sync_iter</span><span class="p">:</span>
             <span class="n">remote_config</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span>
             <span class="n">remote_config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;max_concurrency&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_cpus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">remote_config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;num_cpus&quot;</span><span class="p">,</span> <span class="n">num_cpus</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_gpus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">remote_config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;num_gpus&quot;</span><span class="p">,</span> <span class="n">num_gpus</span><span class="p">)</span>
         <span class="n">remote_cls</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="o">.</span><span class="n">as_remote</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sync_iter</span> <span class="o">=</span> <span class="n">sync_iter</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="n">remote_cls</span><span class="p">(</span>

@@ -426,6 +426,8 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
@@ -438,7 +440,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.history</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">TransformedEnv</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.dataloading</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoadingPrimer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.dataloading</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DataLoadingPrimer</span><span class="p">,</span>
+    <span class="n">RayDataLoadingPrimer</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="n">Tokens</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -807,7 +812,9 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> expects a tensordict as input&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> expects a tensordict as input. Got `None`.&quot;</span>
+            <span class="p">)</span>
         <span class="c1"># Find the total text</span>
         <span class="n">content</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_key</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">content</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -923,6 +930,11 @@
 <span class="sd">        data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).</span>
 <span class="sd">            Defaults to `None` (automatically determined based on the input_mode).</span>
 <span class="sd">        system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.</span>
+<span class="sd">        ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.</span>
+<span class="sd">            Using this backend allows for explicit resource control and avoids serialization issues, as well as</span>
+<span class="sd">            sharing the same dataloader across multiple environments and actors.</span>
+<span class="sd">        dataloader_actor_name (str | None, optional): Name of the Ray actor to use for data loading.</span>
+<span class="sd">            Ignored if `ray_backend` is `None`.</span>
 
 <span class="sd">    .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a</span>
 <span class="sd">        :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format</span>
@@ -955,8 +967,9 @@
         <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ray_backend</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">dataloader_actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_to_stack</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">list_to_stack</span><span class="p">():</span>
@@ -966,6 +979,40 @@
             <span class="p">)</span>
 
         <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">num_envs</span><span class="p">,)</span>
+
+        <span class="n">dataloader_factory</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">batch_size_dl</span><span class="o">=</span><span class="n">batch_size_dl</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_from_dataloader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">dataloader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">dataloader_factory</span><span class="o">=</span><span class="n">dataloader_factory</span><span class="p">,</span>
+            <span class="n">ray_backend</span><span class="o">=</span><span class="n">ray_backend</span><span class="p">,</span>
+            <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">data_key</span><span class="o">=</span><span class="n">data_key</span><span class="p">,</span>
+            <span class="n">system_prompt</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span>
+            <span class="n">dataloader_actor_name</span><span class="o">=</span><span class="n">dataloader_actor_name</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dataloader_factory</span><span class="p">(</span>
+        <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">batch_size_dl</span><span class="p">,</span> <span class="n">shuffle</span><span class="p">,</span> <span class="n">collate_fn</span>
+    <span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span>
 
         <span class="n">dataset_obj</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">split</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;train&quot;</span> <span class="ow">in</span> <span class="n">dataset_obj</span><span class="p">:</span>
@@ -985,20 +1032,7 @@
             <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span> <span class="k">if</span> <span class="n">collate_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_default_collate_fn</span><span class="p">,</span>
             <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_from_dataloader</span><span class="p">(</span>
-            <span class="bp">self</span><span class="p">,</span>
-            <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
-            <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
-            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-            <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
-            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
-            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-            <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
-            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
-            <span class="n">data_key</span><span class="o">=</span><span class="n">data_key</span><span class="p">,</span>
-            <span class="n">system_prompt</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dataloader</span>
 
 <div class="viewcode-block" id="DatasetChatEnv.from_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv.from_dataloader">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dataloader</span><span class="p">(</span>
@@ -1041,7 +1075,7 @@
         <span class="bp">self</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_dataloader</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
-            <span class="n">dataloader</span><span class="p">,</span>
+            <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
             <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
@@ -1058,8 +1092,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_from_dataloader</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">dataloader</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">dataloader_factory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -1070,9 +1105,22 @@
         <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
         <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ray_backend</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">dataloader_actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="n">primer</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span><span class="p">(</span>
+        <span class="k">if</span> <span class="n">ray_backend</span><span class="p">:</span>
+            <span class="n">dl_cls</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="n">RayDataLoadingPrimer</span><span class="p">,</span> <span class="n">actor_name</span><span class="o">=</span><span class="n">dataloader_actor_name</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dataloader_actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;dataloader_actor_name must be None if ray_backend is False&quot;</span>
+                <span class="p">)</span>
+            <span class="n">dl_cls</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span>
+        <span class="n">primer</span> <span class="o">=</span> <span class="n">dl_cls</span><span class="p">(</span>
             <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
+            <span class="n">dataloader_factory</span><span class="o">=</span><span class="n">dataloader_factory</span><span class="p">,</span>
             <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>

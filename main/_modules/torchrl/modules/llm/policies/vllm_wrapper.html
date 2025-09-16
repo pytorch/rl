@@ -445,9 +445,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">NestedKey</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">D</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.utils.rnn</span><span class="w"> </span><span class="kn">import</span> <span class="n">pad_sequence</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_classproperty</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends.vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.common</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_batching</span><span class="p">,</span>
     <span class="n">_extract_responses_from_full_histories</span><span class="p">,</span>
@@ -472,6 +472,8 @@
     <span class="n">SamplingParams</span> <span class="o">=</span> <span class="n">Any</span>  <span class="c1"># type: ignore</span>
     <span class="n">RequestOutput</span> <span class="o">=</span> <span class="n">Any</span>  <span class="c1"># type: ignore</span>
 
+<span class="c1"># Import async vLLM engines</span>
+
 
 <div class="viewcode-block" id="vLLMWrapper"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">vLLMWrapper</span><span class="p">(</span><span class="n">LLMWrapperBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.</span>
@@ -479,8 +481,33 @@
 <span class="sd">    This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input</span>
 <span class="sd">    modalities (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.</span>
 
+<span class="sd">    The wrapper supports both synchronous (vllm.LLM) and asynchronous (:class:`~torchrl.modules.llm.backends.AsyncVLLM`) vLLM engines.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        **Recommended: Use AsyncVLLM for better performance**</span>
+
+<span class="sd">        For distributed inference and better resource utilization, we recommend using</span>
+<span class="sd">        :class:`~torchrl.modules.llm.backends.AsyncVLLM` instead of the synchronous vllm.LLM:</span>
+
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.backends import AsyncVLLM</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm import vLLMWrapper</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Recommended approach</span>
+<span class="sd">        &gt;&gt;&gt; async_engine = AsyncVLLM.from_pretrained(&quot;Qwen/Qwen2.5-3B&quot;, num_replicas=2)</span>
+<span class="sd">        &gt;&gt;&gt; wrapper = vLLMWrapper(async_engine, input_mode=&quot;history&quot;, generate=True)</span>
+
+<span class="sd">        AsyncVLLM provides:</span>
+<span class="sd">        - Better GPU utilization through Ray-based distribution</span>
+<span class="sd">        - Multiple replicas for higher throughput</span>
+<span class="sd">        - Native vLLM batching for optimal performance</span>
+<span class="sd">        - Automatic resource management and cleanup</span>
+
 <span class="sd">    Args:</span>
-<span class="sd">        model (vllm.LLM | str): The vLLM model to wrap. If a string, it will be passed to `vllm.LLM`.</span>
+<span class="sd">        model (vllm.LLM | AsyncVLLM | Ray Actor | str): The vLLM model to wrap.</span>
+<span class="sd">            - If a string, it will be converted to an AsyncVLLM instance (recommended)</span>
+<span class="sd">            - If a vllm.LLM instance, uses synchronous generation via `model.generate()`</span>
+<span class="sd">            - If an AsyncVLLM instance, uses async generation via `model.generate()`</span>
+<span class="sd">            - If a Ray actor with generate method, uses remote calls via `ray.get(model.generate.remote())`</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for encoding and decoding text.</span>
@@ -659,7 +686,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">model</span><span class="p">:</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>  <span class="c1"># type: ignore</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># vllm.LLM | AsyncVLLMEngineService | AsyncLLMEngineExtended | str</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">tokenizer</span><span class="p">:</span> <span class="nb">callable</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># type: ignore</span>
         <span class="n">input_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
@@ -720,8 +747,22 @@
         <span class="k">if</span> <span class="n">transformers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;transformers is required for vLLMWrapper&quot;</span><span class="p">)</span>
 
+        <span class="c1"># Detect and initialize model</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="c1"># Validate model type</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">AsyncVLLM</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model_type</span> <span class="o">=</span> <span class="s2">&quot;async_vllm&quot;</span>
+        <span class="k">elif</span> <span class="n">vllm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model_type</span> <span class="o">=</span> <span class="s2">&quot;sync_vllm&quot;</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;generate&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;remote&quot;</span><span class="p">):</span>
+            <span class="c1"># Ray actor with generate method</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model_type</span> <span class="o">=</span> <span class="s2">&quot;ray_actor&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;model must be a string, vllm.LLM, AsyncVLLM, or Ray actor. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
@@ -737,7 +778,6 @@
             <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_remote_calls</span> <span class="o">=</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">=</span> <span class="n">input_mode</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">attention_mask_key</span> <span class="o">=</span> <span class="n">attention_mask_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">generate</span> <span class="o">=</span> <span class="n">generate</span>
@@ -836,9 +876,29 @@
         <span class="c1"># Get tokenizer if needed</span>
         <span class="k">if</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_tokenizer</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;No tokenizer provided and no tokenizer found in model.&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;get_tokenizer&quot;</span><span class="p">):</span>
+                    <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_tokenizer</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Try to extract model name and load tokenizer as fallback</span>
+                    <span class="n">model_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_model_name</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">model_name</span><span class="p">:</span>
+                        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;No tokenizer provided. Attempting to load tokenizer from model name: </span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                        <span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
+
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_name</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">tokenizer_error</span><span class="p">:</span>
+                            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Failed to load tokenizer from </span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">tokenizer_error</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                            <span class="s2">&quot;No tokenizer provided and no tokenizer found in model.&quot;</span>
+                        <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not get tokenizer from model: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
@@ -1072,6 +1132,62 @@
 
         <span class="c1"># Create and return new instance</span>
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="o">**</span><span class="n">constructor_kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="vLLMWrapper.set_tokenizer"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper.set_tokenizer">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_tokenizer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the tokenizer for the wrapper. Useful for async engines where tokenizer retrieval is deferred.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;pad_token&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">padding_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span><span class="p">)[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">padding_value</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span> <span class="o">=</span> <span class="n">padding_value</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extract_model_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract model name from different model types for tokenizer fallback.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># For AsyncVLLM, try to get the model name from engine_args</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;engine_args&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">engine_args</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">engine_args</span><span class="o">.</span><span class="n">model</span>
+
+            <span class="c1"># For vllm.LLM, try to get the model name</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;llm_engine&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                <span class="n">model</span><span class="o">.</span><span class="n">llm_engine</span><span class="p">,</span> <span class="s2">&quot;model_config&quot;</span>
+            <span class="p">):</span>
+                <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">llm_engine</span><span class="o">.</span><span class="n">model_config</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="c1"># For Ray actors, try to get model name via remote call</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;remote&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;get_model_name&quot;</span><span class="p">):</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">get_model_name</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="k">pass</span>
+
+            <span class="c1"># Try common attributes that might contain model name</span>
+            <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;model_path&quot;</span><span class="p">,</span> <span class="s2">&quot;_model_name&quot;</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="k">return</span> <span class="n">value</span>
+
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call_generate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Call generate method based on model type.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_type</span> <span class="o">==</span> <span class="s2">&quot;ray_actor&quot;</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
+            <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Both sync_vllm and async_vllm have direct generate methods</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="vLLMWrapper.forward"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper.forward">[docs]</a>    <span class="nd">@set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
     <span class="nd">@_batching</span>
@@ -1318,6 +1434,9 @@
                 <span class="n">text_full</span><span class="p">,</span> <span class="n">prompt_histories</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span>
             <span class="p">)</span>
             <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">h_responses</span>
+            <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">prompt</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                <span class="n">h_responses</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+            <span class="p">)</span>
         <span class="n">result</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">,</span> <span class="n">history_chat</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
@@ -1519,12 +1638,21 @@
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_cat_text</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">response_text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">response_text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Concatenate text and response text.&quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
             <span class="n">text</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
         <span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;text must be str or list, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">text</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># Handle None response_text (when tokenizer is not available)</span>
+        <span class="k">if</span> <span class="n">response_text</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;response_text is None, likely due to missing tokenizer. &quot;</span>
+                <span class="s2">&quot;Cannot decode vLLM response without a tokenizer. &quot;</span>
+                <span class="s2">&quot;Please provide a tokenizer explicitly or ensure the model has one available.&quot;</span>
+            <span class="p">)</span>
+
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
             <span class="n">response_text</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
         <span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;response_text must be str or list, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">response_text</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -1566,14 +1694,8 @@
         <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_calls</span><span class="p">:</span>
-            <span class="n">request_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-            <span class="n">request_output</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
+        <span class="c1"># Call generate based on model type</span>
+        <span class="n">request_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_generate</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
 
         <span class="n">request_output_tc</span> <span class="o">=</span> <span class="n">_RequestOutput_tc</span><span class="o">.</span><span class="n">from_request_output</span><span class="p">(</span><span class="n">request_output</span><span class="p">)</span>
 
@@ -1716,12 +1838,7 @@
         <span class="p">}</span>
 
         <span class="c1"># Generate with vLLM to get prompt_logprobs</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_calls</span><span class="p">:</span>
-            <span class="n">request_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-            <span class="n">request_output</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">))</span>
+        <span class="n">request_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_generate</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
 
         <span class="n">request_output_tc</span> <span class="o">=</span> <span class="n">_RequestOutput_tc</span><span class="o">.</span><span class="n">from_request_output</span><span class="p">(</span><span class="n">request_output</span><span class="p">)</span>
 
@@ -1846,14 +1963,8 @@
             <span class="n">tokens_prompt_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_list</span><span class="p">(</span><span class="n">tokens_prompt_unpadded</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;prompt_token_ids&quot;</span><span class="p">:</span> <span class="n">tokens_prompt_list</span><span class="p">})</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_calls</span><span class="p">:</span>
-            <span class="n">request_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-            <span class="n">request_output</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
+        <span class="c1"># Call generate based on model type</span>
+        <span class="n">request_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_generate</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
 
         <span class="n">request_output_tc</span> <span class="o">=</span> <span class="n">_RequestOutput_tc</span><span class="o">.</span><span class="n">from_request_output</span><span class="p">(</span><span class="n">request_output</span><span class="p">)</span>
 
@@ -2090,12 +2201,7 @@
         <span class="p">}</span>
 
         <span class="c1"># Generate with vLLM to get prompt_logprobs</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_calls</span><span class="p">:</span>
-            <span class="n">tokens_out_stuct</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-            <span class="n">tokens_out_stuct</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">))</span>
+        <span class="n">tokens_out_stuct</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_generate</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
 
         <span class="n">request_output_tc</span> <span class="o">=</span> <span class="n">_RequestOutput_tc</span><span class="o">.</span><span class="n">from_request_output</span><span class="p">(</span><span class="n">tokens_out_stuct</span><span class="p">)</span>
 
@@ -2389,11 +2495,12 @@
         <span class="k">def</span><span class="w"> </span><span class="nf">postproc</span><span class="p">(</span><span class="n">output</span><span class="p">):</span>
             <span class="k">def</span><span class="w"> </span><span class="nf">get_logprob</span><span class="p">(</span><span class="n">output</span><span class="p">):</span>
                 <span class="n">t</span> <span class="o">=</span> <span class="p">[]</span>
-                <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">tid</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">logprobs</span><span class="p">,</span> <span class="n">output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">):</span>
+                <span class="n">token_ids</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">token_ids</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_ids</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="n">token_ids</span> <span class="o">=</span> <span class="n">token_ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">tid</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">logprobs</span><span class="p">,</span> <span class="n">token_ids</span><span class="p">):</span>
                     <span class="n">t</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="n">v</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">tid</span><span class="p">)][</span><span class="s2">&quot;logprob&quot;</span><span class="p">]</span>
-                        <span class="k">if</span> <span class="n">v</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;logprob&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                        <span class="k">else</span> <span class="mf">0.0</span>
+                        <span class="n">v</span><span class="p">[</span><span class="n">tid</span><span class="p">][</span><span class="s2">&quot;logprob&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">v</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;logprob&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
                     <span class="p">)</span>
                 <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
 
@@ -2485,354 +2592,6 @@
                 <span class="p">)</span>
                 <span class="k">for</span> <span class="n">request</span> <span class="ow">in</span> <span class="n">requests</span>
             <span class="p">]</span>
-
-
-<div class="viewcode-block" id="RemotevLLMWrapper"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RemotevLLMWrapper</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote Ray actor wrapper for vLLMWrapper that provides a simplified interface.</span>
-
-<span class="sd">    This class wraps a vLLMWrapper instance as a Ray actor, allowing remote execution</span>
-<span class="sd">    while providing a clean interface that doesn&#39;t require explicit `remote()` and `get()` calls.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        model (vllm.LLM | str): The vLLM model to wrap.</span>
-<span class="sd">            - If a string, it will be passed to `vllm.LLM` and downloaded on the remote worker.</span>
-<span class="sd">            - If a vLLM LLM object, it must be a remote model with a ray handle (not a local model).</span>
-<span class="sd">            Local vLLM models are not serializable and will raise an error.</span>
-<span class="sd">        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.</span>
-<span class="sd">        validate_model (bool, optional): Whether to validate the model. Defaults to True.</span>
-<span class="sd">        **kwargs: All other arguments are passed directly to vLLMWrapper.</span>
-
-<span class="sd">    Example:</span>
-<span class="sd">        &gt;&gt;&gt; import ray</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.policies import RemotevLLMWrapper</span>
-<span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; # Initialize Ray if not already done</span>
-<span class="sd">        &gt;&gt;&gt; if not ray.is_initialized():</span>
-<span class="sd">        ...     ray.init()</span>
-<span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; # Create remote wrapper</span>
-<span class="sd">        &gt;&gt;&gt; remote_wrapper = RemotevLLMWrapper(</span>
-<span class="sd">        ...     model=&quot;gpt2&quot;,</span>
-<span class="sd">        ...     input_mode=&quot;history&quot;,</span>
-<span class="sd">        ...     generate=True,</span>
-<span class="sd">        ...     generate_kwargs={&quot;max_new_tokens&quot;: 50}</span>
-<span class="sd">        ... )</span>
-<span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; # Use like a regular wrapper (no remote/get calls needed)</span>
-<span class="sd">        &gt;&gt;&gt; result = remote_wrapper(tensordict_input)</span>
-<span class="sd">        &gt;&gt;&gt; print(result[&quot;text&quot;].response)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">model</span><span class="p">,</span>
-        <span class="n">max_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
-        <span class="n">validate_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="c1"># Validate model parameter - for vLLM, we accept strings or vLLM LLM objects with ray handles</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">validate_model</span><span class="p">:</span>
-            <span class="c1"># Check if it&#39;s a vLLM LLM object with ray handle</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="kn">import</span><span class="w"> </span><span class="nn">vllm</span>
-
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span><span class="p">):</span>
-                    <span class="c1"># Check if it has a ray handle (remote model)</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;_llm_engine&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span>
-                        <span class="n">model</span><span class="o">.</span><span class="n">_llm_engine</span><span class="p">,</span> <span class="s2">&quot;model_executor&quot;</span>
-                    <span class="p">):</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="s2">&quot;For RemotevLLMWrapper, when passing a vLLM LLM object, &quot;</span>
-                            <span class="s2">&quot;it should be a remote vLLM model with a ray handle. &quot;</span>
-                            <span class="s2">&quot;Local vLLM models are not serializable. &quot;</span>
-                            <span class="s2">&quot;Consider using a string model name/path instead. &quot;</span>
-                            <span class="s2">&quot;You can bypass this check by setting validate_model=False.&quot;</span>
-                        <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;For RemotevLLMWrapper, the model parameter must be a string &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;(model name or path) or a remote vLLM LLM object. Got type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Local vLLM models are not serializable. &quot;</span>
-                        <span class="s2">&quot;You can bypass this check by setting validate_model=False.&quot;</span>
-                    <span class="p">)</span>
-            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;For RemotevLLMWrapper, the model parameter must be a string &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;(model name or path) or a remote vLLM LLM object. Got type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;vLLM is not available, so only string model names/paths are supported. &quot;</span>
-                    <span class="s2">&quot;You can bypass this check by setting validate_model=False.&quot;</span>
-                <span class="p">)</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="n">actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Check if an actor with this name already exists</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">existing_actor</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get_actor</span><span class="p">(</span><span class="n">actor_name</span><span class="p">)</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using existing actor </span><span class="si">{</span><span class="n">actor_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="c1"># If we can get the actor, assume it&#39;s alive and use it</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span> <span class="o">=</span> <span class="n">existing_actor</span>
-                <span class="k">return</span>
-            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-                <span class="c1"># Actor doesn&#39;t exist, create a new one</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating new actor </span><span class="si">{</span><span class="n">actor_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="c1"># Create the remote actor with the unique name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">vLLMWrapper</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">max_concurrency</span><span class="o">=</span><span class="n">max_concurrency</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass that automatically handles remote execution.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="fm">__call__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.forward"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass that automatically handles remote execution.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">forward</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.get_new_version"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_new_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_new_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a new version of the wrapper with altered parameters.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_new_version</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.get_dist"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_dist">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution from logits/log-probs with optional masking.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.get_dist_with_prompt_mask"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_dist_with_prompt_mask">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist_with_prompt_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked to only include response tokens (exclude prompt).&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_dist_with_prompt_mask</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="p">)</span></div>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_assistant_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked to only include assistant tokens.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_dist_with_assistant_mask</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_attention_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked using attention mask.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_dist_with_attention_mask</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_custom_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution with custom mask.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_dist_with_custom_mask</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sft_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution suitable for SFT loss (response tokens only).&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_sft_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_rlhf_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution suitable for RLHF loss (assistant tokens only).&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_rlhf_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_generic_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution suitable for generic losses (all tokens).&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">_get_generic_dist</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="p">)</span>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.log_prob"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log probabilities.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">log_prob</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.cleanup_batching"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.cleanup_batching">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup_batching</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clean up batching resources.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup when the wrapper is destroyed.&quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_remote_wrapper&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-                <span class="c1"># Clean up batching resources</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
-                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-                    <span class="k">pass</span>  <span class="c1"># Ignore cleanup errors during destruction</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="k">pass</span>  <span class="c1"># Ignore any errors during cleanup</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager entry.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager exit with cleanup.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="p">()</span>
-
-<div class="viewcode-block" id="RemotevLLMWrapper.get_batching_state"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper.get_batching_state">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_batching_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current batching state.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">get_batching_state</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether text generation is enabled.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">pad_output</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether output sequences are padded.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">pad_output</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">text_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The key for text output.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">text_key</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">tokens_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The key for tokens output.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">tokens_key</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">masks_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The key for masks output.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">masks_key</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_probs_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The key for log probabilities output.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">log_probs_key</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The input keys.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">in_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The output keys.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">out_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">inplace</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether in-place operations are used.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">inplace</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The device used for computation.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">layout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The layout used for output tensors.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">num_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The number of samples to generate.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">num_samples</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">batching</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether batching is enabled.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">batching</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The collector associated with the module.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The keys for log probabilities.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">log_prob_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@log_prob_keys</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the keys for log probabilities.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">log_prob_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">dist_params_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The keys for distribution parameters.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">dist_params_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">dist_sample_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The keys for distribution samples.&quot;&quot;&quot;</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span><span class="o">.</span><span class="n">dist_sample_keys</span><span class="o">.</span><span class="n">remote</span><span class="p">)</span></div>
 </pre></div>
 
              </article>

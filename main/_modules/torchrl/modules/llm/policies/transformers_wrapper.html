@@ -1647,12 +1647,15 @@
                 <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
                 <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
-                <span class="n">log_probs_full_unpadded</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
-                <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">log_probs_full_unpadded</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                    <span class="n">log_probs_full_unpadded</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                    <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                    <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">logits_full_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
                 <span class="n">logits_full_unpadded</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
                 <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -2227,12 +2230,15 @@
                 <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
                 <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
-                <span class="n">log_probs_full_unpadded</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
-                <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">log_probs_full_unpadded</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                    <span class="n">log_probs_full_unpadded</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                    <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                    <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">logits_full_padded</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
                 <span class="n">logits_full_unpadded</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
                 <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -2714,7 +2720,7 @@
         <span class="n">flat_input_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
         <span class="n">pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">logits_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Unpack outputs using nested tensors - zero syncs.&quot;&quot;&quot;</span>
         <span class="c1"># use cross_entropy to compute log_probs</span>
         <span class="n">log_probs</span><span class="p">,</span> <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_log_probs_from_model_output</span><span class="p">(</span>
@@ -2725,6 +2731,7 @@
             <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="c1"># check shapes: [1, L] for log_probs, [1, L, vocab_size] for logits</span>
+        <span class="n">sequence_lengths</span> <span class="o">=</span> <span class="n">packing_metadata</span><span class="p">[</span><span class="s2">&quot;sequence_lengths&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">logits_only</span><span class="p">:</span>
             <span class="n">log_probs</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
@@ -2736,7 +2743,6 @@
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Log probs shape </span><span class="si">{</span><span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2"> is not 2D&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">logits</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Logits shape </span><span class="si">{</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2"> is not 3D&quot;</span><span class="p">)</span>
-            <span class="n">sequence_lengths</span> <span class="o">=</span> <span class="n">packing_metadata</span><span class="p">[</span><span class="s2">&quot;sequence_lengths&quot;</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">sequence_lengths</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Log probs shape </span><span class="si">{</span><span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2"> does not match sequence lengths </span><span class="si">{</span><span class="n">sequence_lengths</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">=}</span><span class="s2">&quot;</span>
@@ -2754,11 +2760,16 @@
             <span class="n">lengths</span><span class="o">=</span><span class="n">sequence_lengths</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">pad</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">nested_logprobs</span><span class="o">.</span><span class="n">to_padded_tensor</span><span class="p">(</span>
-                <span class="n">padding</span><span class="o">=</span><span class="mf">0.0</span>
-            <span class="p">),</span> <span class="n">nested_logits</span><span class="o">.</span><span class="n">to_padded_tensor</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">nested_logprobs</span><span class="p">,</span> <span class="n">nested_logits</span>
+        <span class="k">if</span> <span class="n">logits_only</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">pad</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">nested_logits</span><span class="o">.</span><span class="n">to_padded_tensor</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">nested_logits</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">pad</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">nested_logprobs</span><span class="o">.</span><span class="n">to_padded_tensor</span><span class="p">(</span>
+                    <span class="n">padding</span><span class="o">=</span><span class="mf">0.0</span>
+                <span class="p">),</span> <span class="n">nested_logits</span><span class="o">.</span><span class="n">to_padded_tensor</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">nested_logprobs</span><span class="p">,</span> <span class="n">nested_logits</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_create_block_diagonal_attention_mask</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">sequence_lengths</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
@@ -2841,6 +2852,8 @@
 <span class="sd">            Transformers models are not serializable, so only model names/paths are supported.</span>
 <span class="sd">        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.</span>
 <span class="sd">        validate_model (bool, optional): Whether to validate the model. Defaults to True.</span>
+<span class="sd">        num_gpus (int, optional): Number of GPUs to use. Defaults to 0.</span>
+<span class="sd">        num_cpus (int, optional): Number of CPUs to use. Defaults to 0.</span>
 <span class="sd">        **kwargs: All other arguments are passed directly to TransformersWrapper.</span>
 
 <span class="sd">    Example:</span>
@@ -2870,6 +2883,8 @@
         <span class="n">max_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
         <span class="n">validate_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">num_cpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
@@ -2901,7 +2916,12 @@
         <span class="c1"># Create the remote actor with the unique name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_remote_wrapper</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">TransformersWrapper</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">max_concurrency</span><span class="o">=</span><span class="n">max_concurrency</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">options</span><span class="p">(</span>
+                <span class="n">max_concurrency</span><span class="o">=</span><span class="n">max_concurrency</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">,</span>
+                <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+                <span class="n">num_cpus</span><span class="o">=</span><span class="n">num_cpus</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="p">)</span>
 

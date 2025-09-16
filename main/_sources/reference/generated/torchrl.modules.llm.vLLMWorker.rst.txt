@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-vLLMWorker
-==========
-
-.. autoclass:: vLLMWorker
-    :members:
-    :inherited-members:

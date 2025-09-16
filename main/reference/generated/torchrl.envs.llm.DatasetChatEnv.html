@@ -465,6 +465,11 @@ in the tensordict returned by TorchRL components. Defaults to <cite>None</cite>.
 <li><p><strong>data_key</strong> (<em>str</em><em>, </em><em>optional</em>) – The spec of the data returned by the dataloader (or better, its collate_fn).
 Defaults to <cite>None</cite> (automatically determined based on the input_mode).</p></li>
 <li><p><strong>system_prompt</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The system prompt to use for the environment. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>ray_backend</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use the Ray backend for data loading. Defaults to <cite>False</cite>.
+Using this backend allows for explicit resource control and avoids serialization issues, as well as
+sharing the same dataloader across multiple environments and actors.</p></li>
+<li><p><strong>dataloader_actor_name</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Name of the Ray actor to use for data loading.
+Ignored if <cite>ray_backend</cite> is <cite>None</cite>.</p></li>
 </ul>
 </dd>
 </dl>

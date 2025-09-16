@@ -864,12 +864,12 @@ a done state).</p>
 when to reset the environment (through the <code class="docutils literal notranslate"><span class="pre">max_frames_per_traj</span></code> argument),
 on which <code class="docutils literal notranslate"><span class="pre">device</span></code> the policy should be executed, etc. They are also
 designed to work efficiently with batched and multiprocessed environments.</p>
-<p>The simplest data collector is the <a class="reference internal" href="../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>:
+<p>The simplest data collector is the <a class="reference internal" href="../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>:
 it is an iterator that you can use to get batches of data of a given length, and
 that will stop once a total number of frames (<code class="docutils literal notranslate"><span class="pre">total_frames</span></code>) have been
 collected.
-Other data collectors (<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> and
-<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>) will execute
+Other data collectors (<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> and
+<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>) will execute
 the same operations in synchronous and asynchronous manner over a
 set of multiprocessed workers.</p>
 <p>As for the policy and environment before, the data collector will return

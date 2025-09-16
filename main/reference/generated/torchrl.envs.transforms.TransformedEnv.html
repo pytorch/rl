@@ -433,13 +433,13 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.TransformedEnv">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">TransformedEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#TransformedEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.TransformedEnv" title="Permalink to this definition">¶</a></dt>
-<dd><p>A transformed_in environment.</p>
+<dd><p>A transformed environment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>env</strong> (<a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><em>EnvBase</em></a>) – original environment to be transformed_in.</p></li>
+<li><p><strong>base_env</strong> (<a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><em>EnvBase</em></a>) – original environment to be transformed.</p></li>
 <li><p><strong>transform</strong> (<a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><em>Transform</em></a><em> or </em><em>callable</em><em>, </em><em>optional</em>) – <p>transform to apply to the tensordict resulting
-from <code class="xref py py-obj docutils literal notranslate"><span class="pre">env.step(td)</span></code>. If none is provided, an empty Compose
+from <code class="xref py py-obj docutils literal notranslate"><span class="pre">base_env.step(td)</span></code>. If none is provided, an empty Compose
 placeholder in an eval mode is used.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -459,7 +459,7 @@ the transform will run smoothly:</p>
 </p></li>
 <li><p><strong>cache_specs</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the specs will be cached once
 and for all after the first call (i.e. the specs will be
-transformed_in only once). If the transform changes during
+transformed only once). If the transform changes during
 training, the original spec transform may not be valid anymore,
 in which case this value should be set  to <cite>False</cite>. Default is
 <cite>True</cite>.</p></li>
@@ -489,6 +489,13 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># The inner env has been unwrapped</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transformed_env</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="n">GymEnv</span><span class="p">)</span>
 </pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The first argument was renamed from <code class="docutils literal notranslate"><span class="pre">env</span></code> to <code class="docutils literal notranslate"><span class="pre">base_env</span></code> for clarity.
+The old <code class="docutils literal notranslate"><span class="pre">env</span></code> argument is still supported for backward compatibility
+but will be removed in v0.12. A deprecation warning will be shown when
+using the old argument name.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.TransformedEnv.add_truncated_keys">

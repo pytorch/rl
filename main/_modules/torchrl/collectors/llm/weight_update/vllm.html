@@ -426,6 +426,8 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -438,31 +440,52 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends.vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
 
 <span class="n">_has_vllm</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;vllm&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<span class="k">if</span> <span class="n">_has_vllm</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_open_port</span>
-<span class="k">else</span><span class="p">:</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_open_port</span><span class="p">():</span>  <span class="c1"># noqa: D103</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">&quot;vllm is not installed. Please install it with `pip install vllm`.&quot;</span>
-        <span class="p">)</span>
-
 
 <span class="n">_has_ray</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;ray&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<span class="k">if</span> <span class="n">_has_ray</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="k">else</span><span class="p">:</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">ray</span><span class="p">():</span>  <span class="c1"># noqa: D103</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
-        <span class="p">)</span>
 
 
-<div class="viewcode-block" id="vLLMUpdater"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">vLLMUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">vLLMUpdaterMeta</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for vLLMUpdater that allows switching between V1 and V2 implementations.</span>
+
+<span class="sd">    When instantiating vLLMUpdater with v2=True, returns a vLLMUpdaterV2 instance instead.</span>
+<span class="sd">    This provides a unified entry point for both updater versions while maintaining</span>
+<span class="sd">    backward compatibility.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">v2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">v2</span><span class="p">:</span>
+            <span class="c1"># Import V2 here to avoid circular imports</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">.vllm_v2</span><span class="w"> </span><span class="kn">import</span> <span class="n">vLLMUpdaterV2</span>
+
+            <span class="c1"># V2 has a different signature - it expects a vllm_engine parameter</span>
+            <span class="c1"># If the user is providing the old signature, we need to handle this gracefully</span>
+            <span class="k">if</span> <span class="n">args</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span>
+                <span class="n">k</span> <span class="ow">in</span> <span class="n">kwargs</span>
+                <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span>
+                    <span class="s2">&quot;master_address&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;master_port&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;model_metadata&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;vllm_tp_size&quot;</span><span class="p">,</span>
+                <span class="p">]</span>
+            <span class="p">):</span>
+                <span class="c1"># Old signature detected - we can&#39;t auto-convert, user needs to update their code</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;When using v2=True, you must provide a vllm_engine parameter instead of &quot;</span>
+                    <span class="s2">&quot;the v1 parameters (master_address, master_port, model_metadata, vllm_tp_size). &quot;</span>
+                    <span class="s2">&quot;See vLLMUpdaterV2 documentation for details.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Forward to V2 constructor</span>
+            <span class="k">return</span> <span class="n">vLLMUpdaterV2</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Use original V1 constructor</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="vLLMUpdater"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">vLLMUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">vLLMUpdaterMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A class that sends weights to vLLM workers.</span>
 
 <span class="sd">    This class handles synchronizing weights between a training policy and vLLM inference workers.</span>
@@ -474,6 +497,9 @@
 <span class="sd">        model_metadata (dict[str, tuple[torch.dtype, torch.Size]], optional): Model metadata mapping</span>
 <span class="sd">            parameter names to their dtype and shape. If not provided, will be extracted from policy.</span>
 <span class="sd">        vllm_tp_size (int, optional): vLLM tensor parallel size. Defaults to 1.</span>
+<span class="sd">        v2 (bool, optional): If True, returns a vLLMUpdaterV2 instance instead. This is an experimental</span>
+<span class="sd">            feature that provides better integration with AsyncVLLM engines. When using v2=True, you must</span>
+<span class="sd">            provide a vllm_engine parameter instead of the above parameters. Defaults to False.</span>
 
 <span class="sd">    Methods:</span>
 <span class="sd">        init: Initialize the updater with model metadata and initialize the group.</span>
@@ -485,6 +511,11 @@
 <span class="sd">    .. note::</span>
 <span class="sd">        This class assumes the policy is a transformers model that can be loaded by vLLM.</span>
 <span class="sd">        The policy must have a state_dict() method that returns the model weights.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        The v2=True option is experimental and may have backward-compatibility breaking changes</span>
+<span class="sd">        in future releases. However, it is generally considered a better option for working with</span>
+<span class="sd">        AsyncVLLM engines and provides improved performance and reliability.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -527,6 +558,8 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">master_port</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_open_port</span>
+
             <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="o">=</span> <span class="n">get_open_port</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span>
 
@@ -558,6 +591,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_init_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">._init_group&quot;</span><span class="p">)</span>
         <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;initializing group with </span><span class="si">{</span><span class="n">weight_sync_world_size</span><span class="si">=}</span><span class="s2">...&quot;</span><span class="p">)</span>
@@ -582,6 +617,7 @@
             <span class="n">weight_sync_world_size</span><span class="p">,</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">),</span>
         <span class="p">)</span>
+
         <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">init_weight_update_group_getter</span><span class="p">)</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group getter succeeded&quot;</span><span class="p">)</span>
 
@@ -652,6 +688,8 @@
                 <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
             <span class="p">)</span>
             <span class="k">del</span> <span class="n">val</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
         <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">remotes</span><span class="p">)</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;done broadcasting&quot;</span><span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span></div>

@@ -435,8 +435,9 @@ together to create a complete reinforcement learning pipeline for language model
 output classes. This includes the <a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> class for managing conversation context and structured output classes for
 tokens, log-probabilities, and text.</p></li>
 <li><p><strong>LLM Wrapper API</strong> (<a class="reference internal" href="#modules">Modules</a>): Unified interfaces for different LLM backends, including <a class="reference internal" href="generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a> for
-Hugging Face models and <a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a> for vLLM inference. These wrappers provide consistent input/output formats across
-different backends and an integrated interface for loss computation, data storage, grading, weight synchronization, etc.</p></li>
+Hugging Face models, <a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a> for vLLM inference, and <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> for high-performance
+distributed vLLM inference (recommended). These wrappers provide consistent input/output formats across different backends and an integrated
+interface for loss computation, data storage, grading, weight synchronization, etc.</p></li>
 <li><p><strong>Environments</strong> (<a class="reference internal" href="#environments">Environments</a>): The orchestration layer that manages data loading, tool execution, reward computation, and formatting. This includes
 <a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChatEnv</span></code></a> for conversation management, dataset environments, and various transforms for tool integration.</p></li>
 <li><p><strong>Objectives</strong> (<a class="reference internal" href="#objectives">Objectives</a>): Specialized loss functions for LLM training, including <a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss" title="torchrl.objectives.llm.GRPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRPOLoss</span></code></a> for Group Relative
@@ -844,8 +845,8 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper" title="torchrl.modules.llm.RemoteTransformersWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoteTransformersWrapper</span></code></a>(model[, ...])</p></td>
 <td><p>A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.RemotevLLMWrapper.html#torchrl.modules.llm.RemotevLLMWrapper" title="torchrl.modules.llm.RemotevLLMWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemotevLLMWrapper</span></code></a>(model[, max_concurrency, ...])</p></td>
-<td><p>A remote Ray actor wrapper for vLLMWrapper that provides a simplified interface.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a>(engine_args[, num_replicas, ...])</p></td>
+<td><p>A service that manages multiple async vLLM engine actors for distributed inference.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory" title="torchrl.modules.llm.ChatHistory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChatHistory</span></code></a>([prompt, response, full, ...])</p></td>
 <td><p></p></td>
@@ -864,9 +865,111 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
 </tr>
 </tbody>
 </table>
+<section id="async-vllm-engine-recommended">
+<h4>Async vLLM Engine (Recommended)<a class="headerlink" href="#async-vllm-engine-recommended" title="Permalink to this heading">¶</a></h4>
+<p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> is the recommended approach for high-performance vLLM inference in TorchRL.
+It provides a distributed, async-capable inference service built on Ray that offers superior performance and resource utilization compared to synchronous vLLM engines.</p>
+<p><strong>Key Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Distributed Architecture</strong>: Runs multiple vLLM engine replicas as Ray actors for horizontal scaling</p></li>
+<li><p><strong>Load Balancing</strong>: Automatically distributes requests across available replicas</p></li>
+<li><p><strong>Native vLLM Batching</strong>: Leverages vLLM’s optimized batching for maximum throughput.
+Every thread or actor in your code will be able to make requests to the vLLM engine(s), put the query in
+the queue and let the engine handle the batching.</p></li>
+<li><p><strong>Resource Management</strong>: Automatic GPU allocation and cleanup through Ray placement groups</p></li>
+<li><p><strong>Simple API</strong>: Single-import convenience with <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.from_pretrained" title="torchrl.modules.llm.AsyncVLLM.from_pretrained"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pretrained()</span></code></a></p></li>
+</ul>
+<p><strong>Basic Usage:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span><span class="p">,</span> <span class="n">vLLMWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamplingParams</span>
+
+<span class="c1"># Create async vLLM service (recommended)</span>
+<span class="n">async_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+    <span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span>
+    <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>       <span class="c1"># Use 2 GPUs per replica (tensor parallel)</span>
+    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>      <span class="c1"># Create 2 replicas for higher throughput</span>
+    <span class="n">max_model_len</span><span class="o">=</span><span class="mi">4096</span>
+<span class="p">)</span>
+
+<span class="c1"># Use with vLLMWrapper for TorchRL integration</span>
+<span class="n">wrapper</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Direct generation (also supported)</span>
+<span class="n">sampling_params</span> <span class="o">=</span> <span class="n">SamplingParams</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">async_engine</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">&quot;Hello, world!&quot;</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">)</span>
+
+<span class="c1"># Cleanup when done</span>
+<span class="n">async_engine</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>These objects (AsyncVLLM and vLLMWrapper) can be shared across multiple collectors, environments, or workers efficiently.
+They can be directly passed from one worker to another: under the hood, Ray will handle the handler sharing and remote execution.</p>
+<p><strong>Performance Benefits:</strong></p>
+<ul class="simple">
+<li><p><strong>Higher Throughput</strong>: Multiple replicas process requests concurrently</p></li>
+<li><p><strong>Better GPU Utilization</strong>: Ray ensures optimal GPU allocation and co-location</p></li>
+<li><p><strong>Reduced Latency</strong>: Native batching reduces per-request overhead</p></li>
+<li><p><strong>Fault Tolerance</strong>: Ray provides automatic error recovery and resource management</p></li>
+</ul>
+<p><strong>Resource Sharing:</strong></p>
+<p>AsyncVLLM instances can be shared across multiple collectors, environments, or workers efficiently:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span><span class="p">,</span> <span class="n">vLLMWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMCollector</span>
+
+<span class="c1"># Create a shared AsyncVLLM service</span>
+<span class="n">shared_async_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+    <span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span>
+    <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>  <span class="c1"># High throughput for multiple consumers</span>
+    <span class="n">max_model_len</span><span class="o">=</span><span class="mi">4096</span>
+<span class="p">)</span>
+
+<span class="c1"># Multiple wrappers can use the same AsyncVLLM service</span>
+<span class="n">wrapper1</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">shared_async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
+<span class="n">wrapper2</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">shared_async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
+
+<span class="c1"># Multiple collectors can share the same service</span>
+<span class="n">collector1</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env1</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">wrapper1</span><span class="p">)</span>
+<span class="n">collector2</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env2</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">wrapper2</span><span class="p">)</span>
+
+<span class="c1"># The AsyncVLLM service automatically load-balances across replicas</span>
+<span class="c1"># No additional coordination needed between consumers</span>
+</pre></div>
+</div>
+<p>This approach is more efficient than creating separate vLLM instances for each consumer, as it:</p>
+<ul class="simple">
+<li><p><strong>Reduces Memory Usage</strong>: Single model loading shared across consumers</p></li>
+<li><p><strong>Automatic Load Balancing</strong>: Requests are distributed across replicas</p></li>
+<li><p><strong>Better Resource Utilization</strong>: GPUs are used more efficiently</p></li>
+<li><p><strong>Simplified Management</strong>: Single service to monitor and manage</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>AsyncVLLM vs. Traditional Actor Sharing</strong></p>
+<p>Unlike traditional Ray actor sharing patterns where you manually create named actors and share references,
+AsyncVLLM handles the distributed architecture internally. You simply create one AsyncVLLM service and
+pass it to multiple consumers. The service automatically:</p>
+<ul class="simple">
+<li><p>Creates and manages multiple Ray actors (replicas) internally</p></li>
+<li><p>Load-balances requests across replicas without manual coordination</p></li>
+<li><p>Handles actor lifecycle and resource cleanup</p></li>
+</ul>
+<p>This eliminates the need for manual actor name management and reference sharing that was required
+with the previous <cite>RemotevLLMWrapper</cite> approach.</p>
+</div>
+</section>
 <section id="remote-wrappers">
 <h4>Remote Wrappers<a class="headerlink" href="#remote-wrappers" title="Permalink to this heading">¶</a></h4>
 <p>TorchRL provides remote wrapper classes that enable distributed execution of LLM wrappers using Ray. These wrappers provide a simplified interface that doesn’t require explicit <cite>remote()</cite> and <cite>get()</cite> calls, making them easy to use in distributed settings.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>For vLLM: Use AsyncVLLM Instead</strong></p>
+<p>For vLLM-based inference, we recommend using <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> directly rather than
+remote wrappers. AsyncVLLM provides better performance, resource utilization, and built-in load balancing.
+See the <a class="reference internal" href="#async-vllm-engine-recommended">Async vLLM Engine (Recommended)</a> section above for details.</p>
+<p>Remote wrappers are primarily intended for Transformers-based models or other use cases where AsyncVLLM
+is not applicable.</p>
+</div>
 <p><strong>Key Features:</strong></p>
 <ul class="simple">
 <li><p><strong>Simplified Interface</strong>: No need to call <cite>remote()</cite> and <cite>get()</cite> explicitly</p></li>
@@ -878,12 +981,13 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
 </ul>
 <p><strong>Model Parameter Requirements:</strong></p>
 <ul class="simple">
-<li><p><strong>RemotevLLMWrapper</strong>: Accepts string model names/paths (recommended) or remote vLLM LLM objects with ray handles. Local vLLM models are not serializable.</p></li>
 <li><p><strong>RemoteTransformersWrapper</strong>: Only accepts string model names/paths. Transformers models are not serializable.</p></li>
 </ul>
+<p><strong>Supported Backends:</strong></p>
+<p>Currently, only Transformers-based models are supported through remote wrappers. For vLLM models, use <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> instead.</p>
 <p><strong>Usage Examples:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemotevLLMWrapper</span><span class="p">,</span> <span class="n">RemoteTransformersWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemoteTransformersWrapper</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span><span class="p">,</span> <span class="n">Text</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -892,27 +996,8 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
 <span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
     <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 
-<span class="c1"># Use context manager for proper cleanup (recommended)</span>
-<span class="k">with</span> <span class="n">RemotevLLMWrapper</span><span class="p">(</span>
-    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
-    <span class="n">max_concurrency</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>  <span class="c1"># Control concurrent calls</span>
-    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
-    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">}</span>
-<span class="p">)</span> <span class="k">as</span> <span class="n">remote_wrapper</span><span class="p">:</span>
-
-    <span class="c1"># Create test input</span>
-    <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-        <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello, how are you?&quot;</span><span class="p">}</span>
-    <span class="p">]])</span>
-    <span class="n">chat_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">history</span><span class="p">)</span>
-    <span class="n">tensordict_input</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">chat_history</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-
-    <span class="c1"># Use like a regular wrapper (no remote/get calls needed!)</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">remote_wrapper</span><span class="p">(</span><span class="n">tensordict_input</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
-
 <span class="c1"># Transformers wrapper (only string models supported)</span>
+<span class="c1"># The remote wrappers implement context managers for proper resource cleanup:</span>
 <span class="k">with</span> <span class="n">RemoteTransformersWrapper</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
     <span class="n">max_concurrency</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
@@ -924,21 +1009,6 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
     <span class="n">text_input</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">Text</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Hello world&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">remote_transformers</span><span class="p">(</span><span class="n">text_input</span><span class="p">)</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
-</pre></div>
-</div>
-<p><strong>Cleanup and Resource Management:</strong></p>
-<p>The remote wrappers implement context managers for proper resource cleanup:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Context manager (recommended)</span>
-<span class="k">with</span> <span class="n">RemotevLLMWrapper</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">wrapper</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">input_data</span><span class="p">)</span>
-    <span class="c1"># Cleanup is automatic when exiting the context</span>
-
-<span class="c1"># Manual cleanup</span>
-<span class="n">wrapper</span> <span class="o">=</span> <span class="n">RemotevLLMWrapper</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">input_data</span><span class="p">)</span>
-<span class="k">finally</span><span class="p">:</span>
-    <span class="n">wrapper</span><span class="o">.</span><span class="n">cleanup_batching</span><span class="p">()</span>  <span class="c1"># Important: prevents hanging</span>
 </pre></div>
 </div>
 <p><strong>Performance Considerations:</strong></p>
@@ -955,17 +1025,17 @@ to combine them in a cohesive batch. Working with unpadded data is more straight
 <h4>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h4>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.LLMOnDevice.html#torchrl.modules.llm.LLMOnDevice" title="torchrl.modules.llm.LLMOnDevice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMOnDevice</span></code></a>(*args[, bundle_indices])</p></td>
-<td><p>A thin wrapper around <cite>vllm.LLM</cite> to control its placement devices.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_async_vllm_engine.html#torchrl.modules.llm.make_async_vllm_engine" title="torchrl.modules.llm.make_async_vllm_engine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_async_vllm_engine</span></code></a>(model_name[, ...])</p></td>
+<td><p>Create an async vLLM engine service.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker" title="torchrl.modules.llm.make_vllm_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vllm_worker</span></code></a>(*, model_name[, devices, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group_async.html#torchrl.modules.llm.stateless_init_process_group_async" title="torchrl.modules.llm.stateless_init_process_group_async"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group_async</span></code></a>(...)</p></td>
+<td><p>Initializes a stateless process group for distributed communication (async version).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker" title="torchrl.modules.llm.make_vllm_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vllm_worker</span></code></a>(*, model_name[, devices, ...])</p></td>
 <td><p>Creates a vLLM inference engine with tensor parallelism support.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group" title="torchrl.modules.llm.stateless_init_process_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group</span></code></a>(master_address, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group" title="torchrl.modules.llm.stateless_init_process_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group</span></code></a>(master_address, ...)</p></td>
 <td><p>Initializes a stateless process group for distributed communication.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.vLLMWorker.html#torchrl.modules.llm.vLLMWorker" title="torchrl.modules.llm.vLLMWorker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMWorker</span></code></a>(*args, **kwargs)</p></td>
-<td><p>vLLM worker for Ray.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1017,13 +1087,16 @@ transform, or a boolean to the collector constructor.</p>
 </div>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater" title="torchrl.collectors.llm.vLLMUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMUpdater</span></code></a>([master_address, master_port, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater" title="torchrl.collectors.llm.vLLMUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMUpdater</span></code></a>(*args[, v2])</p></td>
 <td><p>A class that sends weights to vLLM workers.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.vLLMUpdaterV2.html#torchrl.collectors.llm.vLLMUpdaterV2" title="torchrl.collectors.llm.vLLMUpdaterV2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMUpdaterV2</span></code></a>(vllm_engine)</p></td>
+<td><p>Simplified vLLM weight updater using the RLvLLMEngine interface.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
 <td><p>A simplified version of SyncDataCollector for LLM inference.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
 <td><p>A lightweight Ray implementation of the LLM Collector that can be extended and sampled remotely.</p></td>
 </tr>
 </tbody>
@@ -1312,13 +1385,13 @@ For example, in the GSM8K reward parser:</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.BrowserTransform.html#torchrl.envs.llm.transforms.BrowserTransform" title="torchrl.envs.llm.transforms.BrowserTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BrowserTransform</span></code></a>([allowed_domains, ...])</p></td>
 <td><p>A transform that enables web browsing capabilities.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a>(dataloader, *[, primers, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A primer that loads data from a dataloader and converts it into a tensordict using <code class="docutils literal notranslate"><span class="pre">stack_method</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.KLComputation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLComputation</span></code></a>([gen_log_probs_full_key, ...])</p></td>
 <td><p>A transform to compute KL divergence between two log-prob tensors and optionally add it to the reward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(ref_model, *[, coef, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A legacy transform for computing KL divergence-based rewards.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(tools, tool_schemas[, ...])</p></td>
@@ -1330,22 +1403,25 @@ For example, in the GSM8K reward parser:</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
 <td><p>A transform that executes Python code in the LLM response.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.RetrieveKL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>([gen_model, ref_model, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer" title="torchrl.envs.llm.transforms.RayDataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayDataLoadingPrimer</span></code></a>(*[, dataloader, ...])</p></td>
+<td><p>A <a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a> that creates a single actor that can be shared by multiple environments.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.RetrieveKL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>(*args[, use_ray_service])</p></td>
 <td><p>A transform to retrieve the KL divergence between two models' log-probabilities.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(model, *[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(model, *[, ...])</p></td>
 <td><p>A transform to retrieve log-probabilities from a model for KL divergence computation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
 <td><p>A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with nested tensors.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with padded tensors.</p></td>
 </tr>
 </tbody>
@@ -1468,6 +1544,7 @@ that codes the LLM-specific functionalities.</p>
 </li>
 <li><a class="reference internal" href="#modules">Modules</a><ul>
 <li><a class="reference internal" href="#wrappers">Wrappers</a><ul>
+<li><a class="reference internal" href="#async-vllm-engine-recommended">Async vLLM Engine (Recommended)</a></li>
 <li><a class="reference internal" href="#remote-wrappers">Remote Wrappers</a></li>
 <li><a class="reference internal" href="#utils">Utils</a></li>
 </ul>

@@ -587,6 +587,11 @@
 <span class="sd">            collate function is used. Defaults to `None`.</span>
 <span class="sd">        max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.</span>
 <span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;], optional): The mode of input to use. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">        ray_backend (bool, optional): Whether to use the Ray backend for data loading. Defaults to `False`.</span>
+<span class="sd">            Using this backend allows for explicit resource control and avoids serialization issues, as well as</span>
+<span class="sd">            sharing the same dataloader across multiple environments and actors.</span>
+<span class="sd">        dataloader_actor_name (str, optional): Name of the Ray actor to use for data loading.</span>
+<span class="sd">            Defaults to `&quot;gsm8k_dataloader&quot;`.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import transformers</span>
@@ -738,7 +743,11 @@
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">ray_backend</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">dataloader_actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="k">if</span> <span class="n">ray_backend</span> <span class="ow">and</span> <span class="n">dataloader_actor_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dataloader_actor_name</span> <span class="o">=</span> <span class="s2">&quot;gsm8k_dataloader&quot;</span>
         <span class="k">if</span> <span class="n">collate_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">_collate_fn</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
@@ -756,11 +765,14 @@
             <span class="n">apply_template</span><span class="o">=</span><span class="n">apply_template</span><span class="p">,</span>
             <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">,</span>
             <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">ray_backend</span><span class="o">=</span><span class="n">ray_backend</span><span class="p">,</span>
+            <span class="n">dataloader_actor_name</span><span class="o">=</span><span class="n">dataloader_actor_name</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">max_steps</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">StepCounter</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">compute_reward</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">GSM8KRewardParser</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">))</span></div>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">GSM8KRewardParser</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">t</span><span class="p">)</span></div>
 </pre></div>
 
              </article>

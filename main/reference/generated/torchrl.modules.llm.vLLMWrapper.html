@@ -436,9 +436,33 @@
 <dd><p>A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.</p>
 <p>This class is a subclass of <code class="xref py py-class docutils literal notranslate"><span class="pre">LLMWrapperBase</span></code> and provides a unified API for handling different input
 modalities (history, text, tokens) with consistent output structure using <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code> objects.</p>
+<p>The wrapper supports both synchronous (vllm.LLM) and asynchronous (<code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code>) vLLM engines.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Recommended: Use AsyncVLLM for better performance</strong></p>
+<p>For distributed inference and better resource utilization, we recommend using
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code> instead of the synchronous vllm.LLM:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">vLLMWrapper</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Recommended approach</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">async_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-3B&quot;</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wrapper</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>AsyncVLLM provides:
+- Better GPU utilization through Ray-based distribution
+- Multiple replicas for higher throughput
+- Native vLLM batching for optimal performance
+- Automatic resource management and cleanup</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model</strong> (<em>vllm.LLM</em><em> | </em><em>str</em>) – The vLLM model to wrap. If a string, it will be passed to <cite>vllm.LLM</cite>.</p>
+<dd class="field-odd"><p><strong>model</strong> (<em>vllm.LLM</em><em> | </em><a class="reference internal" href="torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><em>AsyncVLLM</em></a><em> | </em><em>Ray Actor</em><em> | </em><em>str</em>) – The vLLM model to wrap.
+- If a string, it will be converted to an AsyncVLLM instance (recommended)
+- If a vllm.LLM instance, uses synchronous generation via <cite>model.generate()</cite>
+- If an AsyncVLLM instance, uses async generation via <cite>model.generate()</cite>
+- If a Ray actor with generate method, uses remote calls via <cite>ray.get(model.generate.remote())</cite></p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -1972,6 +1996,12 @@ if the submodule doesn’t already exist.</p></li>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.set_tokenizer">
+<span class="sig-name descname"><span class="pre">set_tokenizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/vllm_wrapper.html#vLLMWrapper.set_tokenizer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.set_tokenizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the tokenizer for the wrapper. Useful for async engines where tokenizer retrieval is deferred.</p>
 </dd></dl>
 
 <dl class="py method">

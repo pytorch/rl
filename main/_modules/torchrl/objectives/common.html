@@ -1108,13 +1108,13 @@
         <span class="k">return</span> <span class="n">x</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">add_random_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+<div class="viewcode-block" id="add_random_module"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.add_random_module.html#torchrl.objectives.add_random_module">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">add_random_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Adds a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random.&quot;&quot;&quot;</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span>
 
     <span class="n">torchrl</span><span class="o">.</span><span class="n">objectives</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">RANDOM_MODULE_LIST</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">torchrl</span><span class="o">.</span><span class="n">objectives</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">RANDOM_MODULE_LIST</span> <span class="o">+</span> <span class="p">(</span><span class="n">module</span><span class="p">,)</span>
-    <span class="p">)</span>
+    <span class="p">)</span></div>
 </pre></div>
 
              </article>

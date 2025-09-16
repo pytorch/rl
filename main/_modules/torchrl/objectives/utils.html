@@ -449,6 +449,7 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">functorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">vmap</span>
     <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err_ft</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">err_ft</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">implement_for</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">step_mdp</span>
 
 <span class="k">try</span><span class="p">:</span>
@@ -968,6 +969,7 @@
             <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
 
 
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.7&quot;</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_pseudo_vmap</span><span class="p">(</span>
     <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
     <span class="n">in_dims</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
@@ -1003,6 +1005,7 @@
                 <span class="n">in_dims</span> <span class="o">=</span> <span class="p">(</span><span class="n">in_dims</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out_dims</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
                 <span class="n">out_dims</span> <span class="o">=</span> <span class="p">(</span><span class="n">out_dims</span><span class="p">,)</span>
+
             <span class="n">vs</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="nb">tuple</span><span class="p">(</span><span class="n">tree_map</span><span class="p">(</span><span class="n">_unbind</span><span class="p">,</span> <span class="n">in_dims</span><span class="p">,</span> <span class="n">args</span><span class="p">)))</span>
             <span class="n">rs</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">vs</span><span class="p">:</span>
@@ -1015,6 +1018,22 @@
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">vs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
             <span class="k">return</span> <span class="n">vs</span>
+
+    <span class="k">return</span> <span class="n">new_func</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.7&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_pseudo_vmap</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+    <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">in_dims</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">out_dims</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">randomness</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">new_func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">in_dims</span><span class="o">=</span><span class="n">in_dims</span><span class="p">,</span> <span class="n">out_dims</span><span class="o">=</span><span class="n">out_dims</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;This implementation is not supported for torch&lt;2.7&quot;</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">new_func</span>
 

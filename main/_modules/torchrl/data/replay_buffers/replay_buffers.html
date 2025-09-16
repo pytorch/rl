@@ -1460,7 +1460,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sampler</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The sampler of the replay buffer.</span>
 
 <span class="sd">        The sampler must be an instance of :class:`~torchrl.data.replay_buffers.Sampler`.</span>
@@ -1469,7 +1469,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Writer</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The writer of the replay buffer.</span>
 
 <span class="sd">        The writer must be an instance of :class:`~torchrl.data.replay_buffers.Writer`.</span>
@@ -1478,7 +1478,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">storage</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">storage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Storage</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The storage of the replay buffer.</span>
 
 <span class="sd">        The storage must be an instance of :class:`~torchrl.data.replay_buffers.Storage`.</span>

@@ -435,7 +435,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim.lr_scheduler</span><span class="w"> </span><span class="kn">import</span> <span class="n">CosineAnnealingLR</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCollectorBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCollectorBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span>
@@ -533,7 +533,7 @@
 <span class="sd">        &gt;&gt;&gt; from torchrl.trainers.loggers import TensorboardLogger</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.trainers import Trainer</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs import EnvCreator</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.collectors.collectors import SyncDataCollector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.data import TensorDictReplayBuffer</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper</span>

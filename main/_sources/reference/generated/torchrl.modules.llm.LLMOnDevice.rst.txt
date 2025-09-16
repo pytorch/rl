@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.llm
-
-
-LLMOnDevice
-===========
-
-.. autoclass:: LLMOnDevice
-    :members:
-    :inherited-members:

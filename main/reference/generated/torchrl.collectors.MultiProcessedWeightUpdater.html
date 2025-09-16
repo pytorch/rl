@@ -478,9 +478,15 @@ logic, consider extending <cite>WeightUpdaterBase</cite> with a custom implement
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedWeightUpdater.collector">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.collector.DataCollectorBase</span></em><a class="headerlink" href="#torchrl.collectors.MultiProcessedWeightUpdater.collector" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.MultiProcessedWeightUpdater.collector" title="Permalink to this definition">¶</a></dt>
 <dd><p>The collector or container of the receiver.</p>
 <p>Returns <cite>None</cite> if the container is out-of-scope or not set.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedWeightUpdater.collectors">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collectors</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.MultiProcessedWeightUpdater.collectors" title="Permalink to this definition">¶</a></dt>
+<dd><p>The collectors or container of the receiver.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -556,7 +562,7 @@ By default, this is a no-op.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedWeightUpdater.register_collector">
-<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiProcessedWeightUpdater.register_collector" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiProcessedWeightUpdater.register_collector" title="Permalink to this definition">¶</a></dt>
 <dd><p>Register a collector in the updater.</p>
 <p>Once registered, the updater will not accept another collector.</p>
 <dl class="field-list simple">

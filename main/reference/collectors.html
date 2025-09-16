@@ -426,8 +426,7 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <p>from torchrl.collectors import SyncDataCollector.. currentmodule:: torchrl.collectors</p>
-<section id="torchrl-collectors-package">
+  <section id="torchrl-collectors-package">
 <h1>torchrl.collectors package<a class="headerlink" href="#torchrl-collectors-package" title="Permalink to this heading">¶</a></h1>
 <p id="ref-collectors">Data collectors are somewhat equivalent to pytorch dataloaders, except that (1) they
 collect data over non-static data sources and (2) the data is collected using a model
@@ -440,10 +439,10 @@ state, and/or after a predefined number of steps.</p>
 <p>Because data collection is a potentially compute heavy process, it is crucial to
 configure the execution hyperparameters appropriately.
 The first parameter to take into consideration is whether the data collection should
-occur serially with the optimization step or in parallel. The <code class="xref py py-obj docutils literal notranslate"><span class="pre">SyncDataCollector</span></code>
-class will execute the data collection on the training worker. The <code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code>
+occur serially with the optimization step or in parallel. The <a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>
+class will execute the data collection on the training worker. The <a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>
 will split the workload across an number of workers and aggregate the results that
-will be delivered to the training worker. Finally, the <code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code> will
+will be delivered to the training worker. Finally, the <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a> will
 execute the data collection on several workers and deliver the first batch of results
 that it can gather. This execution will occur continuously and concomitantly with
 the training of the networks: this implies that the weights of the policy that
@@ -451,7 +450,7 @@ is used for the data collection may slightly lag the configuration of the policy
 on the training worker. Therefore, although this class may be the fastest to collect
 data, it comes at the price of being suitable only in settings where it is acceptable
 to gather data asynchronously (e.g. off-policy RL or curriculum RL).
-For remotely executed rollouts (<code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> or <code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>)
+For remotely executed rollouts (<a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> or <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>)
 it is necessary to synchronise the weights of the remote policy with the weights
 from the training worker using either the <cite>collector.update_policy_weights_()</cite> or
 by setting <cite>update_at_each_batch=True</cite> in the constructor.</p>
