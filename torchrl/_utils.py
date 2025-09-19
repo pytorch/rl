@@ -410,7 +410,9 @@ def accept_remote_rref_udf_invocation(decorated_class):
     """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
     # ignores private methods
     for name in dir(decorated_class):
-        method = getattr(decorated_class, name)
+        method = getattr(decorated_class, name, None)
+        if method is None:
+            continue
         if callable(method) and not name.startswith("_"):
             setattr(decorated_class, name, accept_remote_rref_invocation(method))
     return decorated_class
