@@ -50,3 +50,17 @@ repos:
       entry: autoflake --in-place --remove-unused-variables --remove-all-unused-imports
       language: system
       types: [python]
+
+    - id: check-future-annotations
+      name: Check for `from __future__ import annotations`
+      entry: python packaging/check_future_annotations.py
+      language: python
+      files: \.py$
+      exclude: run-clang-format\.py
+
+    - id: check-header
+      name: Check for Meta copyright header
+      entry: python packaging/check_headers.py
+      language: python
+      files: \.py$
+      exclude: run-clang-format\.py
