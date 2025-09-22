@@ -85,7 +85,7 @@ class OnlineDTLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: str | float = "auto",
         samples_mc_entropy: int = 1,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -296,7 +296,7 @@ class DTLoss(LossModule):
         actor_network: ProbabilisticActor,
         *,
         loss_function: str = "l2",
-        reduction: str = None,
+        reduction: str | None = None,
         device: torch.device | None = None,
     ) -> None:
         self._in_keys = None

@@ -266,9 +266,9 @@ class IQLLoss(LossModule):
         temperature: float = 1.0,
         expectile: float = 0.5,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
@@ -785,9 +785,9 @@ class DiscreteIQLLoss(IQLLoss):
         temperature: float = 1.0,
         expectile: float = 0.5,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None

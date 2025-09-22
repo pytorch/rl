@@ -236,9 +236,9 @@ class TD3Loss(LossModule):
         delay_actor: bool = True,
         delay_qvalue: bool = True,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ) -> None:
         if reduction is None:

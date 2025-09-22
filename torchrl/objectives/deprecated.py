@@ -163,9 +163,9 @@ class REDQLoss_deprecated(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float | None = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ):
         self._in_keys = None
