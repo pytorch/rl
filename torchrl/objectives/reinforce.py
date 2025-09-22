@@ -249,13 +249,13 @@ class ReinforceLoss(LossModule):
         delay_value: bool = False,
         loss_critic_type: str = "smooth_l1",
         gamma: float | None = None,
-        advantage_key: str = None,
-        value_target_key: str = None,
+        advantage_key: str | None = None,
+        value_target_key: str | None = None,
         separate_losses: bool = False,
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-        reduction: str = None,
+        reduction: str | None = None,
         clip_value: float | None = None,
     ) -> None:
         if actor is not None:

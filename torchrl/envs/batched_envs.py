@@ -308,7 +308,7 @@ class BatchedEnvBase(EnvBase):
         num_sub_threads: int = 1,
         serial_for_single: bool = False,
         non_blocking: bool = False,
-        mp_start_method: str = None,
+        mp_start_method: str | None = None,
         use_buffers: bool | None = None,
         consolidate: bool = True,
     ):
