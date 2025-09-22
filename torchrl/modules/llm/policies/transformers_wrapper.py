@@ -2460,7 +2460,7 @@ class RemoteTransformersWrapper:
         model,
         max_concurrency: int = 16,
         validate_model: bool = True,
-        actor_name: str = None,
+        actor_name: str | None = None,
         num_gpus: int = 1,
         num_cpus: int = 1,
         **kwargs,

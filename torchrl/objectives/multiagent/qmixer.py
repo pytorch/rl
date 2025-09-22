@@ -195,7 +195,7 @@ class QMixerLoss(LossModule):
         delay_value: bool = True,
         gamma: float | None = None,
         action_space: str | TensorSpec = None,
-        priority_key: str = None,
+        priority_key: str | None = None,
     ) -> None:
         super().__init__()
         self._in_keys = None

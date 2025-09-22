@@ -179,8 +179,8 @@ class DQNLoss(LossModule):
         double_dqn: bool = False,
         gamma: float | None = None,
         action_space: str | TensorSpec = None,
-        priority_key: str = None,
-        reduction: str = None,
+        priority_key: str | None = None,
+        reduction: str | None = None,
     ) -> None:
         if reduction is None:
             reduction = "mean"
@@ -455,8 +455,8 @@ class DistributionalDQNLoss(LossModule):
         *,
         gamma: float,
         delay_value: bool = True,
-        priority_key: str = None,
-        reduction: str = None,
+        priority_key: str | None = None,
+        reduction: str | None = None,
     ):
         if reduction is None:
             reduction = "mean"
