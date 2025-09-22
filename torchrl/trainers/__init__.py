@@ -16,6 +16,7 @@ from .trainers import (
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
+    TargetNetUpdaterHook,
     Trainer,
     TrainerHookBase,
     UpdateWeights,
@@ -37,4 +38,5 @@ __all__ = [
     "Trainer",
     "TrainerHookBase",
     "UpdateWeights",
+    "TargetNetUpdaterHook",
 ]

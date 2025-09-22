@@ -18,10 +18,8 @@ from torch import optim
 from torchrl.collectors import DataCollectorBase
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
     LogScalar,
@@ -31,23 +29,76 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
 )
 
-try:
-    pass
-
-    _has_tqdm = True
-except ImportError:
-    _has_tqdm = False
-
-try:
-    pass
-
-    _has_ts = True
-except ImportError:
-    _has_ts = False
-
 
 class SACTrainer(Trainer):
-    """TODO"""
+    """A trainer class for Soft Actor-Critic (SAC) algorithm.
+
+    This trainer implements the SAC algorithm, an off-policy actor-critic method that
+    optimizes a stochastic policy in an off-policy way, forming a bridge between
+    stochastic policy optimization and DDPG-style approaches. SAC incorporates the
+    entropy measure of the policy into the reward to encourage exploration.
+
+    The trainer handles:
+    - Replay buffer management for off-policy learning
+    - Target network updates with configurable update frequency
+    - Policy weight updates to the data collector
+    - Comprehensive logging of training metrics
+    - Gradient clipping and optimization steps
+
+    Args:
+        collector (DataCollectorBase): The data collector used to gather environment interactions.
+        total_frames (int): Total number of frames to collect during training.
+        frame_skip (int): Number of frames to skip between policy updates.
+        optim_steps_per_batch (int): Number of optimization steps per collected batch.
+        loss_module (LossModule | Callable): The SAC loss module or a callable that computes losses.
+        optimizer (optim.Optimizer, optional): The optimizer for training. If None, must be configured elsewhere.
+        logger (Logger, optional): Logger for recording training metrics. Defaults to None.
+        clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
+        clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.
+        progress_bar (bool, optional): Whether to show a progress bar during training. Defaults to True.
+        seed (int, optional): Random seed for reproducibility. Defaults to None.
+        save_trainer_interval (int, optional): Interval for saving trainer state. Defaults to 10000.
+        log_interval (int, optional): Interval for logging metrics. Defaults to 10000.
+        save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.
+        replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.
+        batch_size (int, optional): Batch size for sampling from replay buffer. Defaults to None.
+        enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
+        log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
+        log_actions (bool, optional): Whether to log action statistics. Defaults to True.
+        log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
+        target_net_updater (TargetNetUpdater, optional): Target network updater for soft updates. Defaults to None.
+
+    Example:
+        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.objectives import SACLoss
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> from torch import optim
+        >>>
+        >>> # Set up collector, loss, and replay buffer
+        >>> collector = SyncDataCollector(env, policy, frames_per_batch=1000)
+        >>> loss_module = SACLoss(actor_network, qvalue_network)
+        >>> optimizer = optim.Adam(loss_module.parameters(), lr=3e-4)
+        >>> replay_buffer = ReplayBuffer(storage=LazyTensorStorage(100000))
+        >>>
+        >>> # Create and run trainer
+        >>> trainer = SACTrainer(
+        ...     collector=collector,
+        ...     total_frames=1000000,
+        ...     frame_skip=1,
+        ...     optim_steps_per_batch=100,
+        ...     loss_module=loss_module,
+        ...     optimizer=optimizer,
+        ...     replay_buffer=replay_buffer,
+        ... )
+        >>> trainer.train()
+
+    Note:
+        This is an experimental/prototype feature. The API may change in future versions.
+        SAC is particularly effective for continuous control tasks and environments where
+        exploration is crucial due to its entropy regularization.
+
+    """
+
     def __init__(
         self,
         *,
@@ -115,7 +166,7 @@ class SACTrainer(Trainer):
             self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
-        self.register_op("post_loss", TargetNetUpdaterHook(target_net_updater))
+        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         policy_weights_getter = partial(
             TensorDict.from_module, self.loss_module.actor_network
@@ -135,7 +186,20 @@ class SACTrainer(Trainer):
         if self.enable_logging:
             self._setup_sac_logging()
 
-    def _pass_action_spec_from_collector_to_loss(self, collector: DataCollectorBase, loss: LossModule):
+    def _pass_action_spec_from_collector_to_loss(
+        self, collector: DataCollectorBase, loss: LossModule
+    ):
+        """Pass the action specification from the collector's environment to the loss module.
+
+        This method extracts the action specification from the collector's environment
+        and assigns it to the loss module if the loss module doesn't already have one.
+        This is necessary for SAC loss computation which requires knowledge of the
+        action space bounds for proper entropy calculation and action clipping.
+
+        Args:
+            collector (DataCollectorBase): The data collector containing the environment.
+            loss (LossModule): The loss module that needs the action specification.
+        """
         if hasattr(loss, "_action_spec") and loss._action_spec is None:
             action_spec = collector.getattr_env("full_action_spec_unbatched").cpu()
             loss._action_spec = action_spec
@@ -143,12 +207,12 @@ class SACTrainer(Trainer):
     def _setup_sac_logging(self):
         """Set up logging hooks for SAC-specific metrics.
 
-        This method configures logging for common PPO metrics including:
-        - Training rewards (mean and std)
-        - Action statistics (norms, entropy)
-        - Episode completion rates
-        - Value function statistics
-        - Advantage statistics
+        This method configures logging for common SAC metrics including:
+        - Training rewards (mean, max, total, and std)
+        - Action statistics (action norms)
+        - Episode completion rates (done percentage)
+        - Observation statistics (when enabled)
+        - Q-value and policy loss metrics (handled by loss module)
         """
         # Always log done states as percentage (episode completion rate)
         log_done_percentage = LogScalar(
@@ -162,7 +226,7 @@ class SACTrainer(Trainer):
 
         # Log rewards if enabled
         if self.log_rewards:
-            # 1. Log training rewards (most important metric for PPO)
+            # 1. Log training rewards (most important metric for SAC)
             log_rewards = LogScalar(
                 key=("next", "reward"),
                 logname="r_training",
@@ -215,4 +279,3 @@ class SACTrainer(Trainer):
                 reduction="mean",
             )
             self.register_op("pre_steps_log", log_obs_norm)
-

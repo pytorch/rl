@@ -1727,7 +1727,14 @@ class TargetNetUpdaterHook:
     """A hook for target parameters update.
 
     Examples:
-        >>>
+        >>> # define a loss module
+        >>> loss_module = SACLoss(actor_network, qvalue_network)
+        >>> # define a target network updater
+        >>> target_net_updater = SoftUpdate(loss_module)
+        >>> # define a target network updater hook
+        >>> target_net_updater_hook = TargetNetUpdaterHook(target_net_updater)
+        >>> # register the target network updater hook
+        >>> trainer.register_op("post_optim", target_net_updater_hook)
     """
 
     def __init__(self, target_params_updater: TargetNetUpdater):
