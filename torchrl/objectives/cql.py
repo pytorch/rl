@@ -291,7 +291,7 @@ class CQLLoss(LossModule):
         num_random: int = 10,
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ) -> None:
         self._out_keys = None
@@ -1100,7 +1100,7 @@ class DiscreteCQLLoss(LossModule):
         delay_value: bool = True,
         gamma: float | None = None,
         action_space=None,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         if reduction is None:
