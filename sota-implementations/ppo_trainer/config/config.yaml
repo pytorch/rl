@@ -5,6 +5,7 @@ defaults:
   
   - transform@transform0: noop_reset
   - transform@transform1: step_counter
+  - transform@transform2: reward_sum
   
   - env@training_env: batched_env
   - env@training_env.create_env_fn: transformed_env
@@ -64,6 +65,10 @@ transform1:
   max_steps: 200
   step_count_key: "step_count"
 
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
 training_env:
   num_workers: 1
   create_env_fn:
@@ -73,6 +78,7 @@ training_env:
       transforms:
         - ${transform0}
         - ${transform1}
+        - ${transform2}
     _partial_: true
 
 # Loss configuration
@@ -92,6 +98,7 @@ collector:
   total_frames: 1_000_000
   frames_per_batch: 1024
   num_workers: 2
+  _partial_: true
 
 # Replay buffer configuration
 replay_buffer:
@@ -129,3 +136,4 @@ trainer:
   save_trainer_file: null
   optim_steps_per_batch: null
   num_epochs: 2
+  async_collection: false

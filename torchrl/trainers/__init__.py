@@ -20,6 +20,7 @@ from .trainers import (
     Trainer,
     TrainerHookBase,
     UpdateWeights,
+    UTDRHook,
 )
 
 __all__ = [
@@ -39,4 +40,5 @@ __all__ = [
     "TrainerHookBase",
     "UpdateWeights",
     "TargetNetUpdaterHook",
+    "UTDRHook",
 ]

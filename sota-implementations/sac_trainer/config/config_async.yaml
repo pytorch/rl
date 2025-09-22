@@ -1,4 +1,5 @@
 # SAC Trainer Configuration for HalfCheetah-v4
+# Run with `python sota-implementations/sac_trainer/train.py --config-name=config_async`
 # This configuration uses the new configurable trainer system and matches SOTA SAC implementation
 
 defaults:
@@ -114,14 +115,15 @@ collector:
   total_frames: 1_000_000
   frames_per_batch: 1000
   num_workers: 4
-  init_random_frames: 2500
+  # Incompatible with async collection
+  init_random_frames: 0
   track_policy_version: true
   _partial_: true
 
 # Replay buffer configuration
 replay_buffer:
   storage:
-    max_size: 100_000
+    max_size: 10_000
     device: cpu
     ndim: 1
   sampler:
@@ -153,4 +155,4 @@ trainer:
   log_interval: 25000
   save_trainer_file: null
   optim_steps_per_batch: 64  # Match SOTA utd_ratio
-  async_collection: false
+  async_collection: true

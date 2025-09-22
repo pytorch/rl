@@ -7261,7 +7261,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
 class RewardSum(Transform):
     """Tracks episode cumulative rewards.
 
-    This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
+    This transform accepts a list of tensordict reward keys (i.e. 'in_keys') and tracks their cumulative
     value along the time dimension for each episode.
 
     When called, the transform writes a new tensordict entry for each ``in_key`` named
@@ -7269,7 +7269,7 @@ class RewardSum(Transform):
 
     Args:
         in_keys (list of NestedKeys, optional): Input reward keys.
-            All ´in_keys´ should be part of the environment reward_spec.
+            All 'in_keys' should be part of the environment reward_spec.
             If no ``in_keys`` are specified, this transform assumes ``"reward"`` to be the input key.
             However, multiple rewards (e.g. ``"reward1"`` and ``"reward2""``) can also be specified.
         out_keys (list of NestedKeys, optional): The output sum keys, should be one per each input key.
@@ -11610,3 +11610,123 @@ class ConditionalPolicySwitch(Transform):
         raise RuntimeError(
             "ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional."
         )
+
+
+class FlattenTensorDict(Transform):
+    """Flattens TensorDict batch dimensions during inverse pass for replay buffer usage.
+
+    This transform is specifically designed for replay buffers where data needs
+    to be flattened before being stored. It performs an identity operation during
+    the forward pass and flattens the batch dimensions during the inverse pass.
+
+    This is useful when collecting batched data that needs to be stored as
+    individual experiences in a replay buffer.
+
+    .. warning::
+        This transform is NOT intended for use with environments. If you try to use
+        it as an environment transform, it will raise an exception. For reshaping
+        environment batch dimensions, use :class:`~torchrl.envs.BatchSizeTransform`
+        instead.
+
+    .. note::
+        This transform should be applied to replay buffers, not to environments.
+        It is designed to be used with :meth:`~torchrl.data.ReplayBuffer.append_transform`.
+
+    Examples:
+        Using with a replay buffer:
+
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import FlattenTensorDict
+        >>> from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage
+        >>>
+        >>> # Create a replay buffer with the transform
+        >>> transform = FlattenTensorDict()
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(1000),
+        ...     transform=transform,
+        ...     batch_size=32
+        ... )
+        >>>
+        >>> # Create batched data (e.g., from multiple environments)
+        >>> td = TensorDict({
+        ...     "observation": torch.randn(4, 2, 3),
+        ...     "action": torch.randn(4, 2, 1),
+        ...     "reward": torch.randn(4, 2, 1),
+        ... }, batch_size=[4, 2])
+        >>>
+        >>> # When extending the buffer, data gets flattened automatically
+        >>> rb.extend(td)  # Data is flattened from [4, 2] to [8] before storage
+        >>>
+        >>> # When sampling, data comes out in the requested batch size
+        >>> sample = rb.sample(4)  # Shape will be [4, ...]
+
+        Direct usage (for testing):
+
+        >>> # Forward pass (identity)
+        >>> td_forward = transform(td)
+        >>> print(td_forward.batch_size)  # [4, 2]
+        >>>
+        >>> # Inverse pass (flatten)
+        >>> td_inverse = transform.inv(td)
+        >>> print(td_inverse.batch_size)  # [8]
+    """
+
+    _ENV_ERROR_MSG = (
+        "FlattenTensorDict is designed for replay buffers and should not be used "
+        "as an environment transform. For reshaping environment batch dimensions, "
+        "use BatchSizeTransform instead."
+    )
+
+    def __init__(self):
+        super().__init__(in_keys=[], out_keys=[])
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Forward pass - identity operation."""
+        return tensordict
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Inverse pass - flatten the tensordict."""
+        return tensordict.reshape(-1)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Forward pass - identity operation."""
+        return self._call(tensordict)
+
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Inverse pass - flatten the tensordict."""
+        return self._inv_call(tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Reset pass - identity operation."""
+        return self._call(tensordict_reset)
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        """Transform input spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        """Transform output spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """Transform observation spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        """Transform action spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        """Transform state spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        """Transform reward spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        """Transform done spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)

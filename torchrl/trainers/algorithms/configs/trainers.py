@@ -53,6 +53,7 @@ class SACTrainerConfig(TrainerConfig):
     actor_network: Any = None
     critic_network: Any = None
     target_net_updater: Any = None
+    async_collection: bool = False
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -83,8 +84,9 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
-    create_env_fn = kwargs.pop("create_env_fn")
+    kwargs.pop("create_env_fn")
     target_net_updater = kwargs.pop("target_net_updater")
+    async_collection = kwargs.pop("async_collection", False)
 
     # Instantiate networks first
     if actor_network is not None:
@@ -94,7 +96,16 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
 
     if not isinstance(collector, DataCollectorBase):
         # then it's a partial config
-        collector = collector(create_env_fn=create_env_fn, policy=actor_network)
+        if not async_collection:
+            collector = collector()
+        elif replay_buffer is not None:
+            collector = collector(replay_buffer=replay_buffer)
+    elif getattr(collector, "replay_buffer", None) is None:
+        if collector.replay_buffer is None or replay_buffer is None:
+            raise ValueError(
+                "replay_buffer must be provided when async_collection is True"
+            )
+
     if not isinstance(loss_module, LossModule):
         # then it's a partial config
         loss_module = loss_module(
@@ -138,6 +149,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
         target_net_updater=target_net_updater,
+        async_collection=async_collection,
     )
 
 
@@ -168,6 +180,7 @@ class PPOTrainerConfig(TrainerConfig):
     actor_network: Any = None
     critic_network: Any = None
     num_epochs: int = 4
+    async_collection: bool = False
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
@@ -199,7 +212,11 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
     create_env_fn = kwargs.pop("create_env_fn")
+    if create_env_fn is not None:
+        # could be referenced somewhere else, no need to raise an error
+        pass
     num_epochs = kwargs.pop("num_epochs", 4)
+    async_collection = kwargs.pop("async_collection", False)
 
     # Instantiate networks first
     if actor_network is not None:
@@ -209,7 +226,14 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
 
     if not isinstance(collector, DataCollectorBase):
         # then it's a partial config
-        collector = collector(create_env_fn=create_env_fn, policy=actor_network)
+        if not async_collection:
+            collector = collector()
+        else:
+            collector = collector(replay_buffer=replay_buffer)
+    elif getattr(collector, "replay_buffer", None) is None:
+        raise RuntimeError(
+            "replay_buffer must be provided when async_collection is True"
+        )
     if not isinstance(loss_module, LossModule):
         # then it's a partial config
         loss_module = loss_module(
@@ -250,4 +274,5 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
         num_epochs=num_epochs,
+        async_collection=async_collection,
     )

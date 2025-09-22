@@ -304,3 +304,4 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     writer: Any = None
     transform: Any = None
     batch_size: int | None = None
+    shared: bool = False

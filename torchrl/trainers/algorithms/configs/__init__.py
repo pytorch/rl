@@ -119,6 +119,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     ExcludeTransformConfig,
     FiniteTensorDictCheckConfig,
     FlattenObservationConfig,
+    FlattenTensorDictConfig,
     FrameSkipTransformConfig,
     GrayScaleConfig,
     HashConfig,
@@ -265,6 +266,7 @@ __all__ = [
     "ExcludeTransformConfig",
     "FiniteTensorDictCheckConfig",
     "FlattenObservationConfig",
+    "FlattenTensorDictConfig",
     "FrameSkipTransformConfig",
     "GrayScaleConfig",
     "HashConfig",
@@ -413,6 +415,7 @@ def _register_configs():
     cs.store(
         group="transform", name="flatten_observation", node=FlattenObservationConfig
     )
+    cs.store(group="transform", name="flatten_tensordict", node=FlattenTensorDictConfig)
     cs.store(group="transform", name="gray_scale", node=GrayScaleConfig)
     cs.store(group="transform", name="observation_norm", node=ObservationNormConfig)
     cs.store(group="transform", name="cat_frames", node=CatFramesConfig)
