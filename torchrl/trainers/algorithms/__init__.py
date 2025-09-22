@@ -6,5 +6,6 @@
 from __future__ import annotations
 
 from .ppo import PPOTrainer
+from .sac import SACTrainer
 
-__all__ = ["PPOTrainer"]
+__all__ = ["PPOTrainer", "SACTrainer"]

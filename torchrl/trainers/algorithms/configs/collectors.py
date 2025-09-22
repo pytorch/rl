@@ -51,6 +51,7 @@ class SyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    track_policy_version: bool = False
     _target_: str = "torchrl.collectors.SyncDataCollector"
     _partial_: bool = False
 
@@ -93,6 +94,7 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    track_policy_version: bool = False
     _target_: str = "torchrl.collectors.aSyncDataCollector"
 
     def __post_init__(self):
@@ -133,6 +135,7 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    track_policy_version: bool = False
     _target_: str = "torchrl.collectors.MultiSyncDataCollector"
 
     def __post_init__(self):
@@ -174,6 +177,7 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    track_policy_version: bool = False
     _target_: str = "torchrl.collectors.MultiaSyncDataCollector"
 
     def __post_init__(self):
