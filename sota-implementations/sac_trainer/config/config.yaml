@@ -143,7 +143,7 @@ trainer:
   target_net_updater: ${target_net_updater}
   loss_module: ${loss}
   logger: ${logger}
-  total_frames: 1_000_000
+  total_frames: ${collector.total_frames}
   frame_skip: 1
   clip_grad_norm: false  # SAC typically doesn't use gradient clipping
   clip_norm: null

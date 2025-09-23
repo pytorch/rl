@@ -2314,8 +2314,8 @@ class _MultiDataCollector(DataCollectorBase):
             fake_td["collector", "traj_ids"] = torch.zeros(
                 fake_td.shape, dtype=torch.long
             )
-
-            self.replay_buffer.add(fake_td)
+            # Use extend to avoid time-related transforms to fail
+            self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
 
     @classmethod

@@ -246,6 +246,8 @@ class TanhNormalModelConfig(ModelConfig):
     eval_mode: bool = False
 
     extract_normal_params: bool = True
+    scale_mapping: str = "biased_softplus_1.0"
+    scale_lb: float = 1e-4
 
     param_keys: Any = None
 
@@ -305,6 +307,8 @@ def _make_tanh_normal_model(*args, **kwargs):
     param_keys = list(kwargs.pop("param_keys", ["loc", "scale"]))
     out_keys = list(kwargs.pop("out_keys", ["action"]))
     extract_normal_params = kwargs.pop("extract_normal_params", True)
+    scale_mapping = kwargs.pop("scale_mapping", "biased_softplus_1.0")
+    scale_lb = kwargs.pop("scale_lb", 1e-4)
     return_log_prob = kwargs.pop("return_log_prob", False)
     eval_mode = kwargs.pop("eval_mode", False)
     exploration_type = kwargs.pop("exploration_type", "RANDOM")
@@ -318,7 +322,10 @@ def _make_tanh_normal_model(*args, **kwargs):
     # Create the sequential
     if extract_normal_params:
         # Add NormalParamExtractor to split the output
-        network = torch.nn.Sequential(network, NormalParamExtractor())
+        network = torch.nn.Sequential(
+            network,
+            NormalParamExtractor(scale_mapping=scale_mapping, scale_lb=scale_lb),
+        )
 
     module = TensorDictModule(network, in_keys=in_keys, out_keys=param_keys)
 

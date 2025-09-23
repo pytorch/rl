@@ -658,22 +658,13 @@ class Trainer:
         based on the replay buffer's write_count rather than using a fixed range.
         This ensures the training loop properly consumes the entire collector output.
         """
-        last_write_count = 0
-
         while True:
             current_write_count = self.collector.getattr_rb("write_count")
-
-            # Only yield if there's new data or we haven't started yet
-            if current_write_count > last_write_count or last_write_count == 0:
-                last_write_count = current_write_count
-                yield None  # In async mode, we don't have actual batch data here
-
-                # Check if we've reached the target frames
-                if current_write_count >= self.total_frames:
-                    break
+            # Check if we've reached the target frames
+            if current_write_count >= self.total_frames:
+                break
             else:
-                # No new data, wait a bit before checking again
-                time.sleep(0.01)
+                yield None
 
     def __del__(self):
         try:
