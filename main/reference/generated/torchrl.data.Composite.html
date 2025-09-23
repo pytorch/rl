@@ -860,6 +860,12 @@ for a given spec.</p>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.Composite.names">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">names</span></span><a class="headerlink" href="#torchrl.data.Composite.names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the names of the dimensions of this Composite.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="torchrl.data.Composite.ndim">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ndim</span></span><a class="headerlink" href="#torchrl.data.Composite.ndim" title="Permalink to this definition">¶</a></dt>
 <dd><p>Number of dimensions of the spec shape.</p>
@@ -953,6 +959,30 @@ will be drawn.</p>
 <dd class="field-even"><p>a random tensor sampled in the TensorSpec box.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.Composite.refine_names">
+<span class="sig-name descname"><span class="pre">refine_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/tensor_specs.html#Composite.refine_names"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.Composite.refine_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Refines the dimension names of self according to names.</p>
+<p>Refining is a special case of renaming that “lifts” unnamed dimensions.
+A None dim can be refined to have any name; a named dim can only be
+refined to have the same name.</p>
+<p>Because named specs can coexist with unnamed specs, refining names
+gives a nice way to write named-spec-aware code that works with both
+named and unnamed specs.</p>
+<p>names may contain up to one Ellipsis (…). The Ellipsis is expanded
+greedily; it is expanded in-place to fill names to the same length as
+self.ndim using names from the corresponding indices of self.names.</p>
+<p>Returns: the same composite spec with dimensions named according to the input.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({},</span> <span class="n">shape</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec_refined</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">spec_refined</span><span class="o">.</span><span class="n">names</span> <span class="o">==</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec_refined</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">spec_refined</span><span class="o">.</span><span class="n">names</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
