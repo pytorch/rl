@@ -251,9 +251,9 @@ class TD3BCLoss(LossModule):
         loss_function: str = "smooth_l1",
         delay_actor: bool = True,
         delay_qvalue: bool = True,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
         deactivate_vmap: bool = False,
     ) -> None:
         if reduction is None:
