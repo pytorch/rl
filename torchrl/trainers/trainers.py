@@ -18,6 +18,7 @@ from typing import Any, Literal
 import numpy as np
 import torch.nn
 from tensordict import NestedKey, pad, TensorDictBase
+from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
@@ -39,6 +40,7 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 
 try:
@@ -1134,7 +1136,7 @@ class LogScalar(TrainerHookBase):
 
         return result
 
-    def register(self, trainer: Trainer, name: str = None):
+    def register(self, trainer: Trainer, name: str | None = None):
         if name is None:
             name = f"log_{self.logname}"
         trainer.register_op("pre_steps_log", self)
@@ -1719,3 +1721,29 @@ def flatten_dict(d):
         else:
             out[key] = item
     return out
+
+
+class TargetNetUpdaterHook:
+    """A hook for target parameters update.
+
+    Examples:
+        >>> # define a loss module
+        >>> loss_module = SACLoss(actor_network, qvalue_network)
+        >>> # define a target network updater
+        >>> target_net_updater = SoftUpdate(loss_module)
+        >>> # define a target network updater hook
+        >>> target_net_updater_hook = TargetNetUpdaterHook(target_net_updater)
+        >>> # register the target network updater hook
+        >>> trainer.register_op("post_optim", target_net_updater_hook)
+    """
+
+    def __init__(self, target_params_updater: TargetNetUpdater):
+        if not isinstance(target_params_updater, TargetNetUpdater):
+            raise ValueError(
+                f"Expected a target network updater, got {type(target_params_updater)=}"
+            )
+        self.target_params_updater = target_params_updater
+
+    def __call__(self, tensordict: TensorCollection):
+        self.target_params_updater.step()
+        return tensordict

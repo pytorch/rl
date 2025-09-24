@@ -84,8 +84,18 @@ from torchrl.trainers.algorithms.configs.modules import (
     TensorDictModuleConfig,
     ValueModelConfig,
 )
-from torchrl.trainers.algorithms.configs.objectives import LossConfig, PPOLossConfig
-from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig, TrainerConfig
+from torchrl.trainers.algorithms.configs.objectives import (
+    HardUpdateConfig,
+    LossConfig,
+    PPOLossConfig,
+    SACLossConfig,
+    SoftUpdateConfig,
+)
+from torchrl.trainers.algorithms.configs.trainers import (
+    PPOTrainerConfig,
+    SACTrainerConfig,
+    TrainerConfig,
+)
 from torchrl.trainers.algorithms.configs.transforms import (
     ActionDiscretizerConfig,
     ActionMaskConfig,
@@ -317,8 +327,10 @@ __all__ = [
     # Losses
     "LossConfig",
     "PPOLossConfig",
+    "SACLossConfig",
     # Trainers
     "PPOTrainerConfig",
+    "SACTrainerConfig",
     "TrainerConfig",
     # Loggers
     "CSVLoggerConfig",
@@ -479,6 +491,10 @@ def _register_configs():
 
     cs.store(group="loss", name="base", node=LossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
+    cs.store(group="loss", name="sac", node=SACLossConfig)
+
+    cs.store(group="target_net_updater", name="soft", node=SoftUpdateConfig)
+    cs.store(group="target_net_updater", name="hard", node=HardUpdateConfig)
 
     # =============================================================================
     # Replay Buffer Configurations
@@ -523,6 +539,7 @@ def _register_configs():
 
     cs.store(group="trainer", name="base", node=TrainerConfig)
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
+    cs.store(group="trainer", name="sac", node=SACTrainerConfig)
 
     # =============================================================================
     # Optimizer Configurations
