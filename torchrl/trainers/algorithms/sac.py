@@ -27,6 +27,7 @@ from torchrl.trainers.trainers import (
     TargetNetUpdaterHook,
     Trainer,
     UpdateWeights,
+    UTDRHook,
 )
 
 
@@ -123,6 +124,7 @@ class SACTrainer(Trainer):
         log_actions: bool = True,
         log_observations: bool = False,
         target_net_updater: TargetNetUpdater | None = None,
+        async_collection: bool = False,
     ) -> None:
         warnings.warn(
             "SACTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -148,8 +150,10 @@ class SACTrainer(Trainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            async_collection=async_collection,
         )
         self.replay_buffer = replay_buffer
+        self.async_collection = async_collection
 
         # Note: SAC can use any sampler type, unlike PPO which requires SamplerWithoutReplacement
 
@@ -162,8 +166,8 @@ class SACTrainer(Trainer):
                 device=getattr(replay_buffer.storage, "device", "cpu"),
                 iterate=True,
             )
-
-            self.register_op("pre_epoch", rb_trainer.extend)
+            if not self.async_collection:
+                self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
@@ -222,7 +226,10 @@ class SACTrainer(Trainer):
             include_std=False,  # No std for binary values
             reduction="mean",
         )
-        self.register_op("pre_steps_log", log_done_percentage)
+        if not self.async_collection:
+            self.register_op("pre_steps_log", log_done_percentage)
+        else:
+            self.register_op("post_optim_log", log_done_percentage)
 
         # Log rewards if enabled
         if self.log_rewards:
@@ -234,7 +241,11 @@ class SACTrainer(Trainer):
                 include_std=True,
                 reduction="mean",
             )
-            self.register_op("pre_steps_log", log_rewards)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_rewards)
+            else:
+                # In the async case, use the batch passed to the optimizer
+                self.register_op("post_optim_log", log_rewards)
 
             # 2. Log maximum reward in batch (for monitoring best performance)
             log_max_reward = LogScalar(
@@ -244,17 +255,23 @@ class SACTrainer(Trainer):
                 include_std=False,
                 reduction="max",
             )
-            self.register_op("pre_steps_log", log_max_reward)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_max_reward)
+            else:
+                self.register_op("post_optim_log", log_max_reward)
 
             # 3. Log total reward in batch (for monitoring cumulative performance)
             log_total_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", "reward_sum"),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
-                reduction="sum",
+                reduction="max",
             )
-            self.register_op("pre_steps_log", log_total_reward)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_total_reward)
+            else:
+                self.register_op("post_optim_log", log_total_reward)
 
         # Log actions if enabled
         if self.log_actions:
@@ -266,7 +283,10 @@ class SACTrainer(Trainer):
                 include_std=True,
                 reduction="mean",
             )
-            self.register_op("pre_steps_log", log_action_norm)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_action_norm)
+            else:
+                self.register_op("post_optim_log", log_action_norm)
 
         # Log observations if enabled
         if self.log_observations:
@@ -278,4 +298,9 @@ class SACTrainer(Trainer):
                 include_std=True,
                 reduction="mean",
             )
-            self.register_op("pre_steps_log", log_obs_norm)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_obs_norm)
+            else:
+                self.register_op("post_optim_log", log_obs_norm)
+
+        self.register_op("pre_steps_log", UTDRHook(self))

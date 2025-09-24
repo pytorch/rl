@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import itertools
 import pathlib
+import time
 import warnings
 from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Sequence
@@ -27,6 +28,7 @@ from torchrl._utils import (
     _CKPT_BACKEND,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
+    RL_WARNINGS,
     VERBOSE,
 )
 from torchrl.collectors import DataCollectorBase
@@ -144,6 +146,10 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+        async_collection (bool, optional): Whether to collect data asynchronously.
+            This will only work if the replay buffer is registed within the data collector.
+            If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
+            Default is False.
     """
 
     @classmethod
@@ -179,6 +185,7 @@ class Trainer:
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
         num_epochs: int = 1,
+        async_collection: bool = False,
     ) -> None:
 
         # objects
@@ -187,6 +194,7 @@ class Trainer:
         self.loss_module = loss_module
         self.optimizer = optimizer
         self.logger = logger
+        self.async_collection = async_collection
 
         # Logging frequency control - how often to log each metric (in frames)
         self._log_interval = log_interval
@@ -596,20 +604,37 @@ class Trainer:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = {}
 
-        for batch in self.collector:
-            batch = self._process_batch_hook(batch)
-            current_frames = (
-                batch.get(("collector", "mask"), torch.tensor(batch.numel()))
-                .sum()
-                .item()
-                * self.frame_skip
-            )
-            self.collected_frames += current_frames
+        if self.async_collection:
+            self.collector.start()
+            while not self.collector.getattr_rb("write_count"):
+                time.sleep(0.1)
+
+            # Create async iterator that monitors write_count progress
+            iterator = self._async_iterator()
+        else:
+            iterator = self.collector
+
+        for batch in iterator:
+            if not self.async_collection:
+                batch = self._process_batch_hook(batch)
+                current_frames = (
+                    batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                    .sum()
+                    .item()
+                    * self.frame_skip
+                )
+                self.collected_frames += current_frames
+            else:
+                # In async mode, batch is None and we track frames via write_count
+                batch = None
+                cf = self.collected_frames
+                self.collected_frames = self.collector.getattr_rb("write_count")
+                current_frames = self.collected_frames - cf
 
             # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
             self._pre_steps_log_hook(batch)
 
-            if self.collected_frames > self.collector.init_random_frames:
+            if self.collected_frames >= self.collector.init_random_frames:
                 self.optim_steps(batch)
             self._post_steps_hook()
 
@@ -626,6 +651,21 @@ class Trainer:
             self.save_trainer()
 
         self.collector.shutdown()
+
+    def _async_iterator(self):
+        """Create an iterator for async collection that monitors replay buffer write_count.
+
+        This iterator yields None batches and terminates when total_frames is reached
+        based on the replay buffer's write_count rather than using a fixed range.
+        This ensures the training loop properly consumes the entire collector output.
+        """
+        while True:
+            current_write_count = self.collector.getattr_rb("write_count")
+            # Check if we've reached the target frames
+            if current_write_count >= self.total_frames:
+                break
+            else:
+                yield None
 
     def __del__(self):
         try:
@@ -1723,7 +1763,7 @@ def flatten_dict(d):
     return out
 
 
-class TargetNetUpdaterHook:
+class TargetNetUpdaterHook(TrainerHookBase):
     """A hook for target parameters update.
 
     Examples:
@@ -1744,6 +1784,77 @@ class TargetNetUpdaterHook:
             )
         self.target_params_updater = target_params_updater
 
-    def __call__(self, tensordict: TensorCollection):
+    def __call__(self, tensordict: TensorCollection | None = None):
         self.target_params_updater.step()
         return tensordict
+
+    def register(self, trainer: Trainer, name: str):
+        trainer.register_op("post_steps", self)
+
+
+class UTDRHook(TrainerHookBase):
+    """Hook for logging Update-to-Data (UTD) ratio during async collection.
+
+    The UTD ratio measures how many optimization steps are performed per
+    collected data sample, providing insight into training efficiency during
+    asynchronous data collection. This metric is particularly useful for
+    off-policy algorithms where data collection and training happen concurrently.
+
+    The UTD ratio is calculated as: (batch_size * update_count) / write_count
+    where:
+    - batch_size: Size of batches sampled from replay buffer
+    - update_count: Total number of optimization steps performed
+    - write_count: Total number of samples written to replay buffer
+
+    Args:
+        trainer (Trainer): The trainer instance to monitor for UTD calculation.
+                          Must have async_collection=True for meaningful results.
+
+    Note:
+        This hook is only meaningful when async_collection is enabled, as it
+        relies on the replay buffer's write_count to track data collection progress.
+    """
+
+    def __init__(self, trainer: Trainer):
+        self.trainer = trainer
+
+    def __call__(self, batch: TensorDictBase | None = None) -> dict:
+        if (
+            hasattr(self.trainer, "replay_buffer")
+            and self.trainer.replay_buffer is not None
+        ):
+            write_count = self.trainer.replay_buffer.write_count
+            batch_size = self.trainer.replay_buffer.batch_size
+        else:
+            write_count = self.trainer.collector.getattr_rb("write_count")
+            batch_size = self.trainer.collector.getattr_rb("batch_size")
+        if not write_count:
+            return {}
+        if batch_size is None and RL_WARNINGS:
+            warnings.warn("Batch size is not set. Using 1.")
+            batch_size = 1
+        update_count = self.trainer._optim_count
+        utd_ratio = batch_size * update_count / write_count
+        return {
+            "utd_ratio": utd_ratio,
+            "write_count": write_count,
+            "update_count": update_count,
+            "log_pbar": False,
+        }
+
+    def register(self, trainer: Trainer, name: str = "utdr_hook"):
+        """Register the UTD ratio hook with the trainer.
+
+        Args:
+            trainer (Trainer): The trainer to register with.
+            name (str): Name to use when registering the hook module.
+        """
+        trainer.register_op("pre_steps_log", self)
+        trainer.register_module(name, self)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return state dictionary for checkpointing."""
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load state from dictionary."""

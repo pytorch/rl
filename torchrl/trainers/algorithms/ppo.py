@@ -110,6 +110,7 @@ class PPOTrainer(Trainer):
         log_rewards: bool = True,
         log_actions: bool = True,
         log_observations: bool = False,
+        async_collection: bool = False,
     ) -> None:
         warnings.warn(
             "PPOTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -133,8 +134,10 @@ class PPOTrainer(Trainer):
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
             num_epochs=num_epochs,
+            async_collection=async_collection,
         )
         self.replay_buffer = replay_buffer
+        self.async_collection = async_collection
 
         gae = GAE(
             gamma=gamma,
@@ -144,8 +147,10 @@ class PPOTrainer(Trainer):
         )
         self.register_op("pre_epoch", gae)
 
-        if replay_buffer is not None and not isinstance(
-            replay_buffer.sampler, SamplerWithoutReplacement
+        if (
+            not self.async_collection
+            and replay_buffer is not None
+            and not isinstance(replay_buffer.sampler, SamplerWithoutReplacement)
         ):
             warnings.warn(
                 "Sampler is not a SamplerWithoutReplacement, which is required for PPO."
@@ -161,7 +166,8 @@ class PPOTrainer(Trainer):
                 iterate=True,
             )
 
-            self.register_op("pre_epoch", rb_trainer.extend)
+            if not self.async_collection:
+                self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
 
@@ -201,7 +207,10 @@ class PPOTrainer(Trainer):
             include_std=False,  # No std for binary values
             reduction="mean",
         )
-        self.register_op("pre_steps_log", log_done_percentage)
+        if not self.async_collection:
+            self.register_op("pre_steps_log", log_done_percentage)
+        else:
+            self.register_op("post_optim_log", log_done_percentage)
 
         # Log rewards if enabled
         if self.log_rewards:
@@ -213,7 +222,10 @@ class PPOTrainer(Trainer):
                 include_std=True,
                 reduction="mean",
             )
-            self.register_op("pre_steps_log", log_rewards)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_rewards)
+            else:
+                self.register_op("post_optim_log", log_rewards)
 
             # 2. Log maximum reward in batch (for monitoring best performance)
             log_max_reward = LogScalar(
@@ -223,7 +235,10 @@ class PPOTrainer(Trainer):
                 include_std=False,
                 reduction="max",
             )
-            self.register_op("pre_steps_log", log_max_reward)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_max_reward)
+            else:
+                self.register_op("post_optim_log", log_max_reward)
 
             # 3. Log total reward in batch (for monitoring cumulative performance)
             log_total_reward = LogScalar(
@@ -233,7 +248,10 @@ class PPOTrainer(Trainer):
                 include_std=False,
                 reduction="sum",
             )
-            self.register_op("pre_steps_log", log_total_reward)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_total_reward)
+            else:
+                self.register_op("post_optim_log", log_total_reward)
 
         # Log actions if enabled
         if self.log_actions:
@@ -245,7 +263,10 @@ class PPOTrainer(Trainer):
                 include_std=True,
                 reduction="mean",
             )
-            self.register_op("pre_steps_log", log_action_norm)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_action_norm)
+            else:
+                self.register_op("post_optim_log", log_action_norm)
 
         # Log observations if enabled
         if self.log_observations:
@@ -257,4 +278,7 @@ class PPOTrainer(Trainer):
                 include_std=True,
                 reduction="mean",
             )
-            self.register_op("pre_steps_log", log_obs_norm)
+            if not self.async_collection:
+                self.register_op("pre_steps_log", log_obs_norm)
+            else:
+                self.register_op("post_optim_log", log_obs_norm)

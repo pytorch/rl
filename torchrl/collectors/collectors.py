@@ -60,6 +60,8 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.env_creator import EnvCreator
+
+from torchrl.envs.llm.transforms.policy_version import PolicyVersion
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -68,8 +70,6 @@ from torchrl.envs.utils import (
     RandomPolicy,
     set_exploration_type,
 )
-
-from torchrl.envs.llm.transforms.policy_version import PolicyVersion
 
 try:
     from torch.compiler import cudagraph_mark_step_begin
@@ -1818,12 +1818,19 @@ class SyncDataCollector(DataCollectorBase):
         return self.policy_version
 
     def getattr_policy(self, attr):
+        """Get an attribute from the policy."""
         # send command to policy to return the attr
         return getattr(self.policy, attr)
 
     def getattr_env(self, attr):
+        """Get an attribute from the environment."""
         # send command to env to return the attr
         return getattr(self.env, attr)
+
+    def getattr_rb(self, attr):
+        """Get an attribute from the replay buffer."""
+        # send command to rb to return the attr
+        return getattr(self.replay_buffer, attr)
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -2153,6 +2160,7 @@ class _MultiDataCollector(DataCollectorBase):
             and hasattr(replay_buffer, "shared")
             and not replay_buffer.shared
         ):
+            torchrl_logger.warning("Replay buffer is not shared. Sharing it.")
             replay_buffer.share()
 
         self._policy_weights_dict = {}
@@ -2306,8 +2314,8 @@ class _MultiDataCollector(DataCollectorBase):
             fake_td["collector", "traj_ids"] = torch.zeros(
                 fake_td.shape, dtype=torch.long
             )
-
-            self.replay_buffer.add(fake_td)
+            # Use extend to avoid time-related transforms to fail
+            self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
 
     @classmethod
@@ -2840,6 +2848,10 @@ also that the state dict is synchronised across processes if needed."""
             raise result
 
         return result
+
+    def getattr_rb(self, attr):
+        """Get an attribute from the replay buffer."""
+        return getattr(self.replay_buffer, attr)
 
 
 @accept_remote_rref_udf_invocation

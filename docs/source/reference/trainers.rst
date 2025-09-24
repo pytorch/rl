@@ -184,6 +184,7 @@ Trainer and hooks
     TrainerHookBase
     UpdateWeights
     TargetNetUpdaterHook
+    UTDRHook
 
 
 Algorithm-specific trainers (Experimental)

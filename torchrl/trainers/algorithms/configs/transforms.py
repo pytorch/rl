@@ -922,3 +922,19 @@ class CropConfig(TransformConfig):
     def __post_init__(self) -> None:
         """Post-initialization hook for Crop configuration."""
         super().__post_init__()
+
+
+@dataclass
+class FlattenTensorDictConfig(TransformConfig):
+    """Configuration for flattening TensorDict during inverse pass.
+
+    This transform reshapes the tensordict to have a flat batch dimension
+    during the inverse pass, which is useful for replay buffers that need
+    to store data with a flat batch structure.
+    """
+
+    _target_: str = "torchrl.envs.transforms.transforms.FlattenTensorDict"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for FlattenTensorDict configuration."""
+        super().__post_init__()

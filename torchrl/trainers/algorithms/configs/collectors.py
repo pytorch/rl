@@ -96,6 +96,7 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     weight_updater: Any = None
     track_policy_version: bool = False
     _target_: str = "torchrl.collectors.aSyncDataCollector"
+    _partial_: bool = False
 
     def __post_init__(self):
         self.create_env_fn._partial_ = True
@@ -137,6 +138,7 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
     weight_updater: Any = None
     track_policy_version: bool = False
     _target_: str = "torchrl.collectors.MultiSyncDataCollector"
+    _partial_: bool = False
 
     def __post_init__(self):
         for env_cfg in self.create_env_fn:
@@ -179,6 +181,7 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     weight_updater: Any = None
     track_policy_version: bool = False
     _target_: str = "torchrl.collectors.MultiaSyncDataCollector"
+    _partial_: bool = False
 
     def __post_init__(self):
         for env_cfg in self.create_env_fn:

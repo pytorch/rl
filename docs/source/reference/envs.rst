@@ -1123,6 +1123,7 @@ to be able to create this other composition:
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
+    FlattenTensorDict
     FrameSkipTransform
     GrayScale
     Hash

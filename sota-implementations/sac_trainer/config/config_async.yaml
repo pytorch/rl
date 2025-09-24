@@ -1,4 +1,5 @@
 # SAC Trainer Configuration for HalfCheetah-v4
+# Run with `python sota-implementations/sac_trainer/train.py --config-name=config_async`
 # This configuration uses the new configurable trainer system and matches SOTA SAC implementation
 
 defaults:
@@ -6,6 +7,7 @@ defaults:
   - transform@transform0: step_counter
   - transform@transform1: double_to_float
   - transform@transform2: reward_sum
+  - transform@transform3: flatten_tensordict
   
   - env@training_env: batched_env
   - env@training_env.create_env_fn: transformed_env
@@ -36,7 +38,7 @@ defaults:
 # Network configurations
 networks:
   policy_network:
-    out_features: 12  # HalfCheetah action space is 6-dimensional (loc + scale)
+    out_features: 12  # HalfCheetah action space is 6-dimensional (loc + scale) = 2 * 6
     in_features: 17   # HalfCheetah observation space is 17-dimensional
     num_cells: [256, 256]
 
@@ -58,6 +60,9 @@ models:
     param_keys: ["loc", "scale"]
     out_keys: ["action"]
     network: ${networks.policy_network}
+    # Configure NormalParamExtractor for higher exploration
+    scale_mapping: "biased_softplus_2.0"  # Higher bias for more exploration (default: 1.0)
+    scale_lb: 1e-2  # Minimum scale value (default: 1e-4)
 
   qvalue_model:
     in_keys: ["observation", "action"]
@@ -111,24 +116,27 @@ optimizer:
 collector:
   create_env_fn: ${training_env}
   policy: ${models.policy_model}
-  total_frames: 1_000_000
+  total_frames: 5_000_000
   frames_per_batch: 1000
-  num_workers: 4
-  init_random_frames: 2500
+  num_workers: 8
+  # Incompatible with async collection
+  init_random_frames: 0
   track_policy_version: true
+  extend_buffer: true
   _partial_: true
 
 # Replay buffer configuration
 replay_buffer:
   storage:
-    max_size: 100_000
+    max_size: 10_000
     device: cpu
     ndim: 1
   sampler:
   writer:
     compilable: false
-  batch_size: 64
+  batch_size: 256
   shared: true
+  transform: ${transform3}
 
 logger:
   exp_name: sac_halfcheetah_v4
@@ -152,5 +160,5 @@ trainer:
   save_trainer_interval: 25000  # Match SOTA eval_iter
   log_interval: 25000
   save_trainer_file: null
-  optim_steps_per_batch: 64  # Match SOTA utd_ratio
-  async_collection: false
+  optim_steps_per_batch: 16  # Match SOTA utd_ratio
+  async_collection: true
