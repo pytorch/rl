@@ -201,7 +201,7 @@ class DDPGLoss(LossModule):
         delay_value: bool = True,
         gamma: float | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         if reduction is None:
