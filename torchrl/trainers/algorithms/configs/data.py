@@ -50,7 +50,6 @@ class RandomSamplerConfig(SamplerConfig):
     """Configuration for random sampling from replay buffer."""
 
     _target_: str = "torchrl.data.replay_buffers.RandomSampler"
-    batch_size: int | None = None
 
     def __post_init__(self) -> None:
         """Post-initialization hook for random sampler configurations."""
