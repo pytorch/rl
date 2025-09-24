@@ -668,6 +668,8 @@
     <span class="n">eval_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="n">extract_normal_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">scale_mapping</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;biased_softplus_1.0&quot;</span>
+    <span class="n">scale_lb</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span>
 
     <span class="n">param_keys</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -727,6 +729,8 @@
     <span class="n">param_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;param_keys&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">]))</span>
     <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;out_keys&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]))</span>
     <span class="n">extract_normal_params</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;extract_normal_params&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">scale_mapping</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;scale_mapping&quot;</span><span class="p">,</span> <span class="s2">&quot;biased_softplus_1.0&quot;</span><span class="p">)</span>
+    <span class="n">scale_lb</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;scale_lb&quot;</span><span class="p">,</span> <span class="mf">1e-4</span><span class="p">)</span>
     <span class="n">return_log_prob</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;return_log_prob&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">eval_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;eval_mode&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">exploration_type</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;exploration_type&quot;</span><span class="p">,</span> <span class="s2">&quot;RANDOM&quot;</span><span class="p">)</span>
@@ -740,7 +744,10 @@
     <span class="c1"># Create the sequential</span>
     <span class="k">if</span> <span class="n">extract_normal_params</span><span class="p">:</span>
         <span class="c1"># Add NormalParamExtractor to split the output</span>
-        <span class="n">network</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">NormalParamExtractor</span><span class="p">())</span>
+        <span class="n">network</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">network</span><span class="p">,</span>
+            <span class="n">NormalParamExtractor</span><span class="p">(</span><span class="n">scale_mapping</span><span class="o">=</span><span class="n">scale_mapping</span><span class="p">,</span> <span class="n">scale_lb</span><span class="o">=</span><span class="n">scale_lb</span><span class="p">),</span>
+        <span class="p">)</span>
 
     <span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">param_keys</span><span class="p">)</span>
 

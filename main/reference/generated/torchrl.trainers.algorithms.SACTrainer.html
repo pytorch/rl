@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>RemoteTransformersWrapper &mdash; torchrl main documentation</title>
+  <title>SACTrainer &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="AsyncVLLM" href="torchrl.modules.llm.AsyncVLLM.html" />
-    <link rel="prev" title="vLLMWrapper" href="torchrl.modules.llm.vLLMWrapper.html" />
+    <link rel="next" title="make_collector_offpolicy" href="torchrl.trainers.helpers.make_collector_offpolicy.html" />
+    <link rel="prev" title="PPOTrainer" href="torchrl.trainers.algorithms.PPOTrainer.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -388,15 +388,15 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
+          <li><a href="../trainers.html">torchrl.trainers package</a> &gt;</li>
         
-      <li>RemoteTransformersWrapper</li>
+      <li>SACTrainer</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.modules.llm.RemoteTransformersWrapper.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.trainers.algorithms.SACTrainer.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -428,185 +428,85 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="remotetransformerswrapper">
-<h1>RemoteTransformersWrapper<a class="headerlink" href="#remotetransformerswrapper" title="Permalink to this heading">¶</a></h1>
+  <section id="sactrainer">
+<h1>SACTrainer<a class="headerlink" href="#sactrainer" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.llm.</span></span><span class="sig-name descname"><span class="pre">RemoteTransformersWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_concurrency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actor_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_gpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper" title="Permalink to this definition">¶</a></dt>
-<dd><p>A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.</p>
-<p>This class wraps a TransformersWrapper instance as a Ray actor, allowing remote execution
-while providing a clean interface that doesn’t require explicit <cite>remote()</cite> and <cite>get()</cite> calls.</p>
+<dt class="sig sig-object py" id="torchrl.trainers.algorithms.SACTrainer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.</span></span><span class="sig-name descname"><span class="pre">SACTrainer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/sac.html#SACTrainer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.SACTrainer" title="Permalink to this definition">¶</a></dt>
+<dd><p>A trainer class for Soft Actor-Critic (SAC) algorithm.</p>
+<p>This trainer implements the SAC algorithm, an off-policy actor-critic method that
+optimizes a stochastic policy in an off-policy way, forming a bridge between
+stochastic policy optimization and DDPG-style approaches. SAC incorporates the
+entropy measure of the policy into the reward to encourage exploration.</p>
+<p>The trainer handles:
+- Replay buffer management for off-policy learning
+- Target network updates with configurable update frequency
+- Policy weight updates to the data collector
+- Comprehensive logging of training metrics
+- Gradient clipping and optimization steps</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> (<em>str</em>) – The Hugging Face Transformers model to wrap.
-Must be a string (model name or path) that will be passed to <cite>transformers.AutoModelForCausalLM.from_pretrained</cite>.
-Transformers models are not serializable, so only model names/paths are supported.</p></li>
-<li><p><strong>max_concurrency</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of concurrent calls to the remote actor. Defaults to 16.</p></li>
-<li><p><strong>validate_model</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to validate the model. Defaults to True.</p></li>
-<li><p><strong>num_gpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of GPUs to use. Defaults to 0.</p></li>
-<li><p><strong>num_cpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of CPUs to use. Defaults to 0.</p></li>
-<li><p><strong>**kwargs</strong> – All other arguments are passed directly to TransformersWrapper.</p></li>
+<li><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><em>DataCollectorBase</em></a>) – The data collector used to gather environment interactions.</p></li>
+<li><p><strong>total_frames</strong> (<em>int</em>) – Total number of frames to collect during training.</p></li>
+<li><p><strong>frame_skip</strong> (<em>int</em>) – Number of frames to skip between policy updates.</p></li>
+<li><p><strong>optim_steps_per_batch</strong> (<em>int</em>) – Number of optimization steps per collected batch.</p></li>
+<li><p><strong>loss_module</strong> (<a class="reference internal" href="torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><em>LossModule</em></a><em> | </em><em>Callable</em>) – The SAC loss module or a callable that computes losses.</p></li>
+<li><p><strong>optimizer</strong> (<em>optim.Optimizer</em><em>, </em><em>optional</em>) – The optimizer for training. If None, must be configured elsewhere.</p></li>
+<li><p><strong>logger</strong> (<em>Logger</em><em>, </em><em>optional</em>) – Logger for recording training metrics. Defaults to None.</p></li>
+<li><p><strong>clip_grad_norm</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to clip gradient norms. Defaults to True.</p></li>
+<li><p><strong>clip_norm</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum gradient norm for clipping. Defaults to None.</p></li>
+<li><p><strong>progress_bar</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to show a progress bar during training. Defaults to True.</p></li>
+<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – Random seed for reproducibility. Defaults to None.</p></li>
+<li><p><strong>save_trainer_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – Interval for saving trainer state. Defaults to 10000.</p></li>
+<li><p><strong>log_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – Interval for logging metrics. Defaults to 10000.</p></li>
+<li><p><strong>save_trainer_file</strong> (<em>str</em><em> | </em><em>pathlib.Path</em><em>, </em><em>optional</em>) – File path for saving trainer state. Defaults to None.</p></li>
+<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><em>ReplayBuffer</em></a><em>, </em><em>optional</em>) – Replay buffer for storing and sampling experiences. Defaults to None.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Batch size for sampling from replay buffer. Defaults to None.</p></li>
+<li><p><strong>enable_logging</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable metric logging. Defaults to True.</p></li>
+<li><p><strong>log_rewards</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log reward statistics. Defaults to True.</p></li>
+<li><p><strong>log_actions</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log action statistics. Defaults to True.</p></li>
+<li><p><strong>log_observations</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log observation statistics. Defaults to False.</p></li>
+<li><p><strong>target_net_updater</strong> (<em>TargetNetUpdater</em><em>, </em><em>optional</em>) – Target network updater for soft updates. Defaults to None.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemoteTransformersWrapper</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives</span><span class="w"> </span><span class="kn">import</span> <span class="n">SACLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">optim</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Initialize Ray if not already done</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Set up collector, loss, and replay buffer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_module</span> <span class="o">=</span> <span class="n">SACLoss</span><span class="p">(</span><span class="n">actor_network</span><span class="p">,</span> <span class="n">qvalue_network</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><span class="n">loss_module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100000</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create remote wrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">remote_wrapper</span> <span class="o">=</span> <span class="n">RemoteTransformersWrapper</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create and run trainer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">SACTrainer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">total_frames</span><span class="o">=</span><span class="mi">1000000</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">frame_skip</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use like a regular wrapper (no remote/get calls needed)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">remote_wrapper</span><span class="p">(</span><span class="n">tensordict_input</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
 </pre></div>
 </div>
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.batching">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">batching</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.batching" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether batching is enabled.</p>
-</dd></dl>
-
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This is an experimental/prototype feature. The API may change in future versions.
+SAC is particularly effective for continuous control tasks and environments where
+exploration is crucial due to its entropy regularization.</p>
+</div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.cleanup_batching">
-<span class="sig-name descname"><span class="pre">cleanup_batching</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.cleanup_batching"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.cleanup_batching" title="Permalink to this definition">¶</a></dt>
-<dd><p>Clean up batching resources.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.collector">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.collector" title="Permalink to this definition">¶</a></dt>
-<dd><p>The collector associated with the module.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.device">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.device" title="Permalink to this definition">¶</a></dt>
-<dd><p>The device used for computation.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.dist_params_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_params_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.dist_params_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The keys for distribution parameters.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.dist_sample_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_sample_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.dist_sample_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The keys for distribution samples.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.generate">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">generate</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.generate" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether text generation is enabled.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_batching_state">
-<span class="sig-name descname"><span class="pre">get_batching_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_batching_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_batching_state" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get the current batching state.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_dist">
-<span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_dist" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get distribution from logits/log-probs with optional masking.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_dist_with_prompt_mask">
-<span class="sig-name descname"><span class="pre">get_dist_with_prompt_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_dist_with_prompt_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_dist_with_prompt_mask" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get distribution masked to only include response tokens (exclude prompt).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_new_version">
-<span class="sig-name descname"><span class="pre">get_new_version</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_new_version"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_new_version" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get a new version of the wrapper with altered parameters.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.in_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">in_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.in_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The input keys.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.inplace">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">inplace</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.inplace" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether in-place operations are used.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.layout">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">layout</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.layout" title="Permalink to this definition">¶</a></dt>
-<dd><p>The layout used for output tensors.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.log_prob">
-<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.log_prob"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.log_prob" title="Permalink to this definition">¶</a></dt>
-<dd><p>Compute log probabilities.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.log_prob_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">log_prob_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.log_prob_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The keys for log probabilities.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.log_probs_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">log_probs_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.log_probs_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for log probabilities output.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.masks_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">masks_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.masks_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for masks output.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.num_samples">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_samples</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.num_samples" title="Permalink to this definition">¶</a></dt>
-<dd><p>The number of samples to generate.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.out_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">out_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.out_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The output keys.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.pad_output">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">pad_output</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.pad_output" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether output sequences are padded.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.text_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">text_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.text_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for text output.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.tokens_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tokens_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.tokens_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for tokens output.</p>
+<dt class="sig sig-object py" id="torchrl.trainers.algorithms.SACTrainer.load_from_file">
+<span class="sig-name descname"><span class="pre">load_from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><span class="pre">Trainer</span></a></span></span><a class="headerlink" href="#torchrl.trainers.algorithms.SACTrainer.load_from_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a file and its state-dict in the trainer.</p>
+<p>Keyword arguments are passed to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a> function.</p>
 </dd></dl>
 
 </dd></dl>
@@ -621,10 +521,10 @@ Transformers models are not serializable, so only model names/paths are supporte
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.llm.AsyncVLLM.html" class="btn btn-neutral float-right" title="AsyncVLLM" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.trainers.helpers.make_collector_offpolicy.html" class="btn btn-neutral float-right" title="make_collector_offpolicy" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.llm.vLLMWrapper.html" class="btn btn-neutral" title="vLLMWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.trainers.algorithms.PPOTrainer.html" class="btn btn-neutral" title="PPOTrainer" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -658,7 +558,7 @@ Transformers models are not serializable, so only model names/paths are supporte
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">RemoteTransformersWrapper</a></li>
+<li><a class="reference internal" href="#">SACTrainer</a></li>
 </ul>
 
             </div>

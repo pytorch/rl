@@ -430,6 +430,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
@@ -440,6 +441,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">pad</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._tensorcollection</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorCollection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_right</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span><span class="p">,</span> <span class="n">optim</span>
@@ -448,6 +450,7 @@
     <span class="n">_CKPT_BACKEND</span><span class="p">,</span>
     <span class="n">KeyDependentDefaultDict</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
+    <span class="n">RL_WARNINGS</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCollectorBase</span>
@@ -461,6 +464,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">TargetNetUpdater</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Logger</span>
 
 <span class="k">try</span><span class="p">:</span>
@@ -564,6 +568,10 @@
 <span class="sd">            in frame count. Default is 10000.</span>
 <span class="sd">        save_trainer_file (path, optional): path where to save the trainer.</span>
 <span class="sd">            Default is None (no saving)</span>
+<span class="sd">        async_collection (bool, optional): Whether to collect data asynchronously.</span>
+<span class="sd">            This will only work if the replay buffer is registed within the data collector.</span>
+<span class="sd">            If using this, the UTD ratio (Update to Data) will be logged under the key &quot;utd_ratio&quot;.</span>
+<span class="sd">            Default is False.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
@@ -599,6 +607,7 @@
         <span class="n">log_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
         <span class="n">save_trainer_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="c1"># objects</span>
@@ -607,6 +616,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span> <span class="o">=</span> <span class="n">loss_module</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optimizer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>
 
         <span class="c1"># Logging frequency control - how often to log each metric (in frames)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_log_interval</span> <span class="o">=</span> <span class="n">log_interval</span>
@@ -1016,20 +1026,37 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pbar_str</span> <span class="o">=</span> <span class="p">{}</span>
 
-        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">:</span>
-            <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-            <span class="n">current_frames</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">numel</span><span class="p">()))</span>
-                <span class="o">.</span><span class="n">sum</span><span class="p">()</span>
-                <span class="o">.</span><span class="n">item</span><span class="p">()</span>
-                <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="n">current_frames</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">):</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+
+            <span class="c1"># Create async iterator that monitors write_count progress</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_iterator</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span>
+
+        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">iterator</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+                <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                <span class="n">current_frames</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">numel</span><span class="p">()))</span>
+                    <span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+                    <span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                    <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">frame_skip</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="n">current_frames</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># In async mode, batch is None and we track frames via write_count</span>
+                <span class="n">batch</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">cf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">)</span>
+                <span class="n">current_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">-</span> <span class="n">cf</span>
 
             <span class="c1"># LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">optim_steps</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_hook</span><span class="p">()</span>
 
@@ -1046,6 +1073,21 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">save_trainer</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an iterator for async collection that monitors replay buffer write_count.</span>
+
+<span class="sd">        This iterator yields None batches and terminates when total_frames is reached</span>
+<span class="sd">        based on the replay buffer&#39;s write_count rather than using a fixed range.</span>
+<span class="sd">        This ensures the training loop properly consumes the entire collector output.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">current_write_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">)</span>
+            <span class="c1"># Check if we&#39;ve reached the target frames</span>
+            <span class="k">if</span> <span class="n">current_write_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
@@ -1556,7 +1598,7 @@
 
         <span class="k">return</span> <span class="n">result</span>
 
-<div class="viewcode-block" id="LogScalar.register"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar.register">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="LogScalar.register"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar.register">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;log_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">logname</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
@@ -2141,6 +2183,103 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
     <span class="k">return</span> <span class="n">out</span>
+
+
+<div class="viewcode-block" id="TargetNetUpdaterHook"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.TargetNetUpdaterHook.html#torchrl.trainers.TargetNetUpdaterHook">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TargetNetUpdaterHook</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A hook for target parameters update.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # define a loss module</span>
+<span class="sd">        &gt;&gt;&gt; loss_module = SACLoss(actor_network, qvalue_network)</span>
+<span class="sd">        &gt;&gt;&gt; # define a target network updater</span>
+<span class="sd">        &gt;&gt;&gt; target_net_updater = SoftUpdate(loss_module)</span>
+<span class="sd">        &gt;&gt;&gt; # define a target network updater hook</span>
+<span class="sd">        &gt;&gt;&gt; target_net_updater_hook = TargetNetUpdaterHook(target_net_updater)</span>
+<span class="sd">        &gt;&gt;&gt; # register the target network updater hook</span>
+<span class="sd">        &gt;&gt;&gt; trainer.register_op(&quot;post_optim&quot;, target_net_updater_hook)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target_params_updater</span><span class="p">:</span> <span class="n">TargetNetUpdater</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_params_updater</span><span class="p">,</span> <span class="n">TargetNetUpdater</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Expected a target network updater, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">target_params_updater</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_params_updater</span> <span class="o">=</span> <span class="n">target_params_updater</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorCollection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_params_updater</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
+<div class="viewcode-block" id="TargetNetUpdaterHook.register"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.TargetNetUpdaterHook.html#torchrl.trainers.TargetNetUpdaterHook.register">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="UTDRHook"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UTDRHook</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hook for logging Update-to-Data (UTD) ratio during async collection.</span>
+
+<span class="sd">    The UTD ratio measures how many optimization steps are performed per</span>
+<span class="sd">    collected data sample, providing insight into training efficiency during</span>
+<span class="sd">    asynchronous data collection. This metric is particularly useful for</span>
+<span class="sd">    off-policy algorithms where data collection and training happen concurrently.</span>
+
+<span class="sd">    The UTD ratio is calculated as: (batch_size * update_count) / write_count</span>
+<span class="sd">    where:</span>
+<span class="sd">    - batch_size: Size of batches sampled from replay buffer</span>
+<span class="sd">    - update_count: Total number of optimization steps performed</span>
+<span class="sd">    - write_count: Total number of samples written to replay buffer</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        trainer (Trainer): The trainer instance to monitor for UTD calculation.</span>
+<span class="sd">                          Must have async_collection=True for meaningful results.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        This hook is only meaningful when async_collection is enabled, as it</span>
+<span class="sd">        relies on the replay buffer&#39;s write_count to track data collection progress.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span> <span class="o">=</span> <span class="n">trainer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="p">,</span> <span class="s2">&quot;replay_buffer&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="n">write_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">write_count</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">write_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">)</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">write_count</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Batch size is not set. Using 1.&quot;</span><span class="p">)</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">update_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="o">.</span><span class="n">_optim_count</span>
+        <span class="n">utd_ratio</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">update_count</span> <span class="o">/</span> <span class="n">write_count</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;utd_ratio&quot;</span><span class="p">:</span> <span class="n">utd_ratio</span><span class="p">,</span>
+            <span class="s2">&quot;write_count&quot;</span><span class="p">:</span> <span class="n">write_count</span><span class="p">,</span>
+            <span class="s2">&quot;update_count&quot;</span><span class="p">:</span> <span class="n">update_count</span><span class="p">,</span>
+            <span class="s2">&quot;log_pbar&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="p">}</span>
+
+<div class="viewcode-block" id="UTDRHook.register"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook.register">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;utdr_hook&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register the UTD ratio hook with the trainer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            trainer (Trainer): The trainer to register with.</span>
+<span class="sd">            name (str): Name to use when registering the hook module.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">register_module</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="UTDRHook.state_dict"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook.state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return state dictionary for checkpointing.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{}</span></div>
+
+<div class="viewcode-block" id="UTDRHook.load_state_dict"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook.load_state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load state from dictionary.&quot;&quot;&quot;</span></div></div>
 </pre></div>
 
              </article>

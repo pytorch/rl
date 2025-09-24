@@ -475,6 +475,10 @@ saved to disk, in frame count. Default is 10000.</p></li>
 in frame count. Default is 10000.</p></li>
 <li><p><strong>save_trainer_file</strong> (<em>path</em><em>, </em><em>optional</em>) – path where to save the trainer.
 Default is None (no saving)</p></li>
+<li><p><strong>async_collection</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to collect data asynchronously.
+This will only work if the replay buffer is registed within the data collector.
+If using this, the UTD ratio (Update to Data) will be logged under the key “utd_ratio”.
+Default is False.</p></li>
 </ul>
 </dd>
 </dl>

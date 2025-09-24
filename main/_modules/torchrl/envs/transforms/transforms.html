@@ -7683,7 +7683,7 @@
 <div class="viewcode-block" id="RewardSum"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.RewardSum.html#torchrl.envs.transforms.RewardSum">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RewardSum</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Tracks episode cumulative rewards.</span>
 
-<span class="sd">    This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative</span>
+<span class="sd">    This transform accepts a list of tensordict reward keys (i.e. &#39;in_keys&#39;) and tracks their cumulative</span>
 <span class="sd">    value along the time dimension for each episode.</span>
 
 <span class="sd">    When called, the transform writes a new tensordict entry for each ``in_key`` named</span>
@@ -7691,7 +7691,7 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        in_keys (list of NestedKeys, optional): Input reward keys.</span>
-<span class="sd">            All ´in_keys´ should be part of the environment reward_spec.</span>
+<span class="sd">            All &#39;in_keys&#39; should be part of the environment reward_spec.</span>
 <span class="sd">            If no ``in_keys`` are specified, this transform assumes ``&quot;reward&quot;`` to be the input key.</span>
 <span class="sd">            However, multiple rewards (e.g. ``&quot;reward1&quot;`` and ``&quot;reward2&quot;&quot;``) can also be specified.</span>
 <span class="sd">        out_keys (list of NestedKeys, optional): The output sum keys, should be one per each input key.</span>
@@ -12032,6 +12032,126 @@
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional.&quot;</span>
         <span class="p">)</span></div></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FlattenTensorDict</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flattens TensorDict batch dimensions during inverse pass for replay buffer usage.</span>
+
+<span class="sd">    This transform is specifically designed for replay buffers where data needs</span>
+<span class="sd">    to be flattened before being stored. It performs an identity operation during</span>
+<span class="sd">    the forward pass and flattens the batch dimensions during the inverse pass.</span>
+
+<span class="sd">    This is useful when collecting batched data that needs to be stored as</span>
+<span class="sd">    individual experiences in a replay buffer.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This transform is NOT intended for use with environments. If you try to use</span>
+<span class="sd">        it as an environment transform, it will raise an exception. For reshaping</span>
+<span class="sd">        environment batch dimensions, use :class:`~torchrl.envs.BatchSizeTransform`</span>
+<span class="sd">        instead.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This transform should be applied to replay buffers, not to environments.</span>
+<span class="sd">        It is designed to be used with :meth:`~torchrl.data.ReplayBuffer.append_transform`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Using with a replay buffer:</span>
+
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.transforms import FlattenTensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create a replay buffer with the transform</span>
+<span class="sd">        &gt;&gt;&gt; transform = FlattenTensorDict()</span>
+<span class="sd">        &gt;&gt;&gt; rb = TensorDictReplayBuffer(</span>
+<span class="sd">        ...     storage=LazyTensorStorage(1000),</span>
+<span class="sd">        ...     transform=transform,</span>
+<span class="sd">        ...     batch_size=32</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create batched data (e.g., from multiple environments)</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict({</span>
+<span class="sd">        ...     &quot;observation&quot;: torch.randn(4, 2, 3),</span>
+<span class="sd">        ...     &quot;action&quot;: torch.randn(4, 2, 1),</span>
+<span class="sd">        ...     &quot;reward&quot;: torch.randn(4, 2, 1),</span>
+<span class="sd">        ... }, batch_size=[4, 2])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # When extending the buffer, data gets flattened automatically</span>
+<span class="sd">        &gt;&gt;&gt; rb.extend(td)  # Data is flattened from [4, 2] to [8] before storage</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # When sampling, data comes out in the requested batch size</span>
+<span class="sd">        &gt;&gt;&gt; sample = rb.sample(4)  # Shape will be [4, ...]</span>
+
+<span class="sd">        Direct usage (for testing):</span>
+
+<span class="sd">        &gt;&gt;&gt; # Forward pass (identity)</span>
+<span class="sd">        &gt;&gt;&gt; td_forward = transform(td)</span>
+<span class="sd">        &gt;&gt;&gt; print(td_forward.batch_size)  # [4, 2]</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Inverse pass (flatten)</span>
+<span class="sd">        &gt;&gt;&gt; td_inverse = transform.inv(td)</span>
+<span class="sd">        &gt;&gt;&gt; print(td_inverse.batch_size)  # [8]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_ENV_ERROR_MSG</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;FlattenTensorDict is designed for replay buffers and should not be used &quot;</span>
+        <span class="s2">&quot;as an environment transform. For reshaping environment batch dimensions, &quot;</span>
+        <span class="s2">&quot;use BatchSizeTransform instead.&quot;</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass - identity operation.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Inverse pass - flatten the tensordict.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass - identity operation.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">inv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Inverse pass - flatten the tensordict.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_call</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset pass - identity operation.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform input spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform output spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform observation spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform action spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_state_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform state spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform reward spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_done_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform done spec - not supported for environments.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ENV_ERROR_MSG</span><span class="p">)</span>
 </pre></div>
 
              </article>

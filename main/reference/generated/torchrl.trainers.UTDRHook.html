@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>RemoteTransformersWrapper &mdash; torchrl main documentation</title>
+  <title>UTDRHook &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="AsyncVLLM" href="torchrl.modules.llm.AsyncVLLM.html" />
-    <link rel="prev" title="vLLMWrapper" href="torchrl.modules.llm.vLLMWrapper.html" />
+    <link rel="next" title="PPOTrainer" href="torchrl.trainers.algorithms.PPOTrainer.html" />
+    <link rel="prev" title="TargetNetUpdaterHook" href="torchrl.trainers.TargetNetUpdaterHook.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -388,15 +388,15 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
+          <li><a href="../trainers.html">torchrl.trainers package</a> &gt;</li>
         
-      <li>RemoteTransformersWrapper</li>
+      <li>UTDRHook</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.modules.llm.RemoteTransformersWrapper.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.trainers.UTDRHook.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -428,185 +428,56 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="remotetransformerswrapper">
-<h1>RemoteTransformersWrapper<a class="headerlink" href="#remotetransformerswrapper" title="Permalink to this heading">¶</a></h1>
+  <section id="utdrhook">
+<h1>UTDRHook<a class="headerlink" href="#utdrhook" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.llm.</span></span><span class="sig-name descname"><span class="pre">RemoteTransformersWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_concurrency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actor_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_gpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper" title="Permalink to this definition">¶</a></dt>
-<dd><p>A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.</p>
-<p>This class wraps a TransformersWrapper instance as a Ray actor, allowing remote execution
-while providing a clean interface that doesn’t require explicit <cite>remote()</cite> and <cite>get()</cite> calls.</p>
+<dt class="sig sig-object py" id="torchrl.trainers.UTDRHook">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.</span></span><span class="sig-name descname"><span class="pre">UTDRHook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trainer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.trainers.Trainer"><span class="pre">Trainer</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#UTDRHook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.UTDRHook" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook for logging Update-to-Data (UTD) ratio during async collection.</p>
+<p>The UTD ratio measures how many optimization steps are performed per
+collected data sample, providing insight into training efficiency during
+asynchronous data collection. This metric is particularly useful for
+off-policy algorithms where data collection and training happen concurrently.</p>
+<p>The UTD ratio is calculated as: (batch_size * update_count) / write_count
+where:
+- batch_size: Size of batches sampled from replay buffer
+- update_count: Total number of optimization steps performed
+- write_count: Total number of samples written to replay buffer</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>trainer</strong> (<a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><em>Trainer</em></a>) – The trainer instance to monitor for UTD calculation.
+Must have async_collection=True for meaningful results.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This hook is only meaningful when async_collection is enabled, as it
+relies on the replay buffer’s write_count to track data collection progress.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.trainers.UTDRHook.load_state_dict">
+<span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#UTDRHook.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.UTDRHook.load_state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load state from dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.trainers.UTDRHook.register">
+<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trainer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.trainers.Trainer"><span class="pre">Trainer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'utdr_hook'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#UTDRHook.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.UTDRHook.register" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register the UTD ratio hook with the trainer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> (<em>str</em>) – The Hugging Face Transformers model to wrap.
-Must be a string (model name or path) that will be passed to <cite>transformers.AutoModelForCausalLM.from_pretrained</cite>.
-Transformers models are not serializable, so only model names/paths are supported.</p></li>
-<li><p><strong>max_concurrency</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of concurrent calls to the remote actor. Defaults to 16.</p></li>
-<li><p><strong>validate_model</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to validate the model. Defaults to True.</p></li>
-<li><p><strong>num_gpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of GPUs to use. Defaults to 0.</p></li>
-<li><p><strong>num_cpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of CPUs to use. Defaults to 0.</p></li>
-<li><p><strong>**kwargs</strong> – All other arguments are passed directly to TransformersWrapper.</p></li>
+<li><p><strong>trainer</strong> (<a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><em>Trainer</em></a>) – The trainer to register with.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – Name to use when registering the hook module.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemoteTransformersWrapper</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Initialize Ray if not already done</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create remote wrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">remote_wrapper</span> <span class="o">=</span> <span class="n">RemoteTransformersWrapper</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">}</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use like a regular wrapper (no remote/get calls needed)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">remote_wrapper</span><span class="p">(</span><span class="n">tensordict_input</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
-</pre></div>
-</div>
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.batching">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">batching</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.batching" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether batching is enabled.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.cleanup_batching">
-<span class="sig-name descname"><span class="pre">cleanup_batching</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.cleanup_batching"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.cleanup_batching" title="Permalink to this definition">¶</a></dt>
-<dd><p>Clean up batching resources.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.collector">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.collector" title="Permalink to this definition">¶</a></dt>
-<dd><p>The collector associated with the module.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.device">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.device" title="Permalink to this definition">¶</a></dt>
-<dd><p>The device used for computation.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.dist_params_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_params_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.dist_params_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The keys for distribution parameters.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.dist_sample_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dist_sample_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.dist_sample_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The keys for distribution samples.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.generate">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">generate</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.generate" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether text generation is enabled.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_batching_state">
-<span class="sig-name descname"><span class="pre">get_batching_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_batching_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_batching_state" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get the current batching state.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_dist">
-<span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_dist" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get distribution from logits/log-probs with optional masking.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_dist_with_prompt_mask">
-<span class="sig-name descname"><span class="pre">get_dist_with_prompt_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_dist_with_prompt_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_dist_with_prompt_mask" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get distribution masked to only include response tokens (exclude prompt).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.get_new_version">
-<span class="sig-name descname"><span class="pre">get_new_version</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.get_new_version"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.get_new_version" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get a new version of the wrapper with altered parameters.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.in_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">in_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.in_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The input keys.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.inplace">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">inplace</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.inplace" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether in-place operations are used.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.layout">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">layout</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.layout" title="Permalink to this definition">¶</a></dt>
-<dd><p>The layout used for output tensors.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.log_prob">
-<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#RemoteTransformersWrapper.log_prob"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.log_prob" title="Permalink to this definition">¶</a></dt>
-<dd><p>Compute log probabilities.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.log_prob_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">log_prob_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.log_prob_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The keys for log probabilities.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.log_probs_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">log_probs_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.log_probs_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for log probabilities output.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.masks_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">masks_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.masks_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for masks output.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.num_samples">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_samples</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.num_samples" title="Permalink to this definition">¶</a></dt>
-<dd><p>The number of samples to generate.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.out_keys">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">out_keys</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.out_keys" title="Permalink to this definition">¶</a></dt>
-<dd><p>The output keys.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.pad_output">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">pad_output</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.pad_output" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether output sequences are padded.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.text_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">text_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.text_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for text output.</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrl.modules.llm.RemoteTransformersWrapper.tokens_key">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tokens_key</span></span><a class="headerlink" href="#torchrl.modules.llm.RemoteTransformersWrapper.tokens_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>The key for tokens output.</p>
+<dt class="sig sig-object py" id="torchrl.trainers.UTDRHook.state_dict">
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/trainers/trainers.html#UTDRHook.state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.UTDRHook.state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return state dictionary for checkpointing.</p>
 </dd></dl>
 
 </dd></dl>
@@ -621,10 +492,10 @@ Transformers models are not serializable, so only model names/paths are supporte
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.llm.AsyncVLLM.html" class="btn btn-neutral float-right" title="AsyncVLLM" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.trainers.algorithms.PPOTrainer.html" class="btn btn-neutral float-right" title="PPOTrainer" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.llm.vLLMWrapper.html" class="btn btn-neutral" title="vLLMWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.trainers.TargetNetUpdaterHook.html" class="btn btn-neutral" title="TargetNetUpdaterHook" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -658,7 +529,7 @@ Transformers models are not serializable, so only model names/paths are supporte
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">RemoteTransformersWrapper</a></li>
+<li><a class="reference internal" href="#">UTDRHook</a></li>
 </ul>
 
             </div>
