@@ -194,6 +194,7 @@ class Trainer:
         self.loss_module = loss_module
         self.optimizer = optimizer
         self.logger = logger
+        self.async_collection = async_collection
 
         # Logging frequency control - how often to log each metric (in frames)
         self._log_interval = log_interval

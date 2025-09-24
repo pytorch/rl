@@ -1172,9 +1172,10 @@ class LazyTensorStorage(TensorStorage):
 
         self._storage = out
         self.initialized = True
-        torchrl_logger.info(
-            f"Initialized LazyTensorStorage with {self._storage.shape} shape"
-        )
+        if hasattr(self._storage, "shape"):
+            torchrl_logger.info(
+                f"Initialized LazyTensorStorage with {self._storage.shape} shape"
+            )
 
 
 class LazyMemmapStorage(LazyTensorStorage):
@@ -1394,9 +1395,10 @@ class LazyMemmapStorage(LazyTensorStorage):
         else:
             out = _init_pytree(self.scratch_dir, max_size_along_dim0, data)
         self._storage = out
-        torchrl_logger.info(
-            f"Initialized LazyMemmapStorage with {self._storage.shape} shape"
-        )
+        if hasattr(self._storage, "shape"):
+            torchrl_logger.info(
+                f"Initialized LazyMemmapStorage with {self._storage.shape} shape"
+            )
         self.initialized = True
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
