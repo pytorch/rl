@@ -5,6 +5,6 @@
 
 from .base import LLMCollector
 from .ray_collector import RayLLMCollector
-from .weight_update import vLLMUpdater
+from .weight_update import vLLMUpdater, vLLMUpdaterV2
 
-__all__ = ["vLLMUpdater", "LLMCollector", "RayLLMCollector"]
+__all__ = ["vLLMUpdater", "vLLMUpdaterV2", "LLMCollector", "RayLLMCollector"]

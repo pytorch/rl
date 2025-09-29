@@ -42,6 +42,7 @@ from torchrl.envs.llm import (
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers import AutoTokenizer
 
+_has_ray = importlib.util.find_spec("ray") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -563,13 +564,44 @@ class TestGSM8K:
         assert ("next", "reward") in r
         assert r["next", "reward"].shape == (n_envs, 3, 1, 1)
 
-    def test_gsm8kenv(self):
+    @pytest.fixture(scope="class")
+    def ray_backend_fixture(self):
+        import ray
+
+        shutdown = False
+        if not ray.is_initialized():
+            shutdown = True
+            ray.init()
+        yield
+        if shutdown:
+            ray.shutdown()
+
+    @pytest.mark.parametrize("ray_backend", [True, False], ids=["ray", "local"])
+    @pytest.mark.parametrize(
+        "device",
+        [
+            None,
+            torch.device("cpu")
+            if not torch.cuda.is_available()
+            else torch.device("cuda:0"),
+        ],
+        ids=["none", "cpu/cuda"],
+    )
+    def test_gsm8kenv(self, ray_backend, device, ray_backend_fixture):
+        if not _has_ray and ray_backend:
+            pytest.skip("Ray not available")
         import transformers
 
         tokenizer = transformers.AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
-        env = GSM8KEnv(tokenizer=tokenizer, apply_template=True)
+        env = GSM8KEnv(
+            tokenizer=tokenizer,
+            apply_template=True,
+            ray_backend=ray_backend,
+            device=device,
+        )
         # env.check_env_specs(break_when_any_done="both")
         r = env.reset()
+        assert r.device == device
         assert "history" in r
         assert r["history"].prompt.shape == (1, 2)
         r = r.clone()
@@ -584,6 +616,7 @@ class TestGSM8K:
         assert history_full.shape[-1] == 3
         r["history"].full = history_full
         s = env.step(r)
+        assert s.device == device
         assert s["next", "reward"] >= 10
         assert s["next", "done"].all()
 

@@ -60,6 +60,8 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.env_creator import EnvCreator
+
+from torchrl.envs.llm.transforms.policy_version import PolicyVersion
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -417,8 +419,8 @@ class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
-        create_env_fn (Callable): a callable that returns an instance of
-            :class:`~torchrl.envs.EnvBase` class.
+        create_env_fn (Callable or EnvBase): a callable that returns an instance of
+            :class:`~torchrl.envs.EnvBase` class, or the env itself.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
@@ -571,6 +573,11 @@ class SyncDataCollector(DataCollectorBase):
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
+        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
+            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
+            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
+            the policy version.
+            Defaults to `False`.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -665,6 +672,7 @@ class SyncDataCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        track_policy_version: bool = False,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -733,6 +741,8 @@ class SyncDataCollector(DataCollectorBase):
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 # Will break for older PT versions which don't have torch.mps
                 self._sync_storage = torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                self._sync_storage = torch.npu.synchronize
             elif self.storing_device.type == "cpu":
                 self._sync_storage = _do_nothing
             else:
@@ -747,6 +757,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_env = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_env = torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                self._sync_env = torch.npu.synchronize
             elif self.env_device.type == "cpu":
                 self._sync_env = _do_nothing
             else:
@@ -760,6 +772,8 @@ class SyncDataCollector(DataCollectorBase):
                 self._sync_policy = torch.cuda.synchronize
             elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
                 self._sync_policy = torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                self._sync_policy = torch.npu.synchronize
             elif self.policy_device.type == "cpu":
                 self._sync_policy = _do_nothing
             else:
@@ -777,6 +791,33 @@ class SyncDataCollector(DataCollectorBase):
 
         self.env: EnvBase = env
         del env
+
+        # Policy version tracking setup
+        self.policy_version_tracker = track_policy_version
+        if PolicyVersion is not None:
+            if isinstance(track_policy_version, bool) and track_policy_version:
+                from torchrl.envs.batched_envs import BatchedEnvBase
+
+                if isinstance(self.env, BatchedEnvBase):
+                    raise RuntimeError(
+                        "BatchedEnvBase is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, "
+                        "and pass that transform to the collector."
+                    )
+                self.policy_version_tracker = PolicyVersion()
+                self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
+            elif hasattr(
+                track_policy_version, "increment_version"
+            ):  # Check if it's a PolicyVersion instance
+                self.policy_version_tracker = track_policy_version
+                self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
+            else:
+                self.policy_version_tracker = None
+        else:
+            if track_policy_version:
+                raise ImportError(
+                    "PolicyVersion is not available. Please install the LLM dependencies or set track_policy_version=False."
+                )
+            self.policy_version_tracker = None
         self.replay_buffer = replay_buffer
         self.extend_buffer = extend_buffer
         if self.replay_buffer is not None:
@@ -1749,6 +1790,48 @@ class SyncDataCollector(DataCollectorBase):
         except Exception:
             return f"{type(self).__name__}(not_init)"
 
+    def increment_version(self):
+        """Increment the policy version."""
+        if self.policy_version_tracker is not None:
+            if not hasattr(self.policy_version_tracker, "increment_version"):
+                raise RuntimeError(
+                    "Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector."
+                )
+            self.policy_version_tracker.increment_version()
+
+    @property
+    def policy_version(self) -> str | int | None:
+        """The current policy version."""
+        if not hasattr(self.policy_version_tracker, "version"):
+            return None
+        return self.policy_version_tracker.version
+
+    def get_policy_version(self) -> str | int | None:
+        """Get the current policy version.
+
+        This method exists to support remote calls in Ray actors, since properties
+        cannot be accessed directly through Ray's RPC mechanism.
+
+        Returns:
+            The current version number (int) or UUID (str), or None if version tracking is disabled.
+        """
+        return self.policy_version
+
+    def getattr_policy(self, attr):
+        """Get an attribute from the policy."""
+        # send command to policy to return the attr
+        return getattr(self.policy, attr)
+
+    def getattr_env(self, attr):
+        """Get an attribute from the environment."""
+        # send command to env to return the attr
+        return getattr(self.env, attr)
+
+    def getattr_rb(self, attr):
+        """Get an attribute from the replay buffer."""
+        # send command to rb to return the attr
+        return getattr(self.replay_buffer, attr)
+
 
 class _MultiDataCollector(DataCollectorBase):
     """Runs a given number of DataCollectors on separate processes.
@@ -1789,6 +1872,8 @@ class _MultiDataCollector(DataCollectorBase):
             .. warning:: `policy_factory` is currently not compatible with multiprocessed data
                 collectors.
 
+        num_workers (int, optional): number of workers to use. If `create_env_fn` is a list, this will be ignored.
+            Defaults to `None` (workers determined by the `create_env_fn` length).
         frames_per_batch (int, Sequence[int]): A keyword-only argument representing the
             total number of elements in a batch. If a sequence is provided, represents the number of elements in a
             batch per worker. Total number of elements in a batch is then the sum over the sequence.
@@ -1936,6 +2021,11 @@ class _MultiDataCollector(DataCollectorBase):
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
             which handles weight synchronization across multiple processes.
             Consider using a constructor if the updater needs to be serialized.
+        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
+            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
+            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
+            the policy version.
+            Defaults to `False`.
 
     """
 
@@ -1945,6 +2035,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        num_workers: int | None = None,
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
@@ -1980,9 +2071,14 @@ class _MultiDataCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        track_policy_version: bool = False,
     ):
         self.closed = True
-        self.num_workers = len(create_env_fn)
+        if isinstance(create_env_fn, Sequence):
+            self.num_workers = len(create_env_fn)
+        else:
+            self.num_workers = num_workers
+            create_env_fn = [create_env_fn] * self.num_workers
 
         if (
             isinstance(frames_per_batch, Sequence)
@@ -2064,6 +2160,7 @@ class _MultiDataCollector(DataCollectorBase):
             and hasattr(replay_buffer, "shared")
             and not replay_buffer.shared
         ):
+            torchrl_logger.warning("Replay buffer is not shared. Sharing it.")
             replay_buffer.share()
 
         self._policy_weights_dict = {}
@@ -2105,10 +2202,30 @@ class _MultiDataCollector(DataCollectorBase):
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
                 "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
                 "on their own (via some specialized worker type / constructor) this may well work, but make sure "
-                "your weight synchronization strategy is properly set."
+                "your weight synchronization strategy is properly set. To suppress this warning, you can use "
+                "RemoteModuleWeightUpdater() which enforces explicit weight passing when calling update_policy_weights_(weights). "
+                "This will work whenever your inference and training policies are nn.Module instances with similar structures."
             )
 
         self.weight_updater = weight_updater
+
+        # Policy version tracking setup
+        self.policy_version_tracker = track_policy_version
+        if PolicyVersion is not None:
+            if isinstance(track_policy_version, bool) and track_policy_version:
+                self.policy_version_tracker = PolicyVersion()
+            elif hasattr(
+                track_policy_version, "increment_version"
+            ):  # Check if it's a PolicyVersion instance
+                self.policy_version_tracker = track_policy_version
+            else:
+                self.policy_version_tracker = None
+        else:
+            if track_policy_version:
+                raise ImportError(
+                    "PolicyVersion is not available. Please install the LLM dependencies or set track_policy_version=False."
+                )
+            self.policy_version_tracker = None
 
         self.policy = policy
         self.policy_factory = policy_factory
@@ -2197,8 +2314,8 @@ class _MultiDataCollector(DataCollectorBase):
             fake_td["collector", "traj_ids"] = torch.zeros(
                 fake_td.shape, dtype=torch.long
             )
-
-            self.replay_buffer.add(fake_td)
+            # Use extend to avoid time-related transforms to fail
+            self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
 
     @classmethod
@@ -2652,6 +2769,89 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+
+    def increment_version(self):
+        """Increment the policy version."""
+        if self.policy_version_tracker is not None:
+            if not hasattr(self.policy_version_tracker, "increment_version"):
+                raise RuntimeError(
+                    "Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector."
+                )
+            self.policy_version_tracker.increment_version()
+
+    @property
+    def policy_version(self) -> str | int | None:
+        """The current policy version."""
+        if not hasattr(self.policy_version_tracker, "version"):
+            return None
+        return self.policy_version_tracker.version
+
+    def get_policy_version(self) -> str | int | None:
+        """Get the current policy version.
+
+        This method exists to support remote calls in Ray actors, since properties
+        cannot be accessed directly through Ray's RPC mechanism.
+
+        Returns:
+            The current version number (int) or UUID (str), or None if version tracking is disabled.
+        """
+        return self.policy_version
+
+    def getattr_policy(self, attr):
+        """Get an attribute from the policy of the first worker.
+
+        Args:
+            attr (str): The attribute name to retrieve from the policy.
+
+        Returns:
+            The attribute value from the policy of the first worker.
+
+        Raises:
+            AttributeError: If the attribute doesn't exist on the policy.
+        """
+        _check_for_faulty_process(self.procs)
+
+        # Send command to first worker (index 0)
+        self.pipes[0].send((attr, "getattr_policy"))
+        result, msg = self.pipes[0].recv()
+        if msg != "getattr_policy":
+            raise RuntimeError(f"Expected msg='getattr_policy', got {msg}")
+
+        # If the worker returned an AttributeError, re-raise it
+        if isinstance(result, AttributeError):
+            raise result
+
+        return result
+
+    def getattr_env(self, attr):
+        """Get an attribute from the environment of the first worker.
+
+        Args:
+            attr (str): The attribute name to retrieve from the environment.
+
+        Returns:
+            The attribute value from the environment of the first worker.
+
+        Raises:
+            AttributeError: If the attribute doesn't exist on the environment.
+        """
+        _check_for_faulty_process(self.procs)
+
+        # Send command to first worker (index 0)
+        self.pipes[0].send((attr, "getattr_env"))
+        result, msg = self.pipes[0].recv()
+        if msg != "getattr_env":
+            raise RuntimeError(f"Expected msg='getattr_env', got {msg}")
+
+        # If the worker returned an AttributeError, re-raise it
+        if isinstance(result, AttributeError):
+            raise result
+
+        return result
+
+    def getattr_rb(self, attr):
+        """Get an attribute from the replay buffer."""
+        return getattr(self.replay_buffer, attr)
 
 
 @accept_remote_rref_udf_invocation
@@ -3458,6 +3658,11 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
+            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
+            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
+            the policy version.
+            Defaults to `False`.
 
     """
 
@@ -3487,6 +3692,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         num_threads: int | None = None,
         num_sub_threads: int = 1,
         set_truncated: bool = False,
+        track_policy_version: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -3514,6 +3720,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             num_threads=num_threads,
             num_sub_threads=num_sub_threads,
             set_truncated=set_truncated,
+            track_policy_version=track_policy_version,
             **kwargs,
         )
 
@@ -3807,6 +4014,26 @@ def _main_async_collector(
             inner_collector.load_state_dict(state_dict)
             del state_dict
             pipe_child.send((j, "loaded"))
+            has_timed_out = False
+            continue
+
+        elif msg == "getattr_policy":
+            attr_name = data_in
+            try:
+                result = getattr(inner_collector.policy, attr_name)
+                pipe_child.send((result, "getattr_policy"))
+            except AttributeError as e:
+                pipe_child.send((e, "getattr_policy"))
+            has_timed_out = False
+            continue
+
+        elif msg == "getattr_env":
+            attr_name = data_in
+            try:
+                result = getattr(inner_collector.env, attr_name)
+                pipe_child.send((result, "getattr_env"))
+            except AttributeError as e:
+                pipe_child.send((e, "getattr_env"))
             has_timed_out = False
             continue
 

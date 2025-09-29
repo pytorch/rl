@@ -48,7 +48,7 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl._utils import implement_for, logger as torchrl_logger
-from torchrl.collectors.collectors import SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     Binary,
     Bounded,
@@ -158,6 +158,8 @@ else:
         retry,
         rollout_consistency_assertion,
     )
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
@@ -1995,6 +1997,9 @@ if _has_gym:
     IS_OSX,
     reason="rendering unstable on osx, skipping (mujoco.FatalError: gladLoadGL error)",
 )
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
 @pytest.mark.parametrize("env_lib,env_args,env_kwargs", params)
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     if (
@@ -2042,6 +2047,9 @@ if _has_gym:
     [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
 )
 class TestCollectorLib:
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
         env_args = tuple(arg() if callable(arg) else arg for arg in env_args)
         if not _has_dmc and env_lib is DMControlEnv:
@@ -2782,14 +2790,21 @@ class TestVmas:
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
+        # Skip football scenario due to VMAS bug: IndexError in get_wall_separations
+        if scenario_name == "football":
+            pytest.skip(
+                "Football scenario has a shape mismatch bug in VMAS get_wall_separations method"
+            )
+
         env = VmasEnv(
             scenario=scenario_name,
             continuous_actions=continuous_actions,
             num_envs=4,
         )
         env.set_seed(0)
-        env.reset()
-        env.rollout(10)
+        env.check_env_specs()
+        env.rollout(10, break_when_any_done=False)
+        env.check_env_specs()
         env.close()
 
     @pytest.mark.parametrize(

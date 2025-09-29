@@ -13,7 +13,7 @@ from tensordict import TensorDictBase
 
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
 
-from torchrl.collectors.collectors import (
+from torchrl.collectors import (
     DataCollectorBase,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,

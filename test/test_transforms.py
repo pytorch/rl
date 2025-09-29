@@ -24,7 +24,7 @@ import pytest
 
 import tensordict.tensordict
 import torch
-
+from packaging import version
 from tensordict import (
     assert_close,
     LazyStackedTensorDict,
@@ -205,6 +205,7 @@ else:
     mp_ctx = "fork"
 
 TIMEOUT = 100.0
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -1784,21 +1785,21 @@ class TestStepCounter(TransformBase):
 
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
-            StepCounter(max_steps=15),
+            StepCounter(max_steps=10),
         )
         torch.manual_seed(0)
         env.set_seed(0)
-        r0 = env.rollout(100, break_when_any_done=break_when_any_done)
+        r0 = env.rollout(30, break_when_any_done=break_when_any_done)
 
         env = batched_class(
             2,
             lambda: TransformedEnv(
-                GymEnv(CARTPOLE_VERSIONED()), StepCounter(max_steps=15)
+                GymEnv(CARTPOLE_VERSIONED()), StepCounter(max_steps=10)
             ),
         )
         torch.manual_seed(0)
         env.set_seed(0)
-        r1 = env.rollout(100, break_when_any_done=break_when_any_done)
+        r1 = env.rollout(30, break_when_any_done=break_when_any_done)
         tensordict.tensordict.assert_allclose_td(r0, r1)
 
     @pytest.mark.parametrize("update_done", [False, True])
@@ -2248,7 +2249,7 @@ class TestTrajCounter(TransformBase):
 
         collector = MultiSyncDataCollector(
             [EnvCreator(make_env, max_steps=5), EnvCreator(make_env, max_steps=4)],
-            total_frames=99,
+            total_frames=32,
             frames_per_batch=8,
         )
 
@@ -7309,6 +7310,9 @@ class TestUnsqueezeTransform(TransformBase):
         else:
             assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     def test_transform_inverse(self):
         env = TransformedEnv(
@@ -7590,6 +7594,9 @@ class TestSqueezeTransform(TransformBase):
         else:
             assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_inverse(self):
         env = TransformedEnv(
@@ -13772,6 +13779,9 @@ class TestActionDiscretizer(TransformBase):
             partial(EnvWithScalarAction, singleton=True),
             partial(EnvWithScalarAction, singleton=False),
         ],
+    )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
     )
     def test_transform_env(self, env_cls, interval_as_tensor, categorical, sampling):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -422,6 +422,9 @@ def add_one(x):
     return x + 1
 
 
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+)
 @pytest.mark.parametrize("in_dim, out_dim", [(0, 0), (0, 1), (1, 0), (1, 1)])
 def test_vmap_in_out_dims(in_dim, out_dim):
     # Create a tensor with batch dimension

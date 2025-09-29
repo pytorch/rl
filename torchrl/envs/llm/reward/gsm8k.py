@@ -80,7 +80,9 @@ class GSM8KRewardParser(Transform):
                     elif getattr(parent.base_env, "input_mode", None) == "tokens":
                         self.in_keys = [("tokens", "full"), "answer"]
             else:
-                raise ValueError(f"No base env found for {self}")
+                raise ValueError(
+                    f"No base env found for {self} with container {self.container}"
+                )
 
     def set_container(self, container: Transform | EnvBase) -> None:
         result = super().set_container(container)

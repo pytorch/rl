@@ -22,6 +22,11 @@ from torch import multiprocessing as mp
 from torchrl._utils import _STRDTYPE2DTYPE
 
 try:
+    from torch.compiler import disable as compile_disable
+except ImportError:
+    from torch._dynamo import disable as compile_disable
+
+try:
     from torch.utils._pytree import tree_leaves
 except ImportError:
     from torch.utils._pytree import tree_flatten
@@ -221,7 +226,7 @@ class RoundRobinWriter(Writer):
 
     # TODO: Workaround for PyTorch nightly regression where compiler can't handle
     # method calls on objects returned from _attached_entities_iter()
-    @torch.compiler.disable()
+    @compile_disable()
     def _mark_update_entities(self, index: torch.Tensor) -> None:
         """Mark entities as updated with the given index."""
         for ent in self._storage._attached_entities_iter():
@@ -576,6 +581,14 @@ class TensorDictMaxValueWriter(Writer):
         index = self._replicate_index(out_index)
         self._mark_update_entities(index)
         return index
+
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @compile_disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
+        for ent in self._storage._attached_entities_iter():
+            ent.mark_update(index)
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0

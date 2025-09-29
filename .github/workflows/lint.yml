@@ -55,22 +55,23 @@ jobs:
       script: |
         set -euo pipefail
         
-        echo '::group::Setup environment'
-        CONDA_PATH=$(which conda)
-        eval "$(${CONDA_PATH} shell.bash hook)"
-        conda create --name ci --quiet --yes -c conda-forge python=3.11 ncurses=5 libgcc
-        conda activate ci
-        export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}"
-        echo '::endgroup::'
-        
         echo '::group::Install lint tools'
-        curl https://oss-clang-format.s3.us-east-2.amazonaws.com/linux64/clang-format-linux64 -o ./clang-format
-        chmod +x ./clang-format
+        # Install clang-format via package manager (more reliable than binary download)
+        if command -v apt-get &> /dev/null; then
+          apt-get update && apt-get install -y clang-format
+        elif command -v yum &> /dev/null; then
+          yum install -y clang-tools-extra
+        elif command -v dnf &> /dev/null; then
+          dnf install -y clang-tools-extra
+        else
+          echo "No supported package manager found"
+          exit 1
+        fi
         echo '::endgroup::'
 
         echo '::group::Lint C source'
         set +e
-        ./.github/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable ./clang-format
+        python3 ./.github/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable clang-format
         
         if [ $? -ne 0 ]; then
           git --no-pager diff

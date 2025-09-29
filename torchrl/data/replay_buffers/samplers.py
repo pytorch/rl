@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 import torch
+from pyvers import implement_for
 from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
 from torch.utils._pytree import tree_map
@@ -706,7 +707,12 @@ class PrioritizedSampler(Sampler):
         self._sum_tree = state_dict.pop("_sum_tree")
         self._min_tree = state_dict.pop("_min_tree")
 
+    @implement_for("torch", None, "2.5.0")
     def dumps(self, path):
+        raise NotImplementedError("This method is not implemented for Torch < 2.5.0")
+
+    @implement_for("torch", "2.5.0", None)
+    def dumps(self, path):  # noqa: F811
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         try:
@@ -752,7 +758,12 @@ class PrioritizedSampler(Sampler):
                 file,
             )
 
+    @implement_for("torch", None, "2.5.0")
     def loads(self, path):
+        raise NotImplementedError("This method is not implemented for Torch < 2.5.0")
+
+    @implement_for("torch", "2.5.0", None)
+    def loads(self, path):  # noqa: F811
         path = Path(path).absolute()
         with open(path / "sampler_metadata.json") as file:
             metadata = json.load(file)

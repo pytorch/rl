@@ -9,10 +9,10 @@ import pytest
 import torch.cuda
 import tqdm
 
-from torchrl.collectors import SyncDataCollector
-from torchrl.collectors.collectors import (
+from torchrl.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
 )
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper

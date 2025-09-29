@@ -23,9 +23,9 @@ from tensordict.tensorclass import from_dataclass, TensorClass
 from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
-from torchrl import logger as torchrl_logger
 
 from torchrl.envs.utils import _classproperty
+from torchrl.modules.llm.backends.vllm import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
     _batching,
     _extract_responses_from_full_histories,
@@ -50,6 +50,8 @@ except ImportError:
     SamplingParams = Any  # type: ignore
     RequestOutput = Any  # type: ignore
 
+# Import async vLLM engines
+
 
 class vLLMWrapper(LLMWrapperBase):
     """A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.
@@ -57,8 +59,33 @@ class vLLMWrapper(LLMWrapperBase):
     This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input
     modalities (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
 
+    The wrapper supports both synchronous (vllm.LLM) and asynchronous (:class:`~torchrl.modules.llm.backends.AsyncVLLM`) vLLM engines.
+
+    .. note::
+        **Recommended: Use AsyncVLLM for better performance**
+
+        For distributed inference and better resource utilization, we recommend using
+        :class:`~torchrl.modules.llm.backends.AsyncVLLM` instead of the synchronous vllm.LLM:
+
+        >>> from torchrl.modules.llm.backends import AsyncVLLM
+        >>> from torchrl.modules.llm import vLLMWrapper
+        >>>
+        >>> # Recommended approach
+        >>> async_engine = AsyncVLLM.from_pretrained("Qwen/Qwen2.5-3B", num_replicas=2)
+        >>> wrapper = vLLMWrapper(async_engine, input_mode="history", generate=True)
+
+        AsyncVLLM provides:
+        - Better GPU utilization through Ray-based distribution
+        - Multiple replicas for higher throughput
+        - Native vLLM batching for optimal performance
+        - Automatic resource management and cleanup
+
     Args:
-        model (vllm.LLM | str): The vLLM model to wrap. If a string, it will be passed to `vllm.LLM`.
+        model (vllm.LLM | AsyncVLLM | Ray Actor | str): The vLLM model to wrap.
+            - If a string, it will be converted to an AsyncVLLM instance (recommended)
+            - If a vllm.LLM instance, uses synchronous generation via `model.generate()`
+            - If an AsyncVLLM instance, uses async generation via `model.generate()`
+            - If a Ray actor with generate method, uses remote calls via `ray.get(model.generate.remote())`
 
     Keyword Args:
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for encoding and decoding text.
@@ -237,7 +264,7 @@ class vLLMWrapper(LLMWrapperBase):
 
     def __init__(
         self,
-        model: vllm.LLM | str,  # type: ignore
+        model: Any,  # vllm.LLM | AsyncVLLMEngineService | AsyncLLMEngineExtended | str
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
@@ -298,8 +325,22 @@ class vLLMWrapper(LLMWrapperBase):
         if transformers is None:
             raise ImportError("transformers is required for vLLMWrapper")
 
+        # Detect and initialize model
         if isinstance(model, str):
-            model = vllm.LLM(model)
+            model = AsyncVLLM.from_pretrained(model)
+
+        # Validate model type
+        if isinstance(model, AsyncVLLM):
+            self._model_type = "async_vllm"
+        elif vllm is not None and isinstance(model, vllm.LLM):
+            self._model_type = "sync_vllm"
+        elif hasattr(model, "generate") and hasattr(model, "remote"):
+            # Ray actor with generate method
+            self._model_type = "ray_actor"
+        else:
+            raise ValueError(
+                f"model must be a string, vllm.LLM, AsyncVLLM, or Ray actor. Got {type(model)}"
+            )
 
         if isinstance(tokenizer, str):
             from transformers import AutoTokenizer
@@ -315,7 +356,6 @@ class vLLMWrapper(LLMWrapperBase):
             )
 
         self.model = model
-        self._remote_calls = not isinstance(model, vllm.LLM)
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
@@ -414,9 +454,29 @@ class vLLMWrapper(LLMWrapperBase):
         # Get tokenizer if needed
         if tokenizer is None:
             try:
-                tokenizer = model.get_tokenizer()
-            except AttributeError:
-                warnings.warn("No tokenizer provided and no tokenizer found in model.")
+                if hasattr(model, "get_tokenizer"):
+                    tokenizer = model.get_tokenizer()
+                else:
+                    # Try to extract model name and load tokenizer as fallback
+                    model_name = self._extract_model_name(model)
+                    if model_name:
+                        warnings.warn(
+                            f"No tokenizer provided. Attempting to load tokenizer from model name: {model_name}"
+                        )
+                        from transformers import AutoTokenizer
+
+                        try:
+                            tokenizer = AutoTokenizer.from_pretrained(model_name)
+                        except Exception as tokenizer_error:
+                            warnings.warn(
+                                f"Failed to load tokenizer from {model_name}: {tokenizer_error}"
+                            )
+                    else:
+                        warnings.warn(
+                            "No tokenizer provided and no tokenizer found in model."
+                        )
+            except Exception as e:
+                warnings.warn(f"Could not get tokenizer from model: {e}")
         self.tokenizer = tokenizer
 
         if self.tokenizer is not None and (
@@ -650,6 +710,62 @@ class vLLMWrapper(LLMWrapperBase):
 
         # Create and return new instance
         return type(self)(**constructor_kwargs)
+
+    def set_tokenizer(self, tokenizer):
+        """Set the tokenizer for the wrapper. Useful for async engines where tokenizer retrieval is deferred."""
+        self.tokenizer = tokenizer
+        if self.tokenizer is not None and (
+            not hasattr(self.tokenizer, "pad_token") or self.tokenizer.pad_token is None
+        ):
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        if self.tokenizer is not None:
+            padding_value = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
+        else:
+            padding_value = None
+        self.padding_value = padding_value
+
+    def _extract_model_name(self, model) -> str | None:
+        """Extract model name from different model types for tokenizer fallback."""
+        try:
+            # For AsyncVLLM, try to get the model name from engine_args
+            if hasattr(model, "engine_args") and hasattr(model.engine_args, "model"):
+                return model.engine_args.model
+
+            # For vllm.LLM, try to get the model name
+            elif hasattr(model, "llm_engine") and hasattr(
+                model.llm_engine, "model_config"
+            ):
+                return getattr(model.llm_engine.model_config, "model", None)
+
+            # For Ray actors, try to get model name via remote call
+            elif hasattr(model, "remote") and hasattr(model, "get_model_name"):
+                import ray
+
+                try:
+                    return ray.get(model.get_model_name.remote())
+                except Exception:
+                    pass
+
+            # Try common attributes that might contain model name
+            for attr in ["model_name", "model", "model_path", "_model_name"]:
+                if hasattr(model, attr):
+                    value = getattr(model, attr)
+                    if isinstance(value, str):
+                        return value
+
+            return None
+        except Exception:
+            return None
+
+    def _call_generate(self, *args, **kwargs):
+        """Call generate method based on model type."""
+        if self._model_type == "ray_actor":
+            import ray
+
+            return ray.get(self.model.generate.remote(*args, **kwargs))
+        else:
+            # Both sync_vllm and async_vllm have direct generate methods
+            return self.model.generate(*args, **kwargs)
 
     @set_list_to_stack(True)
     @_batching
@@ -896,6 +1012,9 @@ class vLLMWrapper(LLMWrapperBase):
                 text_full, prompt_histories, self.chat_template_name, self.tokenizer
             )
             history_chat_flat.response = h_responses
+            history_chat_flat.full = history_chat_flat.prompt.extend(
+                h_responses, inplace=False, dim=-1
+            )
         result.set(self.history_key, history_chat)
         return result
 
@@ -1097,12 +1216,21 @@ class vLLMWrapper(LLMWrapperBase):
         )
 
     def _cat_text(
-        self, text: str | list[str], response_text: str | list[str]
+        self, text: str | list[str], response_text: str | list[str] | None
     ) -> str | list[str]:
         """Concatenate text and response text."""
         assert isinstance(
             text, (str, list)
         ), f"text must be str or list, got {type(text)}"
+
+        # Handle None response_text (when tokenizer is not available)
+        if response_text is None:
+            raise RuntimeError(
+                "response_text is None, likely due to missing tokenizer. "
+                "Cannot decode vLLM response without a tokenizer. "
+                "Please provide a tokenizer explicitly or ensure the model has one available."
+            )
+
         assert isinstance(
             response_text, (str, list)
         ), f"response_text must be str or list, got {type(response_text)}"
@@ -1144,14 +1272,8 @@ class vLLMWrapper(LLMWrapperBase):
         elif not isinstance(text, list):
             text = text.tolist()
 
-        if not self._remote_calls:
-            request_output = self.model.generate(text, *args, **generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(
-                self.model.generate.remote(text, *args, **generate_kwargs)
-            )
+        # Call generate based on model type
+        request_output = self._call_generate(text, *args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1294,12 +1416,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
-        if not self._remote_calls:
-            request_output = self.model.generate(**generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(self.model.generate.remote(**generate_kwargs))
+        request_output = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1424,14 +1541,8 @@ class vLLMWrapper(LLMWrapperBase):
             tokens_prompt_list = self._to_list(tokens_prompt_unpadded, None)
         generate_kwargs.update({"prompt_token_ids": tokens_prompt_list})
 
-        if not self._remote_calls:
-            request_output = self.model.generate(*args, **generate_kwargs)
-        else:
-            import ray
-
-            request_output = ray.get(
-                self.model.generate.remote(*args, **generate_kwargs)
-            )
+        # Call generate based on model type
+        request_output = self._call_generate(*args, **generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
@@ -1668,12 +1779,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
-        if not self._remote_calls:
-            tokens_out_stuct = self.model.generate(**generate_kwargs)
-        else:
-            import ray
-
-            tokens_out_stuct = ray.get(self.model.generate.remote(**generate_kwargs))
+        tokens_out_stuct = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)
 
@@ -1967,11 +2073,12 @@ class _RequestOutput_tc(TensorClass["nocast"]):
         def postproc(output):
             def get_logprob(output):
                 t = []
-                for v, tid in zip(output.logprobs, output.token_ids):
+                token_ids = output.token_ids
+                if isinstance(token_ids, torch.Tensor):
+                    token_ids = token_ids.tolist()
+                for v, tid in zip(output.logprobs, token_ids):
                     t.append(
-                        v[int(tid)]["logprob"]
-                        if v[tid].get("logprob") is not None
-                        else 0.0
+                        v[tid]["logprob"] if v[tid].get("logprob") is not None else 0.0
                     )
                 return torch.tensor(t)
 
@@ -2063,351 +2170,3 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                 )
                 for request in requests
             ]
-
-
-class RemotevLLMWrapper:
-    """A remote Ray actor wrapper for vLLMWrapper that provides a simplified interface.
-
-    This class wraps a vLLMWrapper instance as a Ray actor, allowing remote execution
-    while providing a clean interface that doesn't require explicit `remote()` and `get()` calls.
-
-    Args:
-        model (vllm.LLM | str): The vLLM model to wrap.
-            - If a string, it will be passed to `vllm.LLM` and downloaded on the remote worker.
-            - If a vLLM LLM object, it must be a remote model with a ray handle (not a local model).
-            Local vLLM models are not serializable and will raise an error.
-        max_concurrency (int, optional): Maximum number of concurrent calls to the remote actor. Defaults to 16.
-        validate_model (bool, optional): Whether to validate the model. Defaults to True.
-        **kwargs: All other arguments are passed directly to vLLMWrapper.
-
-    Example:
-        >>> import ray
-        >>> from torchrl.modules.llm.policies import RemotevLLMWrapper
-        >>>
-        >>> # Initialize Ray if not already done
-        >>> if not ray.is_initialized():
-        ...     ray.init()
-        >>>
-        >>> # Create remote wrapper
-        >>> remote_wrapper = RemotevLLMWrapper(
-        ...     model="gpt2",
-        ...     input_mode="history",
-        ...     generate=True,
-        ...     generate_kwargs={"max_new_tokens": 50}
-        ... )
-        >>>
-        >>> # Use like a regular wrapper (no remote/get calls needed)
-        >>> result = remote_wrapper(tensordict_input)
-        >>> print(result["text"].response)
-    """
-
-    def __init__(
-        self,
-        model,
-        max_concurrency: int = 16,
-        validate_model: bool = True,
-        actor_name: str = None,
-        **kwargs,
-    ):
-        import ray
-
-        # Validate model parameter - for vLLM, we accept strings or vLLM LLM objects with ray handles
-        if not isinstance(model, str) and validate_model:
-            # Check if it's a vLLM LLM object with ray handle
-            try:
-                import vllm
-
-                if isinstance(model, vllm.LLM):
-                    # Check if it has a ray handle (remote model)
-                    if not hasattr(model, "_llm_engine") or not hasattr(
-                        model._llm_engine, "model_executor"
-                    ):
-                        raise ValueError(
-                            "For RemotevLLMWrapper, when passing a vLLM LLM object, "
-                            "it should be a remote vLLM model with a ray handle. "
-                            "Local vLLM models are not serializable. "
-                            "Consider using a string model name/path instead. "
-                            "You can bypass this check by setting validate_model=False."
-                        )
-                else:
-                    raise ValueError(
-                        f"For RemotevLLMWrapper, the model parameter must be a string "
-                        f"(model name or path) or a remote vLLM LLM object. Got type: {type(model)}. "
-                        f"Local vLLM models are not serializable. "
-                        "You can bypass this check by setting validate_model=False."
-                    )
-            except ImportError:
-                raise ValueError(
-                    f"For RemotevLLMWrapper, the model parameter must be a string "
-                    f"(model name or path) or a remote vLLM LLM object. Got type: {type(model)}. "
-                    f"vLLM is not available, so only string model names/paths are supported. "
-                    "You can bypass this check by setting validate_model=False."
-                )
-
-        if not ray.is_initialized():
-            ray.init()
-
-        if actor_name is not None:
-            # Check if an actor with this name already exists
-            try:
-                existing_actor = ray.get_actor(actor_name)
-                torchrl_logger.info(f"Using existing actor {actor_name}")
-                # If we can get the actor, assume it's alive and use it
-                self._remote_wrapper = existing_actor
-                return
-            except ValueError:
-                # Actor doesn't exist, create a new one
-                torchrl_logger.info(f"Creating new actor {actor_name}")
-
-        # Create the remote actor with the unique name
-        self._remote_wrapper = (
-            ray.remote(vLLMWrapper)
-            .options(max_concurrency=max_concurrency, name=actor_name)
-            .remote(model, **kwargs)
-        )
-
-    def __call__(self, tensordict, **kwargs):
-        """Forward pass that automatically handles remote execution."""
-        import ray
-
-        return ray.get(self._remote_wrapper.__call__.remote(tensordict, **kwargs))
-
-    def forward(self, tensordict, **kwargs):
-        """Forward pass that automatically handles remote execution."""
-        import ray
-
-        return ray.get(self._remote_wrapper.forward.remote(tensordict, **kwargs))
-
-    def get_new_version(self, **kwargs):
-        """Get a new version of the wrapper with altered parameters."""
-        import ray
-
-        return ray.get(self._remote_wrapper.get_new_version.remote(**kwargs))
-
-    def get_dist(self, tensordict, **kwargs):
-        """Get distribution from logits/log-probs with optional masking."""
-        import ray
-
-        return ray.get(self._remote_wrapper.get_dist.remote(tensordict, **kwargs))
-
-    def get_dist_with_prompt_mask(self, tensordict, **kwargs):
-        """Get distribution masked to only include response tokens (exclude prompt)."""
-        import ray
-
-        return ray.get(
-            self._remote_wrapper.get_dist_with_prompt_mask.remote(tensordict, **kwargs)
-        )
-
-    def _get_dist_with_assistant_mask(self, tensordict, **kwargs):
-        """Get distribution masked to only include assistant tokens."""
-        import ray
-
-        return ray.get(
-            self._remote_wrapper._get_dist_with_assistant_mask.remote(
-                tensordict, **kwargs
-            )
-        )
-
-    def _get_dist_with_attention_mask(self, tensordict, **kwargs):
-        """Get distribution masked using attention mask."""
-        import ray
-
-        return ray.get(
-            self._remote_wrapper._get_dist_with_attention_mask.remote(
-                tensordict, **kwargs
-            )
-        )
-
-    def _get_dist_with_custom_mask(self, tensordict, **kwargs):
-        """Get distribution with custom mask."""
-        import ray
-
-        return ray.get(
-            self._remote_wrapper._get_dist_with_custom_mask.remote(tensordict, **kwargs)
-        )
-
-    def _get_sft_dist(self, tensordict, **kwargs):
-        """Get distribution suitable for SFT loss (response tokens only)."""
-        import ray
-
-        return ray.get(self._remote_wrapper._get_sft_dist.remote(tensordict, **kwargs))
-
-    def _get_rlhf_dist(self, tensordict, **kwargs):
-        """Get distribution suitable for RLHF loss (assistant tokens only)."""
-        import ray
-
-        return ray.get(self._remote_wrapper._get_rlhf_dist.remote(tensordict, **kwargs))
-
-    def _get_generic_dist(self, tensordict, **kwargs):
-        """Get distribution suitable for generic losses (all tokens)."""
-        import ray
-
-        return ray.get(
-            self._remote_wrapper._get_generic_dist.remote(tensordict, **kwargs)
-        )
-
-    def log_prob(self, data, **kwargs):
-        """Compute log probabilities."""
-        import ray
-
-        return ray.get(self._remote_wrapper.log_prob.remote(data, **kwargs))
-
-    def cleanup_batching(self):
-        """Clean up batching resources."""
-        import ray
-
-        return ray.get(self._remote_wrapper.cleanup_batching.remote())
-
-    def __del__(self):
-        """Cleanup when the wrapper is destroyed."""
-        try:
-            import ray
-
-            if hasattr(self, "_remote_wrapper") and ray.is_initialized():
-                # Clean up batching resources
-                try:
-                    ray.get(self._remote_wrapper.cleanup_batching.remote())
-                except Exception:
-                    pass  # Ignore cleanup errors during destruction
-        except Exception:
-            pass  # Ignore any errors during cleanup
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit with cleanup."""
-        self.cleanup_batching()
-
-    def get_batching_state(self):
-        """Get the current batching state."""
-        import ray
-
-        return ray.get(self._remote_wrapper.get_batching_state.remote())
-
-    @property
-    def generate(self):
-        """Whether text generation is enabled."""
-        import ray
-
-        return ray.get(self._remote_wrapper.generate.remote)
-
-    @property
-    def pad_output(self):
-        """Whether output sequences are padded."""
-        import ray
-
-        return ray.get(self._remote_wrapper.pad_output.remote)
-
-    @property
-    def text_key(self):
-        """The key for text output."""
-        import ray
-
-        return ray.get(self._remote_wrapper.text_key.remote)
-
-    @property
-    def tokens_key(self):
-        """The key for tokens output."""
-        import ray
-
-        return ray.get(self._remote_wrapper.tokens_key.remote)
-
-    @property
-    def masks_key(self):
-        """The key for masks output."""
-        import ray
-
-        return ray.get(self._remote_wrapper.masks_key.remote)
-
-    @property
-    def log_probs_key(self):
-        """The key for log probabilities output."""
-        import ray
-
-        return ray.get(self._remote_wrapper.log_probs_key.remote)
-
-    @property
-    def in_keys(self):
-        """The input keys."""
-        import ray
-
-        return ray.get(self._remote_wrapper.in_keys.remote)
-
-    @property
-    def out_keys(self):
-        """The output keys."""
-        import ray
-
-        return ray.get(self._remote_wrapper.out_keys.remote)
-
-    @property
-    def inplace(self):
-        """Whether in-place operations are used."""
-        import ray
-
-        return ray.get(self._remote_wrapper.inplace.remote)
-
-    @property
-    def device(self):
-        """The device used for computation."""
-        import ray
-
-        return ray.get(self._remote_wrapper.device.remote)
-
-    @property
-    def layout(self):
-        """The layout used for output tensors."""
-        import ray
-
-        return ray.get(self._remote_wrapper.layout.remote)
-
-    @property
-    def num_samples(self):
-        """The number of samples to generate."""
-        import ray
-
-        return ray.get(self._remote_wrapper.num_samples.remote)
-
-    @property
-    def batching(self):
-        """Whether batching is enabled."""
-        import ray
-
-        return ray.get(self._remote_wrapper.batching.remote)
-
-    @property
-    def collector(self):
-        """The collector associated with the module."""
-        import ray
-
-        return ray.get(self._remote_wrapper.collector.remote)
-
-    @property
-    def log_prob_keys(self):
-        """The keys for log probabilities."""
-        import ray
-
-        return ray.get(self._remote_wrapper.log_prob_keys.remote)
-
-    @log_prob_keys.setter
-    def log_prob_keys(self, value):
-        """Set the keys for log probabilities."""
-        import ray
-
-        ray.get(self._remote_wrapper.log_prob_keys.remote(value))
-
-    @property
-    def dist_params_keys(self):
-        """The keys for distribution parameters."""
-        import ray
-
-        return ray.get(self._remote_wrapper.dist_params_keys.remote)
-
-    @property
-    def dist_sample_keys(self):
-        """The keys for distribution samples."""
-        import ray
-
-        return ray.get(self._remote_wrapper.dist_sample_keys.remote)

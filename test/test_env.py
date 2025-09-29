@@ -2965,7 +2965,7 @@ class TestNestedSpecs:
             create_env_kwargs=[{"num_steps": i} for i in [4, 6]],
         )
         transformed_env = TransformedEnv(
-            env=maybe_fork_ParallelEnv(
+            base_env=maybe_fork_ParallelEnv(
                 2,
                 create_env_fn=make_env,
                 create_env_kwargs=[{"num_steps": i} for i in [4, 6]],

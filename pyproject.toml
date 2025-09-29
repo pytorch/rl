@@ -16,7 +16,6 @@ maintainers = [
 ]
 keywords = ["reinforcement-learning", "pytorch", "rl", "machine-learning"]
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,6 +29,7 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "torch>=2.1.0",
+    "pyvers",
     "numpy",
     "packaging",
     "cloudpickle",
@@ -89,6 +89,25 @@ llm = [
     "protobuf",
     "einops",
     "safetensors",
+]
+grpo = [
+    # Core dependencies for GRPO training
+    "datasets",
+    "peft",
+    "wandb",
+    "vllm",
+    "transformers",
+    "accelerate",
+    "ray",
+    "tqdm",
+    # Optional but recommended dependencies
+    "flash-attn",
+    "bitsandbytes",
+    "xformers",
+    # LLM-related dependencies that may be needed
+    "nltk",
+    "langdetect", 
+    "immutabledict",
 ]
 dev = [
     "pre-commit",

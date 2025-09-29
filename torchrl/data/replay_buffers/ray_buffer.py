@@ -278,9 +278,5 @@ class RayReplayBuffer(ReplayBuffer):
     def __setitem__(self, index, value) -> None:
         return ray.get(self._rb.__setitem__.remote(index, value))
 
-    def __repr__(self) -> str:
-        rb_repr = ray.get(self._rb.__repr__.remote())
-        return f"RayReplayBuffer(\n    remote_buffer={rb_repr}\n)"
-
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return ray.get(self._rb.load_state_dict.remote(state_dict))

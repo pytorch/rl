@@ -1,0 +1,156 @@
+# SAC Trainer Configuration for HalfCheetah-v4
+# This configuration uses the new configurable trainer system and matches SOTA SAC implementation
+
+defaults:
+  
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - model@models.qvalue_model: value
+  
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - network@networks.qvalue_network: mlp
+  
+  - collector@collector: multi_async
+
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: sac
+  - optimizer@optimizer: adam
+  - loss@loss: sac
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: wandb
+  - _self_
+
+# Network configurations
+networks:
+  policy_network:
+    out_features: 12  # HalfCheetah action space is 6-dimensional (loc + scale)
+    in_features: 17   # HalfCheetah observation space is 17-dimensional
+    num_cells: [256, 256]
+
+  value_network:
+    out_features: 1  # Value output
+    in_features: 17   # HalfCheetah observation space
+    num_cells: [256, 256]
+
+  qvalue_network:
+    out_features: 1  # Q-value output
+    in_features: 23   # HalfCheetah observation space (17) + action space (6)
+    num_cells: [256, 256]
+
+# Model configurations
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  qvalue_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 1000
+  step_count_key: "step_count"
+
+transform1:
+  # DoubleToFloatTransform - converts double precision to float to fix dtype mismatch
+  in_keys: null
+  out_keys: null
+
+transform2:
+  # RewardSumTransform - sums up the rewards
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 4
+  create_env_fn:
+    base_env:
+      env_name: HalfCheetah-v4
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+# Loss configuration
+loss:
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  target_entropy: "auto"
+  loss_function: l2
+  alpha_init: 1.0
+  delay_qvalue: true
+  num_qvalue_nets: 2
+
+target_net_updater:
+  tau: 0.001
+
+# Optimizer configuration
+optimizer:
+  lr: 3.0e-4
+
+# Collector configuration
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  total_frames: 1_000_000
+  frames_per_batch: 1000
+  num_workers: 4
+  init_random_frames: 2500
+  track_policy_version: true
+  _partial_: true
+
+# Replay buffer configuration
+replay_buffer:
+  storage:
+    max_size: 100_000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 64
+  shared: true
+
+logger:
+  exp_name: sac_halfcheetah_v4
+  offline: false
+  project: torchrl-sota-implementations
+
+# Trainer configuration
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false  # SAC typically doesn't use gradient clipping
+  clip_norm: null
+  progress_bar: true
+  seed: 42
+  save_trainer_interval: 25000  # Match SOTA eval_iter
+  log_interval: 25000
+  save_trainer_file: null
+  optim_steps_per_batch: 64  # Match SOTA utd_ratio
+  async_collection: false

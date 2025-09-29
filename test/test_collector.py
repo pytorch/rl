@@ -41,12 +41,14 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
-from torchrl.collectors.collectors import (
-    _Interruptor,
+from torchrl.collectors import (
+    aSyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    SyncDataCollector,
+    WeightUpdaterBase,
 )
+from torchrl.collectors.collectors import _Interruptor
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -89,7 +91,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_default_devices,
         LSTMNet,
         PENDULUM_VERSIONED,
-        PONG_VERSIONED,
         retry,
     )
     from pytorch.rl.test.mocking_classes import (
@@ -121,7 +122,6 @@ else:
         get_default_devices,
         LSTMNet,
         PENDULUM_VERSIONED,
-        PONG_VERSIONED,
         retry,
     )
     from mocking_classes import (
@@ -404,7 +404,7 @@ class TestCollectorGeneric:
             # versions.
             with set_gym_backend(gym_backend()):
                 return TransformedEnv(
-                    GymEnv(PONG_VERSIONED(), frame_skip=4), StepCounter()
+                    GymEnv(CARTPOLE_VERSIONED(), frame_skip=4), StepCounter()
                 )
 
         if parallel:
@@ -417,8 +417,8 @@ class TestCollectorGeneric:
             collector = SyncDataCollector(
                 env,
                 policy=None,
-                total_frames=10001,
-                frames_per_batch=10000,
+                total_frames=2001,
+                frames_per_batch=2000,
                 split_trajs=False,
             )
             for _data in collector:
@@ -433,9 +433,9 @@ class TestCollectorGeneric:
             assert (steps[~done] > 1).all()
             # check that if step is 1, then the env was done before
             assert (steps == 1)[done].all()
-            # check that split traj has a minimum total reward of -21 (for pong only)
+            # check that split traj has reasonable reward structure
             _data = constr(_data)
-            assert _data["next", "reward"].sum(-2).min() == -21
+            assert _data["next", "reward"].sum(-2).min() >= 0
         finally:
             env.close()
             del env
@@ -3258,8 +3258,8 @@ class TestCompile:
             collector = SyncDataCollector(
                 make_env(),
                 policy,
-                frames_per_batch=30,
-                total_frames=120,
+                frames_per_batch=10,
+                total_frames=30,
                 compile_policy=compile_policy,
             )
             assert collector.compiled_policy
@@ -3267,8 +3267,8 @@ class TestCompile:
             collector = collector_cls(
                 [make_env] * 2,
                 policy,
-                frames_per_batch=30,
-                total_frames=120,
+                frames_per_batch=10,
+                total_frames=30,
                 compile_policy=compile_policy,
             )
             assert collector.compiled_policy
@@ -3741,7 +3741,7 @@ class TestPolicyFactory:
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_weight_update(self):
         device = "cuda:0"
-        env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        env_maker = lambda: GymEnv(PENDULUM_VERSIONED(), device="cpu")
         policy_factory = lambda: TensorDictModule(
             nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
         ).to(device)

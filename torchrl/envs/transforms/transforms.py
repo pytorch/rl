@@ -20,7 +20,7 @@ from copy import copy
 from enum import IntEnum
 from functools import wraps
 from textwrap import indent
-from typing import Any, TYPE_CHECKING, TypeVar, Union
+from typing import Any, overload, TYPE_CHECKING, TypeVar, Union
 
 import numpy as np
 
@@ -833,12 +833,12 @@ class _TEnvPostInit(_EnvPostInit):
 
 
 class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
-    """A transformed_in environment.
+    """A transformed environment.
 
     Args:
-        env (EnvBase): original environment to be transformed_in.
+        base_env (EnvBase): original environment to be transformed.
         transform (Transform or callable, optional): transform to apply to the tensordict resulting
-            from :obj:`env.step(td)`. If none is provided, an empty Compose
+            from :obj:`base_env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
 
             .. note:: If ``transform`` is a callable, it must receive as input a single tensordict
@@ -855,7 +855,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
         cache_specs (bool, optional): if ``True``, the specs will be cached once
             and for all after the first call (i.e. the specs will be
-            transformed_in only once). If the transform changes during
+            transformed only once). If the transform changes during
             training, the original spec transform may not be valid anymore,
             in which case this value should be set  to `False`. Default is
             `True`.
@@ -878,28 +878,94 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         >>> # The inner env has been unwrapped
         >>> assert isinstance(transformed_env.base_env, GymEnv)
 
+    .. note::
+        The first argument was renamed from ``env`` to ``base_env`` for clarity.
+        The old ``env`` argument is still supported for backward compatibility
+        but will be removed in v0.12. A deprecation warning will be shown when
+        using the old argument name.
+
     """
 
+    @overload
     def __init__(
         self,
-        env: EnvBase,
+        base_env: EnvBase,
         transform: Transform | None = None,
         cache_specs: bool = True,
         *,
         auto_unwrap: bool | None = None,
         **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        base_env: EnvBase,
+        transform: Transform | None = None,
+        cache_specs: bool = True,
+        auto_unwrap: bool | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        env: EnvBase,  # type: ignore[misc]  # deprecated
+        transform: Transform | None = None,
+        cache_specs: bool = True,
+        auto_unwrap: bool | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
     ):
+        # Backward compatibility: handle both old and new syntax
+        if len(args) > 0:
+            # New syntax: TransformedEnv(base_env, transform, ...)
+            base_env = args[0]
+            transform = args[1] if len(args) > 1 else kwargs.pop("transform", None)
+            cache_specs = args[2] if len(args) > 2 else kwargs.pop("cache_specs", True)
+            auto_unwrap = kwargs.pop("auto_unwrap", None)
+        elif "env" in kwargs:
+            # Old syntax: TransformedEnv(env=..., transform=...)
+            warnings.warn(
+                "The 'env' argument is deprecated and will be removed in v0.12. "
+                "Use 'base_env' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            base_env = kwargs.pop("env")
+            transform = kwargs.pop("transform", None)
+            cache_specs = kwargs.pop("cache_specs", True)
+            auto_unwrap = kwargs.pop("auto_unwrap", None)
+        elif "base_env" in kwargs:
+            # New syntax with keyword arguments: TransformedEnv(base_env=..., transform=...)
+            base_env = kwargs.pop("base_env")
+            transform = kwargs.pop("transform", None)
+            cache_specs = kwargs.pop("cache_specs", True)
+            auto_unwrap = kwargs.pop("auto_unwrap", None)
+        else:
+            raise TypeError("TransformedEnv requires a base_env argument")
+
         self._transform = None
         device = kwargs.pop("device", None)
         if device is not None:
-            env = env.to(device)
+            base_env = base_env.to(device)
         else:
-            device = env.device
+            device = base_env.device
         super().__init__(device=None, allow_done_after_reset=None, **kwargs)
 
         # Type matching must be exact here, because subtyping could introduce differences in behavior that must
         # be contained within the subclass.
-        if type(env) is TransformedEnv and type(self) is TransformedEnv:
+        if type(base_env) is TransformedEnv and type(self) is TransformedEnv:
             if auto_unwrap is None:
                 auto_unwrap = auto_unwrap_transformed_env(allow_none=True)
                 if auto_unwrap is None:
@@ -917,7 +983,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             auto_unwrap = False
 
         if auto_unwrap:
-            self._set_env(env.base_env, device)
+            self._set_env(base_env.base_env, device)
             if type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to lose.
@@ -936,7 +1002,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             else:
                 for t in transform:
                     t.reset_parent()
-            env_transform = env.transform.clone()
+            env_transform = base_env.transform.clone()
             if type(env_transform) is not Compose:
                 env_transform = [env_transform]
             else:
@@ -944,7 +1010,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                     t.reset_parent()
             transform = Compose(*env_transform, *transform).to(device)
         else:
-            self._set_env(env, device)
+            self._set_env(base_env, device)
             if transform is None:
                 transform = Compose()
 
@@ -1435,15 +1501,44 @@ class Compose(Transform):
 
     :class:`~torchrl.envs.transforms.Transform` or ``callable``s are accepted.
 
+    The class can be instantiated in several ways:
+
+    Args:
+        *transforms (Transform): Variable number of transforms to compose.
+        transforms (list[Transform], optional): A list of transforms to compose.
+            This can be passed as a keyword argument.
+
     Examples:
         >>> env = GymEnv("Pendulum-v0")
-        >>> transforms = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]
-        >>> transforms = Compose(*transforms)
+        >>>
+        >>> # Method 1: Using positional arguments
+        >>> transforms = Compose(RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0))
+        >>> transformed_env = TransformedEnv(env, transforms)
+        >>>
+        >>> # Method 2: Using a list with positional argument
+        >>> transform_list = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]
+        >>> transforms = Compose(transform_list)
+        >>> transformed_env = TransformedEnv(env, transforms)
+        >>>
+        >>> # Method 3: Using keyword argument
+        >>> transforms = Compose(transforms=[RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)])
         >>> transformed_env = TransformedEnv(env, transforms)
 
     """
 
-    def __init__(self, *transforms: Transform):
+    @overload
+    def __init__(self, transforms: list[Transform]):
+        ...
+
+    def __init__(self, *trsfs: Transform, **kwargs):
+        if len(trsfs) == 0 and "transforms" in kwargs:
+            transforms = kwargs.pop("transforms")
+        elif len(trsfs) == 1 and isinstance(trsfs[0], list):
+            transforms = trsfs[0]
+        else:
+            transforms = trsfs
+        if kwargs:
+            raise ValueError(f"Unexpected keyword arguments: {kwargs}")
         super().__init__()
 
         def map_transform(trsf):
@@ -6441,6 +6536,9 @@ class TensorDictPrimer(Transform):
 
     def _validate_value_tensor(self, value, spec) -> bool:
         if not spec.is_in(value):
+            raise ValueError(
+                f"spec {spec}, spec.shape {spec.shape}, value.shape {value.shape}, spec.device {spec.device}, value.device {value.device}, spec.dtype {spec.dtype}, value.dtype {value.dtype}"
+            )
             raise RuntimeError(f"Value ({value}) is not in the spec domain ({spec}).")
         return True
 
@@ -6514,8 +6612,8 @@ class TensorDictPrimer(Transform):
                 device = parent.device
                 batch_size = parent.batch_size
             else:
-                device = None
-                batch_size = ()
+                device = getattr(self, "device", None)
+                batch_size = getattr(self, "batch_size", ())
             tensordict = TensorDict(device=device, batch_size=batch_size)
         return self._reset_func(tensordict, tensordict)
 
@@ -7163,7 +7261,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
 class RewardSum(Transform):
     """Tracks episode cumulative rewards.
 
-    This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
+    This transform accepts a list of tensordict reward keys (i.e. 'in_keys') and tracks their cumulative
     value along the time dimension for each episode.
 
     When called, the transform writes a new tensordict entry for each ``in_key`` named
@@ -7171,7 +7269,7 @@ class RewardSum(Transform):
 
     Args:
         in_keys (list of NestedKeys, optional): Input reward keys.
-            All ´in_keys´ should be part of the environment reward_spec.
+            All 'in_keys' should be part of the environment reward_spec.
             If no ``in_keys`` are specified, this transform assumes ``"reward"`` to be the input key.
             However, multiple rewards (e.g. ``"reward1"`` and ``"reward2""``) can also be specified.
         out_keys (list of NestedKeys, optional): The output sum keys, should be one per each input key.
@@ -11512,3 +11610,123 @@ class ConditionalPolicySwitch(Transform):
         raise RuntimeError(
             "ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional."
         )
+
+
+class FlattenTensorDict(Transform):
+    """Flattens TensorDict batch dimensions during inverse pass for replay buffer usage.
+
+    This transform is specifically designed for replay buffers where data needs
+    to be flattened before being stored. It performs an identity operation during
+    the forward pass and flattens the batch dimensions during the inverse pass.
+
+    This is useful when collecting batched data that needs to be stored as
+    individual experiences in a replay buffer.
+
+    .. warning::
+        This transform is NOT intended for use with environments. If you try to use
+        it as an environment transform, it will raise an exception. For reshaping
+        environment batch dimensions, use :class:`~torchrl.envs.BatchSizeTransform`
+        instead.
+
+    .. note::
+        This transform should be applied to replay buffers, not to environments.
+        It is designed to be used with :meth:`~torchrl.data.ReplayBuffer.append_transform`.
+
+    Examples:
+        Using with a replay buffer:
+
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import FlattenTensorDict
+        >>> from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage
+        >>>
+        >>> # Create a replay buffer with the transform
+        >>> transform = FlattenTensorDict()
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(1000),
+        ...     transform=transform,
+        ...     batch_size=32
+        ... )
+        >>>
+        >>> # Create batched data (e.g., from multiple environments)
+        >>> td = TensorDict({
+        ...     "observation": torch.randn(4, 2, 3),
+        ...     "action": torch.randn(4, 2, 1),
+        ...     "reward": torch.randn(4, 2, 1),
+        ... }, batch_size=[4, 2])
+        >>>
+        >>> # When extending the buffer, data gets flattened automatically
+        >>> rb.extend(td)  # Data is flattened from [4, 2] to [8] before storage
+        >>>
+        >>> # When sampling, data comes out in the requested batch size
+        >>> sample = rb.sample(4)  # Shape will be [4, ...]
+
+        Direct usage (for testing):
+
+        >>> # Forward pass (identity)
+        >>> td_forward = transform(td)
+        >>> print(td_forward.batch_size)  # [4, 2]
+        >>>
+        >>> # Inverse pass (flatten)
+        >>> td_inverse = transform.inv(td)
+        >>> print(td_inverse.batch_size)  # [8]
+    """
+
+    _ENV_ERROR_MSG = (
+        "FlattenTensorDict is designed for replay buffers and should not be used "
+        "as an environment transform. For reshaping environment batch dimensions, "
+        "use BatchSizeTransform instead."
+    )
+
+    def __init__(self):
+        super().__init__(in_keys=[], out_keys=[])
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Forward pass - identity operation."""
+        return tensordict
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Inverse pass - flatten the tensordict."""
+        return tensordict.reshape(-1)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Forward pass - identity operation."""
+        return self._call(tensordict)
+
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Inverse pass - flatten the tensordict."""
+        return self._inv_call(tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Reset pass - identity operation."""
+        return self._call(tensordict_reset)
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        """Transform input spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        """Transform output spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """Transform observation spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        """Transform action spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        """Transform state spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        """Transform reward spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        """Transform done spec - not supported for environments."""
+        raise RuntimeError(self._ENV_ERROR_MSG)

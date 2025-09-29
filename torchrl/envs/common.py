@@ -2267,7 +2267,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         entry_point: Callable | None = None,
         transform: Transform | None = None,  # noqa: F821
         info_keys: list[NestedKey] | None = None,
-        backend: str = None,
+        backend: str | None = None,
         to_numpy: bool = False,
         reward_threshold: float | None = None,
         nondeterministic: bool = False,
@@ -3928,9 +3928,9 @@ class _EnvWrapper(EnvBase):
                 "Make sure only keywords arguments are used when calling `super().__init__`."
             )
 
-        frame_skip = kwargs.get("frame_skip", 1)
-        if "frame_skip" in kwargs:
-            del kwargs["frame_skip"]
+        frame_skip = kwargs.pop("frame_skip", 1)
+        if not isinstance(frame_skip, int):
+            raise ValueError(f"frame_skip must be an integer, got {frame_skip}")
         self.frame_skip = frame_skip
         # this value can be changed if frame_skip is passed during env construction
         self.wrapper_frame_skip = frame_skip

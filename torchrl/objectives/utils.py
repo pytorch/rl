@@ -27,6 +27,7 @@ except ImportError as err:
         from functorch import vmap
     except ImportError as err_ft:
         raise err_ft from err
+from torchrl._utils import implement_for
 from torchrl.envs.utils import step_mdp
 
 try:
@@ -546,6 +547,7 @@ def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
             ) from err
 
 
+@implement_for("torch", "2.7")
 def _pseudo_vmap(
     func: Callable,
     in_dims: Any = 0,
@@ -581,6 +583,7 @@ def _pseudo_vmap(
                 in_dims = (in_dims,) * len(args)
             if isinstance(out_dims, int):
                 out_dims = (out_dims,)
+
             vs = zip(*tuple(tree_map(_unbind, in_dims, args)))
             rs = []
             for v in vs:
@@ -593,6 +596,22 @@ def _pseudo_vmap(
             if len(vs) == 1:
                 return vs[0]
             return vs
+
+    return new_func
+
+
+@implement_for("torch", None, "2.7")
+def _pseudo_vmap(  # noqa: F811
+    func: Callable,
+    in_dims: Any = 0,
+    out_dims: Any = 0,
+    randomness: str | None = None,
+    *,
+    chunk_size=None,
+):
+    @functools.wraps(func)
+    def new_func(*args, in_dims=in_dims, out_dims=out_dims, **kwargs):
+        raise NotImplementedError("This implementation is not supported for torch<2.7")
 
     return new_func
 

@@ -13,7 +13,7 @@ import math
 import warnings
 import weakref
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import dataclass, field
 from functools import wraps
 from textwrap import indent
@@ -5095,6 +5095,7 @@ class Composite(TensorSpec):
 
     shape: torch.Size
     domain: str = "composite"
+    _td_dim_names: list[str] | None = None
 
     SPEC_HANDLED_FUNCTIONS = {}
 
@@ -5111,6 +5112,7 @@ class Composite(TensorSpec):
         device: torch.device | None = None,
         data_cls: type | None = None,
         step_mdp_static: bool = False,
+        names: Sequence[str] | None = None,
         **kwargs,
     ):
         # For compatibility with TensorDict
@@ -5125,6 +5127,12 @@ class Composite(TensorSpec):
         self._shape = _size(shape)
         self._specs = {}
         self.step_mdp_static = step_mdp_static
+
+        # Initialize names
+        if names is not None:
+            self._td_dim_names = list(names)
+        else:
+            self._td_dim_names = None
 
         _device = (
             _make_ordinal_device(torch.device(device)) if device is not None else device
@@ -5142,6 +5150,8 @@ class Composite(TensorSpec):
                 )
             for k, item in argdict.items():
                 if isinstance(item, dict):
+                    # Create nested Composite with appropriate names
+                    # Note: nested specs will get their names propagated later in the names setter
                     item = Composite(item, shape=shape, device=_device)
                 self[k] = item
         for k, item in kwargs.items():
@@ -5149,6 +5159,10 @@ class Composite(TensorSpec):
         self.data_cls = data_cls
         self.encode = self._encode_eager
         self._encode_memo_dict = {}
+
+        # Propagate names to nested specs if names were provided
+        if names is not None:
+            self._propagate_names_to_nested()
 
     def memoize_encode(self, mode: bool = True) -> None:
         super().memoize_encode(mode=mode)
@@ -5354,6 +5368,127 @@ class Composite(TensorSpec):
             spec.clear_device_()
         return self
 
+    def _has_names(self):
+        """Returns True if names are set for this Composite."""
+        return self._td_dim_names is not None
+
+    def _erase_names(self):
+        """Erases the names of this Composite."""
+        self._td_dim_names = None
+
+    def _propagate_names_to_nested(self):
+        """Propagates names to nested Composite specs."""
+        if not self._has_names():
+            return
+        for spec in self._specs.values():
+            if isinstance(spec, Composite):
+                # For nested specs, we need to propagate the names
+                # The nested spec should have the same leading dimensions
+                if spec.ndim >= self.ndim:
+                    nested_names = list(self.names) + [None] * (spec.ndim - self.ndim)
+                    spec.names = nested_names
+
+    @property
+    def names(self):
+        """Returns the names of the dimensions of this Composite."""
+        names = self._td_dim_names
+        if names is None:
+            return [None for _ in range(self.ndim)]
+        # Return a copy but don't use copy to make dynamo happy
+        return list(names)
+
+    @names.setter
+    def names(self, value):
+        """Sets the names of the dimensions of this Composite."""
+        if value is None:
+            self._td_dim_names = None
+            return
+        if len(value) != self.ndim:
+            raise ValueError(
+                f"Expected {self.ndim} names, but got {len(value)} names: {value}"
+            )
+        self._td_dim_names = list(value)
+        # Propagate names to nested Composite specs
+        for spec in self._specs.values():
+            if isinstance(spec, Composite):
+                # For nested specs, we need to propagate the names
+                # The nested spec should have the same leading dimensions
+                if spec.ndim >= self.ndim:
+                    nested_names = list(value) + [None] * (spec.ndim - self.ndim)
+                    spec.names = nested_names
+
+    def refine_names(self, *names):
+        """Refines the dimension names of self according to names.
+
+        Refining is a special case of renaming that "lifts" unnamed dimensions.
+        A None dim can be refined to have any name; a named dim can only be
+        refined to have the same name.
+
+        Because named specs can coexist with unnamed specs, refining names
+        gives a nice way to write named-spec-aware code that works with both
+        named and unnamed specs.
+
+        names may contain up to one Ellipsis (...). The Ellipsis is expanded
+        greedily; it is expanded in-place to fill names to the same length as
+        self.ndim using names from the corresponding indices of self.names.
+
+        Returns: the same composite spec with dimensions named according to the input.
+
+        Examples:
+            >>> spec = Composite({}, shape=[3, 4, 5, 6])
+            >>> spec_refined = spec.refine_names(None, None, None, "d")
+            >>> assert spec_refined.names == [None, None, None, "d"]
+            >>> spec_refined = spec.refine_names("a", None, None, "d")
+            >>> assert spec_refined.names == ["a", None, None, "d"]
+
+        """
+        # replace ellipsis if any
+        names_copy = copy(names)
+        if any(name is Ellipsis for name in names):
+            ellipsis_name = [None for _ in range(self.ndim - len(names) + 1)]
+            names = []
+            for name in names_copy:
+                if name is Ellipsis:
+                    names += ellipsis_name
+                else:
+                    names.append(name)
+
+        # check that the names that are set are either None or identical
+        curr_names = self.names
+        for i, name in enumerate(names):
+            if curr_names[i] is None:
+                continue
+            if curr_names[i] == name:
+                continue
+            else:
+                raise RuntimeError(
+                    f"refine_names: cannot coerce Composite names {self.names} with {names_copy}."
+                )
+        self.names = names
+        return self
+
+    def _get_names_idx(self, idx):
+        """Helper method to get names after indexing."""
+        if not self._has_names():
+            return None
+
+        names = copy(self.names)
+        if isinstance(idx, (int, slice)):
+            # Single dimension indexing
+            if isinstance(idx, int):
+                names.pop(idx)
+            else:
+                # For slice, we keep the names but adjust for the slice
+                pass
+        elif isinstance(idx, tuple):
+            # Multi-dimensional indexing
+            for i, sub_idx in enumerate(idx):
+                if isinstance(sub_idx, int):
+                    # Remove the dimension
+                    names.pop(i)
+                # For slices, we keep the name
+        return names
+
     def __getitem__(self, idx):
         """Indexes the current Composite based on the provided index."""
         if isinstance(idx, (str, tuple)):
@@ -5393,10 +5528,15 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
 
+        names = None
+        if self._has_names():
+            names = self._get_names_idx(idx)
+
         return self.__class__(
             indexed_specs,
             shape=indexed_shape,
             device=device,
+            names=names,
         )
 
     def get(self, item, default=NO_DEFAULT):
@@ -5760,6 +5900,7 @@ class Composite(TensorSpec):
                 shape=self.shape,
                 data_cls=self.data_cls,
                 step_mdp_static=self.step_mdp_static,
+                names=self.names if self._has_names() else None,
             )
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
@@ -5782,6 +5923,7 @@ class Composite(TensorSpec):
             shape=self.shape,
             data_cls=self.data_cls,
             step_mdp_static=self.step_mdp_static,
+            names=self.names if self._has_names() else None,
         )
 
     def clone(self) -> Composite:
@@ -5802,6 +5944,7 @@ class Composite(TensorSpec):
             shape=self.shape,
             data_cls=self.data_cls,
             step_mdp_static=self.step_mdp_static,
+            names=self.names if self._has_names() else None,
         )
 
     def cardinality(self) -> int:
@@ -5942,12 +6085,17 @@ class Composite(TensorSpec):
             else None
             for key, value in tuple(self.items())
         }
+        names = None
+        if self._has_names():
+            names = [None] * (len(shape) - self.ndim) + self.names
+
         out = Composite(
             specs,
             shape=shape,
             device=device,
             data_cls=self.data_cls,
             step_mdp_static=self.step_mdp_static,
+            names=names,
         )
         return out
 
@@ -5965,12 +6113,21 @@ class Composite(TensorSpec):
             except RuntimeError:
                 device = self._device
 
+            names = None
+            if self._has_names():
+                names = copy(self.names)
+                names.pop(dim)
+                # If all names are None after popping, set to None
+                if all(name is None for name in names):
+                    names = None
+
             return self.__class__(
                 {key: value.squeeze(dim) for key, value in self.items()},
                 shape=shape,
                 device=device,
                 data_cls=self.data_cls,
                 step_mdp_static=self.step_mdp_static,
+                names=names,
             )
 
         if self.shape.count(1) == 0:
@@ -5993,6 +6150,11 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
 
+        names = None
+        if self._has_names():
+            names = copy(self.names)
+            names.insert(dim, None)
+
         return self.__class__(
             {
                 key: value.unsqueeze(dim) if value is not None else None
@@ -6002,6 +6164,7 @@ class Composite(TensorSpec):
             device=device,
             data_cls=self.data_cls,
             step_mdp_static=self.step_mdp_static,
+            names=names,
         )
 
     def unbind(self, dim: int = 0) -> tuple[Composite, ...]:
@@ -6012,8 +6175,17 @@ class Composite(TensorSpec):
             raise ValueError(
                 f"Cannot unbind along dim {orig_dim} with shape {self.shape}."
             )
-        shape = (s for i, s in enumerate(self.shape) if i != dim)
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
         unbound_vals = {key: val.unbind(dim) for key, val in self.items()}
+
+        names = None
+        if self._has_names():
+            names = copy(self.names)
+            names.pop(dim)
+            # If all names are None after popping, set to None
+            if all(name is None for name in names):
+                names = None
+
         return tuple(
             self.__class__(
                 {key: val[i] for key, val in unbound_vals.items()},
@@ -6021,6 +6193,7 @@ class Composite(TensorSpec):
                 device=self.device,
                 data_cls=self.data_cls,
                 step_mdp_static=self.step_mdp_static,
+                names=names,
             )
             for i in range(self.shape[dim])
         )
