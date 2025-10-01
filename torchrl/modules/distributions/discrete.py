@@ -172,7 +172,7 @@ class OneHotCategorical(D.Categorical):
             )
 
 
-class MaskedCategorical(D.Categorical):
+class (D.Categorical):
     """MaskedCategorical distribution.
 
     Reference:
@@ -251,7 +251,10 @@ class MaskedCategorical(D.Categorical):
             sparse_mask = True
         else:
             sparse_mask = False
-
+        if !mask.any():
+            raise ValueError(
+                f"Provided ``mask`` must contain a value True"
+            )
         if probs is not None:
             if logits is not None:
                 raise ValueError(
@@ -360,7 +363,7 @@ class MaskedCategorical(D.Categorical):
                         original_value_shape = value.shape
                         value = value.flatten()
                     logits = logits.unsqueeze(0).expand(value.shape + logits.shape)
-                result = -torch.nn.functional.cross_entropy(logits, value, reduce=False)
+                result = -torch.nn.functional.cross_entropy(logits, value, reduction='none')
                 if original_value_shape is not None:
                     result = result.unflatten(0, original_value_shape)
             else:
@@ -391,7 +394,7 @@ class MaskedCategorical(D.Categorical):
                     original_idx_shape = idx.shape
                     idx = idx.flatten()
                 logits = logits.unsqueeze(0).expand(idx.shape + logits.shape)
-            ret = -torch.nn.functional.cross_entropy(logits, idx, reduce=False)
+            ret = -torch.nn.functional.cross_entropy(logits, idx, reduction='none')
             if original_idx_shape is not None:
                 ret = ret.unflatten(0, original_idx_shape)
         else:
