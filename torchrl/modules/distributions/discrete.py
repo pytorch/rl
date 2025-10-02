@@ -251,7 +251,7 @@ class MaskedCategorical(D.Categorical):
             sparse_mask = True
         else:
             sparse_mask = False
-        if !mask.any():
+        if not mask.any():
             raise ValueError(
                 f"Provided ``mask`` must contain a value True"
             )
