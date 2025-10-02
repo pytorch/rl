@@ -172,7 +172,7 @@ class OneHotCategorical(D.Categorical):
             )
 
 
-class (D.Categorical):
+class MaskedCategorical(D.Categorical):
     """MaskedCategorical distribution.
 
     Reference:
