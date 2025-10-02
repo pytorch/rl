@@ -2790,12 +2790,7 @@ class TestVmas:
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
-        # Skip football scenario due to VMAS bug: IndexError in get_wall_separations
-        if scenario_name == "football":
-            pytest.skip(
-                "Football scenario has a shape mismatch bug in VMAS get_wall_separations method"
-            )
-
+        
         env = VmasEnv(
             scenario=scenario_name,
             continuous_actions=continuous_actions,
