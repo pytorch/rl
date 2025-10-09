@@ -7,6 +7,7 @@ from .common import Logger
 
 from .csv import CSVLogger
 from .mlflow import MLFlowLogger
+from .neptune import NeptuneLogger
 from .tensorboard import TensorboardLogger
 from .utils import generate_exp_name, get_logger
 
@@ -16,6 +17,7 @@ __all__ = [
     "Logger",
     "CSVLogger",
     "MLFlowLogger",
+    "NeptuneLogger",
     "TensorboardLogger",
     "generate_exp_name",
     "get_logger",
