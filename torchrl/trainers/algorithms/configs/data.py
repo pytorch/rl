@@ -254,6 +254,7 @@ class LazyMemmapStorageConfig(StorageConfig):
     device: Any = None
     ndim: int = 1
     compilable: bool = False
+    shared_init: bool = False
 
 
 @dataclass
@@ -265,6 +266,7 @@ class LazyTensorStorageConfig(StorageConfig):
     device: Any = None
     ndim: int = 1
     compilable: bool = False
+    shared_init: bool = False
 
 
 @dataclass
