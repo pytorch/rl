@@ -69,9 +69,7 @@ class TrackioLogger(Logger):
 
         return trackio.init(**self._trackio_kwargs)
 
-    def log_scalar(
-        self, name: str, value: float, step: int | None = None
-    ) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to trackio.
 
         Args:
