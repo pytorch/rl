@@ -169,6 +169,248 @@ transformed, and applied, ensuring seamless integration with their existing infr
     RPCWeightUpdater
     DistributedWeightUpdater
 
+Weight Synchronization API
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The weight synchronization API provides a simple, modular approach to updating model weights across
+distributed collectors. This system is designed to handle the complexities of modern RL setups where multiple
+models may need to be synchronized independently.
+
+Overview
+^^^^^^^^
+
+In reinforcement learning, particularly with multi-process data collection, it's essential to keep the inference
+policies synchronized with the latest trained weights. The API addresses this challenge through a clean
+separation of concerns, where four classes are involved:
+
+- **Configuration**: :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme` objects define *what* to synchronize and *how*. For DataCollectors, this is
+  your main entrypoint to configure the weight synchronization.
+- **Sending**: :class:`~torchrl.weight_update.weight_sync_schemes.WeightSender` handles distributing weights from the main process to workers.
+- **Receiving**: :class:`~torchrl.weight_update.weight_sync_schemes.WeightReceiver` handles applying weights in worker processes.
+- **Transport**: Backend-specific communication mechanisms (pipes, shared memory, Ray, RPC)
+
+The following diagram shows the different classes involved in the weight synchronization process:
+
+.. aafig::
+    :aspect: 60
+    :scale: 130
+    :proportional:
+
+    INITIALIZATION PHASE
+    ====================
+
+                        WeightSyncScheme
+                        +------------------+
+                        |                  |
+                        | Configuration:   |
+                        | - strategy       |
+                        | - transport_type |
+                        |                  |
+                        +--------+---------+
+                                 |
+                    +------------+-------------+
+                    |                          |
+                creates                    creates
+                    |                          |
+                    v                          v
+            Main Process                 Worker Process
+            +--------------+             +---------------+
+            | WeightSender |             | WeightReceiver|
+            |              |             |               |
+            | - strategy   |             | - strategy    |
+            | - transports |             | - transport   |
+            | - model_ref  |             | - model_ref   |
+            |              |             |               |
+            | Registers:   |             | Registers:    |
+            | - model      |             | - model       |
+            | - workers    |             | - transport   |
+            +--------------+             +---------------+
+                    |                            |
+                    |   Transport Layer          |
+                    |   +----------------+       |
+                    +-->+ MPTransport    |<------+
+                    |   | (pipes)        |       |
+                    |   +----------------+       |
+                    |   +----------------+       |
+                    +-->+ SharedMemTrans |<------+
+                    |   | (shared mem)   |       |
+                    |   +----------------+       |
+                    |   +----------------+       |
+                    +-->+ RayTransport   |<------+
+                        | (Ray store)    |
+                        +----------------+
+
+
+    SYNCHRONIZATION PHASE
+    =====================
+
+        Main Process                                    Worker Process
+        
+    +-------------------+                           +-------------------+
+    | WeightSender      |                           | WeightReceiver    |
+    |                   |                           |                   |
+    | 1. Extract        |                           | 4. Poll transport |
+    |    weights from   |                           |    for weights    |
+    |    model using    |                           |                   |
+    |    strategy       |                           |                   |
+    |                   |    2. Send via            |                   |
+    | +-------------+   |       Transport           | +--------------+  |
+    | | Strategy    |   |    +------------+         | | Strategy     |  |
+    | | extract()   |   |    |            |         | | apply()      |  |
+    | +-------------+   +----+ Transport  +-------->+ +--------------+  |
+    |        |          |    |            |         |        |          |
+    |        v          |    +------------+         |        v          |
+    | +-------------+   |                           | +--------------+  |
+    | | Model       |   |                           | | Model        |  |
+    | | (source)    |   |  3. Ack (optional)        | | (dest)       |  |
+    | +-------------+   | <-----------------------+ | +--------------+  |
+    |                   |                           |                   |
+    +-------------------+                           | 5. Apply weights  |
+                                                    |    to model using |
+                                                    |    strategy       |
+                                                    +-------------------+
+
+Key Challenges Addressed
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Modern RL training often involves multiple models that need independent synchronization:
+
+1. **Multiple Models Per Collector**: A collector might need to update:
+   
+   - The main policy network
+   - A value network in a Ray actor within the replay buffer
+   - Models embedded in the environment itself
+   - Separate world models or auxiliary networks
+
+2. **Different Update Strategies**: Each model may require different synchronization approaches:
+   
+   - Full state_dict transfer vs. TensorDict-based updates
+   - Different transport mechanisms (multiprocessing pipes, shared memory, Ray object store, collective communication, RDMA, etc.)
+   - Varied update frequencies
+
+3. **Worker-Agnostic Updates**: Some models (like those in shared Ray actors) shouldn't be tied to
+   specific worker indices, requiring a more flexible update mechanism.
+
+Architecture
+^^^^^^^^^^^^
+
+The API follows a scheme-based design where users specify synchronization requirements upfront,
+and the collector handles the orchestration transparently:
+
+.. aafig::
+    :aspect: 60
+    :scale: 130
+    :proportional:
+
+      Main Process                 Worker Process 1         Worker Process 2
+      
+    +-----------------+            +---------------+        +---------------+
+    | Collector       |            | Collector     |        | Collector     |
+    |                 |            |               |        |               |
+    | Models:         |            | Models:       |        | Models:       |
+    |  +----------+   |            |  +--------+   |        |  +--------+   |
+    |  | Policy A |   |            |  |Policy A|   |        |  |Policy A|   |
+    |  +----------+   |            |  +--------+   |        |  +--------+   |
+    |  +----------+   |            |  +--------+   |        |  +--------+   |
+    |  | Model  B |   |            |  |Model  B|   |        |  |Model  B|   |
+    |  +----------+   |            |  +--------+   |        |  +--------+   |
+    |                 |            |               |        |               |
+    | Weight Senders: |            | Weight        |        | Weight        |
+    |  +----------+   |            | Receivers:    |        | Receivers:    |
+    |  | Sender A +---+------------+->Receiver A   |        |  Receiver A   |
+    |  +----------+   |            |               |        |               |
+    |  +----------+   |            |  +--------+   |        |  +--------+   |
+    |  | Sender B +---+------------+->Receiver B   |        |  Receiver B   |
+    |  +----------+   |  Pipes     |               |  Pipes |               |
+    +-----------------+            +-------+-------+        +-------+-------+
+           ^                               ^                        ^
+           |                               |                        |
+           | update_policy_weights_()      |   Apply weights        |
+           |                               |                        |
+    +------+-------+                       |                        |
+    | User Code    |                       |                        |
+    | (Training)   |                       |                        |
+    +--------------+                       +------------------------+
+
+The weight synchronization flow:
+
+1. **Initialization**: User creates ``weight_sync_schemes`` dict mapping model IDs to schemes
+2. **Registration**: Collector creates ``WeightSender`` for each model in the main process
+3. **Worker Setup**: Each worker creates corresponding ``WeightReceiver`` instances  
+4. **Synchronization**: Calling ``update_policy_weights_()`` triggers all senders to push weights
+5. **Application**: Receivers automatically apply weights to their registered models
+
+Available Classes
+^^^^^^^^^^^^^^^^^
+
+**Synchronization Schemes** (User-Facing Configuration):
+
+- :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme`: Base class for schemes
+- :class:`~torchrl.weight_update.weight_sync_schemes.MultiProcessWeightSyncScheme`: For multiprocessing with pipes
+- :class:`~torchrl.weight_update.weight_sync_schemes.SharedMemWeightSyncScheme`: For shared memory synchronization
+- :class:`~torchrl.weight_update.weight_sync_schemes.RayWeightSyncScheme`: For Ray-based distribution
+- :class:`~torchrl.weight_update.weight_sync_schemes.NoWeightSyncScheme`: Dummy scheme for no synchronization
+
+**Internal Classes** (Automatically Managed):
+
+- :class:`~torchrl.weight_update.weight_sync_schemes.WeightSender`: Sends weights to all workers for one model
+- :class:`~torchrl.weight_update.weight_sync_schemes.WeightReceiver`: Receives and applies weights in worker
+- :class:`~torchrl.weight_update.weight_sync_schemes.TransportBackend`: Communication layer abstraction
+
+Usage Example
+^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    from torchrl.collectors import MultiSyncDataCollector
+    from torchrl.weight_update.weight_sync_schemes import MultiProcessWeightSyncScheme
+
+    # Define synchronization for multiple models
+    weight_sync_schemes = {
+        "policy": MultiProcessWeightSyncScheme(strategy="tensordict"),
+        "value_net": MultiProcessWeightSyncScheme(strategy="state_dict"),
+    }
+
+    collector = MultiSyncDataCollector(
+        create_env_fn=[make_env] * 4,
+        policy=policy,
+        frames_per_batch=1000,
+        weight_sync_schemes=weight_sync_schemes,  # Pass schemes dict
+    )
+
+    # Single call updates all registered models across all workers
+    for i, batch in enumerate(collector):
+        # Training step
+        loss = train(batch)
+        
+        # Sync all models with one call
+        collector.update_policy_weights_(policy)
+
+The collector automatically:
+
+- Creates ``WeightSender`` instances in the main process for each model
+- Creates ``WeightReceiver`` instances in each worker process
+- Resolves models by ID (e.g., ``"policy"`` → ``collector.policy``)
+- Handles transport setup and communication
+- Applies weights using the appropriate strategy (state_dict vs tensordict)
+
+API Reference
+^^^^^^^^^^^^^
+
+.. currentmodule:: torchrl.weight_update.weight_sync_schemes
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    WeightSyncScheme
+    MultiProcessWeightSyncScheme
+    SharedMemWeightSyncScheme
+    RayWeightSyncScheme
+    NoWeightSyncScheme
+    WeightSender
+    WeightReceiver
+
 Collectors and replay buffers interoperability
 ----------------------------------------------
 
