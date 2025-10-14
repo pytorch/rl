@@ -348,6 +348,10 @@ class Transform(nn.Module):
     def init(self, tensordict) -> None:
         """Runs init steps for the transform."""
 
+    def _set_attr(self, name, value):
+        """Set attribute on the remote actor or locally."""
+        setattr(self, name, value)
+
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         """Applies the transform to a tensor or a leaf.
 
@@ -11678,16 +11682,21 @@ class FlattenTensorDict(Transform):
         "use BatchSizeTransform instead."
     )
 
-    def __init__(self):
+    def __init__(self, inverse: bool = True):
         super().__init__(in_keys=[], out_keys=[])
+        self.inverse = inverse
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Forward pass - identity operation."""
+        if not self.inverse:
+            return tensordict.reshape(-1)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverse pass - flatten the tensordict."""
-        return tensordict.reshape(-1)
+        if self.inverse:
+            return tensordict.reshape(-1)
+        return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Forward pass - identity operation."""
