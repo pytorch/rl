@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import abc
 import logging
+import multiprocessing as mp
 import os
 import sys
+import tempfile
 import textwrap
 import warnings
 from collections import OrderedDict
@@ -29,7 +31,6 @@ from tensordict import (
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
-from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
@@ -578,7 +579,7 @@ class TensorStorage(Storage):
         storage,
         max_size=None,
         *,
-        device: torch.device = "cpu",
+        device: torch.device | str = "cpu",
         ndim: int = 1,
         compilable: bool = False,
     ):
@@ -746,13 +747,15 @@ class TensorStorage(Storage):
             del state["_len_value"]
             state["len__context"] = length
         elif not self.initialized:
-            # check that the storage is initialized
-            raise RuntimeError(
-                f"Cannot share a storage of type {type(self)} between processes if "
-                f"it has not been initialized yet. Populate the buffer with "
-                f"some data in the main process before passing it to the other "
-                f"subprocesses (or create the buffer explicitly with a TensorStorage)."
-            )
+            if not self.shared_init:
+                # check that the storage is initialized
+                raise RuntimeError(
+                    f"Cowardly refusing to share a storage of type {type(self)} between processes if "
+                    f"it has not been initialized yet. You can either:\n"
+                    f"- Populate the buffer with some data in the main process before passing it to the other processes (or create the buffer explicitly with a TensorStorage).\n"
+                    f"- set shared_init=True when creating the storage such that it can be initialized by the remote processes."
+                )
+            return state
         else:
             # check that the content is shared, otherwise tell the user we can't help
             storage = self._storage
@@ -782,10 +785,10 @@ class TensorStorage(Storage):
         len = state.pop("len__context", None)
         if len is not None:
             if not state["_compilable"]:
-                state["_len_value"] = len
-            else:
                 _len_value = mp.Value("i", len)
                 state["_len_value"] = _len_value
+            else:
+                state["_len_value"] = len
         self.__dict__.update(state)
 
     def state_dict(self) -> dict[str, Any]:
@@ -896,6 +899,8 @@ class TensorStorage(Storage):
                     self._init(tree_map(lambda x: x[0], data))
             else:
                 self._init(data)
+            assert self.initialized
+
         if is_tensor_collection(data):
             self._storage[cursor] = data
         else:
@@ -939,6 +944,8 @@ class TensorStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
+            assert self.initialized
+
         if not isinstance(cursor, (*INT_CLASSES, slice)):
             if not isinstance(cursor, torch.Tensor):
                 cursor = torch.tensor(cursor, dtype=torch.long)
@@ -955,10 +962,15 @@ class TensorStorage(Storage):
                 )
         self._storage[cursor] = data
 
+    def _wait_for_init(self):
+        pass
+
     def get(self, index: int | Sequence[int] | slice) -> Any:
         _storage = self._storage
         is_tc = is_tensor_collection(_storage)
         if not self.initialized:
+            if getattr(self, "shared_init", False):
+                self._wait_for_init()
             raise RuntimeError("Cannot get elements out of a non-initialized storage.")
         if not self._is_full:
             if is_tc:
@@ -1058,6 +1070,12 @@ class LazyTensorStorage(TensorStorage):
             Defaults to ``False``.
         consolidated (bool, optional): if ``True``, the storage will be consolidated after
             its first expansion. Defaults to ``False``.
+        shared_init (bool, optional): if ``True``, enables multiprocess coordination
+            during storage initialization. First process initializes with memmap,
+            others wait and load from the shared memmap. Defaults to ``False``.
+        cleanup_memmap (bool, optional): if ``True`` and ``shared_init=True``,
+            the temporary memmap will be deleted after initialization and the
+            storage will operate in RAM. Defaults to ``True``.
 
     Examples:
         >>> data = TensorDict({
@@ -1115,10 +1133,12 @@ class LazyTensorStorage(TensorStorage):
         self,
         max_size: int,
         *,
-        device: torch.device = "cpu",
+        device: torch.device | str = "cpu",
         ndim: int = 1,
         compilable: bool = False,
         consolidated: bool = False,
+        shared_init: bool = False,
+        cleanup_memmap: bool = True,
     ):
         super().__init__(
             storage=None,
@@ -1128,11 +1148,59 @@ class LazyTensorStorage(TensorStorage):
             compilable=compilable,
         )
         self.consolidated = consolidated
+        self.shared_init = shared_init
+        self.cleanup_memmap = cleanup_memmap
+
+        # Initialize multiprocess coordination objects if shared_init is enabled
+        if self.shared_init:
+            if self._compilable:
+                raise RuntimeError(
+                    "Cannot share a compilable storage between processes."
+                )
+            self._init_lock = mp.Lock()
+            self._init_event = mp.Event()
+            self._make_init_directory()
+
+    def _make_init_directory(self):
+        if getattr(self, "scratch_dir", None) is not None:
+            self._init_directory = self.scratch_dir
+            return
+        # Create a shared directory
+        self.scratch_dir = self._init_directory = tempfile.mkdtemp(
+            prefix="torchrl_storage_init_"
+        )
+        return
 
     def _init(
         self,
         data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
     ) -> None:
+        if not self.shared_init:
+            return self._init_standard(data)
+
+        # Try to become coordinator
+        is_coordinator = not self._init_event.is_set()
+        is_coordinator = is_coordinator and self._init_lock.acquire(block=False)
+
+        if is_coordinator:
+            try:
+                # We are the coordinator
+                self._init_coordinator(data)
+            finally:
+                # Signal other processes that initialization is complete
+                self._init_event.set()
+                self._init_lock.release()
+        else:
+            # Failed to acquire lock, wait for coordinator
+            self._wait_for_init()
+
+        self.initialized = True
+
+    def _init_standard(
+        self,
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+    ) -> None:
+        """Standard initialization without multiprocess coordination."""
         if not self._compilable:
             # TODO: Investigate why this seems to have a performance impact with
             # the compiler
@@ -1177,6 +1245,39 @@ class LazyTensorStorage(TensorStorage):
                 f"Initialized LazyTensorStorage with {self._storage.shape} shape"
             )
 
+    def _init_coordinator(
+        self,
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+    ) -> None:
+        """Initialize storage as the coordinating process using temporary memmap."""
+        # Use LazyMemmapStorage which does everything we want
+        temp_memmap_storage = LazyMemmapStorage(
+            max_size=self.max_size,
+            scratch_dir=self._init_directory,
+            ndim=self.ndim,
+            existsok=False,
+            shared_init=False,  # Don't recurse
+        )
+        temp_memmap_storage._init_standard(data)
+        self._storage = temp_memmap_storage._storage
+        return
+
+    def _wait_for_init(self) -> None:
+        # wait till coordinator has initialized
+        self._init_event.wait()
+        storage = TensorDict.load_memmap(self._init_directory)
+        self._storage = storage
+        self.initialized = True
+        return
+
+    # Read blocks
+    def get(self, indices: slice) -> TensorDictBase | torch.Tensor | Any:
+        if not self.initialized and self.shared_init:
+            # Trigger initialization with dummy data
+            self._wait_for_init()
+        idx = super().get(indices)
+        return idx
+
 
 class LazyMemmapStorage(LazyTensorStorage):
     """A memory-mapped storage for tensors and tensordicts.
@@ -1187,6 +1288,8 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     Keyword Args:
         scratch_dir (str or path): directory where memmap-tensors will be written.
+            If ``shared_init=True`` and no ``scratch_dir`` is provided, a shared
+            temporary directory will be created automatically.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
             If ``None`` is provided, the device is automatically gathered from the
@@ -1199,6 +1302,9 @@ class LazyMemmapStorage(LazyTensorStorage):
         existsok (bool, optional): whether an error should be raised if any of the
             tensors already exists on disk. Defaults to ``True``. If ``False``, the
             tensor will be opened as is, not overewritten.
+        shared_init (bool, optional): if ``True``, enables multiprocess coordination
+            during storage initialization. First process initializes the memmap,
+            others wait and load from the shared directory. Defaults to ``False``.
 
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
@@ -1273,12 +1379,12 @@ class LazyMemmapStorage(LazyTensorStorage):
         max_size: int,
         *,
         scratch_dir=None,
-        device: torch.device = "cpu",
+        device: torch.device | str = "cpu",
         ndim: int = 1,
         existsok: bool = False,
         compilable: bool = False,
+        shared_init: bool = False,
     ):
-        super().__init__(max_size, ndim=ndim, compilable=compilable)
         self.initialized = False
         self.scratch_dir = None
         self.existsok = existsok
@@ -1286,6 +1392,13 @@ class LazyMemmapStorage(LazyTensorStorage):
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
+        super().__init__(
+            max_size,
+            ndim=ndim,
+            compilable=compilable,
+            shared_init=shared_init,
+            cleanup_memmap=False,
+        )
         self.device = (
             _make_ordinal_device(torch.device(device))
             if device != "auto"
@@ -1355,7 +1468,31 @@ class LazyMemmapStorage(LazyTensorStorage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
-    def _init(self, data: TensorDictBase | torch.Tensor) -> None:
+    def _init(
+        self,
+        data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+    ) -> None:
+        if not self.shared_init:
+            return self._init_standard(data)
+        is_coordinator = not self._init_event.is_set()
+        is_coordinator = is_coordinator and self._init_lock.acquire(block=False)
+
+        if is_coordinator:
+            # coordinator init
+            try:
+                return self._init_coordinator(data)
+            finally:
+                self._init_event.set()
+                self._init_lock.release()
+        else:
+            # Standard initialization
+            self._wait_for_init()
+        self.initialized = True
+
+    def _init_coordinator(self, data: TensorDictBase | torch.Tensor | Any) -> None:
+        return self._init_standard(data)
+
+    def _init_standard(self, data: TensorDictBase | torch.Tensor) -> None:
         torchrl_logger.debug("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
@@ -1402,6 +1539,9 @@ class LazyMemmapStorage(LazyTensorStorage):
         self.initialized = True
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
+        if not self.initialized and self.shared_init:
+            # Trigger initialization with dummy data
+            self._wait_for_init()
         result = super().get(index)
         return result
 

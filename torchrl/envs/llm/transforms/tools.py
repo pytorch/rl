@@ -17,7 +17,7 @@ from typing import TextIO
 import torch
 
 from tensordict import lazy_stack, TensorDictBase
-from torchrl import torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 
 from torchrl.envs import Transform
