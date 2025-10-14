@@ -2,8 +2,8 @@
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0 cmake
 ln -s /usr/bin/swig3.0 /usr/bin/swig
@@ -11,16 +11,16 @@ ln -s /usr/bin/swig3.0 /usr/bin/swig
 # we install d4rl here bc env variables have been updated
 git clone https://github.com/Farama-Foundation/d4rl.git
 cd d4rl
-#pip3 install -U 'mujoco-py<2.1,>=2.0'
-pip3 install -U "gym[classic_control,atari,accept-rom-license]"==0.23
-pip3 install -U six
-pip install -e .
+#uv pip install -U 'mujoco-py<2.1,>=2.0'
+uv pip install -U "gym[classic_control,atari,accept-rom-license]"==0.23
+uv pip install -U six
+uv pip install -e . --no-build-isolation
 cd ..
 
 #flow is a dependency disaster of biblical scale
 #git clone https://github.com/flow-project/flow.git
 #cd flow
-#python setup.py develop
+#uv pip install -e . --no-build-isolation
 #cd ..
 
 export PYTORCH_TEST_WITH_SLOW='1'
@@ -33,7 +33,7 @@ root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
-conda deactivate && conda activate ./env
+# conda deactivate (not needed with uv) && source ./.venv/bin/activate
 
 # this workflow only tests the libs
 printf "* Smoke test\n"

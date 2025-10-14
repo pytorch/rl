@@ -9,34 +9,28 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
+apt-get update && apt-get install -y git curl wget gcc g++
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
+env_dir="${root_dir}/.venv"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
-fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+# 1. Install uv
+printf "* Installing uv\n"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-# 2. Create test environment at ./env
-printf "python: ${PYTHON_VERSION}\n"
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
-conda activate "${env_dir}"
+
+# 2. Create test environment at ./.venv
+printf "python: ${PYTHON_VERSION}
+"
+printf "* Creating a test environment with uv
+"
+uv venv "${env_dir}" --python="${PYTHON_VERSION}"
+source "${env_dir}/bin/activate"
+
 
 ## 3. Install mujoco
 #printf "* Installing mujoco and related\n"
@@ -63,15 +57,14 @@ else
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
-conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  MAX_IDLE_COUNT=1000 \
-  DISPLAY=:99 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
-  SDL_VIDEODRIVER=dummy \
-  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL \
-  TOKENIZERS_PARALLELISM=true
+export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
+export MAX_IDLE_COUNT=1000
+export DISPLAY=:99
+export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
+export SDL_VIDEODRIVER=dummy
+export PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+export TOKENIZERS_PARALLELISM=true
 
 # Software rendering requires GLX and OSMesa.
 if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
@@ -85,19 +78,17 @@ if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
   yum -y install freeglut
 fi
 
-pip install pip --upgrade
+uv pip install pip --upgrade
 
-conda env update --file "${this_dir}/environment.yml" --prune
+# Dependencies installed via uv pip (see converted script)
 
-conda deactivate
-conda activate "${env_dir}"
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   # install ale-py: manylinux names are broken for CentOS so we need to manually download and
   # rename them
   PY_VERSION=$(python --version)
   echo "installing gymnasium"
-  pip install "gymnasium[atari]>=1.1"
+  uv pip install "gymnasium[atari]>=1.1"
 else
-  pip install "gymnasium[atari]>=1.1"
+  uv pip install "gymnasium[atari]>=1.1"
 fi

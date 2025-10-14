@@ -48,7 +48,6 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  conda install anaconda::cmake -y
   python3 -m pip install "pybind11[global]"
   python3 -m pip install git+https://github.com/pytorch/tensordict.git
 else
@@ -59,5 +58,5 @@ fi
 python3 -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python3 setup.py develop
+python3 -m pip install -e . --no-build-isolation --no-deps
 python3 -c "import torchrl"

@@ -12,7 +12,7 @@ this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-apt-get install -y wget \
+apt-get install -y wget curl \
     gcc \
     g++ \
     unzip \
@@ -37,38 +37,33 @@ ln -s libglut.so.3.12 libglut.so.3
 cd $this_dir
 
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
+env_dir="${root_dir}/.venv"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
-fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+# 1. Install uv
+printf "* Installing uv
+"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-# 2. Create test environment at ./env
-printf "python: ${PYTHON_VERSION}\n"
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
-conda activate "${env_dir}"
 
-python3 -m pip install pip --upgrade
+# 2. Create test environment at ./.venv
+printf "python: ${PYTHON_VERSION}
+"
+printf "* Creating a test environment with uv
+"
+uv venv "${env_dir}" --python="${PYTHON_VERSION}"
+source "${env_dir}/bin/activate"
+
+
+python3 -m uv pip install pip --upgrade
 
 #pip3 uninstall cython -y
 #pip uninstall cython -y
 #conda uninstall cython -y
-python3 -m pip install "cython<3" --upgrade
+python3 -m uv pip install "cython<3" --upgrade
 #conda install -c anaconda cython="<3.0.0" -y
 
 
@@ -87,15 +82,17 @@ cp mjkey.txt ./mujoco200_linux/bin/
 git clone https://github.com/vmoens/mujoco-py.git
 cd mujoco-py
 git checkout v2.0.2.1
-pip install -e .
+# Install poetry for mujoco-py build (it uses poetry as build backend)
+uv pip install poetry
+uv pip install -e . --no-build-isolation
 cd $this_dir
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-cat "${this_dir}/environment.yml"
-
-pip3 install pip --upgrade
+# Install dependencies
+uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
+  pytest-instafail pytest-rerunfailures pytest-timeout expecttest \
+  "pybind11[global]" pyyaml scipy hydra-core tensorboard
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then
@@ -107,9 +104,7 @@ else
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
-conda env config vars set \
-  MAX_IDLE_COUNT=1000 \
-  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
+export MAX_IDLE_COUNT=1000 MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
   DISPLAY=:99 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
@@ -121,4 +116,4 @@ conda env config vars set \
   LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
 
 
-conda env update --file "${this_dir}/environment.yml" --prune
+# Dependencies installed via uv pip (see converted script)

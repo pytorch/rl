@@ -24,58 +24,54 @@ export OMNI_KIT_ACCEPT_EULA=yes
 nvidia-smi
 
 # Setup
-apt-get update && apt-get install -y git wget gcc g++
+apt-get update && apt-get install -y git wget curl gcc g++
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
+env_dir="${root_dir}/.venv"
 
 cd "${root_dir}"
 
-# install conda
-printf "* Installing conda\n"
-wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh"
-bash ./miniconda.sh -b -f -p "${conda_dir}"
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+# Install uv
+printf "* Installing uv\n"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-
-conda create --prefix ${env_dir} python=3.10 -y
-conda activate ${env_dir}
+# Create virtual environment with uv
+printf "* Creating a test environment with uv\n"
+uv venv "${env_dir}" --python="3.10"
+source "${env_dir}/bin/activate"
 
 # Pin pytorch to 2.5.1 for IsaacLab
-conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
+uv pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 
-conda run -p ${env_dir} pip install --upgrade pip
-conda run -p ${env_dir} pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
-conda install conda-forge::"cmake>3.22" -y
+uv pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
+uv pip install "cmake>3.22"
 
 git clone https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
-conda run -p ${env_dir} ./isaaclab.sh --install sb3
+./isaaclab.sh --install sb3
 cd ../
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  conda install "anaconda::cmake>=3.22" -y
-  conda run -p ${env_dir} python3 -m pip install "pybind11[global]"
-  conda run -p ${env_dir} python3 -m pip install git+https://github.com/pytorch/tensordict.git
+  uv pip install "pybind11[global]"
+  uv pip install git+https://github.com/pytorch/tensordict.git
 else
-  conda run -p ${env_dir} python3 -m pip install tensordict
+  uv pip install tensordict
 fi
 
 # smoke test
-conda run -p ${env_dir} python -c "import tensordict"
+python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-conda run -p ${env_dir} python setup.py develop
-conda run -p ${env_dir} python -c "import torchrl"
+uv pip install -e . --no-build-isolation
+python -c "import torchrl"
 
 # Install pytest
-conda run -p ${env_dir} python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
+uv pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
 
 # Run tests
-conda run -p ${env_dir} python -m pytest test/test_libs.py -k isaac -s
+python -m pytest test/test_libs.py -k isaac -s

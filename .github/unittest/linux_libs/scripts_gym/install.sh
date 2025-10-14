@@ -8,8 +8,8 @@ apt-get update && apt-get install -y git wget gcc g++
 set -e
 set -v
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 #apt-get update -y && apt-get install git wget gcc g++ -y
 
@@ -37,28 +37,28 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    conda install pytorch==2.0 torchvision==0.15 cpuonly -c pytorch -y
+    uv pip install torch==2.0 torchvision==0.15 --index-url https://download.pytorch.org/whl/cpu
 else
-    conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 numpy==1.26 numpy-base==1.26 -c pytorch -c nvidia -y
+    uv pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 numpy==1.26 --index-url https://download.pytorch.org/whl/cu118
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
-pip install -U charset-normalizer
+uv pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  conda install "anaconda::cmake>=3.22" -y
-  pip3 install "pybind11[global]"
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  uv pip install "cmake>=3.22"
+  uv pip install "pybind11[global]"
+  uv pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  uv pip install tensordict
 fi
 
 # smoke test
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+uv pip install -e . --no-build-isolation
 python -c "import torchrl"
 
 ## Reinstalling pytorch with specific version

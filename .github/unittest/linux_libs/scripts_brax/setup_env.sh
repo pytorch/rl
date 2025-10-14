@@ -10,7 +10,7 @@ set -euxo pipefail
 apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-apt-get install -y wget \
+apt-get install -y wget curl \
     gcc \
     g++ \
     unzip \
@@ -32,50 +32,28 @@ apt-get upgrade -y libstdc++6
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
+env_dir="${root_dir}/.venv"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
+# 1. Install uv
+printf "* Installing uv\n"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
-fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
-
-# 2. Create test environment at ./env
+# 2. Create test environment at ./.venv
 printf "python: ${PYTHON_VERSION}\n"
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
-conda activate "${env_dir}"
+printf "* Creating a test environment with uv\n"
+uv venv "${env_dir}" --python="${PYTHON_VERSION}"
+source "${env_dir}/bin/activate"
 
-## 3. Install mujoco
-#printf "* Installing mujoco and related\n"
-#mkdir $root_dir/.mujoco
-#cd $root_dir/.mujoco/
-#wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
-#tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
-#wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-#tar -xf mujoco210-linux-x86_64.tar.gz
-#cd $this_dir
-
-# 4. Install Conda dependencies
+# 3. Install dependencies (except PyTorch)
 printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-cat "${this_dir}/environment.yml"
 
-pip install pip --upgrade
-
-conda env update --file "${this_dir}/environment.yml" --prune
+uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
+  pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio \
+  expecttest "pybind11[global]" pyyaml scipy hydra-core "jax[cuda12]>=0.7.0" \
+  brax psutil
 
 #yum makecache
 # sudo yum -y install glfw

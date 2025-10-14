@@ -3,28 +3,31 @@
 set -e
 set -v
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 # we can install this now but not before installing tensordict and torchrl, g++ version will break the compilation
 # https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin
-#conda install -y -c conda-forge gcc=12.1.0
-conda install -y -c conda-forge libstdcxx-ng=12
-conda env config vars set \
-  MAX_IDLE_COUNT=1000 \
-  LD_PRELOAD=$LD_PRELOAD:$STDC_LOC TOKENIZERS_PARALLELISM=true
+# Install libstdc++ if needed via apt
+apt-get install -y libstdc++6
 
 ## find libstdc
-STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
+STDC_LOC=$(find ${root_dir}/.venv/ -name "libstdc++.so.6" 2>/dev/null | head -1 || echo "/usr/lib/x86_64-linux-gnu/libstdc++.so.6")
 
+export MAX_IDLE_COUNT=1000
+export LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+export TOKENIZERS_PARALLELISM=true
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
+export MAGNUM_LOG=quiet
+export HABITAT_SIM_LOG=quiet
+export MKL_THREADING_LAYER=GNU
+
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 
-root_dir="$(git rev-parse --show-toplevel)"
-env_dir="${root_dir}/env"
+env_dir="${root_dir}/.venv"
 lib_dir="${env_dir}/lib"
 
 # smoke test
@@ -32,17 +35,6 @@ python -c "import habitat;import habitat.gym"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
-export MKL_THREADING_LAYER=GNU
-# more logging
-
-#wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json
-#mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
-
-conda env config vars set \
-  MAX_IDLE_COUNT=1000 \
-  MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet TOKENIZERS_PARALLELISM=true
-
-conda deactivate && conda activate ./env
 
 
 # this workflow only tests the libs

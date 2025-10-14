@@ -11,7 +11,7 @@ set -v
 apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-apt-get install -y wget \
+apt-get install -y wget curl \
     gcc \
     g++ \
     unzip \

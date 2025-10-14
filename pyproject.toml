@@ -53,6 +53,7 @@ tests = [
     "pytest-benchmark",
     "pytest-rerunfailures",
     "pytest-error-for-skips",
+    "virtualenv",  # Required by Ray's runtime_env when using pip installations
 ]
 utils = [
     "tensorboard",

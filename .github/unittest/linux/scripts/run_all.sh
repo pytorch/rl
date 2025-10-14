@@ -9,7 +9,7 @@ set -v
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget cmake
+  apt-get install -y vim git wget curl cmake
 
   # Enable universe repository
   # apt-get install -y software-properties-common
@@ -45,37 +45,23 @@ fi
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
+env_dir="${root_dir}/.venv"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
+# 1. Install uv
+printf "* Installing uv\n"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
-fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
-
-# 2. Create test environment at ./env
+# 2. Create test environment at ./.venv
 printf "python: ${PYTHON_VERSION}\n"
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
-conda activate "${env_dir}"
+printf "* Creating a test environment with uv\n"
+uv venv "${env_dir}" --python="${PYTHON_VERSION}"
+source "${env_dir}/bin/activate"
 
-# 3. Install Conda dependencies
+# 3. Install dependencies (except PyTorch)
 printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-cat "${this_dir}/environment.yml"
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
   export MUJOCO_GL=glfw
@@ -85,27 +71,31 @@ fi
 
 export SDL_VIDEODRIVER=dummy
 
-# legacy from bash scripts: remove?
-conda env config vars set \
-  MAX_IDLE_COUNT=1000 \
-  MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:99 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG TOKENIZERS_PARALLELISM=true
+# Set environment variables
+export MAX_IDLE_COUNT=1000
+export PYOPENGL_PLATFORM=$MUJOCO_GL
+export DISPLAY=:99
+export LAZY_LEGACY_OP=False
+export RL_LOGGING_LEVEL=DEBUG
+export TOKENIZERS_PARALLELISM=true
 
-pip3 install pip --upgrade
-pip install virtualenv
+# Install dependencies from environment.yml using uv
+uv pip install hypothesis future cloudpickle pygame "moviepy<2.0.0" tqdm \
+  pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures \
+  pytest-timeout pytest-asyncio expecttest "pybind11[global]" pyyaml scipy \
+  hydra-core tensorboard "imageio==2.26.0" wandb dm_control "mujoco<3.3.6" \
+  mlflow av coverage ray transformers ninja timm protobuf
 
-conda env update --file "${this_dir}/environment.yml" --prune
-
-# Reset conda env variables
-conda deactivate
-conda activate "${env_dir}"
+# Install pip for compatibility with packages that expect it
+uv pip install pip
 
 echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.12" ]]; then
-  pip3 install ale-py
-  pip3 install sympy
-  pip3 install "gymnasium[mujoco]>=1.1" mo-gymnasium[mujoco]
+  uv pip install ale-py
+  uv pip install sympy
+  uv pip install "gymnasium[mujoco]>=1.1" mo-gymnasium[mujoco]
 else
-  pip3 install "gymnasium[atari,mujoco]>=1.1" mo-gymnasium[mujoco]
+  uv pip install "gymnasium[atari,mujoco]>=1.1" mo-gymnasium[mujoco]
 fi
 
 # sanity check: remove?
@@ -140,15 +130,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
   fi
 else
   printf "Failed to install pytorch"
@@ -167,23 +157,22 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  uv pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  uv pip install tensordict
 fi
 
 printf "* Installing torchrl\n"
-python setup.py develop
-
+uv pip install -e . --no-build-isolation
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
-  python3 -c """
+  python -c """
 from torchrl.envs.transforms.vc1 import VC1Transform
 VC1Transform.install_vc_models(auto_exit=True)
 """
 
-  python3 -c """
+  python -c """
 import vc_models
 from vc_models.models.vit import model_utils
 print(model_utils)

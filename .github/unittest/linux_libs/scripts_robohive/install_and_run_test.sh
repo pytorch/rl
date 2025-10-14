@@ -9,8 +9,8 @@ apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-de
 set -e
 set -v
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     cudatoolkit="cpuonly"
@@ -37,15 +37,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with cu128"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch --index-url https://download.pytorch.org/whl/cu128
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
   fi
 else
   printf "Failed to install pytorch"
@@ -54,16 +54,16 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  uv pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  uv pip install tensordict
 fi
 
 # smoke test
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+uv pip install -e . --no-build-isolation
 python -c "import torchrl"
 
 # Extracted from run_test.sh to run once.
