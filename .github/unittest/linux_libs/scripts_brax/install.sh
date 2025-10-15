@@ -52,6 +52,10 @@ uv pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
 # smoke test
 python -c "import functorch;import tensordict"
 
+# Install build dependencies (required for --no-build-isolation)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]" cmake
+
 printf "* Installing torchrl\n"
 uv pip install -e . --no-build-isolation
 

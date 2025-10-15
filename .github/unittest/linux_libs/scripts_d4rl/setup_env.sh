@@ -58,7 +58,7 @@ uv venv "${env_dir}" --python="${PYTHON_VERSION}"
 source "${env_dir}/bin/activate"
 
 
-v pip install pip --upgrade
+uv pip install pip --upgrade
 
 #pip3 uninstall cython -y
 #pip uninstall cython -y

@@ -14,6 +14,8 @@ cd d4rl
 #uv pip install -U 'mujoco-py<2.1,>=2.0'
 uv pip install -U "gym[classic_control,atari,accept-rom-license]"==0.23
 uv pip install -U six
+# Install build dependencies (required for --no-build-isolation)
+uv pip install setuptools wheel ninja "pybind11[global]" cmake
 uv pip install -e . --no-build-isolation
 cd ..
 
