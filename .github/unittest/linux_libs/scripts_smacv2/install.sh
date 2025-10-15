@@ -8,6 +8,8 @@ unset PYTORCH_VERSION
 set -e
 
 root_dir="$(git rev-parse --show-toplevel)"
+# Add uv to PATH (it was installed in setup_env.sh)
+export PATH="$HOME/.local/bin:$PATH"
 source "${root_dir}/.venv/bin/activate"
 
 if [ "${CU_VERSION:-}" == cpu ] ; then

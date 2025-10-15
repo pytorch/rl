@@ -5,6 +5,9 @@ unset PYTORCH_VERSION
 set -e
 set -v
 
+# Make uv available (installed in setup_env.sh)
+export PATH="$HOME/.local/bin:$PATH"
+
 root_dir="$(git rev-parse --show-toplevel)"
 source "${root_dir}/.venv/bin/activate"
 
@@ -34,10 +37,10 @@ else
 fi
 
 # smoke test
-python3 -c "import functorch;import tensordict"
+python -c "import tensordict"
 
 printf "* Installing torchrl\n"
 uv pip install -e . --no-build-isolation
 
 # smoke test
-python3 -c "import torchrl"
+ -c "import torchrl"

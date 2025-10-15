@@ -7,6 +7,9 @@ unset PYTORCH_VERSION
 
 set -e
 
+# Make uv available (installed in setup_env.sh)
+export PATH="$HOME/.local/bin:$PATH"
+
 # Note: This script is sourced by run_all.sh, so the environment is already active
 
 if [ "${CU_VERSION:-}" == cpu ] ; then

@@ -41,9 +41,7 @@ cd "${root_dir}"
 if ! command -v uv &> /dev/null; then
     printf "* Installing uv\n"
     # Try different Python commands
-    if command -v python3 &> /dev/null; then
-        python3 -m pip install uv
-    elif command -v python &> /dev/null; then
+    if command -v python &> /dev/null; then
         python -m pip install uv
     else
         # Fallback to curl installation

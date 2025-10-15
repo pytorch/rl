@@ -58,12 +58,12 @@ uv venv "${env_dir}" --python="${PYTHON_VERSION}"
 source "${env_dir}/bin/activate"
 
 
-python3 -m uv pip install pip --upgrade
+v pip install pip --upgrade
 
 #pip3 uninstall cython -y
 #pip uninstall cython -y
 #conda uninstall cython -y
-python3 -m uv pip install "cython<3" --upgrade
+uv pip install "cython<3" --upgrade
 #conda install -c anaconda cython="<3.0.0" -y
 
 

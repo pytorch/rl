@@ -8,6 +8,9 @@ apt-get update && apt-get install -y git wget gcc g++
 set -e
 set -v
 
+# Make uv available (installed in setup_env.sh)
+export PATH="$HOME/.local/bin:$PATH"
+
 root_dir="$(git rev-parse --show-toplevel)"
 source "${root_dir}/.venv/bin/activate"
 

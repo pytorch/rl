@@ -48,15 +48,15 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  python3 -m pip install "pybind11[global]"
-  python3 -m pip install git+https://github.com/pytorch/tensordict.git
+  python -m pip install "pybind11[global]"
+  python -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  python3 -m pip install tensordict
+  python -m pip install tensordict
 fi
 
 # smoke test
-python3 -c "import tensordict"
+python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python3 -m pip install -e . --no-build-isolation --no-deps
-python3 -c "import torchrl"
+python -m pip install -e . --no-build-isolation --no-deps
+python -c "import torchrl"

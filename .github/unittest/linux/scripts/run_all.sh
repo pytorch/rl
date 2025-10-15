@@ -99,7 +99,7 @@ else
 fi
 
 # sanity check: remove?
-python3 -c """
+python -c """
 import dm_control
 from dm_control import composer
 from tensorboard import *
