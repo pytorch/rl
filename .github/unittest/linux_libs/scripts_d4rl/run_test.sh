@@ -5,6 +5,11 @@ set -e
 root_dir="$(git rev-parse --show-toplevel)"
 source "${root_dir}/.venv/bin/activate"
 
+# Install build dependencies EARLY (required for --no-build-isolation)
+printf "* Installing build dependencies\n"
+uv pip install setuptools ninja "pybind11[global]"
+
+
 apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0 cmake
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
@@ -14,8 +19,6 @@ cd d4rl
 #uv pip install -U 'mujoco-py<2.1,>=2.0'
 uv pip install -U "gym[classic_control,atari,accept-rom-license]"==0.23
 uv pip install -U six
-# Install build dependencies (required for --no-build-isolation)
-uv pip install setuptools wheel ninja "pybind11[global]" cmake
 uv pip install -e . --no-build-isolation
 cd ..
 

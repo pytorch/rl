@@ -53,7 +53,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
   pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio \
   expecttest "pybind11[global]" pyyaml scipy hydra-core "jax[cuda12]>=0.7.0" \
-  brax psutil
+  brax psutil setuptools
 
 #yum makecache
 # sudo yum -y install glfw

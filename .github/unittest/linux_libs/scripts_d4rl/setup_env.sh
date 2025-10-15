@@ -92,7 +92,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 # Install dependencies
 uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
   pytest-instafail pytest-rerunfailures pytest-timeout expecttest \
-  "pybind11[global]" pyyaml scipy hydra-core tensorboard
+  "pybind11[global]" pyyaml scipy hydra-core tensorboard setuptools
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then

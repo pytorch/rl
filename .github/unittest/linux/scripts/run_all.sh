@@ -84,7 +84,7 @@ uv pip install hypothesis future cloudpickle pygame "moviepy<2.0.0" tqdm \
   pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures \
   pytest-timeout pytest-asyncio expecttest "pybind11[global]" pyyaml scipy \
   hydra-core tensorboard "imageio==2.26.0" wandb dm_control "mujoco<3.3.6" \
-  mlflow av coverage ray transformers ninja timm protobuf
+  mlflow av coverage ray transformers ninja timm protobuf setuptools
 
 # Install pip for compatibility with packages that expect it
 uv pip install pip

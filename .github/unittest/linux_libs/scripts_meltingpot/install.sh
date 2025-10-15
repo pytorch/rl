@@ -13,6 +13,11 @@ export PATH="$HOME/.local/bin:$PATH"
 root_dir="$(git rev-parse --show-toplevel)"
 source "${root_dir}/.venv/bin/activate"
 
+# Install build dependencies EARLY (required for --no-build-isolation)
+printf "* Installing build dependencies\n"
+uv pip install setuptools ninja "pybind11[global]"
+
+
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
 else
@@ -56,9 +61,6 @@ fi
 # smoke test
 python -c "import tensordict"
 
-# Install build dependencies (required for --no-build-isolation)
-printf "* Installing build dependencies\n"
-uv pip install setuptools wheel ninja "pybind11[global]" cmake
 
 printf "* Installing torchrl\n"
 uv pip install -e . --no-build-isolation

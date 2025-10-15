@@ -59,12 +59,12 @@ source "${env_dir}/bin/activate"
 # DO NOT install optional dependencies (no gym envs, no transformers, no wandb, etc.)
 printf "* Installing CORE + BUILD + TEST dependencies only\n"
 
-# Core dependencies from pyproject.toml
-uv pip install numpy packaging cloudpickle pyvers
-
 # Build dependencies for C++ extensions (from pyproject.toml [build-system])
 # These are required because we use --no-build-isolation --no-deps
-uv pip install setuptools wheel "pybind11[global]" ninja cmake
+uv pip install setuptools "pybind11[global]" ninja
+
+# Core dependencies from pyproject.toml
+uv pip install numpy packaging cloudpickle pyvers
 
 # Test dependencies
 uv pip install hypothesis future pytest pytest-cov pytest-mock \
