@@ -456,7 +456,7 @@ class TestPixelRenderTransform:
                 env.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture()
 def trackio_logger():
     exp_name = "ramala"
     logger = TrackioLogger(project="test", exp_name=exp_name)
