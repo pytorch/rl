@@ -8,6 +8,8 @@ import importlib.util
 
 from collections.abc import Sequence
 
+import numpy as np
+
 from torch import Tensor
 
 from .common import Logger
@@ -96,7 +98,11 @@ class TrackioLogger(Logger):
         fps = kwargs.pop("fps", self.video_fps)
         format = kwargs.pop("format", "mp4")
         self.experiment.log(
-            {name: trackio.Video(video, fps=fps, format=format)},
+            {
+                name: trackio.Video(
+                    video.numpy().astype(np.uint8), fps=fps, format=format
+                )
+            },
             **kwargs,
         )
 
