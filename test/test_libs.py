@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import copy
 import functools
 import gc
 import importlib.util
@@ -2811,14 +2812,27 @@ class TestVmas:
         final_seed = []
         tdreset = []
         tdrollout = []
-        for _ in range(2):
-            env = VmasEnv(
+        rollout_length = 10
+
+        def create_env():
+            return VmasEnv(
                 scenario=scenario_name,
                 num_envs=4,
             )
+
+        env = create_env()
+        td_actions = [env.action_spec.rand() for _ in range(rollout_length)]
+
+        for _ in range(2):
+            env = create_env()
+            td_actions_buffer = copy.deepcopy(td_actions)
+
+            def policy(td, actions=td_actions_buffer):
+                return actions.pop(0)
+
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=10))
+            tdrollout.append(env.rollout(max_steps=rollout_length, policy=policy))
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
