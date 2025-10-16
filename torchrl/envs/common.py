@@ -3375,7 +3375,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             "policy": policy,
             "policy_device": policy_device,
             "env_device": env_device,
-            "storing_device": storing_device,
+            "storing_device": None
+            if storing_device is None
+            else torch.device(storing_device),
             "callback": callback,
         }
         if break_when_any_done or break_when_all_done:
