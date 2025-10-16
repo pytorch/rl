@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "torch", "ninja", "numpy", "pybind11[global]", "cmake"]
+requires = ["setuptools", "wheel", "torch", "ninja", "numpy", "pybind11[global]"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -53,6 +53,7 @@ tests = [
     "pytest-benchmark",
     "pytest-rerunfailures",
     "pytest-error-for-skips",
+    "virtualenv",  # Required by Ray's runtime_env when using pip installations
 ]
 utils = [
     "tensorboard",

@@ -13,6 +13,7 @@ import os.path
 import pickle
 import random
 import re
+import time
 from collections import defaultdict
 from functools import partial
 from sys import platform
@@ -3693,13 +3694,23 @@ class TestEnvWithDynamicSpec:
             use_buffers=True,
             mp_start_method=mp_ctx if penv is ParallelEnv else None,
         )
-        env_buffers.set_seed(0)
-        torch.manual_seed(0)
-        rollout_buffers = env_buffers.rollout(
-            20, return_contiguous=True, break_when_any_done=False
-        )
-        del env_buffers
+        try:
+            env_buffers.set_seed(0)
+            torch.manual_seed(0)
+            rollout_buffers = env_buffers.rollout(
+                20, return_contiguous=True, break_when_any_done=False
+            )
+        finally:
+            env_buffers.close(raise_if_closed=False)
+            del env_buffers
         gc.collect()
+        # Add a small delay to allow multiprocessing resource_sharer threads
+        # to fully clean up before creating the next environment. This prevents
+        # a race condition where the old resource_sharer service thread is still
+        # active when the new environment starts, causing a deadlock.
+        # See: https://bugs.python.org/issue30289
+        if penv is ParallelEnv:
+            time.sleep(0.1)
 
         env_no_buffers = penv(
             3,
@@ -3707,12 +3718,15 @@ class TestEnvWithDynamicSpec:
             use_buffers=False,
             mp_start_method=mp_ctx if penv is ParallelEnv else None,
         )
-        env_no_buffers.set_seed(0)
-        torch.manual_seed(0)
-        rollout_no_buffers = env_no_buffers.rollout(
-            20, return_contiguous=True, break_when_any_done=False
-        )
-        del env_no_buffers
+        try:
+            env_no_buffers.set_seed(0)
+            torch.manual_seed(0)
+            rollout_no_buffers = env_no_buffers.rollout(
+                20, return_contiguous=True, break_when_any_done=False
+            )
+        finally:
+            env_no_buffers.close(raise_if_closed=False)
+            del env_no_buffers
         gc.collect()
         assert_allclose_td(rollout_buffers, rollout_no_buffers)
 

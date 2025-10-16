@@ -2,8 +2,9 @@
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+export PATH="$HOME/.local/bin:$PATH"
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 apt-get update && apt-get install -y git wget cmake
 
 

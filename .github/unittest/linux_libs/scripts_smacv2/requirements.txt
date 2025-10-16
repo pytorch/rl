@@ -1,0 +1,17 @@
+pip
+cloudpickle
+gym
+gym-notices
+zipp
+pytest
+pytest-cov
+pytest-mock
+pytest-instafail
+pytest-rerunfailures
+pytest-error-for-skips
+pytest-asyncio
+expecttest
+pybind11[global]
+pyyaml
+numpy==1.23.0
+git+https://github.com/oxwhirl/smacv2.git

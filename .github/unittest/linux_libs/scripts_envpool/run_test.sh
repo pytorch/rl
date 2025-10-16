@@ -8,8 +8,9 @@
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+export PATH="$HOME/.local/bin:$PATH"
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False

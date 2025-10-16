@@ -1,3 +1,4 @@
+pip
 hypothesis
 future
 cloudpickle
@@ -13,8 +14,12 @@ pybind11[global]
 pyyaml
 scipy
 hydra-core
-minari[gcs,hdf5,hf,create]
+minari[gcs,hdf5,hf]
 gymnasium>=1.2.0
 ale-py
 gymnasium-robotics
-mujoco 
+minari[create]
+jax>=0.7.0
+mujoco<3.3.6
+mujoco-py<2.2,>=2.1
+minigrid

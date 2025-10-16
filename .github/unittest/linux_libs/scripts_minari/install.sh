@@ -7,7 +7,14 @@ unset PYTORCH_VERSION
 
 set -e
 
+# Make uv available (installed in setup_env.sh)
+export PATH="$HOME/.local/bin:$PATH"
+
 # Note: This script is sourced by run_all.sh, so the environment is already active
+
+# Install build dependencies EARLY (required for --no-build-isolation)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
@@ -27,15 +34,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with cu128"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
   fi
 else
   printf "Failed to install pytorch"
@@ -52,8 +59,9 @@ fi
 # smoke test
 python -c "import functorch;import tensordict"
 
+
 printf "* Installing torchrl\n"
-python setup.py develop
+uv pip install -e . --no-build-isolation
 
 # smoke test
 python -c "import torchrl"

@@ -7,8 +7,8 @@ unset PYTORCH_VERSION
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
@@ -28,15 +28,15 @@ git submodule sync && git submodule update --init --recursive
 
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION  -U
+      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION  -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
+      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
   fi
 else
   printf "Failed to install pytorch"
@@ -47,14 +47,14 @@ fi
 python -c "import functorch"
 
 ## install snapshot
-#pip install git+https://github.com/pytorch/torchsnapshot
+#uv pip install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  uv pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  uv pip install tensordict
 fi
 
 printf "* Installing torchrl\n"
-python setup.py develop
+uv pip install -e . --no-build-isolation

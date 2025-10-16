@@ -5,8 +5,16 @@ unset PYTORCH_VERSION
 set -e
 set -v
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+# Make uv available (installed in setup_env.sh)
+export PATH="$HOME/.local/bin:$PATH"
+
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
+
+# Install build dependencies EARLY (required for --no-build-isolation)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
+
 
 if [[ ${#CU_VERSION} -eq 4 ]]; then
     CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -21,24 +29,24 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+  uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
-  pip3 install torch --index-url https://download.pytorch.org/whl/cu128
+  uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 fi
 
-# install tensordict
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  uv pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  uv pip install tensordict
 fi
 
 # smoke test
-python3 -c "import functorch;import tensordict"
+python -c "import tensordict"
+
 
 printf "* Installing torchrl\n"
-python setup.py develop
+uv pip install -e . --no-build-isolation
 
 # smoke test
-python3 -c "import torchrl"
+ -c "import torchrl"

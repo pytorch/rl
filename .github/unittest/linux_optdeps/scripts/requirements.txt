@@ -1,0 +1,16 @@
+pip
+hypothesis
+future
+cloudpickle
+pytest
+pytest-cov
+pytest-mock
+pytest-instafail
+pytest-rerunfailures
+pytest-timeout
+expecttest
+pybind11[global]
+pyyaml
+scipy
+coverage
+ray

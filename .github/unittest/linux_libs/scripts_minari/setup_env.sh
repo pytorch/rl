@@ -11,7 +11,7 @@ set -v
 apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-apt-get install -y wget \
+apt-get install -y wget curl \
     gcc \
     g++ \
     unzip \
@@ -41,9 +41,7 @@ cd "${root_dir}"
 if ! command -v uv &> /dev/null; then
     printf "* Installing uv\n"
     # Try different Python commands
-    if command -v python3 &> /dev/null; then
-        python3 -m pip install uv
-    elif command -v python &> /dev/null; then
+    if command -v python &> /dev/null; then
         python -m pip install uv
     else
         # Fallback to curl installation

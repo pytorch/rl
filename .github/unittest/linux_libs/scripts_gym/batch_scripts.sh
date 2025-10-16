@@ -8,8 +8,8 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 set -e
 set -v
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 # Install PyTorch and TorchRL.
 $DIR/install.sh
@@ -18,147 +18,66 @@ $DIR/install.sh
 apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++
 
 # solves "'extras_require' must be a dictionary"
-pip install setuptools==65.3.0
+uv pip install setuptools==65.3.0
 
-#mkdir -p third_party
-#cd third_party
-#git clone https://github.com/vmoens/gym
-#cd ..
+# Helper function to test with a specific gym version
+test_gym_version() {
+  local GYM_VERSION=$1
+  local EXTRA_INSTALL=$2
+  
+  echo "Testing gym version: ${GYM_VERSION}"
+  
+  # Install the specific gym version in the current environment
+  eval "$EXTRA_INSTALL"
+  
+  $DIR/run_test.sh
+  
+  # Uninstall gym to avoid conflicts with next version
+  uv pip uninstall gym gymnasium -y 2>/dev/null || true
+}
 
-# This version is installed initially (see environment.yml)
+# This version is installed initially
 for GYM_VERSION in '0.13'
 do
-  # Create a copy of the conda env and work with this
-  conda deactivate
-  conda create --prefix ./cloned_env --clone ./env -y
-  conda activate ./cloned_env
-
-  echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[atari]'==$GYM_VERSION
-  $DIR/run_test.sh
-
-  # delete the conda copy
-  conda deactivate
-  conda env remove --prefix ./cloned_env -y
+  test_gym_version "$GYM_VERSION" "uv pip install 'gym[atari]==$GYM_VERSION'"
 done
 
 # gym[atari]==0.19 is broken, so we install only gym without dependencies.
 for GYM_VERSION in '0.19'
 do
-  # Create a copy of the conda env and work with this
-  conda deactivate
-  conda create --prefix ./cloned_env --clone ./env -y
-  conda activate ./cloned_env
-
-  echo "Testing gym version: ${GYM_VERSION}"
-  # handling https://github.com/openai/gym/issues/3202
-  pip3 install wheel==0.38.4
-  pip3 install "pip<24.1"
-  pip3 install gym==$GYM_VERSION
-  $DIR/run_test.sh
-
-  # delete the conda copy
-  conda deactivate
-  conda env remove --prefix ./cloned_env -y
+  test_gym_version "$GYM_VERSION" "uv pip install wheel==0.38.4 && uv pip install 'pip<24.1' && uv pip install gym==$GYM_VERSION"
 done
 
 # gym[atari]==0.20 installs ale-py==0.8, but this version is not compatible with gym<0.26, so we downgrade it.
 for GYM_VERSION in '0.20'
 do
-  # Create a copy of the conda env and work with this
-  conda deactivate
-  conda create --prefix ./cloned_env --clone ./env -y
-  conda activate ./cloned_env
-
-  echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install wheel==0.38.4
-  pip3 install "pip<24.1"
-  pip3 install 'gym[atari]'==$GYM_VERSION
-  pip3 install ale-py==0.7
-  $DIR/run_test.sh
-
-  # delete the conda copy
-  conda deactivate
-  conda env remove --prefix ./cloned_env -y
+  test_gym_version "$GYM_VERSION" "uv pip install wheel==0.38.4 && uv pip install 'pip<24.1' && uv pip install 'gym[atari]==$GYM_VERSION' && uv pip install ale-py==0.7"
 done
 
 for GYM_VERSION in '0.25'
 do
-  # Create a copy of the conda env and work with this
-  conda deactivate
-  conda create --prefix ./cloned_env --clone ./env -y
-  conda activate ./cloned_env
-
-  echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[atari]'==$GYM_VERSION
-  pip3 install pip -U
-  $DIR/run_test.sh
-
-  # delete the conda copy
-  conda deactivate
-  conda env remove --prefix ./cloned_env -y
+  test_gym_version "$GYM_VERSION" "uv pip install 'gym[atari]==$GYM_VERSION'"
 done
 
 # For this version "gym[accept-rom-license]" is required.
 for GYM_VERSION in '0.26'
 do
-  # Create a copy of the conda env and work with this
-  conda deactivate
-  conda create --prefix ./cloned_env --clone ./env -y
-  conda activate ./cloned_env
-
-  echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[atari,accept-rom-license]'==$GYM_VERSION
-  pip3 install gym-super-mario-bros
-  $DIR/run_test.sh
-
-  # delete the conda copy
-  conda deactivate
-  conda env remove --prefix ./cloned_env -y
+  test_gym_version "$GYM_VERSION" "uv pip install 'gym[atari,accept-rom-license]==$GYM_VERSION' && uv pip install gym-super-mario-bros"
 done
 
 # For this version "gym[accept-rom-license]" is required.
 for GYM_VERSION in '0.27' '0.28'
 do
-  # Create a copy of the conda env and work with this
-  conda deactivate
-  conda create --prefix ./cloned_env --clone ./env -y
-  conda activate ./cloned_env
-
-  echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gymnasium[atari,ale-py]'==$GYM_VERSION
-
-  $DIR/run_test.sh
-
-  # delete the conda copy
-  conda deactivate
-  conda env remove --prefix ./cloned_env -y
+  test_gym_version "$GYM_VERSION" "uv pip install 'gymnasium[atari,ale-py]==$GYM_VERSION'"
 done
 
 # Prev gymnasium
-conda deactivate
-conda create --prefix ./cloned_env --clone ./env -y
-conda activate ./cloned_env
-
-pip3 install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
-
+echo "Testing gymnasium >= 1.1.0"
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
 $DIR/run_test.sh
-
-# delete the conda copy
-conda deactivate
-conda env remove --prefix ./cloned_env -y
-
-# Skip 1.0.0
+uv pip uninstall gymnasium -y 2>/dev/null || true
 
 # Latest gymnasium
-conda deactivate
-conda create --prefix ./cloned_env --clone ./env -y
-conda activate ./cloned_env
-
-pip3 install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
-
+echo "Testing latest gymnasium"
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
 $DIR/run_test.sh
-
-# delete the conda copy
-conda deactivate
-conda env remove --prefix ./cloned_env -y

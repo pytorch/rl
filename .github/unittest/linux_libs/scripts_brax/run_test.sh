@@ -2,8 +2,9 @@
 
 set -euxo pipefail
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+export PATH="$HOME/.local/bin:$PATH"
+root_dir="$(git rev-parse --show-toplevel)"
+source "${root_dir}/.venv/bin/activate"
 
 
 export PYTORCH_TEST_WITH_SLOW='1'
@@ -62,7 +63,7 @@ except Exception as e:
     print('Falling back to JAX CPU')
 "
 
-python3 -c 'import torch;t = torch.ones([2,2], device="cuda:0");print(t);print("tensor device:" + str(t.device))'
+python -c 'import torch;t = torch.ones([2,2], device="cuda:0");print(t);print("tensor device:" + str(t.device))'
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestBrax --error-for-skips
 coverage combine
