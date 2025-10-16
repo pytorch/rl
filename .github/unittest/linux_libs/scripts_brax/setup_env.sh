@@ -47,13 +47,13 @@ printf "* Creating a test environment with uv\n"
 uv venv "${env_dir}" --python="${PYTHON_VERSION}"
 source "${env_dir}/bin/activate"
 
-# 3. Install dependencies (except PyTorch)
-printf "* Installing dependencies (except PyTorch)\n"
+# 3. Install build dependencies FIRST (required for C++ extensions)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
-uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
-  pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio \
-  expecttest "pybind11[global]" pyyaml scipy hydra-core "jax[cuda12]>=0.7.0" \
-  brax psutil setuptools
+# 4. Install test dependencies and libraries (except PyTorch)
+printf "* Installing dependencies from requirements.txt\n"
+uv pip install -r "${this_dir}/requirements.txt"
 
 #yum makecache
 # sudo yum -y install glfw

@@ -87,12 +87,13 @@ uv pip install poetry
 uv pip install -e . --no-build-isolation
 cd $this_dir
 
-# 4. Install Conda dependencies
-printf "* Installing dependencies (except PyTorch)\n"
-# Install dependencies
-uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
-  pytest-instafail pytest-rerunfailures pytest-timeout expecttest \
-  "pybind11[global]" pyyaml scipy hydra-core tensorboard setuptools
+# 4. Install build dependencies FIRST (required for C++ extensions)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
+
+# 5. Install test dependencies and libraries (except PyTorch)
+printf "* Installing dependencies from requirements.txt\n"
+uv pip install -r "${this_dir}/requirements.txt" setuptools
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then

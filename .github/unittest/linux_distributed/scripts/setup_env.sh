@@ -9,7 +9,7 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git curl wget gcc g++
+apt-get update && apt-get install -y git curl wget gcc g++ cmake
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/.venv"

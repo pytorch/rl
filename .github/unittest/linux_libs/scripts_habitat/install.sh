@@ -13,7 +13,7 @@ source "${root_dir}/.venv/bin/activate"
 
 # Install build dependencies EARLY (required for --no-build-isolation)
 printf "* Installing build dependencies\n"
-uv pip install setuptools ninja "pybind11[global]"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
 
 if [[ ${#CU_VERSION} -eq 4 ]]; then

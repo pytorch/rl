@@ -27,7 +27,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
     apt-get upgrade -y libstdc++6
     apt-get dist-upgrade -y
   else
-    apt-get install -y g++ gcc
+    apt-get install -y g++ gcc cmake
   fi
 
 fi
@@ -79,12 +79,13 @@ export LAZY_LEGACY_OP=False
 export RL_LOGGING_LEVEL=DEBUG
 export TOKENIZERS_PARALLELISM=true
 
-# Install dependencies from environment.yml using uv
-uv pip install hypothesis future cloudpickle pygame "moviepy<2.0.0" tqdm \
-  pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures \
-  pytest-timeout pytest-asyncio expecttest "pybind11[global]" pyyaml scipy \
-  hydra-core tensorboard "imageio==2.26.0" wandb dm_control "mujoco<3.3.6" \
-  mlflow av coverage ray transformers ninja timm protobuf setuptools
+# Install build dependencies FIRST (required for C++ extensions)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
+
+# Install dependencies from requirements.txt
+printf "* Installing dependencies from requirements.txt\n"
+uv pip install -r "${this_dir}/requirements.txt"
 
 # Install pip for compatibility with packages that expect it
 uv pip install pip

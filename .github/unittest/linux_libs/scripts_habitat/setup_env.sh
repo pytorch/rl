@@ -10,7 +10,7 @@ set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-#apt-get update && apt-get install -y git wget curl gcc g++ unzip
+apt-get update && apt-get install -y git wget curl gcc g++ cmake unzip
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -49,10 +49,13 @@ cd ..
 git lfs install
 
 # 4. Install dependencies
-printf "* Installing dependencies (except PyTorch)\n"
+# 3. Install build dependencies FIRST (required for C++ extensions)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
-uv pip install pytest pytest-cov pytest-rerunfailures pytest-mock pytest-instafail \
-  pybind11 scipy expecttest hydra-core pytest-timeout "moviepy<2.0.0" "gym[atari,accept-rom-license]" \
+# 4. Install test dependencies and libraries (except PyTorch)
+printf "* Installing dependencies from requirements.txt\n"
+uv pip install -r "${this_dir}/requirements.txt"
   pygame
 
 # Install habitat-sim using pip (conda package not available with uv)

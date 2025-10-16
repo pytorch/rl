@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "torch", "ninja", "numpy", "pybind11[global]", "cmake"]
+requires = ["setuptools", "wheel", "torch", "ninja", "numpy", "pybind11[global]"]
 build-backend = "setuptools.build_meta"
 
 [project]

@@ -63,10 +63,13 @@ export DISPLAY=:99
 export BATCHED_PIPE_TIMEOUT=60
 export TOKENIZERS_PARALLELISM=true
 
-uv pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock \
-  pytest-instafail pytest-rerunfailures pytest-timeout pytest-asyncio \
-  expecttest "pybind11[global]" pyyaml scipy hydra-core wandb \
-  tensorboard mlflow submitit
+# Install build dependencies FIRST (required for C++ extensions)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
+
+# Install test dependencies and libraries from requirements.txt
+printf "* Installing dependencies from requirements.txt\n"
+uv pip install -r "${this_dir}/requirements.txt"
 
 # Install pip for compatibility with packages that expect it
 uv pip install pip

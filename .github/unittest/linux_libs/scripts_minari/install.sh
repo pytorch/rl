@@ -14,7 +14,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Install build dependencies EARLY (required for --no-build-isolation)
 printf "* Installing build dependencies\n"
-uv pip install setuptools ninja "pybind11[global]"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"

@@ -54,22 +54,18 @@ printf "* Creating a test environment with uv\n"
 uv venv "${env_dir}" --python="${PYTHON_VERSION}"
 source "${env_dir}/bin/activate"
 
-# 3. Install dependencies (except PyTorch)
-# For optdeps, only install CORE dependencies + build deps + test deps
-# DO NOT install optional dependencies (no gym envs, no transformers, no wandb, etc.)
-printf "* Installing CORE + BUILD + TEST dependencies only\n"
+# 3. Install dependencies for OPTDEPS testing
+# Optdeps tests that torchrl works WITHOUT optional dependencies
+# We install: build deps + test deps only (NO optional deps like gym, transformers, etc.)
+printf "* Installing build and test dependencies (NO optional deps)\n"
 
-# Build dependencies for C++ extensions (from pyproject.toml [build-system])
-# These are required because we use --no-build-isolation --no-deps
-uv pip install setuptools "pybind11[global]" ninja
+# Install build dependencies FIRST (required for C++ extensions)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
-# Core dependencies from pyproject.toml
-uv pip install numpy packaging cloudpickle pyvers
-
-# Test dependencies
-uv pip install hypothesis future pytest pytest-cov pytest-mock \
-  pytest-instafail pytest-rerunfailures pytest-timeout pytest-asyncio \
-  expecttest pyyaml scipy
+# Install test dependencies from requirements.txt (pytest, hypothesis, etc.)
+printf "* Installing test dependencies from requirements.txt\n"
+uv pip install -r "${this_dir}/requirements.txt"
 
 # Install pip for compatibility with packages that expect it
 uv pip install pip
@@ -123,10 +119,11 @@ else
   uv pip install tensordict
 fi
 
-printf "* Installing torchrl WITHOUT optional dependencies\n"
-# Use --no-deps to prevent installing dependencies from pyproject.toml
-# This ensures we test torchrl without optional dependencies
-uv pip install -e . --no-build-isolation --no-deps
+printf "* Installing torchrl (will install CORE dependencies only)\n"
+# Standard installation: installs [project.dependencies] but NOT [project.optional-dependencies]
+# Core deps: torch, numpy, packaging, cloudpickle, tensordict (all pre-installed above)
+# --no-build-isolation: build deps already available, avoids reinstalling torch in temp env
+uv pip install -e . --no-build-isolation
 
 # smoke test
 python -c "import torchrl"

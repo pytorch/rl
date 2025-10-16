@@ -1,4 +1,5 @@
 pip
+gsutil
 hypothesis
 future
 cloudpickle
@@ -14,12 +15,7 @@ pybind11[global]
 pyyaml
 scipy
 hydra-core
-minari[gcs,hdf5,hf]
-gymnasium>=1.2.0
-ale-py
-gymnasium-robotics
-minari[create]
-jax>=0.7.0
-mujoco<3.3.6
-mujoco-py<2.2,>=2.1
-minigrid
+tqdm
+h5py
+datasets
+pillow
