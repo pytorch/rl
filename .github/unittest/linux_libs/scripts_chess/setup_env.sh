@@ -59,7 +59,6 @@ cat "${this_dir}/environment.yml"
 
 uv pip install pip --upgrade
 
-uv pip install anaconda::cmake -y
-uv pip install conda-forge::cairo -y
+uv pip install cairo
 
 # Dependencies installed via uv pip (see converted script)

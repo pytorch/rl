@@ -67,6 +67,9 @@ fi
 python -c "import tensordict"
 
 
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
+
 printf "* Installing torchrl\n"
 uv pip install -e . --no-build-isolation
 python -c "import torchrl"

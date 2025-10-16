@@ -2,6 +2,7 @@
 
 set -euxo pipefail
 
+export PATH="$HOME/.local/bin:$PATH"
 root_dir="$(git rev-parse --show-toplevel)"
 source "${root_dir}/.venv/bin/activate"
 

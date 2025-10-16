@@ -69,7 +69,7 @@ uv pip install pip --upgrade
 
 # Dependencies installed via uv pip (see converted script)
 
-uv pip install conda-forge::ffmpeg -y
+apt-get install -y ffmpeg
 
 uv pip install robohive
 

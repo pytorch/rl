@@ -35,8 +35,11 @@ printf "* Creating a test environment with uv
 uv venv "${env_dir}" --python="${PYTHON_VERSION}"
 source "${env_dir}/bin/activate"
 
+# 3. Install build dependencies FIRST (required for C++ extensions AND mujoco-py)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
 
-## 3. Install mujoco
+## 4. Install mujoco
 #printf "* Installing mujoco and related\n"
 #mkdir -p $root_dir/.mujoco
 #cd $root_dir/.mujoco/

@@ -78,6 +78,10 @@ wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mujoco200_linux.z
 unzip mujoco200_linux.zip
 wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mjkey.txt
 cp mjkey.txt ./mujoco200_linux/bin/
+# 4. Install build dependencies FIRST (required for C++ extensions AND mujoco-py)
+printf "* Installing build dependencies\n"
+uv pip install setuptools wheel ninja "pybind11[global]"
+
 # install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git
 cd mujoco-py
@@ -86,10 +90,6 @@ git checkout v2.0.2.1
 uv pip install poetry
 uv pip install -e . --no-build-isolation
 cd $this_dir
-
-# 4. Install build dependencies FIRST (required for C++ extensions)
-printf "* Installing build dependencies\n"
-uv pip install setuptools wheel ninja "pybind11[global]"
 
 # 5. Install test dependencies and libraries (except PyTorch)
 printf "* Installing dependencies from requirements.txt\n"

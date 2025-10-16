@@ -2,6 +2,8 @@
 
 set -e
 
+export PATH="$HOME/.local/bin:$PATH"
+
 # Note: This script is sourced by run_all.sh, so the environment is already active
 
 apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0 cmake
