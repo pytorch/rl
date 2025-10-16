@@ -827,6 +827,28 @@ class TestEnvBase:
     #         env.observation_spec = env.observation_spec.clone()
     #         assert not env._cache
 
+    @pytest.mark.parametrize("storing_device", get_default_devices())
+    def test_storing_device(self, storing_device):
+        """Ensure rollout data tensors are moved to the requested storing_device."""
+        env = ContinuousActionVecMockEnv(device="cpu")
+
+        td = env.rollout(
+            10,
+            storing_device=torch.device(storing_device)
+            if storing_device is not None
+            else None,
+        )
+
+        expected_device = (
+            torch.device(storing_device) if storing_device is not None else env.device
+        )
+
+        assert td.device == expected_device
+
+        for _, item in td.items(True, True):
+            if isinstance(item, torch.Tensor):
+                assert item.device == expected_device
+
 
 class TestRollout:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
