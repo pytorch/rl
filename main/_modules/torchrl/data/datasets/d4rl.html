@@ -689,16 +689,19 @@
         <span class="k">return</span> <span class="n">dataset</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_dataset_direct</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">env_kwargs</span><span class="p">):</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymWrapper</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymWrapper</span><span class="p">,</span> <span class="n">set_gym_backend</span>
 
         <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_import_d4rl</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_d4rl</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;Could not import d4rl&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">self.D4RL_ERR</span>
 <span class="w">        </span><span class="kn">import</span> <span class="n">d4rl</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span>
 
-        <span class="n">env</span> <span class="o">=</span> <span class="n">GymWrapper</span><span class="p">(</span><span class="n">gym</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="c1"># D4RL environments are registered with gym, not gymnasium</span>
+        <span class="c1"># so we need to ensure we&#39;re using the gym backend</span>
+        <span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">):</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">GymWrapper</span><span class="p">(</span><span class="n">gym</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
         <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
             <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;D4RL_DATASET_DIR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmpdir</span>
             <span class="n">dataset</span> <span class="o">=</span> <span class="n">d4rl</span><span class="o">.</span><span class="n">qlearning_dataset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="o">**</span><span class="n">env_kwargs</span><span class="p">)</span>
@@ -768,12 +771,15 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">env_kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;env_kwargs cannot be passed with using from_env=True&quot;</span><span class="p">)</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">d4rl</span>  <span class="c1"># noqa: F401</span>
 
         <span class="c1"># we do a local import to avoid circular import issues</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymWrapper</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymWrapper</span><span class="p">,</span> <span class="n">set_gym_backend</span>
 
-        <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
+        <span class="c1"># D4RL environments are registered with gym, not gymnasium</span>
+        <span class="c1"># so we need to ensure we&#39;re using the gym backend</span>
+        <span class="k">with</span> <span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">),</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">gym</span>
             <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;D4RL_DATASET_DIR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmpdir</span>
             <span class="n">env</span> <span class="o">=</span> <span class="n">GymWrapper</span><span class="p">(</span><span class="n">gym</span><span class="o">.</span><span class="n">make</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
             <span class="n">dataset</span> <span class="o">=</span> <span class="n">make_tensordict</span><span class="p">(</span>
