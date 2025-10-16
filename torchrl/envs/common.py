@@ -3536,7 +3536,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            td_append = tensordict.copy().to(storing_device)
+            if storing_device is None or tensordict.device == storing_device:
+                td_append = tensordict.copy()
+            else:
+                td_append = tensordict.to(storing_device)
             if break_when_all_done:
                 if partial_steps is not True and not partial_steps.all():
                     # At least one step is partial
@@ -3620,7 +3623,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict = self.step(tensordict_)
             else:
                 tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
-            tensordicts.append(tensordict.to(storing_device))
+            if storing_device is None or tensordict.device == storing_device:
+                tensordicts.append(tensordict)
+            else:
+                tensordicts.append(tensordict.to(storing_device))
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
                 break
