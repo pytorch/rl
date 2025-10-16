@@ -3085,6 +3085,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         set_truncated: bool = False,
         out=None,
         trust_policy: bool = False,
+        storing_device: DEVICE_TYPING | None = None,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
@@ -3140,6 +3141,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
                 assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
                 and ``False`` otherwise.
+            storing_device (Device, optional): if provided, the tensordict will be stored on this device.
+                Defaults to ``None``.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -3372,6 +3375,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             "policy": policy,
             "policy_device": policy_device,
             "env_device": env_device,
+            "storing_device": storing_device,
             "callback": callback,
         }
         if break_when_any_done or break_when_all_done:
@@ -3508,6 +3512,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         policy,
         policy_device,
         env_device,
+        storing_device,
         callback,
     ):
         # Get the sync func
@@ -3531,7 +3536,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            td_append = tensordict.copy()
+            td_append = tensordict.copy().to(storing_device)
             if break_when_all_done:
                 if partial_steps is not True and not partial_steps.all():
                     # At least one step is partial
@@ -3589,6 +3594,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         policy,
         policy_device,
         env_device,
+        storing_device,
         callback,
     ):
         if auto_cast_to_device:
@@ -3614,7 +3620,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict = self.step(tensordict_)
             else:
                 tensordict, tensordict_ = self.step_and_maybe_reset(tensordict_)
-            tensordicts.append(tensordict)
+            tensordicts.append(tensordict.to(storing_device))
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
                 break
