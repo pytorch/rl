@@ -481,6 +481,15 @@ class TestTrackioLogger:
                 step=steps[i] if steps else None,
             )
 
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_str(self, steps, trackio_logger):
+        for i in range(3):
+            trackio_logger.log_str(
+                name="foo",
+                value="bar",
+                step=steps[i] if steps else None,
+            )
+
     def test_log_video(self, trackio_logger):
         torch.manual_seed(0)
 
@@ -509,10 +518,14 @@ class TestTrackioLogger:
         for key, value in config.items():
             assert trackio_logger.experiment.config[key] == value
 
-    def test_log_histogram(self, trackio_logger):
-        with pytest.raises(NotImplementedError):
-            data = torch.randn(10)
-            trackio_logger.log_histogram("hist", data, step=0, bins=2)
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_histogram(self, steps, trackio_logger):
+        torch.manual_seed(0)
+        for i in range(3):
+            data = torch.randn(100)
+            trackio_logger.log_histogram(
+                "hist", data, step=steps[i] if steps else None, bins=10
+            )
 
 
 if __name__ == "__main__":
