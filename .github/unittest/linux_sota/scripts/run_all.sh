@@ -162,7 +162,7 @@ else
 fi
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
