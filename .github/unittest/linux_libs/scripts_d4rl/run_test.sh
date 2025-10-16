@@ -20,7 +20,7 @@ cd ..
 #flow is a dependency disaster of biblical scale
 #git clone https://github.com/flow-project/flow.git
 #cd flow
-#python setup.py develop
+#python -m pip install -e . --no-build-isolation
 #cd ..
 
 export PYTORCH_TEST_WITH_SLOW='1'

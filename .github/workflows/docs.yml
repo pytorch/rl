@@ -64,29 +64,29 @@ jobs:
 
         # 2. upgrade pip, ninja and packaging
         conda install anaconda::cmake -y
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools ninja packaging "pybind11[global]" -U
+        python -m pip install --upgrade pip
+        python -m pip install setuptools ninja packaging "pybind11[global]" -U
         
         # 3. check python version
-        python3 --version
+        python --version
         
         # 4. Check git version
         git version
         
         # 5. Install PyTorch
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
-          python3 -m pip install torch torchvision
-          python3 -m pip install tensordict
+          python -m pip install torch torchvision
+          python -m pip install tensordict
         else
-          python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-          python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
         fi
         
         # 7. Install TorchRL
-        python3 setup.py develop
+        python -m pip install -e . --no-build-isolation
         
         # 8. Install requirements
-        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
 
         # 9. Set sanitize version
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
@@ -100,7 +100,7 @@ jobs:
         # 10. Test torchrl installation
         mkdir _tmp
         cd _tmp
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
         
