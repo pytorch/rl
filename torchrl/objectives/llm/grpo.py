@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Literal
@@ -15,19 +17,18 @@ from tensordict import (
     TensorClass,
     TensorDict,
     TensorDictBase,
-    TensorDictParams,
 )
 from tensordict.nn import (
+    CompositeDistribution,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
-    TensorDictModule,
+    set_composite_lp_aggregate,
 )
-from tensordict.utils import expand_as_right
 from torch import distributions as d
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import LLMWrapperBase
-from torchrl.objectives.ppo import ClipPPOLoss
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, _sum_td_features
 
 
@@ -46,7 +47,7 @@ class GRPOLossOutput(TensorClass["nocast"]):
     kl_to_inference: torch.Tensor | None = None
 
 
-class GRPOLoss(ClipPPOLoss):
+class GRPOLoss(LossModule):
     """GRPO loss.
 
     The clipped importance weighted loss is computed as follows:
@@ -76,8 +77,10 @@ class GRPOLoss(ClipPPOLoss):
         The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.
 
     Keyword Args:
-        clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
-            default: 0.2
+        clip_epsilon (float | tuple[float, float], optional): clipping threshold(s) for the clipped surrogate.
+            - float x: symmetric clipping [1 - x, 1 + x] (default: 0.2)
+            - tuple (eps_low, eps_high): asymmetric clipping [1 - eps_low, 1 + eps_high] as in DAPO Clip-Higher
+              recommended defaults from DAPO: (0.20, 0.28); see Eq. (10) in the paper.
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
@@ -111,32 +114,36 @@ class GRPOLoss(ClipPPOLoss):
             - "generic": Use attention masking (all valid tokens)
             Defaults to "sft" since we can't guarantee assistant masks are available.
 
+    .. note:: DAPO defaults (for reference):
+        - Clip-Higher asymmetric thresholds: (eps_low, eps_high) = (0.20, 0.28)
+        - Token-level policy gradient loss is recommended for long CoT
+        - Dynamic sampling filters trivial advantage groups
+        See DAPO [arXiv](https://arxiv.org/html/2503.14476).
+
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
                 the storages match the ones that are passed to other components, such as data collectors.
     """
 
     actor_network: LLMWrapperBase
-    critic_network: TensorDictModule
-    actor_network_params: TensorDictParams
-    critic_network_params: TensorDictParams
-    target_actor_network_params: TensorDictParams
-    target_critic_network_params: TensorDictParams
 
     @dataclass
-    class _AcceptedKeys(ClipPPOLoss._AcceptedKeys):
+    class _AcceptedKeys(LossModule._AcceptedKeys):
         """Maintains default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
         """
 
+        advantage: NestedKey = "advantage"
+        action: NestedKey = ("tokens", "full")
+        sample_log_prob: NestedKey = ("log_probs", "full")
         ref_log_probs: NestedKey = ("next", "ref_log_probs", "full")
 
     def __init__(
         self,
         actor_network: LLMWrapperBase | None = None,
         *,
-        clip_epsilon: float = 0.2,
+        clip_epsilon: float | tuple[float, float] = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coeff: float = 0.01,
@@ -149,32 +156,110 @@ class GRPOLoss(ClipPPOLoss):
         masking_strategy: Literal["sft", "rlhf", "generic"] = "sft",
         **kwargs,
     ):
-        # Define clipping of the value loss
-        if isinstance(clip_value, bool):
-            clip_value = clip_epsilon if clip_value else None
+        super().__init__()
+        # Core modules and hyper-parameters
+        self.actor_network = actor_network
+        self.entropy_bonus = entropy_bonus
+        self.samples_mc_entropy = samples_mc_entropy
+        self.entropy_coeff = entropy_coeff
+        self.reduction = reduction
 
-        super().__init__(
-            actor_network,
-            critic_network=None,
-            entropy_bonus=entropy_bonus,
-            samples_mc_entropy=samples_mc_entropy,
-            entropy_coeff=entropy_coeff,
-            gamma=gamma,
-            separate_losses=False,
-            reduction=reduction,
-            clip_value=clip_value,
-            functional=False,
-            device=device,
-            **kwargs,
-        )
-        # We don't want to use the string action but the tokens
-        self._set_in_keys()
+        # Determine device and register clip epsilon as buffer
+        if device is None:
+            try:
+                device = next(self.parameters()).device
+            except (AttributeError, StopIteration):
+                device = getattr(
+                    torch, "get_default_device", lambda: torch.device("cpu")
+                )()
+        # Accept symmetric or asymmetric thresholds
+        if isinstance(clip_epsilon, (tuple, list)):
+            if len(clip_epsilon) != 2:
+                raise ValueError(
+                    f"clip_epsilon tuple must have length 2, got {clip_epsilon}."
+                )
+            eps_low, eps_high = clip_epsilon
+        else:
+            eps_low = float(clip_epsilon)
+            eps_high = float(clip_epsilon)
+        # Basic validation
+        if eps_low < 0 or eps_high < 0:
+            raise ValueError(
+                f"clip_epsilon values must be non-negative, got ({eps_low}, {eps_high})."
+            )
+        if eps_low >= 1.0:
+            raise ValueError(
+                f"clip_epsilon low must be < 1 (to keep 1 - eps_low > 0), got {eps_low}."
+            )
+        # Register buffers
+        self.register_buffer("clip_epsilon_low", torch.tensor(eps_low, device=device))
+        self.register_buffer("clip_epsilon_high", torch.tensor(eps_high, device=device))
+
         self.masking_strategy = masking_strategy
-        # Always use the full tokens for the action
+        # Defaults for keys
         self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
-        # TODO: make this a buffer
+        # KL coefficients
         self.kl_to_ref_coeff = kl_to_ref_coeff
         self.kl_to_inference_coeff = kl_to_inference_coeff
+        # Prepare IO keys
+        self._set_in_keys()
+
+    @property
+    def _clip_bounds(self):
+        # Returns (log(1 - eps_low), log(1 + eps_high)) for clamping log-weight
+        return (
+            (-self.clip_epsilon_low).log1p(),
+            self.clip_epsilon_high.log1p(),
+        )
+
+    def _set_in_keys(self):
+        keys = []
+        if getattr(self, "actor_network", None) is not None and hasattr(
+            self.actor_network, "in_keys"
+        ):
+            in_keys = self.actor_network.in_keys
+            if isinstance(in_keys, (list, tuple)):
+                keys.extend(in_keys)
+        keys.append(self.tensor_keys.action)
+        keys.append(self.tensor_keys.sample_log_prob)
+        keys.append(self.tensor_keys.advantage)
+        keys.append(self.tensor_keys.ref_log_probs)
+        self._in_keys = list(dict.fromkeys(keys))
+
+    @property
+    def in_keys(self):
+        if getattr(self, "_in_keys", None) is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @property
+    def out_keys(self):
+        if getattr(self, "_out_keys", None) is None:
+            keys = ["loss_objective", "clip_fraction", "ESS", "kl_approx"]
+            if self.entropy_bonus:
+                keys.extend(["entropy", "loss_entropy"])
+            keys.extend(
+                [
+                    "loss_kl_to_ref",
+                    "kl_to_ref",
+                    "loss_kl_to_inference",
+                    "kl_to_inference",
+                ]
+            )
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        # No value estimator in GRPO; simply refresh input keys
+        self._set_in_keys()
 
     def _get_cur_log_prob(self, tensordict):
         """Override to use LLM-specific distribution with explicit masking strategy.
@@ -261,15 +346,10 @@ class GRPOLoss(ClipPPOLoss):
             raise ValueError(
                 f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
-        gain1 = log_weight.exp() * advantage
-
-        log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
-        ratio = log_weight_clip.exp()
-        gain2 = ratio * advantage
-
-        gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
-        td_out = TensorDict({"loss_objective": -gain})
+        loss_objective, clip_fraction = self._compute_policy_objective(
+            log_weight, advantage
+        )
+        td_out = TensorDict({"loss_objective": loss_objective})
         td_out.set("clip_fraction", clip_fraction)
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
@@ -281,11 +361,6 @@ class GRPOLoss(ClipPPOLoss):
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coeff * entropy)
-        if self._has_critic:
-            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
-            td_out.set("loss_critic", loss_critic)
-            if value_clip_fraction is not None:
-                td_out.set("value_clip_fraction", value_clip_fraction)
 
         td_out.set("ESS", _reduce(ess / batch, self.reduction))
         td_out = td_out.named_apply(
@@ -323,108 +398,98 @@ class GRPOLoss(ClipPPOLoss):
         del tensordict["_cur_log_prob"]
         return GRPOLossOutput.from_tensordict(td_out)
 
-    def _kl_to_ref(
-        self,
-        tensordict: TensorDictBase,
-        key: NestedKey = ("next", "ref_log_prob"),
-        ref_log_prob: torch.Tensor | None = None,
-        coeff: float | None = None,
-        mask: torch.Tensor | None = None,
-        dist: d.Distribution | None = None,
-    ):
-        if coeff is None:
-            coeff = self.kl_to_ref_coeff
-        # TODO: customize this
-        if ref_log_prob is None:
-            ref_log_prob = tensordict.get(
-                key,
-                as_padded_tensor=True,
-                padding_side="left",
-                padding_value=0.0,
-            )
-            if ref_log_prob is None:
-                raise KeyError(
-                    f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
+    def _compute_policy_objective(
+        self, log_weight: torch.Tensor, advantage: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Default GRPO objective: PPO-style min between unclipped and clipped ratios.
+
+        Returns (loss_objective, clip_fraction).
+        """
+        gain1 = log_weight.exp() * advantage
+        log_weight_clip = log_weight.clamp(*self._clip_bounds)
+        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
+        ratio = log_weight_clip.exp()
+        gain2 = ratio * advantage
+        gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
+        return -gain, clip_fraction
+
+    def _get_entropy(
+        self, dist: d.Distribution, adv_shape: torch.Size
+    ) -> torch.Tensor | TensorDict:
+        try:
+            entropy = dist.entropy()
+            if not entropy.isfinite().all():
+                del entropy
+                if VERBOSE:
+                    torchrl_logger.info(
+                        "Entropy is not finite. Using Monte Carlo sampling."
+                    )
+                raise NotImplementedError
+        except NotImplementedError:
+            if VERBOSE:
+                torchrl_logger.warning(
+                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
                 )
-            ref_log_prob = ref_log_prob.squeeze(-1)
-        cur_log_prob = tensordict.get("_cur_log_prob")
-        # TODO: remove this
-        if cur_log_prob.shape != ref_log_prob.shape:
-            raise ValueError(
-                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
-            )
-        if mask is not None:
-            ref_log_prob = torch.where(
-                expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
-            )
-            cur_log_prob = torch.where(
-                expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
-            )
-        diff = ref_log_prob - cur_log_prob
-        kl_penalty = (diff.expm1() - diff).mean()
-        return coeff * kl_penalty, kl_penalty
+            if getattr(dist, "has_rsample", False):
+                x = dist.rsample((self.samples_mc_entropy,))
+            else:
+                x = dist.sample((self.samples_mc_entropy,))
+            with set_composite_lp_aggregate(False) if isinstance(
+                dist, CompositeDistribution
+            ) else contextlib.nullcontext():
+                log_prob = dist.log_prob(x)
+                if is_tensor_collection(log_prob):
+                    if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
+                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                    else:
+                        log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
-    def _log_weight(
-        self, tensordict: TensorDictBase, adv_shape: torch.Size
-    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
+        entropy = -log_prob.mean(0)
+        if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
+            entropy.batch_size = adv_shape
+        return entropy.unsqueeze(-1)
 
-        cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
 
-        prev_log_prob = tensordict.get(
-            self.tensor_keys.sample_log_prob,
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0.0,
+class DAPO(GRPOLoss):
+    """DAPO (Clip-Higher over GRPO).
+
+    Validates asymmetric clip thresholds; recommended (0.20, 0.28), see Eq. (10) in DAPO
+    [arXiv](https://arxiv.org/html/2503.14476).
+    """
+
+    def __init__(
+        self,
+        actor_network: LLMWrapperBase | None = None,
+        *,
+        clip_epsilon: tuple[float, float] = (0.20, 0.28),
+        **kwargs,
+    ):
+        if not (isinstance(clip_epsilon, (tuple, list)) and len(clip_epsilon) == 2):
+            raise ValueError("DAPO requires clip_epsilon=(eps_low, eps_high).")
+        super().__init__(
+            actor_network=actor_network, clip_epsilon=clip_epsilon, **kwargs
         )
 
-        if prev_log_prob is None:
-            raise KeyError(
-                f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
-            )
-        if prev_log_prob.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
-            )
 
-        # Check for shape mismatches and provide helpful error messages
-        if cur_log_prob.shape != prev_log_prob.shape:
-            # Try to provide helpful debugging information
-            error_msg = (
-                f"Shape mismatch detected in GRPOLoss: current log-prob shape {cur_log_prob.shape} "
-                f"!= previous log-prob shape {prev_log_prob.shape}. "
-                f"This usually indicates a mismatch between the masking strategy used for "
-                f"advantage computation and the masking strategy used for loss computation.\n"
-                f"Current masking strategy: '{self.masking_strategy}'\n"
-                f"Possible solutions:\n"
-                f"1. If using RLHF (multi-turn conversations), set masking_strategy='rlhf'\n"
-                f"2. If using SFT (single-turn conversations), set masking_strategy='sft'\n"
-                f"3. If using generic scenarios, set masking_strategy='generic'\n"
-                f"4. Ensure the advantage was computed with the same masking strategy as the loss"
-            )
-            raise ValueError(error_msg)
+class CISPO(GRPOLoss):
+    """CISPO (Clipped Importance Sampling Policy Optimization).
 
-        attention_mask = dist.mask
-        cur_log_prob = torch.where(
-            expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0
-        )
-        prev_log_prob = torch.where(
-            expand_as_right(attention_mask, prev_log_prob), prev_log_prob, 0.0
-        )
+    Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but
+    replaces the PPO-style min with a clipped-importance objective:
+        loss = - clip(weight, [1 - eps_low, 1 + eps_high]) * advantage
 
-        if is_composite:
-            raise NotImplementedError
-        log_weight = (cur_log_prob - prev_log_prob).unsqueeze(-1)
-        if is_tensor_collection(log_weight):
-            log_weight = _sum_td_features(log_weight)
-            log_weight = log_weight.view(adv_shape).unsqueeze(-1)
+    See MiniMax-M1 (CISPO) [arXiv](https://arxiv.org/html/2506.13585).
+    """
 
-        kl_approx = (prev_log_prob - cur_log_prob).unsqueeze(-1)
-        if is_tensor_collection(kl_approx):
-            kl_approx = _sum_td_features(kl_approx)
-
-        tensordict.set("_cur_log_prob", cur_log_prob)
-
-        return log_weight, dist, kl_approx
+    def _compute_policy_objective(
+        self, log_weight: torch.Tensor, advantage: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # CISPO: use clipped importance weights directly
+        log_weight_clip = log_weight.clamp(*self._clip_bounds)
+        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
+        ratio = log_weight_clip.exp()
+        gain = ratio * advantage
+        return -gain, clip_fraction
 
 
 class MCAdvantage(Transform):
