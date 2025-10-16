@@ -12,6 +12,7 @@ this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 apt-get update && apt-get install -y git wget gcc g++
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
+apt-get install -y librhash0 # For cmake
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"

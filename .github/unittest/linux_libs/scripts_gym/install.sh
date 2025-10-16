@@ -58,7 +58,7 @@ fi
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 python -c "import torchrl"
 
 ## Reinstalling pytorch with specific version

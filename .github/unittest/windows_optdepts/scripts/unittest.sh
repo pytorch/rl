@@ -121,7 +121,7 @@ echo "=== Setting up CUDA environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 whatsinside=$(ls -rtlh ./torchrl)
 echo $whatsinside

@@ -35,10 +35,10 @@ else
 fi
 
 # smoke test
-python3 -c "import functorch;import tensordict"
+python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 # smoke test
-python3 -c "import torchrl"
+python -c "import torchrl"
