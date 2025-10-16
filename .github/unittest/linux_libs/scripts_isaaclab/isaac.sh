@@ -46,14 +46,17 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 conda create --prefix ${env_dir} python=3.10 -y
 conda activate ${env_dir}
 
-# Pin pytorch to 2.5.1 for IsaacLab
-conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
+# Set LD_LIBRARY_PATH to prioritize conda environment libraries early
+export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
 
-# Ensure libexpat is at the correct version to avoid symbol errors
+# Ensure libexpat is at the correct version BEFORE installing other packages
 conda install -c conda-forge expat -y
 
-# Set LD_LIBRARY_PATH to prioritize conda environment libraries
-export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
+# Reinstall Python to ensure it links against the correct expat
+conda install --force-reinstall python=3.10 -y
+
+# Pin pytorch to 2.5.1 for IsaacLab
+conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
 python -m pip install --upgrade pip
 python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
