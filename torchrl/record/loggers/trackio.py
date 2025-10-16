@@ -128,7 +128,24 @@ class TrackioLogger(Logger):
         return f"TrackioLogger(experiment={self.experiment.__repr__()})"
 
     def log_histogram(self, name: str, data: Sequence, **kwargs):
-        raise NotImplementedError("Logging histograms in trackio is not permitted.")
+        """Add histogram to log.
+
+        Args:
+            name (str): Data identifier
+            data (torch.Tensor, numpy.ndarray): Values to build histogram
+
+        Keyword Args:
+            step (int): Global step value to record
+            bins (int): Number of bins to use for the histogram
+
+        """
+        import trackio
+
+        num_bins = kwargs.pop("bins", None)
+        step = kwargs.pop("step", None)
+        self.experiment.log(
+            {name: trackio.Histogram(data, num_bins=num_bins)}, step=step
+        )
 
     def log_str(self, name: str, value: str, step: int | None = None) -> None:
         """Logs a string value to trackio using a table format for better visualization.
@@ -143,8 +160,4 @@ class TrackioLogger(Logger):
 
         # Create a table with a single row
         table = trackio.Table(columns=["text"], data=[[value]])
-
-        if step is not None:
-            self.experiment.log({name: value}, step=step)
-        else:
-            self.experiment.log({name: table})
+        self.experiment.log({name: table}, step=step)
