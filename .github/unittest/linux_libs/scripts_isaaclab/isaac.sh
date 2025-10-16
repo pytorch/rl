@@ -48,31 +48,18 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 conda create --prefix ${env_dir} python=3.10 -y
 conda activate ${env_dir}
 
-# Set LD_LIBRARY_PATH to prioritize conda environment libraries early
+# Set LD_LIBRARY_PATH to prioritize conda environment libraries
 export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
 
-# Ensure libexpat is at the correct version BEFORE installing other packages
-conda install -c conda-forge expat -y
+# Install a compatible version of expat (< 2.6.0 to avoid XML_SetReparseDeferralEnabled symbol issues)
+conda install -c conda-forge "expat<2.6" -y
 
-# Force the loader to pick conda's libexpat over the system one
-if [ -f "${lib_dir}/libexpat.so.1" ]; then
-  export LD_PRELOAD="${lib_dir}/libexpat.so.1:${LD_PRELOAD:-}"
-elif [ -f "${lib_dir}/libexpat.so" ]; then
-  export LD_PRELOAD="${lib_dir}/libexpat.so:${LD_PRELOAD:-}"
-fi
-
-# Quick diagnostic to confirm which expat is resolved by pyexpat
-PYEXPAT_SO=$(python - <<'PY'
-import importlib.util
-spec = importlib.util.find_spec('pyexpat')
-print(spec.origin)
-PY
-)
-echo "* pyexpat module: ${PYEXPAT_SO}"
-ldd "${PYEXPAT_SO}" | grep -i expat || true
-
-# Reinstall Python to ensure it links against the correct expat
+# Reinstall Python to ensure it's properly linked against the conda expat
 conda install --force-reinstall python=3.10 -y
+
+# Verify the expat linkage
+echo "* Checking pyexpat linkage:"
+python -c "import pyexpat; print('pyexpat imported successfully')" || echo "WARNING: pyexpat import failed"
 
 # Pin pytorch to 2.5.1 for IsaacLab
 conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
