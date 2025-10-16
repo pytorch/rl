@@ -109,7 +109,7 @@ else
 fi
 
 # sanity check: remove?
-python3 -c """
+python -c """
 import dm_control
 from dm_control import composer
 from tensorboard import *
@@ -173,17 +173,17 @@ else
 fi
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
-  python3 -c """
+  python -c """
 from torchrl.envs.transforms.vc1 import VC1Transform
 VC1Transform.install_vc_models(auto_exit=True)
 """
 
-  python3 -c """
+  python -c """
 import vc_models
 from vc_models.models.vit import model_utils
 print(model_utils)
