@@ -53,7 +53,7 @@ conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c
 conda install -c conda-forge expat -y
 
 # Set LD_LIBRARY_PATH to prioritize conda environment libraries
-export LD_LIBRARY_PATH=${lib_dir}:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
 
 python -m pip install --upgrade pip
 python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com

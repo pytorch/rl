@@ -73,6 +73,8 @@ from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import SliceSampler
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     CatTensors,
@@ -82,6 +84,7 @@ from torchrl.envs import (
     EnvCreator,
     RemoveEmptySpecs,
     RenameTransform,
+    StepCounter,
 )
 from torchrl.envs.batched_envs import SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
@@ -5145,6 +5148,17 @@ class TestIsaacLab:
         torchrl_logger.info("Checking env specs...")
         env.check_env_specs(break_when_any_done="both")
         torchrl_logger.info("Check succeeded!")
+
+    def test_isaaclab_rb(self, env):
+        env = env.append_transform(StepCounter())
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(50, ndim=2), sampler=SliceSampler(num_slices=5)
+        )
+        rb.extend(env.rollout(20))
+        # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
+        flat_ranges = rb["step_count"].flatten() % 4
+        arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
+        assert (flat_ranges == arange).all()
 
     def test_isaac_collector(self, env):
         col = SyncDataCollector(
