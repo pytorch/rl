@@ -2790,7 +2790,7 @@ class TestVmas:
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
-        
+
         env = VmasEnv(
             scenario=scenario_name,
             continuous_actions=continuous_actions,
@@ -3455,6 +3455,8 @@ class TestD4RL:
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
+        import d4rl  # noqa: F401
+
         t0 = time.time()
         data = D4RLExperienceReplay(
             task, split_trajs=split_trajs, from_env=from_env, batch_size=2

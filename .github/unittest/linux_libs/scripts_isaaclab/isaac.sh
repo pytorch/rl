@@ -49,33 +49,39 @@ conda activate ${env_dir}
 # Pin pytorch to 2.5.1 for IsaacLab
 conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
-conda run -p ${env_dir} pip install --upgrade pip
-conda run -p ${env_dir} pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
+# Ensure libexpat is at the correct version to avoid symbol errors
+conda install -c conda-forge expat -y
+
+# Set LD_LIBRARY_PATH to prioritize conda environment libraries
+export LD_LIBRARY_PATH=${lib_dir}:$LD_LIBRARY_PATH
+
+python -m pip install --upgrade pip
+python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
 conda install conda-forge::"cmake>3.22" -y
 
 git clone https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
-conda run -p ${env_dir} ./isaaclab.sh --install sb3
+./isaaclab.sh --install sb3
 cd ../
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   conda install "anaconda::cmake>=3.22" -y
-  conda run -p ${env_dir} python -m pip install "pybind11[global]"
-  conda run -p ${env_dir} python -m pip install git+https://github.com/pytorch/tensordict.git
+  python -m pip install "pybind11[global]"
+  python -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  conda run -p ${env_dir} python -m pip install tensordict
+  python -m pip install tensordict
 fi
 
 # smoke test
-conda run -p ${env_dir} python -c "import tensordict"
+python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-conda run -p ${env_dir} python -m pip install -e . --no-build-isolation
-conda run -p ${env_dir} python -c "import torchrl"
+python -m pip install -e . --no-build-isolation
+python -c "import torchrl"
 
 # Install pytest
-conda run -p ${env_dir} python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
+python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
 
 # Run tests
-conda run -p ${env_dir} python -m pytest test/test_libs.py -k isaac -s
+python -m pytest test/test_libs.py -k isaac -s

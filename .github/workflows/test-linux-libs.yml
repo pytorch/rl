@@ -156,10 +156,10 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_d4rl/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/install.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/run_test.sh
-        bash .github/unittest/linux_libs/scripts_d4rl/post_process.sh
+        bash .github/unittest/linux_libs/scripts_envpool/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_envpool/install.sh
+        bash .github/unittest/linux_libs/scripts_envpool/run_test.sh
+        bash .github/unittest/linux_libs/scripts_envpool/post_process.sh
 
   unittests-gendgrl:
     strategy:
