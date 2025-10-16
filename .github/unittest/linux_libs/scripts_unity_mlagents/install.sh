@@ -54,7 +54,7 @@ fi
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 # smoke test
 python -c "import torchrl"
