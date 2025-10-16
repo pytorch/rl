@@ -3464,7 +3464,9 @@ class TestD4RL:
             task, split_trajs=split_trajs, from_env=from_env, batch_size=2
         )
         sample = data.sample()
-        env = GymWrapper(gym.make(task))
+        # D4RL environments are registered with gym, not gymnasium
+        with set_gym_backend("gym"):
+            env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
             if "truncated" in key:
