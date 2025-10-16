@@ -59,14 +59,14 @@ jobs:
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build TorchRL Nightly
         env:
           TORCHRL_NIGHTLY: 1
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install build wheel
+          python -mpip install build wheel
           ./build_nightly.sh
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -105,19 +105,19 @@ jobs:
       - name: Install PyTorch Nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Upgrade pip
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --upgrade pip
+          python -mpip install --upgrade pip
       - name: Install tensordict
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install tensordict-nightly
+          python -mpip install tensordict-nightly
       - name: Install test dependencies
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
+          python -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
@@ -128,26 +128,26 @@ jobs:
       - name: Install built wheels
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install /tmp/wheels/*
+          python -mpip install /tmp/wheels/*
       - name: Log version string
         run: |
           # Avoid ambiguity of "import torchrl" by deleting the source files.
           rm -rf torchrl/
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -c "import torchrl; print(torchrl.__version__)"
+          python -c "import torchrl; print(torchrl.__version__)"
       - name: Verify nightly version format
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 scripts/verify_nightly_version.py
+          python scripts/verify_nightly_version.py
       - name: Run tests
         run: |
           set -e
           export IN_CI=1
           mkdir test-reports
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -m torch.utils.collect_env
-          python3 -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
+          python -m torch.utils.collect_env
+          python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
@@ -186,7 +186,7 @@ jobs:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install twine
+          python -mpip install twine
           python -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
@@ -220,14 +220,14 @@ jobs:
       - name: Install PyTorch nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Build TorchRL nightly
         env:
           TORCHRL_NIGHTLY: 1
         shell: bash
         run: |
           rm -r dist || true
-          python3 -mpip install build wheel
+          python -mpip install build wheel
           ./build_nightly.sh
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
@@ -260,19 +260,19 @@ jobs:
       - name: Install PyTorch Nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Upgrade pip
         shell: bash
         run: |
-          python3 -mpip install --upgrade pip
+          python -mpip install --upgrade pip
       - name: Install test dependencies
         shell: bash
         run: |
-          python3 -mpip install numpy pytest --no-cache-dir
+          python -mpip install numpy pytest --no-cache-dir
       - name: Install tensordict
         shell: bash
         run: |
-          python3 -mpip install tensordict-nightly
+          python -mpip install tensordict-nightly
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
@@ -281,18 +281,18 @@ jobs:
       - name: Install built wheels
         shell: bash
         run: |
-          python3 -mpip install wheels/*
+          python -mpip install wheels/*
       - name: Log version string
         shell: bash
         run: |
           # Avoid ambiguity of "import torchrl" by deleting the source files.
           rm -rf torchrl/
-          python3 -c "import torchrl; print(torchrl.__version__)"
+          python -c "import torchrl; print(torchrl.__version__)"
       - name: Verify nightly version format
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
-          python3 scripts/verify_nightly_version.py
+          python scripts/verify_nightly_version.py
       - name: Run tests
         shell: bash
         run: |
@@ -333,8 +333,8 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          python3 -mpip install twine
-          python3 -m twine upload \
+          python -mpip install twine
+          python -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
               --skip-existing \
