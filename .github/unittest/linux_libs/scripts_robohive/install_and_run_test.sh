@@ -63,7 +63,7 @@ fi
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 python -c "import torchrl"
 
 # Extracted from run_test.sh to run once.
