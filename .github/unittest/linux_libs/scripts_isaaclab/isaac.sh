@@ -61,17 +61,17 @@ cd ../
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   conda install "anaconda::cmake>=3.22" -y
-  conda run -p ${env_dir} python3 -m pip install "pybind11[global]"
-  conda run -p ${env_dir} python3 -m pip install git+https://github.com/pytorch/tensordict.git
+  conda run -p ${env_dir} python -m pip install "pybind11[global]"
+  conda run -p ${env_dir} python -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  conda run -p ${env_dir} python3 -m pip install tensordict
+  conda run -p ${env_dir} python -m pip install tensordict
 fi
 
 # smoke test
 conda run -p ${env_dir} python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-conda run -p ${env_dir} python setup.py develop
+conda run -p ${env_dir} python -m pip install -e . --no-build-isolation
 conda run -p ${env_dir} python -c "import torchrl"
 
 # Install pytest
