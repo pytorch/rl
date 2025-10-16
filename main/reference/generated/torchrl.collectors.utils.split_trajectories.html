@@ -455,7 +455,7 @@ ids. Supersedes <code class="docutils literal notranslate"><span class="pre">don
 to <code class="docutils literal notranslate"><span class="pre">(prefix,</span> <span class="pre">&quot;traj_ids&quot;)</span></code>.</p></li>
 <li><p><strong>done_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – the key pointing to the <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;&quot;</span></code> signal,
 if the trajectory could not be directly recovered. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code>.</p></li>
-<li><p><strong>as_nested</strong> (<em>bool</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.8)"><em>torch.layout</em></a><em>, </em><em>optional</em>) – <p>whether to return the results as nested
+<li><p><strong>as_nested</strong> (<em>bool</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.9)"><em>torch.layout</em></a><em>, </em><em>optional</em>) – <p>whether to return the results as nested
 tensors. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>. If a <code class="docutils literal notranslate"><span class="pre">torch.layout</span></code> is provided, it will be used
 to construct the nested tensor, otherwise the default layout will be used.</p>
 <div class="admonition note">
@@ -470,7 +470,7 @@ an optional feature. The runtime should be faster with <code class="docutils lit
 <p>Providing a layout lets the user control whether the nested tensor is to be used
 with <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code> or <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> layout. While the former has slightly more
 capabilities at the time of writing, the second will be the main focus of the PyTorch team
-in the future due to its better compatibility with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.</p>
+in the future due to its better compatibility with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.9)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a>.</p>
 </div>
 </p></li>
 </ul>

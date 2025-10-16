@@ -3507,6 +3507,7 @@
         <span class="n">set_truncated</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">storing_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Executes a rollout in the environment.</span>
 
@@ -3562,6 +3563,8 @@
 <span class="sd">            trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be</span>
 <span class="sd">                assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules</span>
 <span class="sd">                and ``False`` otherwise.</span>
+<span class="sd">            storing_device (Device, optional): if provided, the tensordict will be stored on this device.</span>
+<span class="sd">                Defaults to ``None``.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            TensorDict object containing the resulting trajectory.</span>
@@ -3794,6 +3797,9 @@
             <span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">policy</span><span class="p">,</span>
             <span class="s2">&quot;policy_device&quot;</span><span class="p">:</span> <span class="n">policy_device</span><span class="p">,</span>
             <span class="s2">&quot;env_device&quot;</span><span class="p">:</span> <span class="n">env_device</span><span class="p">,</span>
+            <span class="s2">&quot;storing_device&quot;</span><span class="p">:</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">storing_device</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">storing_device</span><span class="p">),</span>
             <span class="s2">&quot;callback&quot;</span><span class="p">:</span> <span class="n">callback</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="k">if</span> <span class="n">break_when_any_done</span> <span class="ow">or</span> <span class="n">break_when_all_done</span><span class="p">:</span>
@@ -3930,6 +3936,7 @@
         <span class="n">policy</span><span class="p">,</span>
         <span class="n">policy_device</span><span class="p">,</span>
         <span class="n">env_device</span><span class="p">,</span>
+        <span class="n">storing_device</span><span class="p">,</span>
         <span class="n">callback</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="c1"># Get the sync func</span>
@@ -3953,7 +3960,10 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">tensordict</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-            <span class="n">td_append</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">storing_device</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">storing_device</span><span class="p">:</span>
+                <span class="n">td_append</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">td_append</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">storing_device</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">break_when_all_done</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">True</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">partial_steps</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
                     <span class="c1"># At least one step is partial</span>
@@ -4011,6 +4021,7 @@
         <span class="n">policy</span><span class="p">,</span>
         <span class="n">policy_device</span><span class="p">,</span>
         <span class="n">env_device</span><span class="p">,</span>
+        <span class="n">storing_device</span><span class="p">,</span>
         <span class="n">callback</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">auto_cast_to_device</span><span class="p">:</span>
@@ -4036,7 +4047,10 @@
                 <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">tensordict_</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">tensordict_</span><span class="p">)</span>
-            <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">storing_device</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">storing_device</span><span class="p">:</span>
+                <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">storing_device</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">max_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="c1"># we don&#39;t truncate as one could potentially continue the run</span>
                 <span class="k">break</span>

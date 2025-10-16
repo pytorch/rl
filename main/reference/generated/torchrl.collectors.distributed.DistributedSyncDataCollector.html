@@ -447,7 +447,7 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 Accepted policies are usually subclasses of <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>.
 This is the recommended usage of the collector.
 Other callables are accepted too:
-If the policy is not a <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code> (e.g., a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
+If the policy is not a <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code> (e.g., a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
 instances) it will be wrapped in a <cite>nn.Module</cite> first.
 Then, the collector will try to assess if these
 modules require wrapping in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> or not.</p>
@@ -486,13 +486,13 @@ during its lifespan. If the <code class="docutils literal notranslate"><span cla
 Defaults to <code class="docutils literal notranslate"><span class="pre">-1</span></code> (endless collector).</p>
 </div></blockquote>
 </p></li>
-<li><p><strong>device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The generic device of the
+<li><p><strong>device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The generic device of the
 collector. The <code class="docutils literal notranslate"><span class="pre">device</span></code> args fills any non-specified device: if
 <code class="docutils literal notranslate"><span class="pre">device</span></code> is not <code class="docutils literal notranslate"><span class="pre">None</span></code> and any of <code class="docutils literal notranslate"><span class="pre">storing_device</span></code>, <code class="docutils literal notranslate"><span class="pre">policy_device</span></code> or
 <code class="docutils literal notranslate"><span class="pre">env_device</span></code> is not specified, its value will be set to <code class="docutils literal notranslate"><span class="pre">device</span></code>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (No default device).
 Lists of devices are supported.</p></li>
-<li><p><strong>storing_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+<li><p><strong>storing_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
 the output <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> will be stored.
 If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed and <code class="docutils literal notranslate"><span class="pre">storing_device</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, it will
 default to the value indicated by <code class="docutils literal notranslate"><span class="pre">device</span></code>.
@@ -501,7 +501,7 @@ device than the one where the policy and env are executed.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (the output tensordict isn’t on a specific device,
 leaf tensors sit on the device where they were created).
 Lists of devices are supported.</p></li>
-<li><p><strong>env_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+<li><p><strong>env_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
 the environment should be cast (or executed if that functionality is
 supported). If not specified and the env has a non-<code class="docutils literal notranslate"><span class="pre">None</span></code> device,
 <code class="docutils literal notranslate"><span class="pre">env_device</span></code> will default to that value. If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed
@@ -511,7 +511,7 @@ and one of them is not <code class="docutils literal notranslate"><span class="p
 before being passed to the env (i.e., passing different devices to
 policy and env is supported). Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
 Lists of devices are supported.</p></li>
-<li><p><strong>policy_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+<li><p><strong>policy_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
 the policy should be cast.
 If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed and <code class="docutils literal notranslate"><span class="pre">policy_device=None</span></code>, it will default
 to <code class="docutils literal notranslate"><span class="pre">device</span></code>. If the value as such specified of <code class="docutils literal notranslate"><span class="pre">policy_device</span></code>
@@ -675,7 +675,7 @@ can be transferred to the children workers from a server.</p>
 - TensorDictBase: A TensorDict containing weights
 - dict: A regular dict containing weights
 - None: Will try to get weights from server using _get_server_weights()</p></li>
-<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
+<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
 workers that need to be updated. This is relevant when the collector has more than one worker associated
 with it.</p></li>
 </ul>
