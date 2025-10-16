@@ -21,6 +21,7 @@ from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
+from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
@@ -453,6 +454,78 @@ class TestPixelRenderTransform:
         finally:
             if not env.is_closed:
                 env.close()
+
+
+@pytest.fixture()
+def trackio_logger():
+    exp_name = "ramala"
+    logger = TrackioLogger(project="test", exp_name=exp_name)
+    yield logger
+    logger.experiment.finish()
+    del logger
+
+
+@pytest.mark.skipif(not _has_trackio, reason="trackio not installed")
+class TestTrackioLogger:
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_scalar(self, steps, trackio_logger):
+        torch.manual_seed(0)
+
+        values = torch.rand(3)
+        for i in range(3):
+            scalar_name = "foo"
+            scalar_value = values[i].item()
+            trackio_logger.log_scalar(
+                value=scalar_value,
+                name=scalar_name,
+                step=steps[i] if steps else None,
+            )
+
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_str(self, steps, trackio_logger):
+        for i in range(3):
+            trackio_logger.log_str(
+                name="foo",
+                value="bar",
+                step=steps[i] if steps else None,
+            )
+
+    def test_log_video(self, trackio_logger):
+        torch.manual_seed(0)
+
+        # creating a sample video (T, C, H, W), where T - number of frames,
+        # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
+        # the first 64 frames are black and the next 64 are white
+        video = torch.cat(
+            (torch.zeros(128, 3, 32, 32), torch.full((128, 3, 32, 32), 255))
+        )
+        video = video[None, :]
+        trackio_logger.log_video(
+            name="foo",
+            video=video,
+            fps=4,
+            format="mp4",
+        )
+        trackio_logger.log_video(
+            name="foo_16fps",
+            video=video,
+            fps=16,
+            format="mp4",
+        )
+
+    def test_log_hparams(self, trackio_logger, config):
+        trackio_logger.log_hparams(config)
+        for key, value in config.items():
+            assert trackio_logger.experiment.config[key] == value
+
+    @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    def test_log_histogram(self, steps, trackio_logger):
+        torch.manual_seed(0)
+        for i in range(3):
+            data = torch.randn(100)
+            trackio_logger.log_histogram(
+                "hist", data, step=steps[i] if steps else None, bins=10
+            )
 
 
 if __name__ == "__main__":
