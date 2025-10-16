@@ -71,7 +71,7 @@ jobs:
 
         echo '::group::Lint C source'
         set +e
-        python3 ./.github/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable clang-format
+        python ./.github/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable clang-format
         
         if [ $? -ne 0 ]; then
           git --no-pager diff
