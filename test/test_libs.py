@@ -2790,7 +2790,7 @@ class TestVmas:
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
-        
+
         env = VmasEnv(
             scenario=scenario_name,
             continuous_actions=continuous_actions,
@@ -2814,9 +2814,13 @@ class TestVmas:
                 scenario=scenario_name,
                 num_envs=4,
             )
+
+            def policy(td, env=env):
+                return env.action_spec.zero()
+
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=10))
+            tdrollout.append(env.rollout(max_steps=10, policy=policy))
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
