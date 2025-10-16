@@ -41,6 +41,7 @@ jobs:
         # Install Mesa and OpenGL Libraries:
         yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL python39-pip
         yum install epel-release -y  # for missing librhash0 when installing tensordict
+        yum install rhash -y  # Provides librhash.so.0 needed by cmake
         # Install DRI Drivers:
         yum install -y mesa-dri-drivers
         # Install Xvfb for Headless Environments:
