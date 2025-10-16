@@ -2820,7 +2820,6 @@ class TestVmas:
 
         env = create_env()
         td_actions = [env.action_spec.rand() for _ in range(rollout_length)]
-        td_actions_buffer = copy.deepcopy(td_actions)
 
         for _ in range(2):
             env = create_env()
@@ -2831,7 +2830,7 @@ class TestVmas:
 
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=10, policy=policy))
+            tdrollout.append(env.rollout(max_steps=rollout_length, policy=policy))
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
