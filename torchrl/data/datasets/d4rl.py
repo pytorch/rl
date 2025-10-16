@@ -346,6 +346,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         """
         if env_kwargs:
             raise RuntimeError("env_kwargs cannot be passed with using from_env=True")
+        import d4rl  # noqa: F401
         import gym
 
         # we do a local import to avoid circular import issues
