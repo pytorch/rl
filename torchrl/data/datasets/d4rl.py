@@ -267,16 +267,19 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         return dataset
 
     def _get_dataset_direct(self, name, env_kwargs):
-        from torchrl.envs.libs.gym import GymWrapper
+        from torchrl.envs.libs.gym import GymWrapper, set_gym_backend
 
         type(self)._import_d4rl()
 
         if not self._has_d4rl:
             raise ImportError("Could not import d4rl") from self.D4RL_ERR
         import d4rl
-        import gym
 
-        env = GymWrapper(gym.make(name))
+        # D4RL environments are registered with gym, not gymnasium
+        # so we need to ensure we're using the gym backend
+        with set_gym_backend("gym"):
+            import gym
+            env = GymWrapper(gym.make(name))
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["D4RL_DATASET_DIR"] = tmpdir
             dataset = d4rl.qlearning_dataset(env._env, **env_kwargs)
@@ -346,12 +349,15 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         """
         if env_kwargs:
             raise RuntimeError("env_kwargs cannot be passed with using from_env=True")
-        import gym
+        import d4rl  # noqa: F401
 
         # we do a local import to avoid circular import issues
-        from torchrl.envs.libs.gym import GymWrapper
+        from torchrl.envs.libs.gym import GymWrapper, set_gym_backend
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        # D4RL environments are registered with gym, not gymnasium
+        # so we need to ensure we're using the gym backend
+        with set_gym_backend("gym"), tempfile.TemporaryDirectory() as tmpdir:
+            import gym
             os.environ["D4RL_DATASET_DIR"] = tmpdir
             env = GymWrapper(gym.make(name))
             dataset = make_tensordict(
