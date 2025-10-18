@@ -85,6 +85,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     ValueModelConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import (
+    GAEConfig,
     HardUpdateConfig,
     LossConfig,
     PPOLossConfig,
@@ -126,6 +127,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     InitTrackerConfig,
     KLRewardTransformConfig,
     LineariseRewardsConfig,
+    ModuleTransformConfig,
     MultiActionConfig,
     MultiStepTransformConfig,
     NoopResetEnvConfig,
@@ -178,6 +180,18 @@ from torchrl.trainers.algorithms.configs.utils import (
     RpropConfig,
     SGDConfig,
     SparseAdamConfig,
+)
+from torchrl.trainers.algorithms.configs.weight_sync_schemes import (
+    DistributedWeightSyncSchemeConfig,
+    MultiProcessWeightSyncSchemeConfig,
+    NoWeightSyncSchemeConfig,
+    RayModuleTransformSchemeConfig,
+    RayWeightSyncSchemeConfig,
+    RPCWeightSyncSchemeConfig,
+    SharedMemWeightSyncSchemeConfig,
+    VLLMDoubleBufferSyncSchemeConfig,
+    VLLMWeightSyncSchemeConfig,
+    WeightSyncSchemeConfig,
 )
 from torchrl.trainers.algorithms.configs.weight_update import (
     DistributedWeightUpdaterConfig,
@@ -273,6 +287,7 @@ __all__ = [
     "InitTrackerConfig",
     "KLRewardTransformConfig",
     "LineariseRewardsConfig",
+    "ModuleTransformConfig",
     "MultiActionConfig",
     "MultiStepTransformConfig",
     "NoopResetEnvConfig",
@@ -330,6 +345,8 @@ __all__ = [
     "LossConfig",
     "PPOLossConfig",
     "SACLossConfig",
+    # Value functions
+    "GAEConfig",
     # Trainers
     "PPOTrainerConfig",
     "SACTrainerConfig",
@@ -348,6 +365,17 @@ __all__ = [
     "RPCWeightUpdaterConfig",
     "DistributedWeightUpdaterConfig",
     "vLLMUpdaterConfig",
+    # Weight Sync Schemes
+    "WeightSyncSchemeConfig",
+    "MultiProcessWeightSyncSchemeConfig",
+    "SharedMemWeightSyncSchemeConfig",
+    "NoWeightSyncSchemeConfig",
+    "RayWeightSyncSchemeConfig",
+    "RayModuleTransformSchemeConfig",
+    "RPCWeightSyncSchemeConfig",
+    "DistributedWeightSyncSchemeConfig",
+    "VLLMWeightSyncSchemeConfig",
+    "VLLMDoubleBufferSyncSchemeConfig",
 ]
 
 
@@ -356,6 +384,10 @@ def _register_configs():
 
     This function is called lazily to avoid GlobalHydra initialization issues
     during testing. It should be called explicitly when needed.
+
+    To add a new config:
+    - Write the config class in the appropriate file (e.g. torchrl/trainers/algorithms/configs/transforms.py) and add it to the __all__ list in torchrl/trainers/algorithms/configs/__init__.py
+    - Register the config in the appropriate group, e.g. cs.store(group="transform", name="new_transform", node=NewTransformConfig)
     """
     cs = ConfigStore.instance()
 
@@ -461,6 +493,7 @@ def _register_configs():
     cs.store(group="transform", name="action_discretizer", node=ActionDiscretizerConfig)
     cs.store(group="transform", name="traj_counter", node=TrajCounterConfig)
     cs.store(group="transform", name="linearise_rewards", node=LineariseRewardsConfig)
+    cs.store(group="transform", name="module", node=ModuleTransformConfig)
     cs.store(group="transform", name="conditional_skip", node=ConditionalSkipConfig)
     cs.store(group="transform", name="multi_action", node=MultiActionConfig)
     cs.store(group="transform", name="timer", node=TimerConfig)
@@ -487,6 +520,7 @@ def _register_configs():
     cs.store(group="transform", name="vip", node=VIPTransformConfig)
     cs.store(group="transform", name="vip_reward", node=VIPRewardTransformConfig)
     cs.store(group="transform", name="vec_norm_v2", node=VecNormV2Config)
+    cs.store(group="transform", name="module", node=ModuleTransformConfig)
 
     # =============================================================================
     # Loss Configurations
@@ -495,6 +529,16 @@ def _register_configs():
     cs.store(group="loss", name="base", node=LossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
+
+    # =============================================================================
+    # Value Function Configurations
+    # =============================================================================
+
+    cs.store(group="value", name="gae", node=GAEConfig)
+
+    # =============================================================================
+    # Target Net Updater Configurations
+    # =============================================================================
 
     cs.store(group="target_net_updater", name="soft", node=SoftUpdateConfig)
     cs.store(group="target_net_updater", name="hard", node=HardUpdateConfig)
@@ -594,6 +638,41 @@ def _register_configs():
         group="weight_updater", name="distributed", node=DistributedWeightUpdaterConfig
     )
     cs.store(group="weight_updater", name="vllm", node=vLLMUpdaterConfig)
+
+    # =============================================================================
+    # Weight Sync Scheme Configurations
+    # =============================================================================
+
+    cs.store(group="weight_sync_scheme", name="base", node=WeightSyncSchemeConfig)
+    cs.store(
+        group="weight_sync_scheme",
+        name="multiprocess",
+        node=MultiProcessWeightSyncSchemeConfig,
+    )
+    cs.store(
+        group="weight_sync_scheme",
+        name="shared_mem",
+        node=SharedMemWeightSyncSchemeConfig,
+    )
+    cs.store(group="weight_sync_scheme", name="no_sync", node=NoWeightSyncSchemeConfig)
+    cs.store(group="weight_sync_scheme", name="ray", node=RayWeightSyncSchemeConfig)
+    cs.store(
+        group="weight_sync_scheme",
+        name="ray_module_transform",
+        node=RayModuleTransformSchemeConfig,
+    )
+    cs.store(group="weight_sync_scheme", name="rpc", node=RPCWeightSyncSchemeConfig)
+    cs.store(
+        group="weight_sync_scheme",
+        name="distributed",
+        node=DistributedWeightSyncSchemeConfig,
+    )
+    cs.store(group="weight_sync_scheme", name="vllm", node=VLLMWeightSyncSchemeConfig)
+    cs.store(
+        group="weight_sync_scheme",
+        name="vllm_double_buffer",
+        node=VLLMDoubleBufferSyncSchemeConfig,
+    )
 
 
 if not sys.version_info < (3, 10):  #  type: ignore # noqa
