@@ -14,7 +14,6 @@ The examples show different synchronization strategies and use cases including
 single collectors, multiple collectors, multiple models, and no synchronization.
 """
 
-import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
@@ -23,7 +22,6 @@ from torchrl.envs import GymEnv
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
-    NoWeightSyncScheme,
 )
 
 
@@ -66,7 +64,7 @@ def example_single_collector_multiprocess():
         if i % 2 == 0:
             new_weights = policy.state_dict()
             collector.update_policy_weights_(new_weights)
-            print(f"  → Updated policy weights")
+            print("  → Updated policy weights")
         
         if i >= 2:  # Just run a few iterations for demo
             break
@@ -116,122 +114,13 @@ def example_multi_collector_shared_memory():
         
         # Update weights frequently (shared memory makes this very fast)
         collector.update_policy_weights_(TensorDict.from_module(policy))
-        print(f"  → Updated policy weights via shared memory")
+        print("  → Updated policy weights via shared memory")
         
         if i >= 1:  # Just run a couple iterations for demo
             break
     
     collector.shutdown()
     print("✓ Multi-collector with shared memory example completed!\n")
-
-
-def example_multiple_models():
-    """Example 3: Multiple models (policy + value network)."""
-    print("\n" + "="*70)
-    print("Example 3: Multiple Models (Policy + Value Network)")
-    print("="*70)
-    
-    # Create environment
-    env = GymEnv("CartPole-v1")
-    
-    # Create policy and value network
-    policy = TensorDictModule(
-        nn.Linear(
-            env.observation_spec["observation"].shape[-1],
-            env.action_spec.shape[-1]
-        ),
-        in_keys=["observation"],
-        out_keys=["action"],
-    )
-    
-    value_net = TensorDictModule(
-        nn.Linear(
-            env.observation_spec["observation"].shape[-1],
-            1
-        ),
-        in_keys=["observation"],
-        out_keys=["value"],
-    )
-    env.close()
-    
-    # Create separate schemes for each model
-    weight_sync_schemes = {
-        "policy": MultiProcessWeightSyncScheme(strategy="state_dict"),
-        "value": MultiProcessWeightSyncScheme(strategy="state_dict"),
-    }
-    
-    print("Creating collector with multiple models...")
-    collector = SyncDataCollector(
-        create_env_fn=lambda: GymEnv("CartPole-v1"),
-        policy=policy,
-        frames_per_batch=64,
-        total_frames=200,
-        weight_sync_schemes=weight_sync_schemes,
-    )
-    
-    print("Collecting data...")
-    for i, data in enumerate(collector):
-        print(f"Iteration {i}: Collected {data.numel()} transitions")
-        
-        # Update both models independently
-        collector.update_policy_weights_(
-            {
-                "policy": policy.state_dict(),
-                "value": value_net.state_dict()
-            }
-        )
-        print(f"  → Updated both policy and value network weights")
-        
-        if i >= 1:
-            break
-    
-    collector.shutdown()
-    print("✓ Multiple models example completed!\n")
-
-
-def example_no_weight_sync():
-    """Example 4: Disable weight synchronization."""
-    print("\n" + "="*70)
-    print("Example 4: Disable Weight Synchronization")
-    print("="*70)
-    
-    # Create environment and policy
-    env = GymEnv("CartPole-v1")
-    policy = TensorDictModule(
-        nn.Linear(
-            env.observation_spec["observation"].shape[-1],
-            env.action_spec.shape[-1]
-        ),
-        in_keys=["observation"],
-        out_keys=["action"],
-    )
-    env.close()
-    
-    # Useful for debugging or when using a shared policy reference
-    scheme = NoWeightSyncScheme()
-    
-    print("Creating collector with no weight synchronization...")
-    collector = SyncDataCollector(
-        create_env_fn=lambda: GymEnv("CartPole-v1"),
-        policy=policy,
-        frames_per_batch=64,
-        total_frames=200,
-        weight_sync_schemes={"policy": scheme},
-    )
-    
-    print("Collecting data (no weight updates)...")
-    for i, data in enumerate(collector):
-        print(f"Iteration {i}: Collected {data.numel()} transitions")
-        
-        # Weight updates are no-ops with NoWeightSyncScheme
-        collector.update_policy_weights_(policy.state_dict())
-        print(f"  → Weight update call was a no-op")
-        
-        if i >= 1:
-            break
-    
-    collector.shutdown()
-    print("✓ No weight sync example completed!\n")
 
 
 def main():
@@ -250,8 +139,6 @@ def main():
     # Run examples
     example_single_collector_multiprocess()
     example_multi_collector_shared_memory()
-    example_multiple_models()
-    example_no_weight_sync()
     
     print("\n" + "="*70)
     print("All examples completed successfully!")
@@ -259,8 +146,6 @@ def main():
     print("\nKey takeaways:")
     print("  • MultiProcessWeightSyncScheme: Good for general multiprocess scenarios")
     print("  • SharedMemWeightSyncScheme: Fast zero-copy updates for same-machine workers")
-    print("  • Multiple models: Each model can have its own sync scheme")
-    print("  • NoWeightSyncScheme: Useful for debugging or shared policy references")
     print("="*70 + "\n")
 
 
