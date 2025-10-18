@@ -20,6 +20,10 @@ Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 class WeightUpdaterBase(metaclass=abc.ABCMeta):
     """A base class for updating remote policy weights on inference workers.
 
+    .. deprecated::
+        WeightUpdaterBase is deprecated and will be removed in a future version.
+        Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead.
+
     The weight updater is the central piece of the weight update scheme:
 
     - In leaf collector nodes, it is responsible for sending the weights to the policy, which can be as simple as
@@ -70,6 +74,18 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
 
     _collector_wrs: list[Any] = None
     _post_hooks: list[Callable[[], Any]] | None = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        import warnings
+
+        warnings.warn(
+            f"Creating {cls.__name__} which inherits from WeightUpdaterBase is deprecated. "
+            "Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead. "
+            "This will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @property
     def post_hooks(self) -> list[Callable[[], None]]:
