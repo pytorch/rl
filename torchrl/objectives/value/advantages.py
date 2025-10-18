@@ -1324,6 +1324,8 @@ class GAE(ValueEstimatorBase):
         `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
     """
 
+    value_network: TensorDictModule | None
+
     def __init__(
         self,
         *,
