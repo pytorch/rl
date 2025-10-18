@@ -1313,7 +1313,7 @@ def _resolve_model(context: Any, model_id: str) -> Any:
                 obj = getattr(obj, key)
             except AttributeError:
                 raise AttributeError(
-                    f"Attribute {key} from {parts[:i+1]} not found in {'.'.join(parts[:i])}={obj}"
+                    f"Attribute {key} from {parts[:i + 1]} not found in {'.'.join(parts[:i])}={obj}"
                 )
             for index in indices:
                 obj = obj[index]
@@ -1322,6 +1322,6 @@ def _resolve_model(context: Any, model_id: str) -> Any:
                 obj = getattr(obj, part)
             except AttributeError:
                 raise AttributeError(
-                    f"Attribute {part} from {parts[:i+1]} not found in {'.'.join(parts[:i])}={obj}"
+                    f"Attribute {part} from {parts[:i + 1]} not found in {'.'.join(parts[:i])}={obj}"
                 )
     return obj
