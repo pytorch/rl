@@ -256,6 +256,10 @@ class Transform(nn.Module):
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
+    def _ready(self):
+        # Used to block ray until the actor is ready, see RayTransform
+        return True
+
     def close(self):
         """Close the transform."""
 
