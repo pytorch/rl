@@ -28,6 +28,7 @@ from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 RAY_ERR = None
 try:
@@ -258,11 +259,15 @@ class RayCollector(DataCollectorBase):
 
             .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
                 :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
-        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
+        weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
             Ray's distributed capabilities.
             Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary mapping model identifiers to
+            :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme` instances.
+            This is the recommended way to configure weight synchronization. If not provided,
+            defaults to ``{"policy": RayWeightSyncScheme()}``.
 
     Examples:
         >>> from torch import nn
@@ -326,6 +331,7 @@ class RayCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -436,9 +442,9 @@ class RayCollector(DataCollectorBase):
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory
-        self._local_policy = policy
-        if isinstance(self._local_policy, nn.Module):
-            policy_weights = TensorDict.from_module(self._local_policy)
+        self.policy = policy  # Store policy for weight extraction
+        if isinstance(policy, nn.Module):
+            policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
             policy_weights = TensorDict(lock=True)
@@ -476,7 +482,10 @@ class RayCollector(DataCollectorBase):
 
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
-            collector_kwarg["policy_factory"] = policy_factory[i]
+            # Don't pass policy_factory if we have a policy - remote collectors need the policy object
+            # to be able to apply weight updates
+            if policy is None:
+                collector_kwarg["policy_factory"] = policy_factory[i]
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -510,19 +519,84 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
-        if weight_updater is None:
-            weight_updater = RayWeightUpdater(
-                policy_weights=policy_weights,
-                remote_collectors=self.remote_collectors,
-                max_interval=self.max_weight_update_interval,
-            )
-        self.weight_updater = weight_updater
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_updater is None and weight_sync_schemes is None:
+            # Default to Ray weight sync scheme for Ray collectors
+            from torchrl.weight_update.weight_sync_schemes import RayWeightSyncScheme
 
-        # Print info of all remote workers
-        pending_samples = [
-            e.print_remote_collector_info.remote() for e in self.remote_collectors
-        ]
-        ray.wait(pending_samples)
+            weight_sync_schemes = {"policy": RayWeightSyncScheme()}
+
+        if weight_sync_schemes is not None:
+            # Use new weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self._weight_senders = {}
+
+            # Set up weight senders now that remote collectors exist
+            for model_id, scheme in self._weight_sync_schemes.items():
+                sender = scheme.create_sender()
+                sender._model_id = model_id
+
+                # Register each remote collector as a separate worker
+                # This follows the same pattern as multiprocess collectors
+                for worker_idx, remote_collector in enumerate(self.remote_collectors):
+                    # Create a transport for this specific collector
+                    # Pass the collector as context so the transport knows which one to talk to
+                    sender.register_worker(worker_idx, remote_collector)
+
+                # Set context and register model
+                if hasattr(sender, "set_context"):
+                    sender.set_context(self, model_id)
+
+                # Store reference to source model for automatic extraction
+                if model_id == "policy":
+                    sender._source_model = self.policy
+
+                self._weight_senders[model_id] = sender
+
+            self.weight_updater = None  # Don't use legacy system
+        else:
+            # Fall back to legacy weight updater system
+            if weight_updater is None:
+                weight_updater = RayWeightUpdater(
+                    policy_weights=policy_weights,
+                    remote_collectors=self.remote_collectors,
+                    max_interval=self.max_weight_update_interval,
+                )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
+
+        # Print info of all remote workers (fire and forget - no need to wait)
+        for e in self.remote_collectors:
+            e.print_remote_collector_info.remote()
+
+    def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
+        """Extract weights from a model if needed.
+
+        For Ray collectors, when weights is None and we have a weight sync scheme,
+        extract fresh weights from the tracked policy model.
+        """
+        scheme = (
+            self._weight_sync_schemes.get(model_id)
+            if self._weight_sync_schemes
+            else None
+        )
+
+        if weights is None and scheme is not None:
+            # Extract fresh weights from the source model
+            sender = self._weight_senders.get(model_id)
+            if (
+                sender
+                and hasattr(sender, "_source_model")
+                and sender._source_model is not None
+            ):
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                strategy = WeightStrategy(extract_as=scheme.strategy)
+                return strategy.extract_weights(sender._source_model)
+
+        # Fall back to base class behavior
+        return super()._extract_weights_if_needed(weights, model_id)
 
     @property
     def num_workers(self):

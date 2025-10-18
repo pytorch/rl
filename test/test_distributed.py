@@ -102,26 +102,29 @@ class DistributedCollectorBase:
 
     @classmethod
     def _test_distributed_collector_basic(cls, queue, frames_per_batch):
-        cls._start_worker()
-        env = ContinuousActionVecMockEnv
-        policy = RandomPolicy(env().action_spec)
-        torchrl_logger.info("creating collector")
-        collector = cls.distributed_class()(
-            [env] * 2,
-            policy,
-            total_frames=1000,
-            frames_per_batch=frames_per_batch,
-            **cls.distributed_kwargs(),
-        )
-        total = 0
-        torchrl_logger.info("getting data...")
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        assert data.names[-1] == "time"
-        collector.shutdown()
-        assert total == 1000
-        queue.put("passed")
+        try:
+            cls._start_worker()
+            env = ContinuousActionVecMockEnv
+            policy = RandomPolicy(env().action_spec)
+            torchrl_logger.info("creating collector")
+            collector = cls.distributed_class()(
+                [env] * 2,
+                policy,
+                total_frames=1000,
+                frames_per_batch=frames_per_batch,
+                **cls.distributed_kwargs(),
+            )
+            total = 0
+            torchrl_logger.info("getting data...")
+            for data in collector:
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+            assert data.names[-1] == "time"
+            collector.shutdown()
+            assert total == 1000
+            queue.put("passed")
+        except Exception as e:
+            queue.put(f"not passed: {str(e)}")
 
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
     def test_distributed_collector_basic(self, frames_per_batch):
@@ -143,23 +146,26 @@ class DistributedCollectorBase:
 
     @classmethod
     def _test_distributed_collector_mult(cls, queue, frames_per_batch):
-        cls._start_worker()
-        env = ContinuousActionVecMockEnv
-        policy = RandomPolicy(env().action_spec)
-        collector = cls.distributed_class()(
-            [env] * 2,
-            policy,
-            total_frames=1000,
-            frames_per_batch=frames_per_batch,
-            **cls.distributed_kwargs(),
-        )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == -frames_per_batch * (1000 // -frames_per_batch)
-        queue.put("passed")
+        try:
+            cls._start_worker()
+            env = ContinuousActionVecMockEnv
+            policy = RandomPolicy(env().action_spec)
+            collector = cls.distributed_class()(
+                [env] * 2,
+                policy,
+                total_frames=1000,
+                frames_per_batch=frames_per_batch,
+                **cls.distributed_kwargs(),
+            )
+            total = 0
+            for data in collector:
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+            collector.shutdown()
+            assert total == -frames_per_batch * (1000 // -frames_per_batch)
+            queue.put("passed")
+        except Exception as e:
+            queue.put(f"not passed: {e}")
 
     def test_distributed_collector_mult(self, frames_per_batch=200):
         """Testing multiple nodes."""
@@ -181,24 +187,27 @@ class DistributedCollectorBase:
 
     @classmethod
     def _test_distributed_collector_sync(cls, queue, sync):
-        frames_per_batch = 50
-        env = ContinuousActionVecMockEnv
-        policy = RandomPolicy(env().action_spec)
-        collector = cls.distributed_class()(
-            [env] * 2,
-            policy,
-            total_frames=200,
-            frames_per_batch=frames_per_batch,
-            sync=sync,
-            **cls.distributed_kwargs(),
-        )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == 200
-        queue.put("passed")
+        try:
+            frames_per_batch = 50
+            env = ContinuousActionVecMockEnv
+            policy = RandomPolicy(env().action_spec)
+            collector = cls.distributed_class()(
+                [env] * 2,
+                policy,
+                total_frames=200,
+                frames_per_batch=frames_per_batch,
+                sync=sync,
+                **cls.distributed_kwargs(),
+            )
+            total = 0
+            for data in collector:
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+            collector.shutdown()
+            assert total == 200
+            queue.put("passed")
+        except Exception as e:
+            queue.put(f"not passed: {str(e)}")
 
     @pytest.mark.parametrize("sync", [False, True])
     def test_distributed_collector_sync(self, sync):
@@ -220,24 +229,27 @@ class DistributedCollectorBase:
 
     @classmethod
     def _test_distributed_collector_class(cls, queue, collector_class):
-        frames_per_batch = 50
-        env = ContinuousActionVecMockEnv
-        policy = RandomPolicy(env().action_spec)
-        collector = cls.distributed_class()(
-            [env] * 2,
-            policy,
-            collector_class=collector_class,
-            total_frames=200,
-            frames_per_batch=frames_per_batch,
-            **cls.distributed_kwargs(),
-        )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == 200
-        queue.put("passed")
+        try:
+            frames_per_batch = 50
+            env = ContinuousActionVecMockEnv
+            policy = RandomPolicy(env().action_spec)
+            collector = cls.distributed_class()(
+                [env] * 2,
+                policy,
+                collector_class=collector_class,
+                total_frames=200,
+                frames_per_batch=frames_per_batch,
+                **cls.distributed_kwargs(),
+            )
+            total = 0
+            for data in collector:
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+            collector.shutdown()
+            assert total == 200
+            queue.put("passed")
+        except Exception as e:
+            queue.put(f"not passed: {str(e)}")
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -266,42 +278,45 @@ class DistributedCollectorBase:
 
     @classmethod
     def _test_distributed_collector_updatepolicy(cls, queue, collector_class, sync):
-        frames_per_batch = 50
-        total_frames = 300
-        env = CountingEnv
-        policy = CountingPolicy()
-        if collector_class is MultiaSyncDataCollector:
-            # otherwise we may collect data from a collector that has not yet been
-            # updated
-            n_collectors = 1
-        else:
-            n_collectors = 2
-        collector = cls.distributed_class()(
-            [env] * n_collectors,
-            policy,
-            collector_class=collector_class,
-            total_frames=total_frames,
-            frames_per_batch=frames_per_batch,
-            sync=sync,
-            **cls.distributed_kwargs(),
-        )
-        total = 0
-        first_batch = None
-        last_batch = None
-        for i, data in enumerate(collector):
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-            if i == 0:
-                first_batch = data
-                policy.weight.data += 1
-                collector.update_policy_weights_()
-            elif total == total_frames - frames_per_batch:
-                last_batch = data
-        assert (first_batch["action"] == 1).all(), first_batch["action"]
-        assert (last_batch["action"] == 2).all(), last_batch["action"]
-        collector.shutdown()
-        assert total == total_frames
-        queue.put("passed")
+        try:
+            frames_per_batch = 50
+            total_frames = 300
+            env = CountingEnv
+            policy = CountingPolicy()
+            if collector_class is MultiaSyncDataCollector:
+                # otherwise we may collect data from a collector that has not yet been
+                # updated
+                n_collectors = 1
+            else:
+                n_collectors = 2
+            collector = cls.distributed_class()(
+                [env] * n_collectors,
+                policy,
+                collector_class=collector_class,
+                total_frames=total_frames,
+                frames_per_batch=frames_per_batch,
+                sync=sync,
+                **cls.distributed_kwargs(),
+            )
+            total = 0
+            first_batch = None
+            last_batch = None
+            for i, data in enumerate(collector):
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+                if i == 0:
+                    first_batch = data
+                    policy.weight.data += 1
+                    collector.update_policy_weights_()
+                elif total == total_frames - frames_per_batch:
+                    last_batch = data
+            assert (first_batch["action"] == 1).all(), first_batch["action"]
+            assert (last_batch["action"] == 2).all(), last_batch["action"]
+            collector.shutdown()
+            assert total == total_frames
+            queue.put("passed")
+        except Exception as e:
+            queue.put(f"not passed: {str(e)}")
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -470,7 +485,6 @@ class TestRayCollector(DistributedCollectorBase):
         ray_init_config["runtime_env"] = {
             "working_dir": os.path.dirname(__file__),
             "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
-            "pip": ["ray"],
         }  # for ray workers
         remote_configs = {
             "num_cpus": 1,
