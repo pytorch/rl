@@ -129,5 +129,5 @@ if __name__ == "__main__":
             t0 = time.time()
     collector.shutdown()
     t1 = time.time()
-    torchrl_logger.info(f"time elapsed: {t1-t0}s, rate: {counter/(t1-t0)} fps")
+    torchrl_logger.info(f"time elapsed: {t1 - t0}s, rate: {counter / (t1 - t0)} fps")
     exit()
