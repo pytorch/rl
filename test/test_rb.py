@@ -4514,6 +4514,61 @@ class TestCompressedListStorage:
         ), f"Compression ratio {compression_ratio} is too low"
 
 
+class TestRBLazyInit:
+    def test_lazy_init(self):
+        def transform(td):
+            return td
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+            transform_factory=lambda: transform,
+        )
+        assert not rb.initialized
+        assert not hasattr(rb, "_storage")
+        assert rb._init_storage is not None
+        assert not hasattr(rb, "_sampler")
+        assert rb._init_sampler is not None
+        assert not hasattr(rb, "_writer")
+        assert rb._init_writer is not None
+        rb.extend(TensorDict(batch_size=[2]))
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+        )
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+            delayed_init=False,
+        )
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

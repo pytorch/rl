@@ -168,7 +168,7 @@ for i, data in enumerate(collector):
 t1 = time.time()
 
 torchrl_logger.info(
-    f"solved after {total_count} steps, {total_episodes} episodes and in {t1-t0}s."
+    f"solved after {total_count} steps, {total_episodes} episodes and in {t1 - t0}s."
 )
 
 #################################
