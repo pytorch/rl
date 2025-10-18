@@ -5,9 +5,10 @@
 
 from .gym_transforms import EndOfLifeTransform
 from .llm import KLRewardTransform
+from .module import ModuleTransform
 from .r3m import R3MTransform
+from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform
-
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
@@ -85,9 +86,9 @@ __all__ = [
     "CatFrames",
     "CatTensors",
     "CenterCrop",
-    "ConditionalPolicySwitch",
     "ClipTransform",
     "Compose",
+    "ConditionalPolicySwitch",
     "ConditionalSkip",
     "Crop",
     "DTypeCastTransform",
@@ -104,6 +105,7 @@ __all__ = [
     "InitTracker",
     "KLRewardTransform",
     "LineariseRewards",
+    "ModuleTransform",
     "MultiAction",
     "MultiStepTransform",
     "NoopResetEnv",
@@ -113,6 +115,7 @@ __all__ = [
     "PinMemoryTransform",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RayTransform",
     "RemoveEmptySpecs",
     "RenameTransform",
     "Resize",
