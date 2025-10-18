@@ -60,7 +60,7 @@ from torchrl._utils import (
     timeit,
 )
 
-torchrl_logger = logger
+logger = logger
 
 # Filter warnings in subprocesses: True by default given the multiple optional
 # deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.
@@ -117,5 +117,5 @@ __all__ = [
     "set_auto_unwrap_transformed_env",
     "timeit",
     "logger",
-    "torchrl_logger",
+    "logger",
 ]
