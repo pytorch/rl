@@ -1130,6 +1130,7 @@ to be able to create this other composition:
     InitTracker
     KLRewardTransform
     LineariseRewards
+    ModuleTransform
     MultiAction
     NoopResetEnv
     ObservationNorm

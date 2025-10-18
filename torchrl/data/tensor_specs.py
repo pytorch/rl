@@ -6900,7 +6900,7 @@ def _unsqueezed_shape(shape: torch.Size, dim: int) -> torch.Size:
     n = len(shape)
     if dim < -(n + 1) or dim > n:
         raise ValueError(
-            f"Dimension out of range, expected value in the range [{-(n+1)}, {n}], but "
+            f"Dimension out of range, expected value in the range [{-(n + 1)}, {n}], but "
             f"got {dim}"
         )
     if dim < 0:

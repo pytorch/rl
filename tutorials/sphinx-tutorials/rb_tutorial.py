@@ -435,7 +435,7 @@ data = TensorDict(
 buffer_lazy.extend(data)
 for _i, _ in enumerate(buffer_lazy):
     continue
-print(f"A total of {_i+1} batches have been collected")
+print(f"A total of {_i + 1} batches have been collected")
 
 del buffer_lazy
 

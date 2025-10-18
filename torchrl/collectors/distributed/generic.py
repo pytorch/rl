@@ -37,6 +37,7 @@ from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 SUBMITIT_ERR = None
 try:
@@ -461,6 +462,7 @@ class DistributedDataCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
 
         if collector_class == "async":
@@ -566,14 +568,61 @@ class DistributedDataCollector(DataCollectorBase):
 
         self._init_workers()
         self._make_container()
-        if weight_updater is None:
-            weight_updater = DistributedWeightUpdater(
-                store=self._store,
-                policy_weights=self.policy_weights,
-                num_workers=self.num_workers,
-                sync=self._sync,
+
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_updater is None and weight_sync_schemes is None:
+            # Default to Distributed weight sync scheme for distributed collectors
+            from torchrl.weight_update.weight_sync_schemes import (
+                DistributedWeightSyncScheme,
             )
-        self.weight_updater = weight_updater
+
+            weight_sync_schemes = {
+                "policy": DistributedWeightSyncScheme(backend=backend, sync=self._sync)
+            }
+
+        if weight_sync_schemes is not None:
+            # Use new weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self._weight_senders = {}
+
+            # Set up weight senders now that remote collectors exist
+            for model_id, scheme in self._weight_sync_schemes.items():
+                sender = scheme.create_sender()
+                sender._model_id = model_id
+
+                # Create transports for each remote collector
+                for i in range(self.num_workers):
+                    rank = i + 1  # Workers are 1-indexed in distributed
+                    transport = scheme.create_transport((self._store, rank))
+                    sender._transports[i] = transport
+
+                # Set context and register model
+                if hasattr(sender, "set_context"):
+                    sender.set_context(self, model_id)
+
+                # Store reference to source model for automatic extraction
+                if (
+                    model_id == "policy"
+                    and hasattr(self, "policy")
+                    and self.policy is not None
+                ):
+                    sender._source_model = self.policy
+
+                self._weight_senders[model_id] = sender
+
+            self.weight_updater = None
+        else:
+            # Fall back to legacy weight updater system
+            if weight_updater is None:
+                weight_updater = DistributedWeightUpdater(
+                    store=self._store,
+                    policy_weights=self.policy_weights,
+                    num_workers=self.num_workers,
+                    sync=self._sync,
+                )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
 
     @property
     def device(self) -> list[torch.device]:
@@ -927,6 +976,34 @@ class DistributedDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j] += j != i
                     break
         return data, total_frames
+
+    def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
+        """Extract weights from a model if needed.
+
+        For distributed collectors, when weights is None and we have a weight sync scheme,
+        extract fresh weights from the tracked policy model.
+        """
+        scheme = (
+            self._weight_sync_schemes.get(model_id)
+            if self._weight_sync_schemes
+            else None
+        )
+
+        if weights is None and scheme is not None:
+            # Extract fresh weights from the source model
+            sender = self._weight_senders.get(model_id)
+            if (
+                sender
+                and hasattr(sender, "_source_model")
+                and sender._source_model is not None
+            ):
+                # For distributed collectors, we need TensorDict format for isend/irecv
+                from tensordict import TensorDict
+
+                return TensorDict.from_module(sender._source_model).data.lock_()
+
+        # Fall back to base class implementation
+        return super()._extract_weights_if_needed(weights, model_id)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
