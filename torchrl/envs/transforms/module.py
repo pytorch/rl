@@ -10,6 +10,8 @@ from typing import overload
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+
+from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
 from torchrl.envs.transforms.transforms import Transform
 
@@ -25,7 +27,25 @@ class RayModuleTransform(RayTransform):
     """
 
     def _create_actor(self, **kwargs):
-        return self._ray.remote(ModuleTransform).remote(**kwargs)
+        import ray
+
+        remote = self._ray.remote(ModuleTransform)
+        ray_kwargs = {}
+        num_gpus = self._num_gpus
+        if num_gpus is not None:
+            ray_kwargs["num_gpus"] = num_gpus
+        num_cpus = self._num_cpus
+        if num_cpus is not None:
+            ray_kwargs["num_cpus"] = num_cpus
+        actor_name = self._actor_name
+        if actor_name is not None:
+            ray_kwargs["name"] = actor_name
+        if ray_kwargs:
+            remote = remote.options(**ray_kwargs)
+        actor = remote.remote(**kwargs)
+        # wait till the actor is ready
+        ray.get(actor._ready.remote())
+        return actor
 
     @overload
     def update_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
@@ -68,9 +88,25 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         inverse (bool, optional): Whether to use the inverse of the module. Default is `False`.
         device (torch.device, optional): The device to use. Default is `None`.
         use_ray_service (bool, optional): Whether to use Ray service. Default is `False`.
+        num_gpus (int, optional): The number of GPUs to use if using Ray. Default is `None`.
+        num_cpus (int, optional): The number of CPUs to use if using Ray. Default is `None`.
         actor_name (str, optional): The name of the actor to use. Default is `None`. If an actor name is provided and
             an actor with this name already exists, the existing actor will be used.
-
+        observation_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the observation
+            after it has been transformed by the module, or a function that modifies the existing spec.
+            Defaults to `None` (observation specs remain unchanged).
+        done_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the done
+            after it has been transformed by the module, or a function that modifies the existing spec.
+            Defaults to `None` (done specs remain unchanged).
+        reward_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the reward
+            after it has been transformed by the module, or a function that modifies the existing spec.
+            Defaults to `None` (reward specs remain unchanged).
+        state_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the state
+            after it has been transformed by the module, or a function that modifies the existing spec.
+            Defaults to `None` (state specs remain unchanged).
+        action_spec_transform (TensorSpec or Callable[[TensorSpec], TensorSpec]): either a new spec for the action
+            after it has been transformed by the module, or a function that modifies the existing spec.
+            Defaults to `None` (action specs remain unchanged).
     """
 
     _RayServiceClass = RayModuleTransform
@@ -83,8 +119,25 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         no_grad: bool = False,
         inverse: bool = False,
         device: torch.device | None = None,
-        use_ray_service: bool = False,
-        actor_name: str | None = None,
+        use_ray_service: bool = False,  # noqa
+        actor_name: str | None = None,  # noqa
+        num_gpus: int | None = None,
+        num_cpus: int | None = None,
+        observation_spec_transform: TensorSpec
+        | Callable[[TensorSpec], TensorSpec]
+        | None = None,
+        action_spec_transform: TensorSpec
+        | Callable[[TensorSpec], TensorSpec]
+        | None = None,
+        reward_spec_transform: TensorSpec
+        | Callable[[TensorSpec], TensorSpec]
+        | None = None,
+        done_spec_transform: TensorSpec
+        | Callable[[TensorSpec], TensorSpec]
+        | None = None,
+        state_spec_transform: TensorSpec
+        | Callable[[TensorSpec], TensorSpec]
+        | None = None,
     ):
         super().__init__()
         if module is None and module_factory is None:
@@ -99,6 +152,11 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         self.no_grad = no_grad
         self.inverse = inverse
         self.device = device
+        self.observation_spec_transform = observation_spec_transform
+        self.action_spec_transform = action_spec_transform
+        self.reward_spec_transform = reward_spec_transform
+        self.done_spec_transform = done_spec_transform
+        self.state_spec_transform = state_spec_transform
 
     @property
     def in_keys(self) -> list[str]:
@@ -150,6 +208,9 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         if value is not None:
             raise RuntimeError(f"out_keys {value} cannot be set for ModuleTransform")
 
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self._call(tensordict)
+
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.inverse:
             return tensordict
@@ -177,3 +238,43 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
 
     def _update_weights_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
         self.module.load_state_dict(state_dict)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if self.observation_spec_transform is not None:
+            if isinstance(self.observation_spec_transform, TensorSpec):
+                return self.observation_spec_transform
+            else:
+                return self.observation_spec_transform(observation_spec)
+        return observation_spec
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        if self.action_spec_transform is not None:
+            if isinstance(self.action_spec_transform, TensorSpec):
+                return self.action_spec_transform
+            else:
+                return self.action_spec_transform(action_spec)
+        return action_spec
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if self.reward_spec_transform is not None:
+            if isinstance(self.reward_spec_transform, TensorSpec):
+                return self.reward_spec_transform
+            else:
+                return self.reward_spec_transform(reward_spec)
+        return reward_spec
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        if self.done_spec_transform is not None:
+            if isinstance(self.done_spec_transform, TensorSpec):
+                return self.done_spec_transform
+            else:
+                return self.done_spec_transform(done_spec)
+        return done_spec
+
+    def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
+        if self.state_spec_transform is not None:
+            if isinstance(self.state_spec_transform, TensorSpec):
+                return self.state_spec_transform
+            else:
+                return self.state_spec_transform(state_spec)
+        return state_spec
