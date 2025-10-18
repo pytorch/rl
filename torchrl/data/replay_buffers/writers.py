@@ -157,6 +157,7 @@ class RoundRobinWriter(Writer):
     def __init__(self, compilable: bool = False) -> None:
         super().__init__(compilable=compilable)
         self._cursor = 0
+        self._write_count  # noqa
 
     def dumps(self, path):
         path = Path(path).absolute()
@@ -280,18 +281,28 @@ class RoundRobinWriter(Writer):
         state = super().__getstate__()
         if get_spawning_popen() is None:
             cursor = self._cursor
+            write_count = self._write_count
             del state["_cursor_value"]
+            del state["_write_count_value"]
             state["cursor__context"] = cursor
+            state["write_count__context"] = write_count
         return state
 
     def __setstate__(self, state):
         cursor = state.pop("cursor__context", None)
+        write_count = state.pop("write_count__context", None)
         if cursor is not None:
             if not state["_compilable"]:
                 _cursor_value = mp.Value("i", cursor)
             else:
                 _cursor_value = cursor
             state["_cursor_value"] = _cursor_value
+        if write_count is not None:
+            if not state["_compilable"]:
+                _write_count_value = mp.Value("i", write_count)
+            else:
+                _write_count_value = write_count
+            state["_write_count_value"] = _write_count_value
         self.__dict__.update(state)
 
     def __repr__(self):
@@ -603,7 +614,18 @@ class TensorDictMaxValueWriter(Writer):
                 f"Please submit an issue at https://github.com/pytorch/rl if this feature is needed."
             )
         state = super().__getstate__()
+        # Handle the mp.Value object for pickling
+        if "_write_count_value" in state:
+            write_count = self._write_count
+            del state["_write_count_value"]
+            state["write_count__context"] = write_count
         return state
+
+    def __setstate__(self, state):
+        write_count = state.pop("write_count__context", None)
+        if write_count is not None:
+            state["_write_count_value"] = mp.Value("i", write_count)
+        self.__dict__.update(state)
 
     def dumps(self, path):
         path = Path(path).absolute()
