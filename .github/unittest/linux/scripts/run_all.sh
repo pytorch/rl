@@ -183,6 +183,9 @@ from torchrl.envs.transforms.vc1 import VC1Transform
 VC1Transform.install_vc_models(auto_exit=True)
 """
 
+  printf "* Upgrading timm\n"
+  pip3 install --upgrade "timm>=0.9.0"
+
   python -c """
 import vc_models
 from vc_models.models.vit import model_utils
