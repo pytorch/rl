@@ -173,7 +173,7 @@ class RayTransform(Transform, ABC):
         self,
         *,
         num_cpus: int | None = None,
-        num_gpus: int = 0,
+        num_gpus: int | None = None,
         device: DEVICE_TYPING | None = None,
         actor_name: str | None = None,
         **kwargs,
@@ -191,7 +191,7 @@ class RayTransform(Transform, ABC):
             in_keys=kwargs.get("in_keys", []), out_keys=kwargs.get("out_keys", [])
         )
 
-        self._num_cpus = num_cpus or 1
+        self._num_cpus = num_cpus
         self._num_gpus = num_gpus
         self._device = device
         self._actor_name = actor_name

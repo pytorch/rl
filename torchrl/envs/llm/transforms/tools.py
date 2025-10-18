@@ -501,10 +501,10 @@ class PythonInterpreter(Transform):
 
             if result["success"]:
                 results.append(
-                    f"Code block {i+1} executed successfully:\n{result['stdout']}"
+                    f"Code block {i + 1} executed successfully:\n{result['stdout']}"
                 )
             else:
-                results.append(f"Code block {i+1} failed:\n{result['stderr']}")
+                results.append(f"Code block {i + 1} failed:\n{result['stderr']}")
 
         return results
 
