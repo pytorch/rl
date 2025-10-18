@@ -279,6 +279,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         # so we need to ensure we're using the gym backend
         with set_gym_backend("gym"):
             import gym
+
             env = GymWrapper(gym.make(name))
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["D4RL_DATASET_DIR"] = tmpdir
@@ -358,6 +359,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         # so we need to ensure we're using the gym backend
         with set_gym_backend("gym"), tempfile.TemporaryDirectory() as tmpdir:
             import gym
+
             os.environ["D4RL_DATASET_DIR"] = tmpdir
             env = GymWrapper(gym.make(name))
             dataset = make_tensordict(
