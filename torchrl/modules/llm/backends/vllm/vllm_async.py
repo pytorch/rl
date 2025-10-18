@@ -1622,7 +1622,7 @@ class LoadBalancer:
         for i, strategy in enumerate(self.strategies):
             try:
                 torchrl_logger.debug(
-                    f"Trying strategy {i+1}/{len(self.strategies)}: {strategy}"
+                    f"Trying strategy {i + 1}/{len(self.strategies)}: {strategy}"
                 )
 
                 if strategy == "prefix-aware":
