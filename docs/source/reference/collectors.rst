@@ -233,7 +233,6 @@ across multiple inference workers:
     from torchrl.weight_update import (
         MultiProcessWeightSyncScheme,
         SharedMemWeightSyncScheme,
-        NoWeightSyncScheme,
     )
 
     # Create environment and policy
@@ -291,47 +290,6 @@ across multiple inference workers:
         collector.update_policy_weights_(TensorDict.from_module(policy))
 
     collector.shutdown()
-
-    # Example 3: Multiple models (policy + value network)
-    # ---------------------------------------------------
-    value_net = TensorDictModule(
-        nn.Linear(env.observation_spec["observation"].shape[-1], 1),
-        in_keys=["observation"],
-        out_keys=["value"],
-    )
-
-    weight_sync_schemes = {
-        "policy": MultiProcessWeightSyncScheme(strategy="state_dict"),
-        "value": MultiProcessWeightSyncScheme(strategy="state_dict"),
-    }
-
-    collector = SyncDataCollector(
-        create_env_fn=lambda: GymEnv("CartPole-v1"),
-        policy=policy,
-        frames_per_batch=64,
-        total_frames=1000,
-        weight_sync_schemes=weight_sync_schemes,
-    )
-
-    # Update multiple models independently
-    collector.update_policy_weights_(
-        {"policy": policy.state_dict(), "value": value_net.state_dict()}
-    )
-
-    collector.shutdown()
-
-    # Example 4: Disable weight synchronization
-    # ------------------------------------------
-    # Useful for debugging or when using a shared policy reference
-    no_sync_scheme = NoWeightSyncScheme()
-
-    collector = SyncDataCollector(
-        create_env_fn=lambda: GymEnv("CartPole-v1"),
-        policy=policy,
-        frames_per_batch=64,
-        total_frames=1000,
-        weight_sync_schemes={"policy": no_sync_scheme},
-    )
 
 .. note::
     When using ``SharedMemWeightSyncScheme``, weight updates are zero-copy and extremely fast since all
