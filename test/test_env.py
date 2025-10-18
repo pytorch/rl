@@ -13,6 +13,7 @@ import os.path
 import pickle
 import random
 import re
+import time
 from collections import defaultdict
 from functools import partial
 from sys import platform
@@ -3822,6 +3823,8 @@ class TestNonTensorEnv:
         finally:
             env.close(raise_if_closed=False)
             del env
+            time.sleep(0.1)
+            gc.collect()
 
     class AddString(Transform):
         def __init__(self):
