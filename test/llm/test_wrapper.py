@@ -2536,7 +2536,7 @@ class TestBatching:
         # Create 2 threads and send inputs
         inputs = [
             TensorDict(
-                text=Text(prompt=[f"Question {i}?", f"Question {i+2}?"]),
+                text=Text(prompt=[f"Question {i}?", f"Question {i + 2}?"]),
                 batch_size=(2,),
             )
             for i in range(2)

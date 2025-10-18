@@ -240,8 +240,8 @@ class MultiAgentNetBase(nn.Module):
         if keyset0 != keyset1:
             raise RuntimeError(
                 f"The keys of params and provided module differ: "
-                f"{keyset1-keyset0} are in self.params and not in the module, "
-                f"{keyset0-keyset1} are in the module but not in self.params."
+                f"{keyset1 - keyset0} are in self.params and not in the module, "
+                f"{keyset0 - keyset1} are in the module but not in self.params."
             )
         self.params.data.update_(params.data)
 

@@ -34,7 +34,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.nn import TensorDictSequential, WrapModule
+from tensordict.nn import TensorDictModule, TensorDictSequential, WrapModule
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
@@ -122,8 +122,9 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
 from torchrl.envs.libs.unity_mlagents import _has_unity_mlagents
-from torchrl.envs.transforms import VecNorm
+from torchrl.envs.transforms import ModuleTransform, VecNorm
 from torchrl.envs.transforms.llm import KLRewardTransform
+from torchrl.envs.transforms.module import RayModuleTransform
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
     _has_tv,
@@ -197,6 +198,8 @@ else:
         NestedCountingEnv,
         StateLessCountingEnv,
     )
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 IS_WIN = platform == "win32"
 if IS_WIN:
@@ -14886,6 +14889,130 @@ class TestConditionalPolicySwitch(TransformBase):
 
     def test_transform_inverse(self):
         return
+
+
+class TestModuleTransform(TransformBase):
+    @property
+    def _module_factory_samespec(self):
+        return partial(
+            TensorDictModule,
+            nn.LazyLinear(7),
+            in_keys=["observation"],
+            out_keys=["observation"],
+        )
+
+    @property
+    def _module_factory_samespec_inverse(self):
+        return partial(
+            TensorDictModule, nn.LazyLinear(7), in_keys=["action"], out_keys=["action"]
+        )
+
+    def _single_env_maker(self):
+        base_env = ContinuousActionVecMockEnv()
+        t = ModuleTransform(module_factory=self._module_factory_samespec)
+        return base_env.append_transform(t)
+
+    def test_single_trans_env_check(self):
+        env = self._single_env_maker()
+        env.check_env_specs()
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, self._single_env_maker)
+        try:
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, self._single_env_maker)
+        try:
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_trans_serial_env_check(self):
+        env = SerialEnv(2, ContinuousActionVecMockEnv)
+        try:
+            env = env.append_transform(
+                ModuleTransform(module_factory=self._module_factory_samespec)
+            )
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv)
+        try:
+            env = env.append_transform(
+                ModuleTransform(module_factory=self._module_factory_samespec)
+            )
+            env.check_env_specs()
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_transform_no_env(self):
+        t = ModuleTransform(module_factory=self._module_factory_samespec)
+        td = t(TensorDict(observation=torch.randn(2, 3), batch_size=[2]))
+        assert td["observation"].shape == (2, 7)
+
+    def test_transform_compose(self):
+        t = Compose(ModuleTransform(module_factory=self._module_factory_samespec))
+        td = t(TensorDict(observation=torch.randn(2, 3), batch_size=[2]))
+        assert td["observation"].shape == (2, 7)
+
+    def test_transform_env(self):
+        # TODO: We should give users the opportunity to modify the specs
+        env = self._single_env_maker()
+        env.check_env_specs()
+
+    def test_transform_model(self):
+        t = nn.Sequential(
+            Compose(ModuleTransform(module_factory=self._module_factory_samespec))
+        )
+        td = t(TensorDict(observation=torch.randn(2, 3), batch_size=[2]))
+        assert td["observation"].shape == (2, 7)
+
+    def test_transform_rb(self):
+        t = ModuleTransform(module_factory=self._module_factory_samespec)
+        rb = ReplayBuffer(transform=t)
+        rb.extend(TensorDict(observation=torch.randn(2, 3), batch_size=[2]))
+        assert rb._storage._storage[0]["observation"].shape == (3,)
+        s = rb.sample(2)
+        assert s["observation"].shape == (2, 7)
+
+        rb = ReplayBuffer()
+        rb.append_transform(t, invert=True)
+        rb.extend(TensorDict(observation=torch.randn(2, 3), batch_size=[2]))
+        assert rb._storage._storage[0]["observation"].shape == (7,)
+        s = rb.sample(2)
+        assert s["observation"].shape == (2, 7)
+
+    def test_transform_inverse(self):
+        t = ModuleTransform(
+            module_factory=self._module_factory_samespec_inverse, inverse=True
+        )
+        env = ContinuousActionVecMockEnv().append_transform(t)
+        env.check_env_specs()
+
+    @pytest.mark.skipif(not _has_ray, reason="ray required")
+    def test_ray_extension(self):
+        import ray
+
+        # Check if ray is initialized
+        ray_init = ray.is_initialized
+        try:
+            t = ModuleTransform(
+                module_factory=self._module_factory_samespec,
+                use_ray_service=True,
+                actor_name="my_transform",
+            )
+            env = ContinuousActionVecMockEnv().append_transform(t)
+            assert isinstance(t, RayModuleTransform)
+            env.check_env_specs()
+            assert ray.get_actor("my_transform") is not None
+        finally:
+            if not ray_init:
+                ray.stop()
 
 
 if __name__ == "__main__":

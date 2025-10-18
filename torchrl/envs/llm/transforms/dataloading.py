@@ -15,14 +15,14 @@ from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictB
 
 from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec
 from torchrl.envs.common import EnvBase
+from torchrl.envs.transforms import TensorDictPrimer, Transform
 
 # Import ray service components
-from torchrl.envs.llm.transforms.ray_service import (
+from torchrl.envs.transforms.ray_service import (
     _map_input_output_device,
     _RayServiceMetaClass,
     RayTransform,
 )
-from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.utils import make_composite_from_td
 
 T = TypeVar("T")
@@ -259,7 +259,7 @@ class RayDataLoadingPrimer(RayTransform):
     @primers.setter
     def primers(self, value: TensorSpec):
         """Set primers property."""
-        self._ray.get(self._actor.set_attr.remote("primers", value))
+        self._ray.get(self._actor._set_attr.remote("primers", value))
 
     # TensorDictPrimer methods
     def init(self, tensordict: TensorDictBase | None):
@@ -857,7 +857,3 @@ class DataLoadingPrimer(TensorDictPrimer, metaclass=_RayServiceMetaClass):
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
         return f"{class_name}(primers={self.primers}, dataloader={self.dataloader})"
-
-    def set_attr(self, name, value):
-        """Set attribute on the remote actor or locally."""
-        setattr(self, name, value)
