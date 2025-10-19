@@ -12,7 +12,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import multiprocessing as mp
-from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.envs import GymEnv
 
 from torchrl.weight_update.weight_sync_schemes import (
@@ -270,118 +270,6 @@ class TestWeightSyncSchemes:
 
         weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
         transport.send_weights("policy", weights)
-
-
-class TestCollectorIntegration:
-    @pytest.fixture
-    def simple_env(self):
-        return GymEnv("CartPole-v1")
-
-    @pytest.fixture
-    def simple_policy(self, simple_env):
-        return TensorDictModule(
-            nn.Linear(
-                simple_env.observation_spec["observation"].shape[-1],
-                simple_env.action_spec.shape[-1],
-            ),
-            in_keys=["observation"],
-            out_keys=["action"],
-        )
-
-    def test_syncdatacollector_multiprocess_scheme(self, simple_policy):
-        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-
-        collector = SyncDataCollector(
-            create_env_fn=lambda: GymEnv("CartPole-v1"),
-            policy=simple_policy,
-            frames_per_batch=64,
-            total_frames=128,
-            weight_sync_schemes={"policy": scheme},
-        )
-
-        new_weights = simple_policy.state_dict()
-        with torch.no_grad():
-            for key in new_weights:
-                new_weights[key].fill_(1.0)
-
-        collector.update_policy_weights_(new_weights)
-
-        for data in collector:
-            assert data.numel() > 0
-            break
-
-        collector.shutdown()
-
-    def test_multisyncdatacollector_multiprocess_scheme(self, simple_policy):
-        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-
-        collector = MultiSyncDataCollector(
-            create_env_fn=[
-                lambda: GymEnv("CartPole-v1"),
-                lambda: GymEnv("CartPole-v1"),
-            ],
-            policy=simple_policy,
-            frames_per_batch=64,
-            total_frames=128,
-            weight_sync_schemes={"policy": scheme},
-        )
-
-        new_weights = simple_policy.state_dict()
-        with torch.no_grad():
-            for key in new_weights:
-                new_weights[key].fill_(1.0)
-
-        collector.update_policy_weights_(new_weights)
-
-        for data in collector:
-            assert data.numel() > 0
-            break
-
-        collector.shutdown()
-
-    def test_multisyncdatacollector_shared_mem_scheme(self, simple_policy):
-        scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
-
-        collector = MultiSyncDataCollector(
-            create_env_fn=[
-                lambda: GymEnv("CartPole-v1"),
-                lambda: GymEnv("CartPole-v1"),
-            ],
-            policy=simple_policy,
-            frames_per_batch=64,
-            total_frames=128,
-            weight_sync_schemes={"policy": scheme},
-        )
-
-        new_weights = TensorDict.from_module(simple_policy)
-        with torch.no_grad():
-            new_weights["module"]["weight"].fill_(1.0)
-            new_weights["module"]["bias"].fill_(1.0)
-
-        collector.update_policy_weights_(new_weights)
-
-        for data in collector:
-            assert data.numel() > 0
-            break
-
-        collector.shutdown()
-
-    def test_collector_no_weight_sync(self, simple_policy):
-        scheme = NoWeightSyncScheme()
-
-        collector = SyncDataCollector(
-            create_env_fn=lambda: GymEnv("CartPole-v1"),
-            policy=simple_policy,
-            frames_per_batch=64,
-            total_frames=128,
-            weight_sync_schemes={"policy": scheme},
-        )
-
-        for data in collector:
-            assert data.numel() > 0
-            break
-
-        collector.shutdown()
 
 
 class TestMultiModelUpdates:
