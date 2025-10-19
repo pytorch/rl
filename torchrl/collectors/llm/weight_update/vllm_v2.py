@@ -204,7 +204,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
                 batch = weight_items[i : i + batch_size]
                 self.push_weights(iter(batch))
                 torchrl_logger.info(
-                    f"Transferred batch {i//batch_size + 1}/{(len(weight_items) + batch_size - 1)//batch_size}"
+                    f"Transferred batch {i // batch_size + 1}/{(len(weight_items) + batch_size - 1) // batch_size}"
                 )
         else:
             # Transfer all at once
@@ -266,11 +266,11 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             try:
                 collector.increment_version()
                 torchrl_logger.debug(
-                    f"Incremented version for collector {i+1}/{len(self.collectors)}"
+                    f"Incremented version for collector {i + 1}/{len(self.collectors)}"
                 )
             except Exception as e:
                 torchrl_logger.warning(
-                    f"Failed to increment version for collector {i+1}: {e}"
+                    f"Failed to increment version for collector {i + 1}: {e}"
                 )
         torchrl_logger.info("All collector versions incremented")
 
