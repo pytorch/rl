@@ -3465,7 +3465,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -3490,7 +3490,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -3509,7 +3509,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
 
 _MINARI_DATASETS = []
@@ -3769,7 +3769,7 @@ class TestMinari:
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             assert data.metadata["action_space"].is_in(sample["action"])
             assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
@@ -3907,7 +3907,7 @@ class TestRoboset:
         t0 = time.time()
         for i, _ in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             t0 = time.time()
             if i == 10:
                 break
@@ -3961,7 +3961,7 @@ class TestVD4RL:
                 assert (batch.get("pixels") != 0).any()
                 assert (batch.get(("next", "pixels")) != 0).any()
                 t1 = time.time()
-                torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
                 t0 = time.time()
                 if i == 10:
                     break
