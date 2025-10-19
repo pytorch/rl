@@ -18,7 +18,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torchrl.data import Composite, Unbounded
 from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.envs import EnvBase, Transform
-from torchrl.envs.llm.transforms.ray_service import _RayServiceMetaClass, RayTransform
+from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import LLMWrapperBase
@@ -241,7 +241,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         if out_keys is None:
             out_keys = copy(in_keys)
         if len(out_keys) == len(in_keys):
-            out_keys = out_keys + ["kl_penalty", "ref_log_prob"]
+            out_keys = out_keys + ["kl_penalty", "ref_log_probs"]
         elif len(out_keys) != len(in_keys) + 2:
             raise ValueError(
                 "The out_keys must have the same length as the in_keys (plus two additional optional kl entries for logging)."
