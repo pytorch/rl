@@ -428,8 +428,10 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
@@ -451,7 +453,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NESTED_TENSORS_AS_LISTS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.memmap</span><span class="w"> </span><span class="kn">import</span> <span class="n">MemoryMappedTensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_flatten</span><span class="p">,</span> <span class="n">tree_map</span><span class="p">,</span> <span class="n">tree_unflatten</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_make_ordinal_device</span><span class="p">,</span> <span class="n">implement_for</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
@@ -1000,7 +1001,7 @@
         <span class="n">storage</span><span class="p">,</span>
         <span class="n">max_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
         <span class="n">ndim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
@@ -1168,13 +1169,15 @@
             <span class="k">del</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span>
             <span class="n">state</span><span class="p">[</span><span class="s2">&quot;len__context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">length</span>
         <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
-            <span class="c1"># check that the storage is initialized</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Cannot share a storage of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> between processes if &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;it has not been initialized yet. Populate the buffer with &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;some data in the main process before passing it to the other &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;subprocesses (or create the buffer explicitly with a TensorStorage).&quot;</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span><span class="p">:</span>
+                <span class="c1"># check that the storage is initialized</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Cowardly refusing to share a storage of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> between processes if &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;it has not been initialized yet. You can either:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;- Populate the buffer with some data in the main process before passing it to the other processes (or create the buffer explicitly with a TensorStorage).</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;- set shared_init=True when creating the storage such that it can be initialized by the remote processes.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">state</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># check that the content is shared, otherwise tell the user we can&#39;t help</span>
             <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span>
@@ -1204,10 +1207,10 @@
         <span class="nb">len</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;len__context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_compilable&quot;</span><span class="p">]:</span>
-                <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span>
-            <span class="k">else</span><span class="p">:</span>
                 <span class="n">_len_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">)</span>
                 <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_len_value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_len_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -1318,6 +1321,8 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">tree_map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data</span><span class="p">))</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span>
+
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1361,6 +1366,8 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span>
+
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="p">(</span><span class="o">*</span><span class="n">INT_CLASSES</span><span class="p">,</span> <span class="nb">slice</span><span class="p">)):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="n">cursor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
@@ -1377,10 +1384,15 @@
                 <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">_storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span>
         <span class="n">is_tc</span> <span class="o">=</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">_storage</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;shared_init&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_init</span><span class="p">()</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot get elements out of a non-initialized storage.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_full</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">is_tc</span><span class="p">:</span>
@@ -1480,6 +1492,12 @@
 <span class="sd">            Defaults to ``False``.</span>
 <span class="sd">        consolidated (bool, optional): if ``True``, the storage will be consolidated after</span>
 <span class="sd">            its first expansion. Defaults to ``False``.</span>
+<span class="sd">        shared_init (bool, optional): if ``True``, enables multiprocess coordination</span>
+<span class="sd">            during storage initialization. First process initializes with memmap,</span>
+<span class="sd">            others wait and load from the shared memmap. Defaults to ``False``.</span>
+<span class="sd">        cleanup_memmap (bool, optional): if ``True`` and ``shared_init=True``,</span>
+<span class="sd">            the temporary memmap will be deleted after initialization and the</span>
+<span class="sd">            storage will operate in RAM. Defaults to ``True``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; data = TensorDict({</span>
@@ -1537,10 +1555,12 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
         <span class="n">ndim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">consolidated</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">shared_init</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">cleanup_memmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">storage</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -1550,11 +1570,59 @@
             <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">consolidated</span> <span class="o">=</span> <span class="n">consolidated</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span> <span class="o">=</span> <span class="n">shared_init</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cleanup_memmap</span> <span class="o">=</span> <span class="n">cleanup_memmap</span>
+
+        <span class="c1"># Initialize multiprocess coordination objects if shared_init is enabled</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compilable</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot share a compilable storage between processes.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_lock</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_event</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_make_init_directory</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_init_directory</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;scratch_dir&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span>
+            <span class="k">return</span>
+        <span class="c1"># Create a shared directory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_directory</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span>
+            <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;torchrl_storage_init_&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">PyTree</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_standard</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="c1"># Try to become coordinator</span>
+        <span class="n">is_coordinator</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+        <span class="n">is_coordinator</span> <span class="o">=</span> <span class="n">is_coordinator</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">block</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">is_coordinator</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># We are the coordinator</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_coordinator</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># Signal other processes that initialization is complete</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Failed to acquire lock, wait for coordinator</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_init</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_standard</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">PyTree</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Standard initialization without multiprocess coordination.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compilable</span><span class="p">:</span>
             <span class="c1"># TODO: Investigate why this seems to have a performance impact with</span>
             <span class="c1"># the compiler</span>
@@ -1597,7 +1665,40 @@
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">):</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Initialized LazyTensorStorage with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> shape&quot;</span>
-            <span class="p">)</span></div>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_coordinator</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">PyTree</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize storage as the coordinating process using temporary memmap.&quot;&quot;&quot;</span>
+        <span class="c1"># Use LazyMemmapStorage which does everything we want</span>
+        <span class="n">temp_memmap_storage</span> <span class="o">=</span> <span class="n">LazyMemmapStorage</span><span class="p">(</span>
+            <span class="n">max_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span>
+            <span class="n">scratch_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_directory</span><span class="p">,</span>
+            <span class="n">ndim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ndim</span><span class="p">,</span>
+            <span class="n">existsok</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">shared_init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Don&#39;t recurse</span>
+        <span class="p">)</span>
+        <span class="n">temp_memmap_storage</span><span class="o">.</span><span class="n">_init_standard</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">temp_memmap_storage</span><span class="o">.</span><span class="n">_storage</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_init</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># wait till coordinator has initialized</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_event</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+        <span class="n">storage</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_directory</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">storage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Read blocks</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span><span class="p">:</span>
+            <span class="c1"># Trigger initialization with dummy data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_init</span><span class="p">()</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">idx</span></div>
 
 
 <div class="viewcode-block" id="LazyMemmapStorage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LazyMemmapStorage</span><span class="p">(</span><span class="n">LazyTensorStorage</span><span class="p">):</span>
@@ -1609,6 +1710,8 @@
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        scratch_dir (str or path): directory where memmap-tensors will be written.</span>
+<span class="sd">            If ``shared_init=True`` and no ``scratch_dir`` is provided, a shared</span>
+<span class="sd">            temporary directory will be created automatically.</span>
 <span class="sd">        device (torch.device, optional): device where the sampled tensors will be</span>
 <span class="sd">            stored and sent. Default is :obj:`torch.device(&quot;cpu&quot;)`.</span>
 <span class="sd">            If ``None`` is provided, the device is automatically gathered from the</span>
@@ -1621,6 +1724,9 @@
 <span class="sd">        existsok (bool, optional): whether an error should be raised if any of the</span>
 <span class="sd">            tensors already exists on disk. Defaults to ``True``. If ``False``, the</span>
 <span class="sd">            tensor will be opened as is, not overewritten.</span>
+<span class="sd">        shared_init (bool, optional): if ``True``, enables multiprocess coordination</span>
+<span class="sd">            during storage initialization. First process initializes the memmap,</span>
+<span class="sd">            others wait and load from the shared directory. Defaults to ``False``.</span>
 
 <span class="sd">    .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is</span>
 <span class="sd">        already stored to avoid executing long copies of data that is already stored on disk.</span>
@@ -1695,12 +1801,12 @@
         <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">scratch_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
         <span class="n">ndim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">existsok</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">shared_init</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="n">ndim</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">existsok</span> <span class="o">=</span> <span class="n">existsok</span>
@@ -1708,6 +1814,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;/&quot;</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span> <span class="o">+=</span> <span class="s2">&quot;/&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">max_size</span><span class="p">,</span>
+            <span class="n">ndim</span><span class="o">=</span><span class="n">ndim</span><span class="p">,</span>
+            <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">,</span>
+            <span class="n">shared_init</span><span class="o">=</span><span class="n">shared_init</span><span class="p">,</span>
+            <span class="n">cleanup_memmap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">_make_ordinal_device</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">device</span> <span class="o">!=</span> <span class="s2">&quot;auto&quot;</span>
@@ -1777,7 +1890,31 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;initialized&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_len&quot;</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">PyTree</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_standard</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">is_coordinator</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+        <span class="n">is_coordinator</span> <span class="o">=</span> <span class="n">is_coordinator</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">block</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">is_coordinator</span><span class="p">:</span>
+            <span class="c1"># coordinator init</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_coordinator</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Standard initialization</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_init</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_coordinator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_standard</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_standard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Creating a MemmapStorage...&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">device</span>
@@ -1824,6 +1961,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_init</span><span class="p">:</span>
+            <span class="c1"># Trigger initialization with dummy data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_init</span><span class="p">()</span>
         <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span></div>
 

@@ -579,6 +579,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cursor</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write_count</span>  <span class="c1"># noqa</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span>
@@ -702,18 +703,28 @@
         <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">get_spawning_popen</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cursor</span>
+            <span class="n">write_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_count</span>
             <span class="k">del</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_cursor_value&quot;</span><span class="p">]</span>
+            <span class="k">del</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_write_count_value&quot;</span><span class="p">]</span>
             <span class="n">state</span><span class="p">[</span><span class="s2">&quot;cursor__context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cursor</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;write_count__context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">write_count</span>
         <span class="k">return</span> <span class="n">state</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
         <span class="n">cursor</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cursor__context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">write_count</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;write_count__context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">cursor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_compilable&quot;</span><span class="p">]:</span>
                 <span class="n">_cursor_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="n">cursor</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">_cursor_value</span> <span class="o">=</span> <span class="n">cursor</span>
             <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_cursor_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_cursor_value</span>
+        <span class="k">if</span> <span class="n">write_count</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_compilable&quot;</span><span class="p">]:</span>
+                <span class="n">_write_count_value</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="n">write_count</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">_write_count_value</span> <span class="o">=</span> <span class="n">write_count</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_write_count_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_write_count_value</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1025,7 +1036,18 @@
                 <span class="sa">f</span><span class="s2">&quot;Please submit an issue at https://github.com/pytorch/rl if this feature is needed.&quot;</span>
             <span class="p">)</span>
         <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
+        <span class="c1"># Handle the mp.Value object for pickling</span>
+        <span class="k">if</span> <span class="s2">&quot;_write_count_value&quot;</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+            <span class="n">write_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_count</span>
+            <span class="k">del</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_write_count_value&quot;</span><span class="p">]</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;write_count__context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">write_count</span>
         <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="n">write_count</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;write_count__context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">write_count</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_write_count_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Value</span><span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="n">write_count</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span>

@@ -627,6 +627,12 @@ yielded by the <code class="xref py py-class docutils literal notranslate"><span
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.datasets.OpenMLExperienceReplay.initialized">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">initialized</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrl.data.datasets.OpenMLExperienceReplay.initialized" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether the replay buffer has been initialized.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.datasets.OpenMLExperienceReplay.insert_transform">
 <span class="sig-name descname"><span class="pre">insert_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.transforms.Transform"><span class="pre">Transform</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">invert</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.replay_buffers.replay_buffers.ReplayBuffer"><span class="pre">ReplayBuffer</span></a></span></span><a class="headerlink" href="#torchrl.data.datasets.OpenMLExperienceReplay.insert_transform" title="Permalink to this definition">¶</a></dt>
@@ -938,6 +944,13 @@ value. Otherwise it is reset to a default value.</p></li>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">storage</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.storages.Storage"><span class="pre">Storage</span></a></em><a class="headerlink" href="#torchrl.data.datasets.OpenMLExperienceReplay.storage" title="Permalink to this definition">¶</a></dt>
 <dd><p>The storage of the replay buffer.</p>
 <p>The storage must be an instance of <a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.Storage"><code class="xref py py-class docutils literal notranslate"><span class="pre">Storage</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.datasets.OpenMLExperienceReplay.transform">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">transform</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.transforms.Transform"><span class="pre">Transform</span></a></em><a class="headerlink" href="#torchrl.data.datasets.OpenMLExperienceReplay.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>The transform of the replay buffer.</p>
+<p>The transform must be an instance of <a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py property">

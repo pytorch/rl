@@ -446,7 +446,8 @@
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span><span class="p">,</span> <span class="n">wraps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">TypeVar</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">is_tensor_collection</span><span class="p">,</span>
@@ -492,6 +493,22 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">_InvertTransform</span><span class="p">,</span> <span class="n">Transform</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Self</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">Self</span> <span class="o">=</span> <span class="n">T</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_maybe_delay_init</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delayed_init</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">wrapper</span>
 
 
 <div class="viewcode-block" id="ReplayBuffer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ReplayBuffer</span><span class="p">:</span>
@@ -575,6 +592,12 @@
 <span class="sd">        compilable (bool, optional): whether the writer is compilable.</span>
 <span class="sd">            If ``True``, the writer cannot be shared between multiple processes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform</span>
+<span class="sd">            the first time the buffer is used rather than during construction.</span>
+<span class="sd">            This is useful when the replay buffer needs to be pickled and sent to remote workers,</span>
+<span class="sd">            particularly when using transforms with modules that require gradients.</span>
+<span class="sd">            If not specified, defaults to ``True`` when ``transform_factory`` is provided,</span>
+<span class="sd">            and ``False`` otherwise.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -665,19 +688,55 @@
         <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">delayed_init</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_sampler</span><span class="p">(</span><span class="n">sampler</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_writer</span><span class="p">(</span><span class="n">writer</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">register_storage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_delayed_init</span> <span class="o">=</span> <span class="n">delayed_init</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_get_collate_fn</span><span class="p">(</span><span class="n">collate_fn</span><span class="p">)</span>
+        <span class="c1"># Store init parameters for potential delayed initialization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_storage</span> <span class="o">=</span> <span class="n">storage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_sampler</span> <span class="o">=</span> <span class="n">sampler</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_writer</span> <span class="o">=</span> <span class="n">writer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_collate_fn</span> <span class="o">=</span> <span class="n">collate_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_transform</span> <span class="o">=</span> <span class="n">transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_transform_factory</span> <span class="o">=</span> <span class="n">transform_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_checkpointer</span> <span class="o">=</span> <span class="n">checkpointer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_generator</span> <span class="o">=</span> <span class="n">generator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_compilable</span> <span class="o">=</span> <span class="n">compilable</span>
+
+        <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">transform_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;transform and transform_factory are mutually exclusive. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got transform=</span><span class="si">{</span><span class="n">transform</span><span class="si">}</span><span class="s2"> and transform_factory=</span><span class="si">{</span><span class="n">transform_factory</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Auto-detect delayed_init when transform_factory is provided</span>
+        <span class="k">if</span> <span class="n">transform_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">delayed_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">delayed_init</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">delayed_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">delayed_init</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Update _delayed_init after auto-detection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_delayed_init</span> <span class="o">=</span> <span class="n">delayed_init</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_pin_memory</span> <span class="o">=</span> <span class="n">pin_memory</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">prefetch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_cap</span> <span class="o">=</span> <span class="n">prefetch</span> <span class="ow">or</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_queue</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">prefetch</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Dynamic batch-size specification is incompatible &quot;</span>
+                <span class="s2">&quot;with multithreaded sampling. &quot;</span>
+                <span class="s2">&quot;When using prefetch, the batch-size must be specified in &quot;</span>
+                <span class="s2">&quot;advance. &quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dim_extend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dim_extend</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;dim_extend must be a positive value.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dim_extend</span> <span class="o">=</span> <span class="n">dim_extend</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_cap</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_executor</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_cap</span><span class="p">)</span>
 
@@ -689,31 +748,86 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_futures_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_transform</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">transform_factory</span><span class="p">)</span>
+        <span class="c1"># If not delayed, initialize immediately</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delayed_init</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">prefetch</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Dynamic batch-size specification is incompatible &quot;</span>
-                <span class="s2">&quot;with multithreaded sampling. &quot;</span>
-                <span class="s2">&quot;When using prefetch, the batch-size must be specified in &quot;</span>
-                <span class="s2">&quot;advance. &quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the replay buffer components.</span>
+
+<span class="sd">        This method is called either immediately during __init__ (if delayed_init=False)</span>
+<span class="sd">        or on first use of the buffer (if delayed_init=True).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Initialize storage</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_storage</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_storage</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_compilable</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="p">,</span> <span class="s2">&quot;drop_last&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">drop_last</span>
-        <span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Samplers with drop_last=True must work with a predictable batch-size. &quot;</span>
-                <span class="s2">&quot;Please pass the batch-size to the ReplayBuffer constructor.&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+            <span class="c1"># Initialize sampler</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_sampler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_sampler</span><span class="p">)</span>
+
+            <span class="c1"># Initialize writer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_writer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_writer</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">register_storage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+
+            <span class="c1"># Initialize collate function</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_collate_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_collate_fn</span><span class="p">)</span>
+
+            <span class="c1"># Initialize transform</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_transform</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_init_transform</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_transform_factory</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
-        <span class="k">if</span> <span class="n">dim_extend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dim_extend</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;dim_extend must be a positive value.&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dim_extend</span> <span class="o">=</span> <span class="n">dim_extend</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">checkpointer</span> <span class="o">=</span> <span class="n">checkpointer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_prioritized_sampler</span><span class="p">()</span>
+
+            <span class="c1"># Check batch_size compatibility with sampler</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="p">,</span> <span class="s2">&quot;drop_last&quot;</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">drop_last</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Samplers with drop_last=True must work with a predictable batch-size. &quot;</span>
+                    <span class="s2">&quot;Please pass the batch-size to the ReplayBuffer constructor.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Set dim_extend properly now that storage is initialized</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dim_extend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">ndim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_dim_extend</span> <span class="o">=</span> <span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_dim_extend</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="c1"># Set checkpointer and generator</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">checkpointer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_checkpointer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_generator</span><span class="p">)</span>
+
+            <span class="c1"># Initialize prioritized sampler if needed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_prioritized_sampler</span><span class="p">()</span>
+
+            <span class="c1"># Remove init parameters</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_storage</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_sampler</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_writer</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_collate_fn</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_transform</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_transform_factory</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_checkpointer</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_generator</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_compilable</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">raise</span> <span class="n">e</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialized</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the replay buffer has been initialized.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_initialize_prioritized_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize priority trees for existing data when using PrioritizedSampler.</span>
@@ -807,14 +921,16 @@
         <span class="n">transform</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">transform</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">share</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">share</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shared</span> <span class="o">=</span> <span class="n">shared</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">set_rng</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">generator</span><span class="p">):</span>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_rng</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">generator</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">generator</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">generator</span>
@@ -847,7 +963,7 @@
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">ndim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>
             <span class="k">else</span><span class="p">:</span>
@@ -869,7 +985,8 @@
             <span class="p">)</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="ReplayBuffer.set_storage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_storage">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.set_storage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_storage">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets a new storage in the replay buffer and returns the previous storage.</span>
 
 <span class="sd">        Args:</span>
@@ -884,19 +1001,22 @@
 
         <span class="k">return</span> <span class="n">prev_storage</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.set_writer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_writer">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_writer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">writer</span><span class="p">:</span> <span class="n">Writer</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.set_writer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_writer">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_writer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">writer</span><span class="p">:</span> <span class="n">Writer</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets a new writer in the replay buffer and returns the previous writer.&quot;&quot;&quot;</span>
         <span class="n">prev_writer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="n">writer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">register_storage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">prev_writer</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.set_sampler"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_sampler">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.set_sampler"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_sampler">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets a new sampler in the replay buffer and returns the previous sampler.&quot;&quot;&quot;</span>
         <span class="n">prev_sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="n">sampler</span>
         <span class="k">return</span> <span class="n">prev_sampler</span></div>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
@@ -911,6 +1031,7 @@
         <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># explicit return for remote calls</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">write_count</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The total number of items written so far in the buffer through add and extend.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">_write_count</span>
@@ -939,6 +1060,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="se">\n</span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">sampler</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">writer</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">transform</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">collate_fn</span><span class="si">}</span><span class="s2">)&quot;</span>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="nd">@pin_memory_output</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">NestedKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">index</span><span class="p">)):</span>
@@ -970,6 +1092,7 @@
 
         <span class="k">return</span> <span class="n">data</span>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">index</span><span class="p">)):</span>
             <span class="bp">self</span><span class="p">[:][</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
@@ -994,6 +1117,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
         <span class="k">return</span>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="s2">&quot;_storage&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span>
@@ -1006,6 +1130,7 @@
             <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">}</span>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_storage&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_sampler&quot;</span><span class="p">])</span>
@@ -1019,7 +1144,8 @@
             <span class="n">rng</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
 
-<div class="viewcode-block" id="ReplayBuffer.dumps"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.dumps"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Saves the replay buffer on disk at the specified path.</span>
 
 <span class="sd">        Args:</span>
@@ -1075,7 +1201,8 @@
         <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;buffer_metadata.json&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
             <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">({</span><span class="s2">&quot;batch_size&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span><span class="p">},</span> <span class="n">file</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.loads"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.loads">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.loads"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.loads">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a replay buffer state at the given path.</span>
 
 <span class="sd">        The buffer should have matching components and be saved using :meth:`dumps`.</span>
@@ -1102,19 +1229,23 @@
             <span class="n">metadata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;batch_size&quot;</span><span class="p">]</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.save"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.save">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.save"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.save">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Alias for :meth:`dumps`.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.dump"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dump">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">dump</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.dump"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dump">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dump</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Alias for :meth:`dumps`.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.load"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.load">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.load"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.load">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Alias for :meth:`loads`.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.register_save_hook"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.register_save_hook">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_save_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]):</span>
+<div class="viewcode-block" id="ReplayBuffer.register_save_hook"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.register_save_hook">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_save_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a save hook for the storage.</span>
 
 <span class="sd">        .. note:: Hooks are currently not serialized when saving a replay buffer: they must</span>
@@ -1123,7 +1254,8 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">register_save_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.register_load_hook"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.register_load_hook">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_load_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]):</span>
+<div class="viewcode-block" id="ReplayBuffer.register_load_hook"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.register_load_hook">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_load_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a load hook for the storage.</span>
 
 <span class="sd">        .. note:: Hooks are currently not serialized when saving a replay buffer: they must</span>
@@ -1132,7 +1264,8 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">register_load_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.add"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.add">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<div class="viewcode-block" id="ReplayBuffer.add"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.add">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a single element to the replay buffer.</span>
 
 <span class="sd">        Args:</span>
@@ -1185,7 +1318,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">index</span>
 
-<div class="viewcode-block" id="ReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
+<div class="viewcode-block" id="ReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Extends the replay buffer with one or more elements contained in an iterable.</span>
@@ -1225,6 +1359,7 @@
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extend</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">update_priority</span><span class="o">=</span><span class="n">update_priority</span><span class="p">)</span></div>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">update_priority</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
@@ -1258,7 +1393,8 @@
 
         <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">info</span>
 
-<div class="viewcode-block" id="ReplayBuffer.empty"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.empty"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.empty">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Empties the replay buffer and reset cursor to 0.</span>
 
 <span class="sd">        Args:</span>
@@ -1268,7 +1404,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.sample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">return_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<div class="viewcode-block" id="ReplayBuffer.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.sample">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">return_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Samples a batch of data from the replay buffer.</span>
 
 <span class="sd">        Uses Sampler to sample indices, and retrieves them from Storage.</span>
@@ -1326,10 +1463,12 @@
             <span class="k">return</span> <span class="n">out</span><span class="p">,</span> <span class="n">info</span>
         <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">mark_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">mark_update</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">storage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
 
-<div class="viewcode-block" id="ReplayBuffer.append_transform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.append_transform">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">append_transform</span><span class="p">(</span>
+<div class="viewcode-block" id="ReplayBuffer.append_transform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.append_transform">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">append_transform</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">invert</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># noqa-F821</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReplayBuffer</span><span class="p">:</span>  <span class="c1"># noqa: D417</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Appends transform at the end.</span>
@@ -1364,7 +1503,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span></div>
 
-<div class="viewcode-block" id="ReplayBuffer.insert_transform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.insert_transform">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">insert_transform</span><span class="p">(</span>
+<div class="viewcode-block" id="ReplayBuffer.insert_transform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.insert_transform">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">insert_transform</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
@@ -1392,7 +1532,8 @@
 
     <span class="n">_iterator</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="ReplayBuffer.next"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.next">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBuffer.next"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.next">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the next item in the replay buffer.</span>
 
 <span class="sd">        This method is used to iterate over the replay buffer in contexts where __iter__ is not available,</span>
@@ -1410,6 +1551,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">return</span> <span class="kc">None</span></div>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">ran_out</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">ran_out</span> <span class="o">=</span> <span class="kc">False</span>
@@ -1423,6 +1565,7 @@
         <span class="p">):</span>
             <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_rng&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1460,6 +1603,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sampler</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The sampler of the replay buffer.</span>
 
@@ -1469,6 +1613,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Writer</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The writer of the replay buffer.</span>
 
@@ -1478,13 +1623,23 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">storage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Storage</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The storage of the replay buffer.</span>
 
 <span class="sd">        The storage must be an instance of :class:`~torchrl.data.replay_buffers.Storage`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Transform</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The transform of the replay buffer.</span>
+
+<span class="sd">        The transform must be an instance of :class:`~torchrl.envs.transforms.Transform`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span></div>
 
 
 <div class="viewcode-block" id="PrioritizedReplayBuffer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">PrioritizedReplayBuffer</span><span class="p">(</span><span class="n">ReplayBuffer</span><span class="p">):</span>
@@ -1555,6 +1710,13 @@
 <span class="sd">                    ...     rb.add(d)</span>
 <span class="sd">                    &gt;&gt;&gt; rb.extend(data)</span>
 
+<span class="sd">        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform</span>
+<span class="sd">            the first time the buffer is used rather than during construction.</span>
+<span class="sd">            This is useful when the replay buffer needs to be pickled and sent to remote workers,</span>
+<span class="sd">            particularly when using transforms with modules that require gradients.</span>
+<span class="sd">            If not specified, defaults to ``True`` when ``transform_factory`` is provided,</span>
+<span class="sd">            and ``False`` otherwise.</span>
+
 <span class="sd">    .. note::</span>
 <span class="sd">        Generic prioritized replay buffers (ie. non-tensordict backed) require</span>
 <span class="sd">        calling :meth:`~.sample` with the ``return_info`` argument set to</span>
@@ -1606,6 +1768,7 @@
         <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dim_extend</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">delayed_init</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">storage</span> <span class="o">=</span> <span class="n">ListStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
@@ -1620,6 +1783,7 @@
             <span class="n">transform</span><span class="o">=</span><span class="n">transform</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
             <span class="n">dim_extend</span><span class="o">=</span><span class="n">dim_extend</span><span class="p">,</span>
+            <span class="n">delayed_init</span><span class="o">=</span><span class="n">delayed_init</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 
@@ -1709,6 +1873,12 @@
 <span class="sd">        compilable (bool, optional): whether the writer is compilable.</span>
 <span class="sd">            If ``True``, the writer cannot be shared between multiple processes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform</span>
+<span class="sd">            the first time the buffer is used rather than during construction.</span>
+<span class="sd">            This is useful when the replay buffer needs to be pickled and sent to remote workers,</span>
+<span class="sd">            particularly when using transforms with modules that require gradients.</span>
+<span class="sd">            If not specified, defaults to ``True`` when ``transform_factory`` is provided,</span>
+<span class="sd">            and ``False`` otherwise.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -1826,7 +1996,8 @@
 
         <span class="k">return</span> <span class="n">priority</span>
 
-<div class="viewcode-block" id="TensorDictReplayBuffer.add"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.add">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<div class="viewcode-block" id="TensorDictReplayBuffer.add"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.add">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">_set_dispatch_td_nn_modules</span><span class="p">(</span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
@@ -1841,7 +2012,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">update_tensordict_priority</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">index</span></div>
 
-<div class="viewcode-block" id="TensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
+<div class="viewcode-block" id="TensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend">[docs]</a>    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Extends the replay buffer with a batch of data.</span>
@@ -1904,6 +2076,7 @@
             <span class="k">return</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">))</span>
 
+    <span class="nd">@_maybe_delay_init</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">update_tensordict_priority</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="p">,</span> <span class="n">PrioritizedSampler</span><span class="p">):</span>
             <span class="k">return</span>
@@ -2086,6 +2259,12 @@
 <span class="sd">        compilable (bool, optional): whether the writer is compilable.</span>
 <span class="sd">            If ``True``, the writer cannot be shared between multiple processes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform</span>
+<span class="sd">            the first time the buffer is used rather than during construction.</span>
+<span class="sd">            This is useful when the replay buffer needs to be pickled and sent to remote workers,</span>
+<span class="sd">            particularly when using transforms with modules that require gradients.</span>
+<span class="sd">            If not specified, defaults to ``True`` when ``transform_factory`` is provided,</span>
+<span class="sd">            and ``False`` otherwise.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -2316,6 +2495,12 @@
 
 <span class="sd">        shared (bool, optional): whether the buffer will be shared using multiprocessing or not.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        delayed_init (bool, optional): whether to initialize storage, writer, sampler and transform</span>
+<span class="sd">            the first time the buffer is used rather than during construction.</span>
+<span class="sd">            This is useful when the replay buffer needs to be pickled and sent to remote workers,</span>
+<span class="sd">            particularly when using transforms with modules that require gradients.</span>
+<span class="sd">            If not specified, defaults to ``True`` when ``transform_factory`` is provided,</span>
+<span class="sd">            and ``False`` otherwise.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs import Compose, ToTensorImage, Resize, RenameTransform</span>
@@ -2416,6 +2601,14 @@
         <span class="k">if</span> <span class="n">rbs</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">storages</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">samplers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">writers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span>
+            <span class="c1"># Ensure all replay buffers are initialized before creating ensemble</span>
+            <span class="k">for</span> <span class="n">rb</span> <span class="ow">in</span> <span class="n">rbs</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="nb">hasattr</span><span class="p">(</span><span class="n">rb</span><span class="p">,</span> <span class="s2">&quot;_delayed_init&quot;</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="n">rb</span><span class="o">.</span><span class="n">_delayed_init</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="n">rb</span><span class="o">.</span><span class="n">initialized</span>
+                <span class="p">):</span>
+                    <span class="n">rb</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
             <span class="n">storages</span> <span class="o">=</span> <span class="n">StorageEnsemble</span><span class="p">(</span>
                 <span class="o">*</span><span class="p">[</span><span class="n">rb</span><span class="o">.</span><span class="n">_storage</span> <span class="k">for</span> <span class="n">rb</span> <span class="ow">in</span> <span class="n">rbs</span><span class="p">],</span> <span class="n">transforms</span><span class="o">=</span><span class="p">[</span><span class="n">rb</span><span class="o">.</span><span class="n">_transform</span> <span class="k">for</span> <span class="n">rb</span> <span class="ow">in</span> <span class="n">rbs</span><span class="p">]</span>
             <span class="p">)</span>

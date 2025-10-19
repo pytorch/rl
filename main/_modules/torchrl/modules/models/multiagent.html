@@ -662,8 +662,8 @@
         <span class="k">if</span> <span class="n">keyset0</span> <span class="o">!=</span> <span class="n">keyset1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The keys of params and provided module differ: &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">keyset1</span><span class="o">-</span><span class="n">keyset0</span><span class="si">}</span><span class="s2"> are in self.params and not in the module, &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">keyset0</span><span class="o">-</span><span class="n">keyset1</span><span class="si">}</span><span class="s2"> are in the module but not in self.params.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">keyset1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">keyset0</span><span class="si">}</span><span class="s2"> are in self.params and not in the module, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">keyset0</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">keyset1</span><span class="si">}</span><span class="s2"> are in the module but not in self.params.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
 

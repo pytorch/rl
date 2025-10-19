@@ -437,14 +437,14 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span><span class="p">,</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">Transform</span>
 
 <span class="c1"># Import ray service components</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.ray_service</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.ray_service</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_map_input_output_device</span><span class="p">,</span>
     <span class="n">_RayServiceMetaClass</span><span class="p">,</span>
     <span class="n">RayTransform</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_composite_from_td</span>
 
 <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
@@ -681,7 +681,7 @@
     <span class="nd">@primers</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set primers property.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">set_attr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">_set_attr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
 
     <span class="c1"># TensorDictPrimer methods</span>
 <div class="viewcode-block" id="RayDataLoadingPrimer.init"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.init">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
@@ -1278,11 +1278,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">class_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">(primers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="si">}</span><span class="s2">, dataloader=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="si">}</span><span class="s2">)&quot;</span>
-
-<div class="viewcode-block" id="DataLoadingPrimer.set_attr"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer.set_attr">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set attribute on the remote actor or locally.&quot;&quot;&quot;</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div></div>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">(primers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="si">}</span><span class="s2">, dataloader=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="si">}</span><span class="s2">)&quot;</span></div>
 </pre></div>
 
              </article>

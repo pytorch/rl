@@ -467,7 +467,7 @@ Unlike storages, writers and samplers, transform constructors must
 be passed as separate keyword argument <code class="xref py py-attr docutils literal notranslate"><span class="pre">transform_factory</span></code>,
 as it is impossible to distinguish a constructor from a transform.</p></li>
 <li><p><strong>transform_factory</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>optional</em>) – a factory for the
-transform. Exclusive with <code class="xref py py-attr docutils literal notranslate"><span class="pre">transform</span></code>.</p></li>
+transform. Exclusive with <a class="reference internal" href="#torchrl.data.TensorDictReplayBuffer.transform" title="torchrl.data.TensorDictReplayBuffer.transform"><code class="xref py py-attr docutils literal notranslate"><span class="pre">transform</span></code></a>.</p></li>
 <li><p><strong>batch_size</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>the batch size to be used when sample() is
 called.</p>
 <div class="admonition note">
@@ -526,6 +526,12 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <li><p><strong>compilable</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the writer is compilable.
 If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the writer cannot be shared between multiple processes.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>delayed_init</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to initialize storage, writer, sampler and transform
+the first time the buffer is used rather than during construction.
+This is useful when the replay buffer needs to be pickled and sent to remote workers,
+particularly when using transforms with modules that require gradients.
+If not specified, defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code> when <code class="docutils literal notranslate"><span class="pre">transform_factory</span></code> is provided,
+and <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p></li>
 </ul>
 </dd>
 </dl>
@@ -733,6 +739,12 @@ yielded by the <a class="reference internal" href="torchrl.data.ReplayBuffer.htm
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.TensorDictReplayBuffer.initialized">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">initialized</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrl.data.TensorDictReplayBuffer.initialized" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether the replay buffer has been initialized.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.TensorDictReplayBuffer.insert_transform">
 <span class="sig-name descname"><span class="pre">insert_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.transforms.Transform"><span class="pre">Transform</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">invert</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.replay_buffers.replay_buffers.ReplayBuffer"><span class="pre">ReplayBuffer</span></a></span></span><a class="headerlink" href="#torchrl.data.TensorDictReplayBuffer.insert_transform" title="Permalink to this definition">¶</a></dt>
@@ -868,6 +880,13 @@ value. Otherwise it is reset to a default value.</p></li>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">storage</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.storages.Storage"><span class="pre">Storage</span></a></em><a class="headerlink" href="#torchrl.data.TensorDictReplayBuffer.storage" title="Permalink to this definition">¶</a></dt>
 <dd><p>The storage of the replay buffer.</p>
 <p>The storage must be an instance of <a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.Storage"><code class="xref py py-class docutils literal notranslate"><span class="pre">Storage</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.TensorDictReplayBuffer.transform">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">transform</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.transforms.Transform"><span class="pre">Transform</span></a></em><a class="headerlink" href="#torchrl.data.TensorDictReplayBuffer.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>The transform of the replay buffer.</p>
+<p>The transform must be an instance of <a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py property">
