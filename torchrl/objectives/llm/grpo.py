@@ -155,7 +155,7 @@ class GRPOLoss(LossModule):
         self.entropy_bonus = entropy_bonus
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_coeff = entropy_coeff
-        self.reduction = reduction
+        self.reduction = reduction if reduction is not None else "mean"
 
         # Determine device and register clip epsilon as buffer
         if device is None:
@@ -291,12 +291,16 @@ class GRPOLoss(LossModule):
         # - We may not have the tokens yet. If not, we will use the tokenizer of the actor to tokenize the text.
         #   We default to history rather than text because the history will account for multiturn, or multimodal inputs.
         if self.tensor_keys.action not in tensordict:
-            raise ValueError
+            raise ValueError(f"Action key {self.tensor_keys.action} not in tensordict.")
 
         tensordict = tensordict.copy()
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
+        if advantage is None:
+            raise ValueError(
+                f"Advantage key {self.tensor_keys.advantage} not in tensordict."
+            )
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
@@ -401,8 +405,7 @@ class GRPOLoss(LossModule):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
                     else:
                         log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
-
-        entropy = -log_prob.mean(0)
+            entropy = -log_prob.mean(0)
         if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
             entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
@@ -410,7 +413,7 @@ class GRPOLoss(LossModule):
     def _kl_to_ref(
         self,
         tensordict: TensorDictBase,
-        key: NestedKey = ("next", "ref_log_prob"),
+        key: NestedKey = ("next", "ref_log_probs"),
         ref_log_prob: torch.Tensor | None = None,
         coeff: float | None = None,
         mask: torch.Tensor | None = None,
