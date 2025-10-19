@@ -24,6 +24,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
 )
+from tensordict.utils import expand_as_right
 from torch import distributions as d
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs.transforms.transforms import Transform
@@ -114,14 +115,11 @@ class GRPOLoss(LossModule):
             - "generic": Use attention masking (all valid tokens)
             Defaults to "sft" since we can't guarantee assistant masks are available.
 
-    .. note:: DAPO defaults (for reference):
-        - Clip-Higher asymmetric thresholds: (eps_low, eps_high) = (0.20, 0.28)
-        - Token-level policy gradient loss is recommended for long CoT
-        - Dynamic sampling filters trivial advantage groups
-        See DAPO [arXiv](https://arxiv.org/html/2503.14476).
-
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
                 the storages match the ones that are passed to other components, such as data collectors.
+
+    .. note:: For non-symmetric clipping thresholds, see the `DAPO <https://arxiv.org/html/2503.14476>`_ paper.
+
     """
 
     actor_network: LLMWrapperBase
@@ -162,7 +160,7 @@ class GRPOLoss(LossModule):
         self.entropy_bonus = entropy_bonus
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_coeff = entropy_coeff
-        self.reduction = reduction
+        self.reduction = reduction if reduction is not None else "mean"
 
         # Determine device and register clip epsilon as buffer
         if device is None:
@@ -323,12 +321,16 @@ class GRPOLoss(LossModule):
         # - We may not have the tokens yet. If not, we will use the tokenizer of the actor to tokenize the text.
         #   We default to history rather than text because the history will account for multiturn, or multimodal inputs.
         if self.tensor_keys.action not in tensordict:
-            raise ValueError
+            raise ValueError(f"Action key {self.tensor_keys.action} not in tensordict.")
 
         tensordict = tensordict.copy()
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
+        if advantage is None:
+            raise ValueError(
+                f"Advantage key {self.tensor_keys.advantage} not in tensordict."
+            )
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
@@ -434,11 +436,113 @@ class GRPOLoss(LossModule):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
                     else:
                         log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
-
-        entropy = -log_prob.mean(0)
+            entropy = -log_prob.mean(0)
         if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
             entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
+
+    def _kl_to_ref(
+        self,
+        tensordict: TensorDictBase,
+        key: NestedKey = ("next", "ref_log_probs"),
+        ref_log_prob: torch.Tensor | None = None,
+        coeff: float | None = None,
+        mask: torch.Tensor | None = None,
+        dist: d.Distribution | None = None,
+    ):
+        if coeff is None:
+            coeff = self.kl_to_ref_coeff
+        # TODO: customize this
+        if ref_log_prob is None:
+            ref_log_prob = tensordict.get(
+                key,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0.0,
+            )
+            if ref_log_prob is None:
+                raise KeyError(
+                    f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
+                )
+            ref_log_prob = ref_log_prob.squeeze(-1)
+        cur_log_prob = tensordict.get("_cur_log_prob")
+        # TODO: remove this
+        if cur_log_prob.shape != ref_log_prob.shape:
+            raise ValueError(
+                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
+            )
+        if mask is not None:
+            ref_log_prob = torch.where(
+                expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
+            )
+            cur_log_prob = torch.where(
+                expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
+            )
+        diff = ref_log_prob - cur_log_prob
+        kl_penalty = (diff.expm1() - diff).mean()
+        return coeff * kl_penalty, kl_penalty
+
+    def _log_weight(
+        self, tensordict: TensorDictBase, adv_shape: torch.Size
+    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
+
+        cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
+
+        prev_log_prob = tensordict.get(
+            self.tensor_keys.sample_log_prob,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0.0,
+        )
+
+        if prev_log_prob is None:
+            raise KeyError(
+                f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
+            )
+        if prev_log_prob.requires_grad:
+            raise RuntimeError(
+                f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
+            )
+
+        # Check for shape mismatches and provide helpful error messages
+        if cur_log_prob.shape != prev_log_prob.shape:
+            # Try to provide helpful debugging information
+            error_msg = (
+                f"Shape mismatch detected in GRPOLoss: current log-prob shape {cur_log_prob.shape} "
+                f"!= previous log-prob shape {prev_log_prob.shape}. "
+                f"This usually indicates a mismatch between the masking strategy used for "
+                f"advantage computation and the masking strategy used for loss computation.\n"
+                f"Current masking strategy: '{self.masking_strategy}'\n"
+                f"Possible solutions:\n"
+                f"1. If using RLHF (multi-turn conversations), set masking_strategy='rlhf'\n"
+                f"2. If using SFT (single-turn conversations), set masking_strategy='sft'\n"
+                f"3. If using generic scenarios, set masking_strategy='generic'\n"
+                f"4. Ensure the advantage was computed with the same masking strategy as the loss"
+            )
+            raise ValueError(error_msg)
+
+        attention_mask = dist.mask
+        cur_log_prob = torch.where(
+            expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0
+        )
+        prev_log_prob = torch.where(
+            expand_as_right(attention_mask, prev_log_prob), prev_log_prob, 0.0
+        )
+
+        if is_composite:
+            raise NotImplementedError
+        log_weight = (cur_log_prob - prev_log_prob).unsqueeze(-1)
+        if is_tensor_collection(log_weight):
+            log_weight = _sum_td_features(log_weight)
+            log_weight = log_weight.view(adv_shape).unsqueeze(-1)
+
+        kl_approx = (prev_log_prob - cur_log_prob).unsqueeze(-1)
+        if is_tensor_collection(kl_approx):
+            kl_approx = _sum_td_features(kl_approx)
+
+        tensordict.set("_cur_log_prob", cur_log_prob)
+
+        return log_weight, dist, kl_approx
 
 
 class DAPO(GRPOLoss):
@@ -450,16 +554,44 @@ class DAPO(GRPOLoss):
 
     def __init__(
         self,
-        actor_network: LLMWrapperBase | None = None,
-        *,
-        clip_epsilon: tuple[float, float] = (0.20, 0.28),
-        **kwargs,
+        tensordict: TensorDictBase,
+        key: NestedKey = ("next", "ref_log_prob"),
+        ref_log_prob: torch.Tensor | None = None,
+        coeff: float | None = None,
+        mask: torch.Tensor | None = None,
+        dist: d.Distribution | None = None,
     ):
-        if not (isinstance(clip_epsilon, (tuple, list)) and len(clip_epsilon) == 2):
-            raise ValueError("DAPO requires clip_epsilon=(eps_low, eps_high).")
-        super().__init__(
-            actor_network=actor_network, clip_epsilon=clip_epsilon, **kwargs
-        )
+        if coeff is None:
+            coeff = self.kl_to_ref_coeff
+        # TODO: customize this
+        if ref_log_prob is None:
+            ref_log_prob = tensordict.get(
+                key,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0.0,
+            )
+            if ref_log_prob is None:
+                raise KeyError(
+                    f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
+                )
+            ref_log_prob = ref_log_prob.squeeze(-1)
+        cur_log_prob = tensordict.get("_cur_log_prob")
+        # TODO: remove this
+        if cur_log_prob.shape != ref_log_prob.shape:
+            raise ValueError(
+                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
+            )
+        if mask is not None:
+            ref_log_prob = torch.where(
+                expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
+            )
+            cur_log_prob = torch.where(
+                expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
+            )
+        diff = ref_log_prob - cur_log_prob
+        kl_penalty = (diff.expm1() - diff).mean()
+        return coeff * kl_penalty, kl_penalty
 
 
 class MCAdvantage(Transform):

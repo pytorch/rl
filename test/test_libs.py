@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import copy
 import functools
 import gc
 import importlib.util
@@ -73,6 +74,8 @@ from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import SliceSampler
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     CatTensors,
@@ -82,6 +85,7 @@ from torchrl.envs import (
     EnvCreator,
     RemoveEmptySpecs,
     RenameTransform,
+    StepCounter,
 )
 from torchrl.envs.batched_envs import SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
@@ -2790,7 +2794,6 @@ class TestVmas:
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
-        
         env = VmasEnv(
             scenario=scenario_name,
             continuous_actions=continuous_actions,
@@ -2809,14 +2812,27 @@ class TestVmas:
         final_seed = []
         tdreset = []
         tdrollout = []
-        for _ in range(2):
-            env = VmasEnv(
+        rollout_length = 10
+
+        def create_env():
+            return VmasEnv(
                 scenario=scenario_name,
                 num_envs=4,
             )
+
+        env = create_env()
+        td_actions = [env.action_spec.rand() for _ in range(rollout_length)]
+
+        for _ in range(2):
+            env = create_env()
+            td_actions_buffer = copy.deepcopy(td_actions)
+
+            def policy(td, actions=td_actions_buffer):
+                return actions.pop(0)
+
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=10))
+            tdrollout.append(env.rollout(max_steps=rollout_length, policy=policy))
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
@@ -3449,18 +3465,22 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
+        import d4rl  # noqa: F401
+
         t0 = time.time()
         data = D4RLExperienceReplay(
             task, split_trajs=split_trajs, from_env=from_env, batch_size=2
         )
         sample = data.sample()
-        env = GymWrapper(gym.make(task))
+        # D4RL environments are registered with gym, not gymnasium
+        with set_gym_backend("gym"):
+            env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
             if "truncated" in key:
@@ -3470,7 +3490,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -3489,7 +3509,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
 
 _MINARI_DATASETS = []
@@ -3749,7 +3769,7 @@ class TestMinari:
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             assert data.metadata["action_space"].is_in(sample["action"])
             assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
@@ -3887,7 +3907,7 @@ class TestRoboset:
         t0 = time.time()
         for i, _ in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             t0 = time.time()
             if i == 10:
                 break
@@ -3941,7 +3961,7 @@ class TestVD4RL:
                 assert (batch.get("pixels") != 0).any()
                 assert (batch.get(("next", "pixels")) != 0).any()
                 t1 = time.time()
-                torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
                 t0 = time.time()
                 if i == 10:
                     break
@@ -5143,6 +5163,17 @@ class TestIsaacLab:
         torchrl_logger.info("Checking env specs...")
         env.check_env_specs(break_when_any_done="both")
         torchrl_logger.info("Check succeeded!")
+
+    def test_isaaclab_rb(self, env):
+        env = env.append_transform(StepCounter())
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(50, ndim=2), sampler=SliceSampler(num_slices=5)
+        )
+        rb.extend(env.rollout(20))
+        # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
+        flat_ranges = rb["step_count"].flatten() % 4
+        arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
+        assert (flat_ranges == arange).all()
 
     def test_isaac_collector(self, env):
         col = SyncDataCollector(
