@@ -126,7 +126,7 @@ class SFTLoss(LossModule):
     .. note::
         The input tensordict is expected to contain the following keys by default:
             - ``("next", "history")``: The chat history
-            - ``("next", "ref_log_prob")`` (optional): Reference model log probabilities, required if kl_to_ref_coeff is set
+            - ``("next", "ref_log_probs")`` (optional): Reference model log probabilities, required if kl_to_ref_coeff is set
 
         These keys can be customized using the ``set_keys()`` method.
 
@@ -215,7 +215,7 @@ class SFTLoss(LossModule):
         >>>
         >>> # Apply the transform to get reference log probabilities
         >>> data = transform(data)
-        >>> assert "ref_log_prob" in data["next"].keys()
+        >>> assert "ref_log_probs" in data["next"].keys()
         >>>
         >>> # Use with SFTLoss for KL regularization
         >>> loss = SFTLoss(
@@ -244,7 +244,7 @@ class SFTLoss(LossModule):
             history (NestedKey): The input tensordict key where the chat history is expected.
                 Defaults to ``("next", "history")``.
             ref_log_prob (NestedKey): The input tensordict key where the reference model log probabilities are expected.
-                Only used when kl_to_ref_coeff is set. Defaults to ``("next", "ref_log_prob")``.
+                Only used when kl_to_ref_coeff is set. Defaults to ``("next", "ref_log_probs")``.
             log_probs (NestedKey): The output tensordict key where the model's log probabilities will be written.
                 Defaults to ``"log_probs"``.
         """
@@ -447,7 +447,7 @@ class SFTLoss(LossModule):
             ref_log_probs = tensordict.get(self.tensor_keys.ref_log_prob, as_list=True)
             if ref_log_probs is None:
                 raise ValueError(
-                    f"Reference log probs not found at {self.tensor_keys.ref_log_prob=} in tensordict with keys {tensordict.keys()} but loss_function is 'minor_sft'"
+                    f"Reference log probs not found at {self.tensor_keys.ref_log_prob=} in tensordict with keys {tensordict.keys(True, True)} but loss_function is 'minor_sft'"
                 )
 
             # we need to re-sum ref_log_probs as they are not summed per-sequence
