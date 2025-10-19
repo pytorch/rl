@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import copy
 import functools
 import gc
 import importlib.util
@@ -2811,14 +2812,27 @@ class TestVmas:
         final_seed = []
         tdreset = []
         tdrollout = []
-        for _ in range(2):
-            env = VmasEnv(
+        rollout_length = 10
+
+        def create_env():
+            return VmasEnv(
                 scenario=scenario_name,
                 num_envs=4,
             )
+
+        env = create_env()
+        td_actions = [env.action_spec.rand() for _ in range(rollout_length)]
+
+        for _ in range(2):
+            env = create_env()
+            td_actions_buffer = copy.deepcopy(td_actions)
+
+            def policy(td, actions=td_actions_buffer):
+                return actions.pop(0)
+
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=10))
+            tdrollout.append(env.rollout(max_steps=rollout_length, policy=policy))
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
@@ -3451,7 +3465,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -3476,7 +3490,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -3495,7 +3509,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
 
 _MINARI_DATASETS = []
@@ -3755,7 +3769,7 @@ class TestMinari:
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             assert data.metadata["action_space"].is_in(sample["action"])
             assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
@@ -3893,7 +3907,7 @@ class TestRoboset:
         t0 = time.time()
         for i, _ in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             t0 = time.time()
             if i == 10:
                 break
@@ -3947,7 +3961,7 @@ class TestVD4RL:
                 assert (batch.get("pixels") != 0).any()
                 assert (batch.get(("next", "pixels")) != 0).any()
                 t1 = time.time()
-                torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
                 t0 = time.time()
                 if i == 10:
                     break
