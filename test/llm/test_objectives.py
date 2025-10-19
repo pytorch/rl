@@ -86,9 +86,7 @@ def test_mc_advantage(ndim):
 # Mock infrastructure moved to conftest.py
 
 
-def _mock_data_grpo(
-    vocab_size: int, device: torch.device | str = "cpu"
-) -> TensorDict:
+def _mock_data_grpo(vocab_size: int, device: torch.device | str = "cpu") -> TensorDict:
     from transformers import AutoTokenizer
 
     device = torch.device(device)
@@ -175,11 +173,17 @@ def _mock_data_grpo(
 
 
 class TestLosses:
-    def test_grpo(self, mock_transformer_model):
+    @pytest.mark.parametrize("dapo", [True, False], ids=["dapo", "symmetric"])
+    def test_grpo(self, mock_transformer_model, dapo):
         """Test GRPO loss computation with mock models."""
         vocab_size = 1024
         device = torch.device("cpu")
-
+        if dapo:
+            eps_low = 0.20
+            eps_high = 0.28
+            eps = (eps_low, eps_high)
+        else:
+            eps = 0.20
         # Create mock model and wrap it
         model = mock_transformer_model(vocab_size=vocab_size, device=device)
         actor_network = TransformersWrapper(
@@ -190,7 +194,7 @@ class TestLosses:
         )
 
         # Create loss module
-        loss_fn = GRPOLoss(actor_network)
+        loss_fn = GRPOLoss(actor_network, eps=eps)
 
         # Create fake data
         data = _mock_data_grpo(vocab_size=vocab_size, device=device)
