@@ -241,7 +241,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         if out_keys is None:
             out_keys = copy(in_keys)
         if len(out_keys) == len(in_keys):
-            out_keys = out_keys + ["kl_penalty", "ref_log_prob"]
+            out_keys = out_keys + ["kl_penalty", "ref_log_probs"]
         elif len(out_keys) != len(in_keys) + 2:
             raise ValueError(
                 "The out_keys must have the same length as the in_keys (plus two additional optional kl entries for logging)."
