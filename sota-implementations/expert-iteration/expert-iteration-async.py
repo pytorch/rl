@@ -12,7 +12,7 @@ from pathlib import Path
 
 import hydra
 
-from torchrl import torchrl_logger
+from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.weight_update.llm import get_model_metadata
@@ -397,19 +397,9 @@ def main(cfg):
             if not k.startswith("_")
         }
 
-        # Add computed GPU configuration
+        # Add computed GPU configuration and merge with default runtime_env
         ray_init_config["num_gpus"] = device_config["ray_num_gpus"]
-        # Ensure runtime_env and env_vars exist
-        if "runtime_env" not in ray_init_config:
-            ray_init_config["runtime_env"] = {}
-        if not isinstance(ray_init_config["runtime_env"], dict):
-            ray_init_config["runtime_env"] = dict(ray_init_config["runtime_env"])
-        if "env_vars" not in ray_init_config["runtime_env"]:
-            ray_init_config["runtime_env"]["env_vars"] = {}
-        if not isinstance(ray_init_config["runtime_env"]["env_vars"], dict):
-            ray_init_config["runtime_env"]["env_vars"] = dict(
-                ray_init_config["runtime_env"]["env_vars"]
-            )
+        ray_init_config = merge_ray_runtime_env(ray_init_config)
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
         ray.init(**ray_init_config)
 
