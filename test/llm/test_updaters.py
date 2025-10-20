@@ -41,7 +41,7 @@ else:
 if _has_ray:
     import ray
 
-    from .ray_helpers import (
+    from ray_helpers import (
         WorkerTransformerDoubleBuffer,
         WorkerTransformerNCCL,
         WorkerVLLMDoubleBuffer,
