@@ -4188,6 +4188,25 @@ class TestRayRB:
         finally:
             rb.close()
 
+    def test_ray_rb_serialization(self):
+        import ray
+
+        class Worker:
+            def __init__(self, rb):
+                self.rb = rb
+
+            def run(self):
+                self.rb.extend(TensorDict({"x": torch.ones(100)}, batch_size=100))
+
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            remote_worker = ray.remote(Worker).remote(rb)
+            ray.get(remote_worker.run.remote())
+        finally:
+            rb.close()
+
 
 class TestSharedStorageInit:
     def worker(self, rb, worker_id, queue):
