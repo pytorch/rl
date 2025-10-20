@@ -10,10 +10,7 @@ import pytest
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
 from torch import multiprocessing as mp
-from torchrl.collectors import SyncDataCollector
-from torchrl.envs import GymEnv
 
 from torchrl.weight_update.weight_sync_schemes import (
     _resolve_model,
