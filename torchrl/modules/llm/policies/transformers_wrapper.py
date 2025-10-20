@@ -2216,7 +2216,8 @@ class TransformersWrapper(LLMWrapperBase):
                 "Input contains empty sequences. Packing/padding requires at least one token per sequence."
             )
         # Error handling for overlong sequences
-        max_len = getattr(self.model.config, "max_position_embeddings", None)
+        config = getattr(self.model, "config", None)
+        max_len = getattr(config, "max_position_embeddings", None)
         if max_len is not None and tokens_full_padded.shape[-1] > max_len:
             raise ValueError(
                 f"Input sequence length ({tokens_full_padded.shape[-1]}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
