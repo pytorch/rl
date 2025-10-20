@@ -962,3 +962,103 @@ def as_remote(cls, remote_config: dict[str, Any] | None = None):
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
     return remote_collector
+
+
+def get_ray_default_runtime_env() -> dict[str, Any]:
+    """Get the default Ray runtime environment configuration for TorchRL.
+
+    This function returns a runtime environment configuration that excludes
+    large directories and files that should not be uploaded to Ray workers.
+    This helps prevent issues with Ray's working_dir size limits (512MB default).
+
+    Returns:
+        dict: A dictionary containing the default runtime_env configuration with
+            excludes for common large directories.
+
+    Examples:
+        >>> import ray
+        >>> from torchrl._utils import get_ray_default_runtime_env
+        >>> ray_init_config = {"num_cpus": 4}
+        >>> ray_init_config["runtime_env"] = get_ray_default_runtime_env()
+        >>> ray.init(**ray_init_config)
+
+    Note:
+        The excludes list includes:
+        - Virtual environments (.venv/, venv/, etc.)
+        - Test files and caches
+        - Documentation builds
+        - Benchmarks
+        - Examples and tutorials
+        - CI/CD configurations
+        - IDE configurations
+
+    """
+    return {
+        "excludes": [
+            ".venv/",
+            "venv/",
+            "env/",
+            "ENV/",
+            "env.bak/",
+            "venv.bak/",
+            "test/",
+            "tests/",
+            "docs/",
+            "benchmarks/",
+            "tutorials/",
+            "examples/",
+            ".github/",
+            ".pytest_cache/",
+            ".mypy_cache/",
+            ".ruff_cache/",
+            "__pycache__/",
+            "*.pyc",
+            "*.pyo",
+            "*.egg-info/",
+            ".idea/",
+            ".vscode/",
+            "dev/",
+            "main/",
+            "*.html",
+        ]
+    }
+
+
+def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
+    """Merge user-provided ray_init_config with default runtime_env excludes.
+
+    This function ensures that the default TorchRL runtime_env excludes are applied
+    to prevent large directories from being uploaded to Ray workers, while preserving
+    any user-provided configuration.
+
+    Args:
+        ray_init_config (dict): The ray init configuration dictionary to merge.
+
+    Returns:
+        dict: The merged configuration with default runtime_env excludes applied.
+
+    Examples:
+        >>> from torchrl._utils import merge_ray_runtime_env
+        >>> ray_init_config = {"num_cpus": 4}
+        >>> ray_init_config = merge_ray_runtime_env(ray_init_config)
+        >>> ray.init(**ray_init_config)
+
+    """
+    default_runtime_env = get_ray_default_runtime_env()
+    runtime_env = ray_init_config.setdefault("runtime_env", {})
+
+    if not isinstance(runtime_env, dict):
+        runtime_env = dict(runtime_env)
+        ray_init_config["runtime_env"] = runtime_env
+
+    # Merge excludes lists
+    excludes = runtime_env.get("excludes", [])
+    runtime_env["excludes"] = list(set(default_runtime_env["excludes"] + excludes))
+
+    # Ensure env_vars exists
+    if "env_vars" not in runtime_env:
+        runtime_env["env_vars"] = {}
+    elif not isinstance(runtime_env["env_vars"], dict):
+        runtime_env["env_vars"] = dict(runtime_env["env_vars"])
+
+    return ray_init_config
