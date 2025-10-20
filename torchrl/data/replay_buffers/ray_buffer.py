@@ -147,6 +147,7 @@ class RayReplayBuffer(ReplayBuffer):
         else:
             self.has_gpu = False
         self._rb = remote_cls(*args, **kwargs)
+        self._delayed_init = False
 
     def close(self):
         """Terminates the Ray actor associated with this replay buffer."""
