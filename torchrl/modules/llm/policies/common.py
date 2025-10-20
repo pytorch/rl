@@ -11,7 +11,7 @@ from concurrent.futures import CancelledError, Future, wait
 
 from contextlib import nullcontext
 from functools import wraps
-from typing import Any, Literal, overload
+from typing import Any, Literal, overload, TYPE_CHECKING
 
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDictBase
@@ -21,9 +21,13 @@ from tensordict.utils import _zip_strict
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.distributions.discrete import LLMMaskedCategorical
+
+if TYPE_CHECKING:
+    from transformers import AutoTokenizer
 
 # TODOs:
 # - [ ] Remove the useless view(-1) calls when num_samples is not > 1
@@ -71,6 +75,107 @@ class Tokens(TensorClass["nocast"]):
         defaults["padded"] = NonTensor(shape=shape, example_data=False)
 
         return Composite(defaults, shape=shape[:-1], data_cls=cls, step_mdp_static=True)
+
+    def to_text(
+        self,
+        tokenizer: AutoTokenizer,
+        skip_special_tokens: bool = False,
+    ) -> Text:
+        """Convert tokens to text using the tokenizer.
+
+        Args:
+            tokenizer: The tokenizer to use for decoding.
+            skip_special_tokens: Whether to skip special tokens in the output.
+
+        Returns:
+            A Text object with decoded text.
+
+        Raises:
+            ValueError: If padded tokens are provided (not yet supported).
+        """
+        # Check if padded - handle both bool and LinkedList cases
+        padded = self.padded
+        if isinstance(padded, bool):
+            if padded:
+                raise ValueError(
+                    "Conversion from padded tokens to text is not yet supported. "
+                    "Please use unpadded tokens (nested tensors)."
+                )
+        else:
+            # LinkedList case (when stacked) - check if any are True
+            padded_list = self.view(-1).padded
+            if any(padded_list):
+                raise ValueError(
+                    "Conversion from padded tokens to text is not yet supported. "
+                    "Please use unpadded tokens (nested tensors)."
+                )
+
+        # Create output structure
+        text_out = Text._from_tensordict(self._tensordict.empty())
+
+        # Helper to prepare tokens for batch_decode
+        def _prepare_tokens_for_decode(tokens_list):
+            """Ensure tokens are in the right format for batch_decode."""
+            if isinstance(tokens_list, list):
+                # Squeeze out extra batch dimensions if present
+                return [t.squeeze(0) if t.dim() > 1 else t for t in tokens_list]
+            else:
+                # Single tensor case
+                return tokens_list
+
+        # Decode prompt if available
+        if "prompt" in self._tensordict.keys():
+            prompt_tokens_list = self.get("prompt", as_list=True)
+            prompt_tokens_list = _prepare_tokens_for_decode(prompt_tokens_list)
+            prompt_texts = tokenizer.batch_decode(
+                prompt_tokens_list, skip_special_tokens=skip_special_tokens
+            )
+            text_out.set("prompt", prompt_texts)
+
+        # Decode response if available
+        if "response" in self._tensordict.keys():
+            response_tokens_list = self.get("response", as_list=True)
+            response_tokens_list = _prepare_tokens_for_decode(response_tokens_list)
+            response_texts = tokenizer.batch_decode(
+                response_tokens_list, skip_special_tokens=skip_special_tokens
+            )
+            text_out.set("response", response_texts)
+
+        # Decode full if available
+        if "full" in self._tensordict.keys():
+            full_tokens_list = self.get("full", as_list=True)
+            full_tokens_list = _prepare_tokens_for_decode(full_tokens_list)
+            full_texts = tokenizer.batch_decode(
+                full_tokens_list, skip_special_tokens=skip_special_tokens
+            )
+            text_out.set("full", full_texts)
+
+        return text_out
+
+    def to_history(
+        self,
+        tokenizer: AutoTokenizer,
+        chat_template_name: str | None = None,
+        skip_special_tokens: bool = False,
+    ) -> ChatHistory:
+        """Convert tokens to history by first decoding to text, then parsing.
+
+        Args:
+            tokenizer: The tokenizer to use for decoding and parsing.
+            chat_template_name: Optional chat template name for parsing.
+            skip_special_tokens: Whether to skip special tokens when decoding.
+
+        Returns:
+            A ChatHistory object with parsed conversation history.
+
+        Raises:
+            ValueError: If padded tokens are provided (not yet supported).
+        """
+        # First convert to text
+        text_obj = self.to_text(tokenizer, skip_special_tokens=skip_special_tokens)
+
+        # Then convert text to history
+        return text_obj.to_history(tokenizer, chat_template_name=chat_template_name)
 
 
 class Masks(TensorClass["nocast"]):
@@ -210,6 +315,183 @@ class ChatHistory(TensorClass["nocast"]):
                     [self.full], -1
                 )  # equivalent to unsqueeze(-1) but make sure it's a lazy stack
 
+    def to_tokens(
+        self,
+        tokenizer: AutoTokenizer,
+        chat_template_name: str | None = None,
+        chat_template: str | None = None,
+    ) -> Tokens:
+        """Tokenize the conversation history into a :class:`Tokens` object.
+
+        Args:
+            tokenizer: The tokenizer to use for tokenization.
+            chat_template_name: Optional chat template name to use.
+            chat_template: Optional chat template string to use.
+
+        Returns:
+            A Tokens object with prompt, response, and full tokens.
+
+        Note:
+            - For prompt: uses add_generation_prompt=True
+            - For full: uses add_generation_prompt=False
+            - Response is computed by slicing full tokens after prompt length
+        """
+        from tensordict.utils import _zip_strict
+
+        tokenizer_kwargs = {}
+        if chat_template_name is not None:
+            tokenizer_kwargs["chat_template_name"] = chat_template_name
+        if chat_template is not None:
+            tokenizer_kwargs["chat_template"] = chat_template
+
+        # Create output structure
+        tokens_out = Tokens._from_tensordict(self._tensordict.empty())
+
+        # Process prompt if available
+        if self.prompt is not None:
+            prompt_tokens = self.prompt.apply_chat_template(
+                tokenizer=tokenizer,
+                return_dict=True,
+                add_generation_prompt=True,
+                tokenize=True,
+                padding=False,
+                **tokenizer_kwargs,
+            )
+            # Get input_ids using as_nested_tensor to handle different lengths
+            tokens_out._tensordict.set(
+                "prompt", prompt_tokens.get("input_ids", as_list=True)
+            )
+
+        # Process full if available
+        if self.full is not None:
+            full_tokens = self.full.apply_chat_template(
+                tokenizer=tokenizer,
+                return_dict=True,
+                add_generation_prompt=False,
+                tokenize=True,
+                padding=False,
+                **tokenizer_kwargs,
+            )
+            # Get input_ids using as_nested_tensor to handle different lengths
+            tokens_out._tensordict.set(
+                "full", full_tokens.get("input_ids", as_list=True)
+            )
+
+        # Compute response by slicing if both prompt and full are available
+        if self.prompt is not None and self.full is not None:
+            prompt_tokens_list = tokens_out.get("prompt", as_list=True)
+            full_tokens_list = tokens_out.get("full", as_list=True)
+            response_tokens_list = []
+
+            for prompt_tok, full_tok in _zip_strict(
+                prompt_tokens_list, full_tokens_list
+            ):
+                prompt_len = prompt_tok.shape[-1]
+                response_tok = full_tok[..., prompt_len:]
+                response_tokens_list.append(response_tok)
+
+            tokens_out.set("response", response_tokens_list)
+
+        # Process response directly if available (and full is not)
+        elif self.response is not None:
+            response_tokens = self.response.apply_chat_template(
+                tokenizer=tokenizer,
+                return_dict=True,
+                add_generation_prompt=False,
+                tokenize=True,
+                padding=False,
+                **tokenizer_kwargs,
+            )
+            # Get input_ids using as_nested_tensor to handle different lengths
+            tokens_out._tensordict.set(
+                "response", response_tokens.get("input_ids", as_list=True)
+            )
+
+        tokens_out.padded = False
+        return tokens_out
+
+    def to_text(
+        self,
+        tokenizer: AutoTokenizer,
+        chat_template_name: str | None = None,
+        chat_template: str | None = None,
+    ) -> Text:
+        """Convert the conversation history into a :class:`Text` object.
+
+        Args:
+            tokenizer: The tokenizer to use for applying chat templates.
+            chat_template_name: Optional chat template name to use.
+            chat_template: Optional chat template string to use.
+
+        Returns:
+            A Text object with prompt, response, and full text.
+
+        Note:
+            - For prompt: uses add_generation_prompt=True
+            - For full: uses add_generation_prompt=False
+            - Response is computed by removing prompt prefix from full text
+        """
+        from tensordict.utils import _zip_strict
+
+        tokenizer_kwargs = {}
+        if chat_template_name is not None:
+            tokenizer_kwargs["chat_template_name"] = chat_template_name
+        if chat_template is not None:
+            tokenizer_kwargs["chat_template"] = chat_template
+
+        # Create output structure
+        text_out = Text._from_tensordict(self._tensordict.empty())
+
+        # Process prompt if available
+        if self.prompt is not None:
+            prompt_text = self.prompt.apply_chat_template(
+                tokenizer=tokenizer,
+                tokenize=False,
+                add_generation_prompt=True,
+                **tokenizer_kwargs,
+            )
+            text_out.set("prompt", prompt_text)
+
+        # Process full if available
+        if self.full is not None:
+            full_text = self.full.apply_chat_template(
+                tokenizer=tokenizer,
+                tokenize=False,
+                add_generation_prompt=False,
+                **tokenizer_kwargs,
+            )
+            text_out.set("full", full_text)
+
+        # Compute response by removing prompt prefix if both are available
+        if self.prompt is not None and self.full is not None:
+            prompt_texts_list = text_out.get("prompt", as_list=True)
+            full_texts_list = text_out.get("full", as_list=True)
+            response_texts_list = []
+
+            for prompt_txt, full_txt in _zip_strict(prompt_texts_list, full_texts_list):
+                if full_txt.startswith(prompt_txt):
+                    response_txt = full_txt[len(prompt_txt) :]
+                else:
+                    raise ValueError(
+                        f"Full text does not start with prompt text. "
+                        f"Prompt: {prompt_txt[:50]}..., Full: {full_txt[:50]}..."
+                    )
+                response_texts_list.append(response_txt)
+
+            text_out.set("response", response_texts_list)
+
+        # Process response directly if available (and full is not)
+        elif self.response is not None:
+            response_text = self.response.apply_chat_template(
+                tokenizer=tokenizer,
+                tokenize=False,
+                add_generation_prompt=False,
+                **tokenizer_kwargs,
+            )
+            text_out.set("response", response_text)
+
+        return text_out
+
 
 class LogProbs(TensorClass["nocast"]):
     """A log-probability container.
@@ -280,6 +562,157 @@ class Text(TensorClass["nocast"]):
         defaults = {k: NonTensor(shape=shape, example_data="a string") for k in keys}
 
         return Composite(defaults, shape=shape[:-1], data_cls=cls, step_mdp_static=True)
+
+    def to_tokens(
+        self,
+        tokenizer: AutoTokenizer,
+        padding: bool = False,
+        truncation: bool = False,
+        return_tensors: str = "pt",
+    ) -> Tokens:
+        """Convert text to tokens using the tokenizer.
+
+        Args:
+            tokenizer: The tokenizer to use for encoding.
+            padding: Whether to pad the sequences.
+            truncation: Whether to truncate the sequences.
+            return_tensors: The format of the output tensors.
+
+        Returns:
+            A Tokens object with tokenized text.
+
+        Raises:
+            ValueError: If padding is requested (not yet supported).
+        """
+        if padding:
+            raise ValueError(
+                "Padding is not yet supported for text to tokens conversion. "
+                "Please use padding=False."
+            )
+
+        # When not padding, we can't use return_tensors because sequences have different lengths
+        # We'll get lists and convert them to tensors ourselves
+        actual_return_tensors = return_tensors if padding else None
+
+        # Create output structure
+        tokens_out = Tokens._from_tensordict(self._tensordict.empty())
+
+        # Tokenize prompt if available
+        if self.prompt is not None:
+            prompt_texts_list = self.prompt
+            prompt_tokens = tokenizer(
+                prompt_texts_list,
+                padding=padding,
+                truncation=truncation,
+                return_tensors=actual_return_tensors,
+            )
+            # Convert to list of tensors
+            input_ids = prompt_tokens["input_ids"]
+            if not isinstance(input_ids, list):
+                input_ids = list(input_ids)
+            else:
+                # Convert each list to tensor
+                input_ids = [torch.tensor(ids) for ids in input_ids]
+            tokens_out.set("prompt", input_ids)
+
+        # Tokenize response if available
+        if self.response is not None:
+            response_texts_list = self.response
+            response_tokens = tokenizer(
+                response_texts_list,
+                padding=padding,
+                truncation=truncation,
+                return_tensors=actual_return_tensors,
+            )
+            # Convert to list of tensors
+            input_ids = response_tokens["input_ids"]
+            if not isinstance(input_ids, list):
+                input_ids = list(input_ids)
+            else:
+                # Convert each list to tensor
+                input_ids = [torch.tensor(ids) for ids in input_ids]
+            tokens_out.set("response", input_ids)
+
+        # Tokenize full if available
+        if self.full is not None:
+            full_texts_list = self.full
+            full_tokens = tokenizer(
+                full_texts_list,
+                padding=padding,
+                truncation=truncation,
+                return_tensors=actual_return_tensors,
+            )
+            # Convert to list of tensors
+            input_ids = full_tokens["input_ids"]
+            if not isinstance(input_ids, list):
+                input_ids = list(input_ids)
+            else:
+                # Convert each list to tensor
+                input_ids = [torch.tensor(ids) for ids in input_ids]
+            tokens_out.set("full", input_ids)
+
+        tokens_out.padded = padding
+        return tokens_out
+
+    def to_history(
+        self,
+        tokenizer: AutoTokenizer,
+        chat_template_name: str | None = None,
+    ) -> ChatHistory:
+        """Convert text to history by parsing the chat format.
+
+        Args:
+            tokenizer: The tokenizer to use for parsing.
+            chat_template_name: Optional chat template name for parsing.
+
+        Returns:
+            A ChatHistory object with parsed conversation history.
+        """
+        from torchrl.data.llm import History
+
+        # Create output structure
+        history_out = ChatHistory._from_tensordict(self._tensordict.empty())
+
+        # Parse prompt if available
+        if self.prompt is not None:
+            prompt_texts_list = self.prompt
+            prompt_histories_list = []
+            for prompt_text in prompt_texts_list:
+                prompt_hist = History.from_text(
+                    prompt_text,
+                    chat_template_name=chat_template_name,
+                    tokenizer=tokenizer,
+                )
+                prompt_histories_list.append(prompt_hist)
+            history_out.set("prompt", lazy_stack(prompt_histories_list))
+
+        # Parse response if available
+        if self.response is not None:
+            response_texts_list = self.response
+            response_histories_list = []
+            for response_text in response_texts_list:
+                response_hist = History.from_text(
+                    response_text,
+                    chat_template_name=chat_template_name,
+                    tokenizer=tokenizer,
+                )
+                response_histories_list.append(response_hist)
+            history_out.set("response", lazy_stack(response_histories_list))
+
+        # Parse full if available
+        if self.full is not None:
+            full_texts_list = self.full
+            full_histories_list = []
+            for full_text in full_texts_list:
+                full_hist = History.from_text(
+                    full_text,
+                    chat_template_name=chat_template_name,
+                    tokenizer=tokenizer,
+                )
+                full_histories_list.append(full_hist)
+            history_out.set("full", lazy_stack(full_histories_list))
+
+        return history_out
 
 
 class LogProbDistribution(D.Distribution):
@@ -866,6 +1299,8 @@ class LLMWrapperBase(TensorDictModuleBase):
         # Make the response mask using prompt tokens
         if not self.pad_output:
             # Check that the lengths of the mask is the same as the logits
+            torchrl_logger.info(f"Response mask: {response_mask}")
+            torchrl_logger.info(f"Logits: {logits}")
             for m, lg in _zip_strict(response_mask, logits):
                 if m.shape[-1] != lg.shape[-2]:
                     raise ValueError(
