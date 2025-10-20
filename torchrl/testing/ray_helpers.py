@@ -6,8 +6,8 @@
 """Helper classes for Ray-based weight synchronization tests.
 
 This module contains Ray actor classes that need to be importable by Ray workers.
-These classes are used in test_updaters.py but must be defined at module level
-so Ray can serialize and import them on remote workers.
+These classes are used in tests but must be defined at module level in a proper
+Python package (not in test files) so Ray can serialize and import them on remote workers.
 """
 
 import torch
