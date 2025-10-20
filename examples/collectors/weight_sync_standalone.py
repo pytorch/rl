@@ -129,7 +129,7 @@ def example_multiprocess_sync():
         print(
             f"Main: Worker completed. Worker's weight sum: {model_state['weight_sum']:.4f}"
         )
-        print(f"✓ Weight synchronization successful!")
+        print("Weight synchronization successful!")
 
 
 def example_shared_memory_sync():
@@ -163,7 +163,7 @@ def example_shared_memory_sync():
         weights_td["weight"].fill_(2.0)
         weights_td["bias"].fill_(1.0)
 
-    print(f"Main: Sending weights via shared memory...")
+    print("Main: Sending weights via shared memory...")
     sender.update_weights(weights_td)
 
     # Workers automatically see updates via shared memory!
@@ -179,7 +179,7 @@ def example_shared_memory_sync():
         print(
             f"Main: Worker completed. Worker's weight sum: {model_state['weight_sum']:.4f}"
         )
-        print(f"✓ Shared memory synchronization successful!")
+        print("Shared memory synchronization successful!")
 
 
 def main():
