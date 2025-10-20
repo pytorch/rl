@@ -13,9 +13,9 @@ from pathlib import Path
 import hydra
 
 from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.weight_update.llm import get_model_metadata
 
 try:
     import ray
@@ -36,7 +36,7 @@ from grpo_utils import (
     get_train_model,
     log_training_metrics,
     make_env,
-    make_weight_updater,
+    make_weight_sync_scheme,
 )
 from omegaconf import DictConfig
 
@@ -111,12 +111,23 @@ def train(
         loss_fn = torch.compile(loss_fn)
 
     vllm_engine = inference_policy.model
-    weight_updater: vLLMUpdaterV2 = make_weight_updater(vllm_engine=vllm_engine)
-    collector.weight_updater = weight_updater
 
-    weight_updater.init()
+    # Create weight sync scheme
+    weight_sync_scheme = make_weight_sync_scheme(vllm_engine=vllm_engine)
+
+    # Set up weight sender
+    torchrl_logger.info("Setting up weight synchronization scheme...")
+    sender = weight_sync_scheme.create_sender()
+    sender.register_model(policy_training)
+
+    # Initialize collective group
+    torchrl_logger.info("Initializing collective group...")
+    metadata = get_model_metadata(policy_training)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+
+    # First weight update
     with timeit("update_policy_weights"):
-        weight_updater.push_weights_from_transformers(policy_training)
+        sender.update_weights()
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
@@ -267,7 +278,7 @@ def train(
 
         with timeit("update_policy_weights"):
             torchrl_logger.info("Updating policy weights...")
-            weight_updater.push_weights_from_transformers(policy_training)
+            sender.update_weights()
             # TODO: do we need this? Does it interfere with other processes?
             # torch.cuda.empty_cache()
             gc.collect()

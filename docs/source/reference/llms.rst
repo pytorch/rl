@@ -633,7 +633,7 @@ Collectors
 .. _Collectors:
 
 TorchRL offers specialized collector classes (:class:`~torchrl.collectors.llm.LLMCollector` and :class:`~torchrl.collectors.llm.RayLLMCollector`) 
-that are tailored for LLM use cases. We also provide dedicated updaters for some inference engines.
+that are tailored for LLM use cases. We also provide weight synchronization schemes for vLLM inference engines.
 
 See :ref:`ref_collectors` for more details on the collector API. In brief, the idea of a collector is to isolate the inference part of the pipeline
 in a dedicated class. 
@@ -649,8 +649,126 @@ Collectors are defined by the following parameters and features:
   In other cases, the collector can be iterated over to collect data.
 - **Steps**: A collector is built with a certain number of steps budget, as well as a number of steps to be
   included in each batch yield during collection.
-- **Weight Updater**: Weight updaters are the classes that update the policy weights. Isolating the weight update
-  in a dedicated class allows to easily implement different weight update strategies depending on the policy specification.
+- **Weight Synchronization Schemes**: Weight sync schemes handle the synchronization of weights between the training model
+  and the inference engine. The new scheme-based approach provides flexible, high-performance weight updates for vLLM and
+  other inference backends.
+
+vLLM Weight Synchronization Schemes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TorchRL provides two weight synchronization schemes for vLLM engines, offering different trade-offs between
+performance and simplicity:
+
+**1. NCCL-Based Synchronization** (:class:`~torchrl.weight_update.llm.VLLMWeightSyncScheme`)
+
+Uses NCCL collectives for high-bandwidth GPU-to-GPU weight transfers. Best for:
+
+- High-frequency weight updates
+- Large models where transfer speed is critical
+- Setups with GPU interconnect (NVLink, InfiniBand)
+
+**2. Double-Buffer Synchronization** (:class:`~torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme`)
+
+Uses memory-mapped file storage for asynchronous weight transfers. Best for:
+
+- Simpler setup without NCCL coordination
+- Distributed setups with shared filesystems (NFS)
+- Cases where update frequency is lower
+
+**Usage Example with NCCL:**
+
+.. code-block:: python
+
+    from torchrl.collectors.llm import RayLLMCollector
+    from torchrl.weight_update.llm import VLLMWeightSyncScheme
+    from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
+    
+    # Create vLLM engine
+    vllm_engine = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-7B",
+        num_devices=2,
+        num_replicas=2,
+    )
+    policy = vLLMWrapper(vllm_engine, input_mode="history")
+    
+    # Create NCCL weight sync scheme
+    weight_sync_scheme = VLLMWeightSyncScheme(
+        master_address="localhost",
+        master_port=29500,
+        gpus_per_replica=2,  # tp_size × dp_size × pp_size
+        num_replicas=2,
+        strategy="state_dict"
+    )
+    
+    # Create collector with weight sync scheme
+    collector = RayLLMCollector(
+        env=make_env,
+        policy=policy,
+        dialog_turns_per_batch=256,
+        total_dialog_turns=10000,
+        weight_sync_schemes={"policy": weight_sync_scheme},
+        track_policy_version=True,
+    )
+    
+    # During training, get the sender and update weights
+    sender = collector._weight_senders["policy"]
+    sender.register_model(training_model)
+    
+    # Initialize collective group (must be called before first update)
+    metadata = get_model_metadata(training_model)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+    
+    # Update weights during training
+    for i, data in enumerate(collector):
+        # ... training step ...
+        if i % 10 == 0:
+            sender.update_weights()  # Broadcasts via NCCL
+
+**Usage Example with Double-Buffer:**
+
+.. code-block:: python
+
+    from torchrl.collectors.llm import RayLLMCollector
+    from torchrl.weight_update.llm import VLLMDoubleBufferSyncScheme
+    from torchrl.modules.llm import AsyncVLLM, vLLMWrapper
+    
+    # Create vLLM engine
+    vllm_engine = AsyncVLLM.from_pretrained(
+        "Qwen/Qwen2.5-7B",
+        num_devices=2,
+        num_replicas=1,
+    )
+    policy = vLLMWrapper(vllm_engine, input_mode="history")
+    
+    # Create double-buffer weight sync scheme
+    weight_sync_scheme = VLLMDoubleBufferSyncScheme(
+        remote_addr="/tmp/weights",  # Or "/mnt/shared/weights" for NFS
+        num_threads=128,
+        strategy="state_dict"
+    )
+    
+    # Create collector with weight sync scheme
+    collector = RayLLMCollector(
+        env=make_env,
+        policy=policy,
+        dialog_turns_per_batch=256,
+        total_dialog_turns=10000,
+        weight_sync_schemes={"policy": weight_sync_scheme},
+        track_policy_version=True,
+    )
+    
+    # During training, get the sender and receiver
+    sender = collector._weight_senders["policy"]
+    sender.register_model(training_model)
+    
+    # No initialization needed for double-buffer scheme!
+    
+    # Update weights during training
+    for i, data in enumerate(collector):
+        # ... training step ...
+        if i % 10 == 0:
+            sender.update_weights()  # Writes to shared storage
+            # vLLM workers can poll and apply: receiver.poll_and_apply()
 
 Policy Version Tracking
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -662,18 +780,51 @@ transform, or a boolean to the collector constructor.
 
     >>> from torchrl.envs.llm.transforms import PolicyVersion
     >>> from torchrl.collectors.llm import LLMCollector
-    >>> from torchrl.collectors.llm.weight_update import vLLMUpdater
+    >>> from torchrl.weight_update.llm import VLLMWeightSyncScheme, get_model_metadata
     >>> env = make_env() # place your code here
     >>> policy = make_policy() # place your code here
-    >>> collector = LLMCollector(env, policy=policy, weight_updater=vLLMUpdater(), track_policy_version=True)
-    >>> # init the updater
-    >>> collector.weight_updater.init(...)
-    >>> # the version is incremented after each weight update
-    >>> collector.update_policy_weights_(state_dict=...)
+    >>> scheme = VLLMWeightSyncScheme(master_port=29500, gpus_per_replica=1, num_replicas=1)
+    >>> collector = LLMCollector(env, policy=policy, weight_sync_schemes={"policy": scheme}, track_policy_version=True)
+    >>> # Get the sender and register model
+    >>> sender = collector._weight_senders["policy"]
+    >>> sender.register_model(training_model)
+    >>> # Initialize the collective group
+    >>> metadata = get_model_metadata(training_model)
+    >>> sender.init_all_workers_group(metadata, vllm_engine=policy.model)
+    >>> # Update weights
+    >>> sender.update_weights()
     >>> print(collector.policy_version_tracker.version)
     >>> # the policy version is written in the data
     >>> for data in collector:
     ...     print(data["policy_version"])
+
+.. currentmodule:: torchrl.weight_update.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    VLLMWeightSyncScheme
+    VLLMWeightSender
+    VLLMWeightReceiver
+    VLLMCollectiveTransport
+    VLLMDoubleBufferSyncScheme
+    VLLMDoubleBufferWeightSender
+    VLLMDoubleBufferWeightReceiver
+    VLLMDoubleBufferTransport
+    get_model_metadata
+
+Legacy Weight Updaters (Deprecated)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. deprecated:: 0.11
+    The `vLLMUpdater` and `vLLMUpdaterV2` classes are deprecated in favor of the new weight synchronization schemes
+    (:class:`~torchrl.weight_update.llm.VLLMWeightSyncScheme` and :class:`~torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme`).
+    These schemes provide better performance, more flexibility, and cleaner integration with collectors.
+    The legacy updaters will be removed in a future release.
+
+    The legacy weight updaters (`vLLMUpdater` and `vLLMUpdaterV2`) are still available but are no longer recommended.
+    Please migrate to the new weight synchronization schemes shown above.
 
 .. currentmodule:: torchrl.collectors.llm
 
