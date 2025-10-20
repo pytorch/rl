@@ -14,7 +14,6 @@ from tensordict.nn import TensorDictModule
 from torch import multiprocessing as mp
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.envs import GymEnv
-
 from torchrl.weight_update.weight_sync_schemes import (
     _resolve_model,
     MPTransport,
