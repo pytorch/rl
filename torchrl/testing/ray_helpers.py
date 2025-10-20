@@ -159,7 +159,6 @@ class WorkerTransformerNCCL:
         Returns:
             str: "updated" status message
         """
-
         # Optionally modify weights for testing
         if modify_weights:
             with torch.no_grad():
