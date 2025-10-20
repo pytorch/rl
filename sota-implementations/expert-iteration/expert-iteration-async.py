@@ -13,9 +13,9 @@ from pathlib import Path
 import hydra
 
 from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.weight_update.llm import get_model_metadata
 
 try:
     import ray
@@ -33,7 +33,7 @@ from ei_utils import (
     get_train_model,
     log_training_metrics,
     make_env,
-    make_weight_updater,
+    make_weight_sync_scheme,
     RemoteDataLogger,
 )
 from omegaconf import DictConfig
@@ -115,26 +115,39 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # Get metadata
-    model_metadata = vLLMUpdater.get_model_metadata(policy_training)
+    # Get vLLM engine from the inference policy
+    # Note: In expert iteration, the inference policy is typically created in get_inference_model
+    # We need to get the vLLM engine from the collector's policy or create it
+    # For now, we'll use the approach similar to GRPO with explicit scheme creation
 
-    # Create weight updater with remote LLM
-    weight_updater: vLLMUpdater = make_weight_updater(
+    # Create weight sync scheme
+    weight_sync_scheme = make_weight_sync_scheme(
         master_address="localhost",  # Since we're running locally
         master_port=None,  # Will auto-assign an open port
-        model_metadata=model_metadata,
         vllm_tp_size=cfg.inference_model.num_devices
         if cfg.inference_model.num_devices is not None
         else len(cfg.inference_model.get("devices", [1])),
     )
-    collector.weight_updater = weight_updater
 
-    # Initialize the weight updater
-    weight_updater.init(model_metadata=model_metadata)
+    # Set up weight sender
+    torchrl_logger.info("Setting up weight synchronization scheme...")
+    sender = weight_sync_scheme.create_sender()
+    sender.register_model(policy_training)
 
-    # First update the weights
+    # Get vLLM engine reference from collector's policy
+    # The collector has the policy which wraps the vLLM engine
+    vllm_engine = collector.policy.model if hasattr(collector, "policy") else None
+    if vllm_engine is None:
+        raise RuntimeError("Could not get vLLM engine from collector policy")
+
+    # Initialize collective group
+    torchrl_logger.info("Initializing collective group...")
+    metadata = get_model_metadata(policy_training)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+
+    # First weight update
     with timeit("update_policy_weights"):
-        weight_updater.push_weights(policy_training)
+        sender.update_weights()
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
@@ -329,7 +342,7 @@ def train(
         if step % cfg.train.weight_update_frequency == 0:
             with timeit("update_policy_weights"):
                 torchrl_logger.info("Updating policy weights...")
-                weight_updater.push_weights(policy_training)
+                sender.update_weights()
                 # TODO: do we need this? Does it interfere with other processes?
                 # torch.cuda.empty_cache()
                 gc.collect()
