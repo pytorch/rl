@@ -129,7 +129,7 @@ def example_multiprocess_sync():
         print(
             f"Main: Worker completed. Worker's weight sum: {model_state['weight_sum']:.4f}"
         )
-        print("✓ Weight synchronization successful!")
+        print("Weight synchronization successful!")
 
 
 def example_shared_memory_sync():
@@ -179,7 +179,7 @@ def example_shared_memory_sync():
         print(
             f"Main: Worker completed. Worker's weight sum: {model_state['weight_sum']:.4f}"
         )
-        print("✓ Shared memory synchronization successful!")
+        print("Shared memory synchronization successful!")
 
 
 def main():

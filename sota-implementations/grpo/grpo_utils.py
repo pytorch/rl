@@ -15,10 +15,10 @@ from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
+from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
@@ -544,23 +544,41 @@ def get_hf_model(
         torch.set_default_dtype(original_dtype)
 
 
-def make_weight_updater(
+def make_weight_sync_scheme(
     vllm_engine,
-) -> vLLMUpdaterV2:
-    """Creates a vLLM weight updater for the policy using the new V2 API.
+) -> VLLMWeightSyncScheme:
+    """Creates a vLLM weight synchronization scheme using NCCL collectives.
 
-    The V2 updater is much simpler - it just needs a vLLM engine that implements
-    the RLvLLMEngine interface (like RayLLMWorker, LocalLLMWrapper, or AsyncVLLM).
+    This function creates a weight sync scheme that uses NCCL for high-performance
+    GPU-to-GPU weight transfers from the training model to vLLM inference workers.
 
     Args:
-        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface.
+        vllm_engine: A vLLM engine implementing the RLvLLMEngine interface
+            (like RayLLMWorker, LocalLLMWrapper, or AsyncVLLM).
             This is typically obtained from the inference policy's model attribute.
 
     Returns:
-        vLLMUpdaterV2: An instance of the weight updater configured to update
-            the vLLM worker's weights through the engine's own methods.
+        VLLMWeightSyncScheme: A weight sync scheme configured for the vLLM engine.
     """
-    return vLLMUpdaterV2(vllm_engine=vllm_engine)
+    # Get configuration from the vLLM engine
+    tp_size = vllm_engine.get_tp_size()
+    num_replicas = getattr(vllm_engine, "num_replicas", 1)
+    master_address = vllm_engine.get_master_address()
+    master_port = vllm_engine.get_master_port()
+
+    torchrl_logger.info(
+        f"Creating VLLMWeightSyncScheme with tp_size={tp_size}, "
+        f"num_replicas={num_replicas}, master_address={master_address}, "
+        f"master_port={master_port}"
+    )
+
+    return VLLMWeightSyncScheme(
+        master_address=master_address,
+        master_port=master_port,
+        gpus_per_replica=tp_size,
+        num_replicas=num_replicas,
+        strategy="state_dict",
+    )
 
 
 def compute_device_allocation(cfg):
