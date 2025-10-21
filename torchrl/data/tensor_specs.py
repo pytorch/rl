@@ -5750,6 +5750,7 @@ class Composite(TensorSpec):
             _dict,
             batch_size=_size([*shape, *_remove_neg_shapes(self.shape)]),
             device=self.device,
+            names=self.names,
         )
 
     def keys(
@@ -6030,6 +6031,7 @@ class Composite(TensorSpec):
             },
             batch_size=_size([*shape, *self._safe_shape]),
             device=device,
+            names=self.names,
         )
 
     def __eq__(self, other: object) -> bool:
