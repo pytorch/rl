@@ -169,6 +169,10 @@ class RayTransform(Transform, ABC):
             )
         return ray
 
+    @_ray.setter
+    def _ray(self, value):
+        self._ray = value
+
     def __init__(
         self,
         *,
