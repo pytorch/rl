@@ -375,7 +375,7 @@ class TestTools:
             "```python\n"
             "print(1 + 1)\n"
             "```<|im_end|>\n"
-            "    <|im_start|>user\n"
+            "    <|im_start|>tool\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "2\n"
@@ -395,7 +395,7 @@ class TestTools:
                         content="Here is a python code to execute:\n```python\nprint(1 + 1)\n```",
                     ),
                     History(
-                        role="user",
+                        role="tool",
                         content="<tool_response>\nCode block 1 executed successfully:\n2\n\n</tool_response>",
                         tool_responses=["Code block 1 executed successfully:\n2\n"],
                     ),
@@ -478,7 +478,7 @@ class TestTools:
             "```python\n"
             "a=1\n"
             "```<|im_end|>\n"
-            "    <|im_start|>user\n"
+            "    <|im_start|>tool\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "\n"
@@ -489,7 +489,7 @@ class TestTools:
             "a+=1\n"
             "assert a == 2\n"
             "```<|im_end|>\n"
-            "    <|im_start|>user\n"
+            "    <|im_start|>tool\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "\n"
