@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   unittests:
-    if: ${{ github.event_name == 'push' || contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/') }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
         python_version: ["3.9"]
@@ -51,7 +51,7 @@ jobs:
         export TF_CPP_MIN_LOG_LEVEL=0
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_llm/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_llm/install.sh
-        bash .github/unittest/linux_libs/scripts_llm/run_test.sh
-        bash .github/unittest/linux_libs/scripts_llm/post_process.sh
+        bash .github/unittest/llm/scripts_llm/setup_env.sh
+        bash .github/unittest/llm/scripts_llm/install.sh
+        bash .github/unittest/llm/scripts_llm/run_test.sh
+        bash .github/unittest/llm/scripts_llm/post_process.sh
