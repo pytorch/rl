@@ -13,7 +13,7 @@ import pytest
 import torch
 from tensordict import lazy_stack, set_list_to_stack, TensorDict
 
-from torchrl import torchrl_logger
+from torchrl import logger as torchrl_logger
 
 from torchrl.data import (
     History,
