@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   unittests:
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'llm/') }}
     strategy:
       matrix:
         python_version: ["3.9"]
