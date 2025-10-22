@@ -5740,17 +5740,22 @@ class Composite(TensorSpec):
         for key, item in self.items():
             if item is not None:
                 _dict[key] = item.rand(shape)
-        if self.data_cls is None:
-            cls = TensorDict
+
+        cls = self.data_cls if self.data_cls is not None else TensorDict
+        if cls is not TensorDict:
+            kwargs = {}
+            if self._td_dim_names is not None:
+                warnings.warn(f"names for cls {cls} is not supported for rand.")
         else:
-            cls = self.data_cls
+            kwargs = {"names": self._td_dim_names}
+
         # No need to run checks since we know Composite is compliant with
         # TensorDict requirements
         return cls.from_dict(
             _dict,
             batch_size=_size([*shape, *_remove_neg_shapes(self.shape)]),
             device=self.device,
-            names=self._td_dim_names,
+            **kwargs,
         )
 
     def keys(
@@ -6018,10 +6023,13 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
 
-        if self.data_cls is not None:
-            cls = self.data_cls
+        cls = self.data_cls if self.data_cls is not None else TensorDict
+        if cls is not TensorDict:
+            kwargs = {}
+            if self._td_dim_names is not None:
+                warnings.warn(f"names for cls {cls} is not supported for zero.")
         else:
-            cls = TensorDict
+            kwargs = {"names": self._td_dim_names}
 
         return cls.from_dict(
             {
@@ -6031,7 +6039,7 @@ class Composite(TensorSpec):
             },
             batch_size=_size([*shape, *self._safe_shape]),
             device=device,
-            names=self._td_dim_names,
+            **kwargs,
         )
 
     def __eq__(self, other: object) -> bool:
