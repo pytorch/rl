@@ -9,11 +9,11 @@ import argparse
 import pytest
 import torch
 import torch.nn as nn
+from mocking_classes import ContinuousActionVecMockEnv
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import multiprocessing as mp
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
-from torchrl.envs import GymEnv
 from torchrl.weight_update.weight_sync_schemes import (
     _resolve_model,
     MPTransport,
@@ -274,7 +274,7 @@ class TestWeightSyncSchemes:
 class TestCollectorIntegration:
     @pytest.fixture
     def simple_env(self):
-        return GymEnv("CartPole-v1")
+        return ContinuousActionVecMockEnv()
 
     @pytest.fixture
     def simple_policy(self, simple_env):
@@ -291,7 +291,7 @@ class TestCollectorIntegration:
         scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
 
         collector = SyncDataCollector(
-            create_env_fn=lambda: GymEnv("CartPole-v1"),
+            create_env_fn=ContinuousActionVecMockEnv,
             policy=simple_policy,
             frames_per_batch=64,
             total_frames=128,
@@ -316,8 +316,8 @@ class TestCollectorIntegration:
 
         collector = MultiSyncDataCollector(
             create_env_fn=[
-                lambda: GymEnv("CartPole-v1"),
-                lambda: GymEnv("CartPole-v1"),
+                ContinuousActionVecMockEnv,
+                ContinuousActionVecMockEnv,
             ],
             policy=simple_policy,
             frames_per_batch=64,
@@ -343,8 +343,8 @@ class TestCollectorIntegration:
 
         collector = MultiSyncDataCollector(
             create_env_fn=[
-                lambda: GymEnv("CartPole-v1"),
-                lambda: GymEnv("CartPole-v1"),
+                ContinuousActionVecMockEnv,
+                ContinuousActionVecMockEnv,
             ],
             policy=simple_policy,
             frames_per_batch=64,
@@ -369,7 +369,7 @@ class TestCollectorIntegration:
         scheme = NoWeightSyncScheme()
 
         collector = SyncDataCollector(
-            create_env_fn=lambda: GymEnv("CartPole-v1"),
+            create_env_fn=ContinuousActionVecMockEnv,
             policy=simple_policy,
             frames_per_batch=64,
             total_frames=128,
@@ -385,7 +385,7 @@ class TestCollectorIntegration:
 
 class TestMultiModelUpdates:
     def test_multi_model_state_dict_updates(self):
-        env = GymEnv("CartPole-v1")
+        env = ContinuousActionVecMockEnv()
 
         policy = TensorDictModule(
             nn.Linear(
@@ -407,7 +407,7 @@ class TestMultiModelUpdates:
         }
 
         collector = SyncDataCollector(
-            create_env_fn=lambda: GymEnv("CartPole-v1"),
+            create_env_fn=ContinuousActionVecMockEnv,
             policy=policy,
             frames_per_batch=64,
             total_frames=128,
@@ -438,7 +438,7 @@ class TestMultiModelUpdates:
         env.close()
 
     def test_multi_model_tensordict_updates(self):
-        env = GymEnv("CartPole-v1")
+        env = ContinuousActionVecMockEnv()
 
         policy = TensorDictModule(
             nn.Linear(
@@ -460,7 +460,7 @@ class TestMultiModelUpdates:
         }
 
         collector = SyncDataCollector(
-            create_env_fn=lambda: GymEnv("CartPole-v1"),
+            create_env_fn=ContinuousActionVecMockEnv,
             policy=policy,
             frames_per_batch=64,
             total_frames=128,
