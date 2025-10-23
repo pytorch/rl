@@ -20,7 +20,6 @@ from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any, Literal, TYPE_CHECKING
 
-
 import torch
 
 from torchrl._utils import logger as torchrl_logger
@@ -57,6 +56,7 @@ def _get_ray():
         raise ImportError(
             "ray is not installed. Please install it with `pip install ray`."
         ) from e
+
 
 class _AsyncvLLMWorker:
     """Async vLLM worker for Ray with weight update capabilities.
