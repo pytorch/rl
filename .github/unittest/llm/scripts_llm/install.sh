@@ -30,15 +30,15 @@ git submodule sync && git submodule update --init --recursive
 #printf "Installing PyTorch with cu128"
 #if [[ "$TORCH_VERSION" == "nightly" ]]; then
 #  if [ "${CU_VERSION:-}" == cpu ] ; then
-#      pip3 install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu -U
+#      pip install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu -U
 #  else
-#      pip3 install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+#      pip install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cu128 -U
 #  fi
 #elif [[ "$TORCH_VERSION" == "stable" ]]; then
 #    if [ "${CU_VERSION:-}" == cpu ] ; then
-#      pip3 install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
+#      pip install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
 #  else
-#      pip3 install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cu128
+#      pip install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cu128
 #  fi
 #else
 #  printf "Failed to install pytorch"
@@ -47,9 +47,10 @@ git submodule sync && git submodule update --init --recursive
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip install "pybind11[global]" ninja
+  pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  pip install tensordict
 fi
 
 # smoke test

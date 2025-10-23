@@ -307,6 +307,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             else None
         )
 
+        # If no weights were provided and a sync scheme exists, extract the latest
+        # weights from the current model using the scheme strategy (state_dict or tensordict).
+        # This ensures we don't return stale cached weights.
+        if weights is None and scheme is not None:
+            from torchrl.weight_update.weight_sync_schemes import (
+                _resolve_model,
+                WeightStrategy,
+            )
+
+            strategy = WeightStrategy(extract_as=scheme.strategy)
+            model = _resolve_model(self, model_id)
+            return strategy.extract_weights(model)
+
         if weights is None:
             if model_id == "policy" and hasattr(self, "policy_weights"):
                 return self.policy_weights
@@ -462,6 +475,21 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 # Apply to local policy
                 if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
                     strategy.apply_weights(self.policy, weights)
+            elif (
+                hasattr(self, "_original_policy")
+                and isinstance(self._original_policy, nn.Module)
+                and hasattr(self, "policy")
+                and isinstance(self.policy, nn.Module)
+            ):
+                # If no weights were provided, mirror weights from the original (trainer) policy
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                strategy = WeightStrategy(extract_as="tensordict")
+                weights = strategy.extract_weights(self._original_policy)
+                # Cast weights to the policy device before applying
+                if self.policy_device is not None:
+                    weights = weights.to(self.policy_device)
+                strategy.apply_weights(self.policy, weights)
             # Otherwise, no action needed - policy is local and changes are immediately visible
 
     def __iter__(self) -> Iterator[TensorDictBase]:
