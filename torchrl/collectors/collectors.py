@@ -486,6 +486,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
                 strategy = WeightStrategy(extract_as="tensordict")
                 weights = strategy.extract_weights(self._original_policy)
+                # Cast weights to the policy device before applying
+                if self.policy_device is not None:
+                    weights = weights.to(self.policy_device)
                 strategy.apply_weights(self.policy, weights)
             # Otherwise, no action needed - policy is local and changes are immediately visible
 
