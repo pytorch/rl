@@ -162,7 +162,7 @@ class WrappablePolicy(nn.Module):
         output = self.linear(observation)
         if self.multiple_outputs:
             return output, output.sum(), output.min(), output.max()
-        return self.linear(observation)
+        return output
 
 
 class UnwrappablePolicy(nn.Module):
@@ -1512,6 +1512,7 @@ if __name__ == "__main__":
             cudagraph_policy=cudagraph,
             weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
         )
+        assert "policy" in collector._weight_senders, collector._weight_senders.keys()
         try:
             # collect state_dict
             state_dict = collector.state_dict()
