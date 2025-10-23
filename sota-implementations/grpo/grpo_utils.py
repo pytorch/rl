@@ -259,6 +259,18 @@ def get_inference_model(
             f"Setting VLLM_ATTENTION_BACKEND={vllm_backend} (from config: {attn_impl})"
         )
 
+    # Handle FP32 output configuration
+    if hasattr(cfg.inference_model, "enable_fp32_output"):
+        enable_fp32 = cfg.inference_model.enable_fp32_output
+        if enable_fp32:
+            os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+            torchrl_logger.info(
+                "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
+                "This will use FP32 for the final output layer if the model supports it."
+            )
+        # Add to inference params so it gets passed to AsyncVLLM
+        inference_params["enable_fp32_output"] = enable_fp32
+
     # Add other common vLLM parameters from config if present
     optional_vllm_params = [
         "max_model_len",

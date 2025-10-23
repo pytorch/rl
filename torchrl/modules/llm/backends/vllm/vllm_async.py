@@ -38,6 +38,14 @@ if TYPE_CHECKING:
 
 TIMEOUT_SECONDS = os.getenv("TORCHRL_VLLM_TIMEOUT_SECONDS", 300)
 
+try:
+    import vllm
+
+    _has_vllm = True
+except ImportError:
+    vllm = None
+    _has_vllm = False
+
 
 def _get_ray():
     """Import Ray on demand to avoid global import side-effects.
@@ -59,18 +67,7 @@ def _get_ray():
 
 
 class _AsyncvLLMWorker:
-    """Async vLLM worker for Ray with weight update capabilities.
-
-    This worker extends the base vLLM Worker to support async operations
-    and weight updates via NCCL communication groups.
-    """
-
-    def __init__(self, *args, **kwargs):
-        torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
-        torchrl_logger.info(f"visible devices {os.getenv('CUDA_VISIBLE_DEVICES')}")
-        torchrl_logger.info(f"device count {torch.cuda.device_count()}")
-        self.model_update_group = None
-        super().__init__(*args, **kwargs)
+    """Async vLLM worker extension for Ray with weight update capabilities."""
 
     def init_weight_update_group(
         self,
@@ -732,6 +729,7 @@ class AsyncVLLM(RLvLLMEngine):
         num_replicas: int = 1,
         verbose: bool = True,
         compile: bool = True,
+        enable_fp32_output: bool = False,
         **kwargs,
     ) -> AsyncVLLM:
         """Create an AsyncVLLM instance from a pretrained model.
@@ -745,6 +743,7 @@ class AsyncVLLM(RLvLLMEngine):
             num_replicas (int): Number of engine replicas to create.
             verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
             compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
+            enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             **kwargs: Additional arguments passed to AsyncEngineArgs.
 
         Returns:
@@ -765,6 +764,12 @@ class AsyncVLLM(RLvLLMEngine):
             >>> # Generate text
             >>> from vllm import SamplingParams
             >>> result = service.generate("Hello, world!", SamplingParams(max_tokens=50))
+            >>>
+            >>> # Enable FP32 output for better numerical stability
+            >>> service = AsyncVLLM.from_pretrained(
+            ...     "Qwen/Qwen2.5-3B",
+            ...     enable_fp32_output=True
+            ... )
         """
         return make_async_vllm_engine(
             model_name=model_name,
@@ -772,6 +777,7 @@ class AsyncVLLM(RLvLLMEngine):
             num_replicas=num_replicas,
             verbose=verbose,
             compile=compile,
+            enable_fp32_output=enable_fp32_output,
             **kwargs,
         )
 
@@ -1937,11 +1943,13 @@ class LoadBalancer:
 
 
 def make_async_vllm_engine(
+    *,
     model_name: str,
     num_devices: int | None = None,
     num_replicas: int = 1,
     verbose: bool = True,
     compile: bool = True,
+    enable_fp32_output: bool = False,
     tensor_parallel_size: int | None = None,
     data_parallel_size: int | None = None,
     pipeline_parallel_size: int | None = None,
@@ -1955,6 +1963,9 @@ def make_async_vllm_engine(
         num_replicas (int): Number of engine replicas to create.
         verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
+        enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
+            This can help with numerical stability for certain models. Requires model-specific support in
+            torchrl.modules.llm.backends._models.
         tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
         data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
         pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
@@ -1975,6 +1986,9 @@ def make_async_vllm_engine(
         >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B", num_devices=2, num_replicas=2)
         >>> # Generate text
         >>> result = service.generate("Hello, world!", sampling_params)
+        >>>
+        >>> # Create with FP32 output enabled
+        >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B", enable_fp32_output=True)
     """
     if not _has_vllm:
         raise ImportError(
@@ -1982,6 +1996,14 @@ def make_async_vllm_engine(
         )
 
     from vllm import AsyncEngineArgs
+
+    # Set FP32 output environment variable if requested
+    if enable_fp32_output:
+        os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        torchrl_logger.info(
+            "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
+            "This will use FP32 for the final output layer if the model supports it."
+        )
 
     # Configure verbose logging if requested
     if verbose:
