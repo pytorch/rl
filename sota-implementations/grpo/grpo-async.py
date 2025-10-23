@@ -13,10 +13,10 @@ from pathlib import Path
 
 import hydra
 
-from torchrl import torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
+from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.weight_update.llm import get_model_metadata
 
 try:
     import ray
@@ -35,7 +35,7 @@ from grpo_utils import (
     get_train_model,
     log_training_metrics,
     make_env,
-    make_weight_updater,
+    make_weight_sync_scheme,
 )
 from omegaconf import DictConfig
 
@@ -110,14 +110,28 @@ def train(
         loss_fn = torch.compile(loss_fn)
 
     vllm_engine = inference_policy.model
-    weight_updater: vLLMUpdaterV2 = make_weight_updater(vllm_engine=vllm_engine)
-    for collector in tqdm.tqdm(collectors, desc="Setting weight updater"):
-        collector.weight_updater = weight_updater
 
-    torchrl_logger.info("Initializing weight updater...")
-    weight_updater.init()
+    # Create weight sync scheme for the collectors
+    weight_sync_scheme = make_weight_sync_scheme(vllm_engine=vllm_engine)
+
+    # Set up weight sync scheme for collectors
+    # Note: We need to get the sender after the collectors are created
+    # For now, we'll update the collectors to use the scheme
+    torchrl_logger.info("Setting up weight synchronization scheme...")
+
+    # We'll need to manually set up the sender since collectors were already created
+    # without the scheme. In production, collectors should be created with weight_sync_schemes parameter.
+    sender = weight_sync_scheme.create_sender()
+    sender.register_model(policy_training)
+
+    # Initialize collective group
+    torchrl_logger.info("Initializing collective group...")
+    metadata = get_model_metadata(policy_training)
+    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+
+    # First weight update
     with timeit("update_policy_weights"):
-        weight_updater.push_weights_from_transformers(policy_training)
+        sender.update_weights()
     torchrl_logger.info("Completed first update_policy_weights. Starting collectors...")
     timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
@@ -248,7 +262,7 @@ def train(
         if step % cfg.train.weight_update_frequency == 0:
             with timeit("update_policy_weights"):
                 torchrl_logger.info("Updating policy weights...")
-                weight_updater.push_weights_from_transformers(policy_training)
+                sender.update_weights()
                 # TODO: do we need this? Does it interfere with other processes?
                 # torch.cuda.empty_cache()
                 gc.collect()
@@ -305,19 +319,9 @@ def main(cfg):
             if not k.startswith("_")
         }
 
-        # Add computed GPU configuration
+        # Add computed GPU configuration and merge with default runtime_env
         ray_init_config["num_gpus"] = device_config["ray_num_gpus"]
-        # Ensure runtime_env and env_vars exist
-        if "runtime_env" not in ray_init_config:
-            ray_init_config["runtime_env"] = {}
-        if not isinstance(ray_init_config["runtime_env"], dict):
-            ray_init_config["runtime_env"] = dict(ray_init_config["runtime_env"])
-        if "env_vars" not in ray_init_config["runtime_env"]:
-            ray_init_config["runtime_env"]["env_vars"] = {}
-        if not isinstance(ray_init_config["runtime_env"]["env_vars"], dict):
-            ray_init_config["runtime_env"]["env_vars"] = dict(
-                ray_init_config["runtime_env"]["env_vars"]
-            )
+        ray_init_config = merge_ray_runtime_env(ray_init_config)
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
         ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
         if ray_managed_externally:

@@ -160,6 +160,9 @@ class RayTransform(Transform, ABC):
 
     @property
     def _ray(self):
+        ray = self.__dict__.get("_ray_val", None)
+        if ray is not None:
+            return ray
         # Import ray here to avoid requiring it as a dependency
         try:
             import ray
@@ -167,7 +170,17 @@ class RayTransform(Transform, ABC):
             raise ImportError(
                 "Ray is required for RayTransform. Install with: pip install ray"
             )
+        self.__dict__["_ray_val"] = ray
         return ray
+
+    @_ray.setter
+    def _ray(self, value):
+        self.__dict__["_ray_val"] = value
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("_ray_val", None)
+        return state
 
     def __init__(
         self,
