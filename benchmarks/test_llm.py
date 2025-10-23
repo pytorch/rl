@@ -16,6 +16,11 @@ from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrappe
 
 _has_transformers = importlib.import_module("transformers") is not None
 
+# Skip all these tests if gpu is not available
+pytestmark = pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="GPU not available"
+)
+
 
 @pytest.fixture(scope="module")
 def transformers_wrapper():

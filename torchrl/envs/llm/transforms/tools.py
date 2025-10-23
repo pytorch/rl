@@ -530,7 +530,10 @@ class PythonInterpreter(Transform):
 
         procs = []
         # Iterate over env batch-size
-        for i, t in enumerate(local_history.content):
+        content = local_history.content
+        if isinstance(content, str):
+            content = [content]
+        for i, t in enumerate(content):
             results = self._process_llm_response(t, i)
             if len(results) == 0:
                 procs.append(None)
