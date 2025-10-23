@@ -1512,6 +1512,7 @@ if __name__ == "__main__":
             cudagraph_policy=cudagraph,
             weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
         )
+        assert "policy" in collector._weight_senders, collector._weight_senders.keys()
         try:
             # collect state_dict
             state_dict = collector.state_dict()
