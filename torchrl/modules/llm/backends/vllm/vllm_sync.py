@@ -329,6 +329,7 @@ def make_vllm_worker(
     num_devices: int | None = None,
     make_ray_worker: bool = True,
     enforce_eager: bool = False,
+    enable_fp32_output: bool = False,
     **kwargs,
 ) -> RayLLMWorker | LocalLLMWrapper:
     """Creates a vLLM inference engine with tensor parallelism support.
@@ -339,6 +340,9 @@ def make_vllm_worker(
         num_devices (int, optional): Number of devices to use. Exclusive with devices.
         make_ray_worker (bool, optional): Whether to create a Ray actor. Defaults to True.
         enforce_eager (bool, optional): Whether to enforce eager execution. Defaults to `False`.
+        enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
+            This can help with numerical stability for certain models. Requires model-specific support in
+            torchrl.modules.llm.backends._models.
         **kwargs: Additional arguments passed to vLLM.LLM.__init__.
 
     Returns:
@@ -349,10 +353,20 @@ def make_vllm_worker(
         >>> worker = make_vllm_worker("Qwen/Qwen2.5-3B", num_devices=2)
         >>> # Create a local LLM instance on GPU 1
         >>> llm = make_vllm_worker("Qwen/Qwen2.5-3B", devices=[1], make_ray_worker=False)
+        >>> # Create with FP32 output enabled
+        >>> worker = make_vllm_worker("Qwen/Qwen2.5-3B", num_devices=2, enable_fp32_output=True)
     """
     if not _has_vllm:
         raise ImportError(
             "vllm is not installed. Please install it with `pip install vllm`."
+        )
+
+    # Set FP32 output environment variable if requested
+    if enable_fp32_output:
+        os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        torchrl_logger.info(
+            "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
+            "This will use FP32 for the final output layer if the model supports it."
         )
 
     # Handle device specification
