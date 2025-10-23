@@ -21,7 +21,6 @@ permissions:
 
 jobs:
   unittests:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
         python_version: ["3.9"]
@@ -29,7 +28,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g6.4xlarge.experimental.nvidia.gpu"
+      runner: "linux.g5.4xlarge.nvidia.gpu"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
       docker-image: "nvidia/cudagl:11.4.0-base"
@@ -51,7 +50,7 @@ jobs:
         export TF_CPP_MIN_LOG_LEVEL=0
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/llm/scripts_llm/setup_env.sh
-        bash .github/unittest/llm/scripts_llm/install.sh
-        bash .github/unittest/llm/scripts_llm/run_test.sh
-        bash .github/unittest/llm/scripts_llm/post_process.sh
+        bash .github/unittest/linux_libs/scripts_llm/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_llm/install.sh
+        bash .github/unittest/linux_libs/scripts_llm/run_test.sh
+        bash .github/unittest/linux_libs/scripts_llm/post_process.sh

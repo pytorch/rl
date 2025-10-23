@@ -20,9 +20,12 @@ from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any, Literal, TYPE_CHECKING
 
+import ray
 
 import torch
 
+from ray.util.placement_group import placement_group, remove_placement_group
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from torchrl._utils import logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
@@ -39,24 +42,6 @@ if TYPE_CHECKING:
 
 TIMEOUT_SECONDS = os.getenv("TORCHRL_VLLM_TIMEOUT_SECONDS", 300)
 
-
-def _get_ray():
-    """Import Ray on demand to avoid global import side-effects.
-
-    Returns:
-        ModuleType: The imported Ray module.
-
-    Raises:
-        ImportError: If Ray is not installed.
-    """
-    try:
-        import ray  # type: ignore
-
-        return ray
-    except Exception as e:  # pragma: no cover - surfaced to callers
-        raise ImportError(
-            "ray is not installed. Please install it with `pip install ray`."
-        ) from e
 
 class _AsyncvLLMWorker:
     """Async vLLM worker for Ray with weight update capabilities.
@@ -282,7 +267,7 @@ class _AsyncLLMEngine:
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
 
-        from vllm import SamplingParams, TokensPrompt
+        from vllm import RequestOutput, SamplingParams, TokensPrompt
 
         # Track whether input was originally a single prompt
         single_prompt_input = False
@@ -489,7 +474,11 @@ def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
     )
 
 
-# Ray actor wrapper is created lazily in __init__ to avoid global Ray import.
+# Create Ray remote versions
+if ray is not None and _has_vllm:
+    _AsyncLLMEngineActor = ray.remote(num_cpus=0, num_gpus=0)(_AsyncLLMEngine)
+else:
+    _AsyncLLMEngineActor = None
 
 
 class AsyncVLLM(RLvLLMEngine):
@@ -594,18 +583,17 @@ class AsyncVLLM(RLvLLMEngine):
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
-        # Lazily import ray only when constructing the actor class to avoid global import
+        if ray is None:
+            raise ImportError(
+                "ray is not installed. Please install it with `pip install ray`."
+            )
 
         # Enable prefix caching by default for better performance
         engine_args.enable_prefix_caching = enable_prefix_caching
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
-        if actor_class is None:
-            ray = _get_ray()
-            self.actor_class = ray.remote(num_cpus=0, num_gpus=0)(_AsyncLLMEngine)
-        else:
-            self.actor_class = actor_class
+        self.actor_class = actor_class or _AsyncLLMEngineActor
         self.actors: list = []
         self._launched = False
         self._service_id = uuid.uuid4().hex[
@@ -619,11 +607,6 @@ class AsyncVLLM(RLvLLMEngine):
         if self._launched:
             torchrl_logger.warning("AsyncVLLMEngineService already launched")
             return
-
-        # Local imports to avoid global Ray dependency
-        ray = _get_ray()
-        from ray.util.placement_group import placement_group
-        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
         torchrl_logger.info(
             f"Launching {self.num_replicas} async vLLM engine actors..."
@@ -955,7 +938,6 @@ class AsyncVLLM(RLvLLMEngine):
         Returns:
             RequestOutput | list[RequestOutput]: Generated outputs from vLLM.
         """
-        ray = _get_ray()
         # Check if this is a batch request
         if self._is_batch(prompts, prompt_token_ids):
             # Handle batched input by unbinding and sending individual requests
@@ -1079,9 +1061,6 @@ class AsyncVLLM(RLvLLMEngine):
         torchrl_logger.info(
             f"Shutting down {len(self.actors)} async vLLM engine actors..."
         )
-
-        ray = _get_ray()
-        from ray.util.placement_group import remove_placement_group
 
         # Kill all actors
         for i, actor in enumerate(self.actors):
@@ -1275,7 +1254,6 @@ class AsyncVLLM(RLvLLMEngine):
         )
 
         updated_weights = 0
-        ray = _get_ray()
         with torch.cuda.device(0):  # Ensure we're on the correct CUDA device
             for name, weight in gpu_weights.items():
                 # Convert dtype to string name (like periodic-mono)
@@ -1352,7 +1330,6 @@ class AsyncVLLM(RLvLLMEngine):
                 "AsyncVLLM service must be launched before getting request counts"
             )
 
-        ray = _get_ray()
         if actor_index is not None:
             if not (0 <= actor_index < len(self.actors)):
                 raise IndexError(
@@ -1383,7 +1360,6 @@ class AsyncVLLM(RLvLLMEngine):
                 "AsyncVLLM service must be launched before getting cache usage"
             )
 
-        ray = _get_ray()
         if actor_index is not None:
             if not (0 <= actor_index < len(self.actors)):
                 raise IndexError(
@@ -1696,7 +1672,6 @@ class LoadBalancer:
             futures = [
                 actor.get_num_unfinished_requests.remote() for actor in self.actors
             ]
-            ray = _get_ray()
             request_counts = ray.get(futures)
 
         # Find the actor with minimum pending requests
@@ -1724,7 +1699,6 @@ class LoadBalancer:
         else:
             # Query actors directly
             futures = [actor.get_cache_usage.remote() for actor in self.actors]
-            ray = _get_ray()
             cache_usages = ray.get(futures)
 
         # Find the actor with minimum cache usage
@@ -1864,8 +1838,7 @@ class LoadBalancer:
                 futures = [
                     actor.get_num_unfinished_requests.remote() for actor in self.actors
                 ]
-            ray = _get_ray()
-            request_counts = ray.get(futures)
+                request_counts = ray.get(futures)
 
             if not request_counts:
                 return False
@@ -1914,9 +1887,8 @@ class LoadBalancer:
                 cache_futures = [
                     actor.get_cache_usage.remote() for actor in self.actors
                 ]
-            ray = _get_ray()
-            request_counts = ray.get(request_futures)
-            cache_usages = ray.get(cache_futures)
+                request_counts = ray.get(request_futures)
+                cache_usages = ray.get(cache_futures)
 
             for i, (requests, cache_usage) in enumerate(
                 zip(request_counts, cache_usages)
