@@ -1255,7 +1255,12 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @property
     def lib(self) -> ModuleType:
-        return gym_backend()
+        gym = gym_backend()
+        if gym is None:
+            raise RuntimeError(
+                "Gym backend is not available. Please install gym or gymnasium."
+            )
+        return gym
 
     def _set_seed(self, seed: int | None) -> None:  # noqa: F811
         if self._seed_calls_reset is None:
