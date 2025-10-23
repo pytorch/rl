@@ -2492,7 +2492,7 @@ def _run_worker_pipe_shared_mem(
             # Set event before sending non-tensor data so parent knows worker is done
             # The recv() call itself will provide synchronization for the pipe
             mp_event.set()
-            
+
             if _non_tensor_keys:
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
@@ -2534,7 +2534,7 @@ def _run_worker_pipe_shared_mem(
             # Set event before sending non-tensor data so parent knows worker is done
             # The recv() call itself will provide synchronization for the pipe
             mp_event.set()
-            
+
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
