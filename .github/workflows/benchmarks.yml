@@ -84,7 +84,7 @@ jobs:
           python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers
           python -m pip install "pybind11[global]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          python3.10 -m pip install safetensors tqdm pandas numpy matplotlib
+          python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
           python3.10 setup.py develop
 
           # test import
