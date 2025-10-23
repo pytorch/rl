@@ -82,6 +82,14 @@ class GRPOLoss(LossModule):
             - float x: symmetric clipping [1 - x, 1 + x] (default: 0.2)
             - tuple (eps_low, eps_high): asymmetric clipping [1 - eps_low, 1 + eps_high] as in DAPO Clip-Higher
               recommended defaults from DAPO: (0.20, 0.28); see Eq. (10) in the paper.
+        kl_mask_threshold (float | None, optional): enable token-wise trust-region filtering (KL-Mask).
+            When set, tokens with 0.5 * (log(pi_theta/pi_ref))^2 > kl_mask_threshold are masked out from the loss.
+            This stabilizes updates by skipping tokens that drifted too far from the reference distribution
+            (see table and description; enables per-token trust region).
+        aggregation (str, optional): loss aggregation strategy for the policy objective.
+            - "token_mean": global masked token mean (weights long sequences more). Default.
+            - "prompt_mean": per-sample masked mean over tokens, then mean across samples (equal sample weight).
+            - "none": return per-token loss (mask applied, no aggregation). Useful for downstream custom reductions.
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
@@ -142,6 +150,8 @@ class GRPOLoss(LossModule):
         actor_network: LLMWrapperBase | None = None,
         *,
         clip_epsilon: float | tuple[float, float] = 0.2,
+        kl_mask_threshold: float | None = None,
+        aggregation: str | None = "token_mean",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coeff: float = 0.01,
@@ -161,6 +171,8 @@ class GRPOLoss(LossModule):
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_coeff = entropy_coeff
         self.reduction = reduction if reduction is not None else "mean"
+        self.kl_mask_threshold = kl_mask_threshold
+        self.aggregation = aggregation or "token_mean"
 
         # Determine device and register clip epsilon as buffer
         if device is None:
@@ -335,6 +347,32 @@ class GRPOLoss(LossModule):
             tensordict, adv_shape=advantage.shape[:-1]
         )
         mask = dist.mask
+
+        # Optional per-token trust-region filtering (KL-Mask) vs reference policy
+        if self.kl_mask_threshold is not None and self.kl_mask_threshold > 0:
+            try:
+                ref_log_prob = tensordict.get(
+                    self.tensor_keys.ref_log_probs,
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=0.0,
+                )
+            except KeyError:
+                ref_log_prob = None
+            cur_log_prob = tensordict.get("_cur_log_prob", None)
+            if (ref_log_prob is not None) and (cur_log_prob is not None):
+                # Align to valid tokens only (safety)
+                cur_log_prob_masked = torch.where(
+                    expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
+                )
+                ref_log_prob_masked = torch.where(
+                    expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
+                )
+                log_is_ref = cur_log_prob_masked - ref_log_prob_masked
+                kl_token = 0.5 * (log_is_ref**2)
+                tr_mask = kl_token <= self.kl_mask_threshold
+                # Combine with attention mask
+                mask = mask & tr_mask
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -348,16 +386,10 @@ class GRPOLoss(LossModule):
             raise ValueError(
                 f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
-        gain1 = log_weight.exp() * advantage
-
-        log_weight_clip = log_weight.clamp(*self._clip_bounds)
-        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
-        ratio = log_weight_clip.exp()
-        gain2 = ratio * advantage
-
-        # Token-level objective: compute min over clipped/unclipped at the token level
-        gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
-        td_out = TensorDict({"loss_objective": -gain})
+        loss_objective, clip_fraction = self._compute_policy_objective(
+            log_weight, advantage
+        )
+        td_out = TensorDict({"loss_objective": loss_objective})
         td_out.set("clip_fraction", clip_fraction)
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
@@ -371,13 +403,13 @@ class GRPOLoss(LossModule):
             td_out.set("loss_entropy", -self.entropy_coeff * entropy)
 
         td_out.set("ESS", _reduce(ess / batch, self.reduction))
-        td_out = td_out.named_apply(
-            lambda name, value: _reduce(
-                value, reduction=self.reduction, mask=mask
-            ).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
-        )
+        # Aggregate loss terms according to aggregation strategy
+        for key in list(td_out.keys()):
+            if isinstance(key, tuple) or not isinstance(key, str):
+                continue
+            if key.startswith("loss_"):
+                val = td_out.get(key)
+                td_out.set(key, self._aggregate_loss_value(val, mask))
         if self.kl_to_ref_coeff is not None and self.kl_to_ref_coeff > 0:
             # FIXME: parameterize this
             loss_kl, kl_penalty = self._kl_to_ref(
@@ -405,6 +437,49 @@ class GRPOLoss(LossModule):
             td_out["kl_to_inference"] = kl_penalty.detach()
         del tensordict["_cur_log_prob"]
         return GRPOLossOutput.from_tensordict(td_out)
+
+    def _compute_policy_objective(
+        self, log_weight: torch.Tensor, advantage: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Default GRPO objective: PPO-style min between unclipped and clipped ratios.
+
+        Returns (loss_objective, clip_fraction).
+        """
+        gain1 = log_weight.exp() * advantage
+        log_weight_clip = log_weight.clamp(*self._clip_bounds)
+        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
+        ratio = log_weight_clip.exp()
+        gain2 = ratio * advantage
+        gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
+        return -gain, clip_fraction
+
+    def _aggregate_loss_value(
+        self, value: torch.Tensor, mask: torch.Tensor
+    ) -> torch.Tensor:
+        """Aggregate a per-token loss tensor using the configured strategy.
+
+        Supports:
+            - token_mean: masked mean across all tokens (default)
+            - prompt_mean: per-sample masked mean over tokens, then mean across batch
+            - none: return per-token loss with masked-out tokens set to 0
+
+        The input `value` is expected to have shape [..., T, 1] where T is the token dimension,
+        and `mask` has shape [..., T].
+        """
+        if self.aggregation == "none" or self.reduction == "none":
+            mask_exp = expand_as_right(mask, value)
+            return torch.where(mask_exp, value, value.new_zeros(()).expand_as(value))
+
+        if self.aggregation == "prompt_mean":
+            # Mean over valid tokens per sample, then mean across batch
+            mask_exp = expand_as_right(mask, value).to(value.dtype)
+            token_sum = (value * mask_exp).sum(dim=-2, keepdim=False)
+            token_count = mask_exp.sum(dim=-2, keepdim=False).clamp_min(1.0)
+            sample_mean = token_sum / token_count
+            return sample_mean.mean(dim=0, keepdim=False)
+
+        # token_mean (global masked mean)
+        return _reduce(value, reduction="mean", mask=mask).squeeze(-1)
 
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
@@ -592,6 +667,27 @@ class DAPO(GRPOLoss):
         diff = ref_log_prob - cur_log_prob
         kl_penalty = (diff.expm1() - diff).mean()
         return coeff * kl_penalty, kl_penalty
+
+
+class CISPO(GRPOLoss):
+    """CISPO (Clipped Importance Sampling Policy Optimization).
+
+    Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but
+    replaces the PPO-style min with a clipped-importance objective:
+        loss = - clip(weight, [1 - eps_low, 1 + eps_high]) * advantage
+
+    See MiniMax-M1 (CISPO) [arXiv](https://arxiv.org/html/2506.13585).
+    """
+
+    def _compute_policy_objective(
+        self, log_weight: torch.Tensor, advantage: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # CISPO: use clipped importance weights directly
+        log_weight_clip = log_weight.clamp(*self._clip_bounds)
+        clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
+        ratio = log_weight_clip.exp()
+        gain = ratio * advantage
+        return -gain, clip_fraction
 
 
 class MCAdvantage(Transform):
