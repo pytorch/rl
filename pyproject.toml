@@ -143,3 +143,8 @@ exclude = [
 
 [tool.usort]
 first_party_detection = false
+
+[project.entry-points."vllm.general_plugins"]
+# Ensure FP32 overrides are registered in all vLLM processes (main, workers, and
+# the registry subprocess) before resolving model classes.
+fp32_overrides = "torchrl.modules.llm.backends.vllm_plugin:register_fp32_overrides"
