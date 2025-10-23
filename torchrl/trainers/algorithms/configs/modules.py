@@ -202,6 +202,7 @@ class ModelConfig(ConfigBase):
     _partial_: bool = False
     in_keys: Any = None
     out_keys: Any = None
+    shared: bool = False
 
     def __post_init__(self) -> None:
         """Post-initialization hook for model configurations."""
@@ -226,7 +227,7 @@ class TensorDictModuleConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for TensorDict module configurations."""
-        super().__post_init__()
+        return super().__post_init__()
 
 
 @dataclass
@@ -312,6 +313,7 @@ def _make_tanh_normal_model(*args, **kwargs):
     return_log_prob = kwargs.pop("return_log_prob", False)
     eval_mode = kwargs.pop("eval_mode", False)
     exploration_type = kwargs.pop("exploration_type", "RANDOM")
+    shared = kwargs.pop("shared", False)
 
     # Now instantiate the network
     if hasattr(network, "_target_"):
@@ -328,6 +330,8 @@ def _make_tanh_normal_model(*args, **kwargs):
         )
 
     module = TensorDictModule(network, in_keys=in_keys, out_keys=param_keys)
+    if shared:
+        module = module.share_memory()
 
     # Create ProbabilisticTensorDictModule
     prob_module = ProbabilisticTensorDictModule(
@@ -350,4 +354,7 @@ def _make_value_model(*args, **kwargs):
     from torchrl.modules import ValueOperator
 
     network = kwargs.pop("network")
+    shared = kwargs.pop("shared", False)
+    if shared:
+        network = network.share_memory()
     return ValueOperator(network, **kwargs)
