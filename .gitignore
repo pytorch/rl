@@ -189,3 +189,11 @@ log
 Roms
 
 scratch/*
+
+# Large directories from git history that should not be committed
+dev/
+main/
+*.html
+
+# Additional cache directories
+.ruff_cache/

@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import torch
+
+from torchrl._utils import logger as torchrl_logger
 
 try:
     from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
@@ -22,7 +25,7 @@ except ImportError:
 
 
 def stateless_init_process_group(
-    master_address: str | None, master_port: str | None, rank, world_size, device
+    master_address: str | None, master_port: str | None, rank, world_size, device=None
 ):
     """Initializes a stateless process group for distributed communication.
 
@@ -36,7 +39,7 @@ def stateless_init_process_group(
         master_port (str | None): The port used by the master node. Automatically assigns an open port if not specified.
         rank (int): The rank of the current process.
         world_size (int): The total number of processes in the distributed group.
-        device: The device to use for communication.
+        device: The device to use for communication. Defaults to None.
 
     Returns:
         PyNcclCommunicator: A PyNcclCommunicator instance initialized with the created StatelessProcessGroup.
@@ -56,9 +59,14 @@ def stateless_init_process_group(
     if master_port is None:
         master_port = get_open_port() if callable(get_open_port) else 29500
 
+    torchrl_logger.info(
+        f"Initializing stateless process group: rank={rank}, world_size={world_size}, master_address={master_address}, master_port={master_port}"
+    )
     pg = StatelessProcessGroup.create(
         host=master_address, port=int(master_port), rank=rank, world_size=world_size
     )
+    if device is None:
+        device = torch.device("cuda:0")
     pynccl = PyNcclCommunicator(pg, device=device)
     return pynccl
 
