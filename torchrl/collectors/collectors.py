@@ -307,6 +307,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             else None
         )
 
+        # If no weights were provided and a sync scheme exists, extract the latest
+        # weights from the current model using the scheme strategy (state_dict or tensordict).
+        # This ensures we don't return stale cached weights.
+        if weights is None and scheme is not None:
+            from torchrl.weight_update.weight_sync_schemes import (
+                _resolve_model,
+                WeightStrategy,
+            )
+
+            strategy = WeightStrategy(extract_as=scheme.strategy)
+            model = _resolve_model(self, model_id)
+            return strategy.extract_weights(model)
+
         if weights is None:
             if model_id == "policy" and hasattr(self, "policy_weights"):
                 return self.policy_weights
