@@ -6,10 +6,13 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
-apt-get update && apt-get upgrade -y && apt-get install -y git cmake
+export DEBIAN_FRONTEND=noninteractive
+export TZ=UTC
+apt-get update
+apt-get install -yq --no-install-recommends git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-apt-get install -y wget \
+apt-get install -yq --no-install-recommends wget \
     gcc \
     g++ \
     unzip \
@@ -27,7 +30,10 @@ apt-get install -y wget \
     libgles2
 
 # Upgrade specific package
-apt-get upgrade -y libstdc++6
+apt-get install -yq --no-install-recommends --only-upgrade libstdc++6
+
+apt-get clean
+rm -rf /var/lib/apt/lists/*
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 root_dir="$(git rev-parse --show-toplevel)"
