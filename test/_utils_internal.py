@@ -21,13 +21,7 @@ from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn, vmap
 
-from torchrl._utils import (
-    implement_for,
-    logger,
-    logger as torchrl_logger,
-    RL_WARNINGS,
-    seed_generator,
-)
+from torchrl._utils import implement_for, logger, RL_WARNINGS, seed_generator
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
@@ -230,7 +224,7 @@ def retry(
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
                     msg = "%s, Retrying in %d seconds..." % (str(e), mdelay)
-                    torchrl_logger.info(msg)
+                    logger.info(msg)
                     time.sleep(mdelay)
                     mtries -= 1
             try:
