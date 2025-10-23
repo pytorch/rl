@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import queue
 import re
@@ -12,7 +13,9 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import TextIO
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, Protocol, TextIO
 
 import torch
 
@@ -21,6 +24,510 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 
 from torchrl.envs import Transform
+
+
+# --- Tool Service Library: Pluggable Services & Parsers ---
+
+
+class ToolService(Protocol):
+    """Protocol for side-effecting service callable with structured IO.
+
+    A tool service is a callable that can be invoked with keyword arguments
+    and returns a dictionary of results. It has a name and input/output schemas.
+
+    Attributes:
+        name (str): The name of the tool service.
+        schema_in (dict[str, Any]): Input schema describing expected parameters.
+        schema_out (dict[str, Any]): Output schema describing returned data.
+    """
+
+    name: str
+    schema_in: dict[str, Any]
+    schema_out: dict[str, Any]
+
+    def __call__(self, **kwargs) -> dict[str, Any]:
+        """Execute the tool service.
+
+        Args:
+            **kwargs: Keyword arguments matching the input schema.
+
+        Returns:
+            dict[str, Any]: Results matching the output schema.
+        """
+        ...
+
+
+class ToolRegistry:
+    """Registry for managing available tool services.
+
+    This class maintains a collection of tool services that can be looked up
+    by name for execution.
+
+    Args:
+        services (Sequence[ToolService], optional): Initial services to register.
+            Defaults to an empty sequence.
+
+    Examples:
+        >>> class AddService:
+        ...     name = "add"
+        ...     schema_in = {"a": int, "b": int}
+        ...     schema_out = {"result": int}
+        ...     def __call__(self, a, b, **kwargs):
+        ...         return {"result": a + b}
+        >>> registry = ToolRegistry([AddService()])
+        >>> service = registry.get("add")
+        >>> result = service(a=1, b=2)
+        >>> print(result)
+        {"result": 3}
+    """
+
+    def __init__(self, services: Sequence[ToolService] = ()):
+        self._svc: dict[str, ToolService] = {s.name: s for s in services}
+
+    def register(self, service: ToolService) -> None:
+        """Register a new service.
+
+        Args:
+            service (ToolService): The service to register.
+        """
+        self._svc[service.name] = service
+
+    def get(self, name: str) -> ToolService:
+        """Retrieve a service by name.
+
+        Args:
+            name (str): The name of the service to retrieve.
+
+        Returns:
+            ToolService: The requested service.
+
+        Raises:
+            KeyError: If the service is not found.
+        """
+        if name not in self._svc:
+            raise KeyError(f"Unknown tool: {name}")
+        return self._svc[name]
+
+    def __contains__(self, name: str) -> bool:
+        """Check if a service is registered.
+
+        Args:
+            name (str): The name to check.
+
+        Returns:
+            bool: True if the service exists, False otherwise.
+        """
+        return name in self._svc
+
+
+@dataclass
+class ToolCall:
+    """Representation of a parsed tool call from LLM output.
+
+    Attributes:
+        tool (str): The name of the tool to call.
+        args (dict[str, Any]): Arguments to pass to the tool.
+        tag (str | None): Optional user-visible label or correlation ID.
+    """
+
+    tool: str
+    args: dict[str, Any]
+    tag: str | None = None
+
+
+class ParseResult(dict):
+    """Result of parsing an LLM response for tool calls.
+
+    This is a TypedDict-style class that contains:
+        text (str): The final message to user (post tool blocks removal).
+        calls (list[ToolCall]): Ordered tool calls as they appear.
+        meta (dict[str, Any]): Optional parser metadata.
+    """
+
+
+class LLMToolParser(Protocol):
+    """Protocol for parsing LLM responses into ordered tool calls.
+
+    A tool parser takes the LLM's response (as string or structured data)
+    and extracts ordered tool calls, along with the cleaned user-facing text.
+    """
+
+    def __call__(self, response: str | dict[str, Any]) -> ParseResult:
+        """Parse an LLM response.
+
+        Args:
+            response (str | dict[str, Any]): The LLM's response to parse.
+
+        Returns:
+            ParseResult: Parsed result with text, calls, and metadata.
+        """
+        ...
+
+
+class XMLBlockParser:
+    """Parser for XML-style tool blocks in LLM responses.
+
+    Parses tool calls in the format:
+        <tool name="tool_name" tag="optional_tag">{"arg": "value"}</tool>
+
+    Examples:
+        >>> parser = XMLBlockParser()
+        >>> response = '<tool name="search" tag="A">{"query": "torchrl"}</tool>\\nSome text.'
+        >>> result = parser(response)
+        >>> print(result["text"])
+        Some text.
+        >>> print(result["calls"][0].tool)
+        search
+        >>> print(result["calls"][0].args)
+        {"query": "torchrl"}
+    """
+
+    _re = re.compile(
+        r'<tool\s+name="(?P<name>[^"]+)"(?:\s+tag="(?P<tag>[^"]+)")?\s*>\s*(?P<body>.*?)\s*</tool>',
+        re.DOTALL,
+    )
+
+    def __call__(self, response: str | dict[str, Any]) -> ParseResult:
+        """Parse XML-style tool blocks from response.
+
+        Args:
+            response (str | dict[str, Any]): The response to parse.
+
+        Returns:
+            ParseResult: Parsed result with cleaned text and tool calls.
+        """
+        text = response if isinstance(response, str) else response.get("text", "")
+        calls: list[ToolCall] = []
+
+        def repl(m: re.Match) -> str:
+            name = m.group("name")
+            tag = m.group("tag")
+            body = m.group("body")
+            try:
+                args = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                # If JSON parsing fails, pass the raw body as a "raw" argument
+                args = {"raw": body}
+            calls.append(ToolCall(tool=name, args=args, tag=tag))
+            return ""  # Remove block from final user-visible message
+
+        cleaned = self._re.sub(repl, text).strip()
+        result = ParseResult()
+        result["text"] = cleaned
+        result["calls"] = calls
+        result["meta"] = {"count": len(calls)}
+        return result
+
+
+class JSONCallParser:
+    """Parser for JSON-style function-calling responses.
+
+    Expects responses in the format:
+        {
+          "message": "...",
+          "tools": [
+            {"tool": "search", "args": {"query": "..."}, "tag": "A"},
+            {"tool": "summarize", "args": {"text": "..."}}
+          ]
+        }
+
+    Examples:
+        >>> parser = JSONCallParser()
+        >>> response = {
+        ...     "message": "Let me search for that.",
+        ...     "tools": [{"tool": "search", "args": {"query": "torchrl"}}]
+        ... }
+        >>> result = parser(response)
+        >>> print(result["text"])
+        Let me search for that.
+        >>> print(result["calls"][0].tool)
+        search
+    """
+
+    def __call__(self, response: str | dict[str, Any]) -> ParseResult:
+        """Parse JSON-style function calls from response.
+
+        Args:
+            response (str | dict[str, Any]): The response to parse.
+
+        Returns:
+            ParseResult: Parsed result with message and tool calls.
+        """
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+            except json.JSONDecodeError:
+                # If it's not valid JSON, treat as plain text with no tools
+                result = ParseResult()
+                result["text"] = response
+                result["calls"] = []
+                result["meta"] = {"count": 0}
+                return result
+
+        tools_data = response.get("tools", [])
+        calls = [ToolCall(**c) for c in tools_data]
+
+        result = ParseResult()
+        result["text"] = response.get("message", "")
+        result["calls"] = calls
+        result["meta"] = {"count": len(calls)}
+        return result
+
+
+class ExecuteToolsInOrder(Transform):
+    """A Transform that executes tools in the order they appear in LLM output.
+
+    This transform reads the LLM response, parses ordered tool blocks using a
+    pluggable parser, and executes tools via a ToolRegistry strictly in the
+    order they appear in the response (independent of transform stacking order).
+
+    The transform integrates naturally with TorchRL's LLM environments and can
+    read/write conversation history alongside other transforms.
+
+    Args:
+        registry (ToolRegistry): Registry containing available tool services.
+        parser (LLMToolParser): Parser for extracting tool calls from LLM output.
+        in_keys (tuple[str, ...], optional): Key where LLM response is read.
+            Defaults to ``("history", "prompt")``.
+        out_keys (tuple[str, ...], optional): Key where tool results are written.
+            Defaults to ``("tools", "results")``.
+        message_key (tuple[str, ...], optional): Key for cleaned message text.
+            Defaults to ``("llm", "message")``.
+        history_key (tuple[str, ...], optional): Key for conversation history.
+            Defaults to ``("history", "prompt")``.
+        write_calls_key (tuple[str, ...], optional): Key for storing parsed calls.
+            Defaults to ``("tools", "calls")``.
+        stop_on_error (bool, optional): Whether to stop execution on first error.
+            Defaults to ``False``.
+        pass_state_to_tools (bool, optional): Whether to pass TD state to tools.
+            Defaults to ``True``.
+
+    Examples:
+        >>> from torchrl.envs.llm import ChatEnv
+        >>> from torchrl.envs.transforms import TransformedEnv, Compose
+        >>> from torchrl.envs.llm.transforms import ExecuteToolsInOrder, ToolRegistry, XMLBlockParser
+        >>>
+        >>> # Define a simple service
+        >>> class WebSearch:
+        ...     name = "search"
+        ...     schema_in = {"query": str}
+        ...     schema_out = {"results": list}
+        ...     def __call__(self, query: str, **kwargs):
+        ...         return {"results": [{"title": "TorchRL docs", "url": "https://..."}]}
+        >>>
+        >>> # Create registry and parser
+        >>> registry = ToolRegistry([WebSearch()])
+        >>> parser = XMLBlockParser()
+        >>>
+        >>> # Create environment with transform
+        >>> env = ChatEnv(batch_size=(1,))
+        >>> env = TransformedEnv(
+        ...     env,
+        ...     ExecuteToolsInOrder(registry=registry, parser=parser)
+        ... )
+
+    .. note::
+        This transform operates in the forward direction only; inverse is a no-op.
+        Tool execution order is determined by appearance in the LLM output,
+        not by the order of transforms in the Compose stack.
+    """
+
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        parser: LLMToolParser,
+        in_keys: tuple[str, ...] | None = None,
+        out_keys: tuple[str, ...] | None = None,
+        message_key: tuple[str, ...] | None = None,
+        history_key: tuple[str, ...] | None = None,
+        write_calls_key: tuple[str, ...] | None = None,
+        stop_on_error: bool = False,
+        pass_state_to_tools: bool = True,
+    ):
+        # Set defaults
+        if in_keys is None:
+            in_keys = ("history", "prompt")
+        if out_keys is None:
+            out_keys = ("tools", "results")
+        if message_key is None:
+            message_key = ("llm", "message")
+        if history_key is None:
+            history_key = ("history", "prompt")
+        if write_calls_key is None:
+            write_calls_key = ("tools", "calls")
+
+        super().__init__(in_keys=[in_keys], out_keys=[out_keys])
+        self.registry = registry
+        self.parser = parser
+        self._in = in_keys
+        self._out = out_keys
+        self._msg = message_key
+        self._hist = history_key
+        self._calls = write_calls_key
+        self.stop_on_error = stop_on_error
+        self.pass_state_to_tools = pass_state_to_tools
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Execute tools during environment step.
+
+        Args:
+            tensordict (TensorDictBase): Input tensordict before step.
+            next_tensordict (TensorDictBase): Output tensordict after step.
+
+        Returns:
+            TensorDictBase: Modified next_tensordict with tool results.
+        """
+        if next_tensordict.batch_dims > 1:
+            with next_tensordict.view(-1) as next_tensordict_flat:
+                next_tensordict_flat = self._step(tensordict, next_tensordict_flat)
+            return next_tensordict
+
+        # Check that we're in history mode
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError("ExecuteToolsInOrder must be used with a ChatEnv")
+        base_env = parent.base_env
+        if base_env.input_mode != "history":
+            raise RuntimeError(
+                "ExecuteToolsInOrder must be used with a ChatEnv in history mode"
+            )
+
+        # Get the history and extract the last message (LLM response)
+        history = next_tensordict["history"].prompt
+        local_history = history[..., -1]
+
+        procs = []
+        # Iterate over batch
+        for i, response_text in enumerate(local_history.content):
+            # Parse the response for tool calls
+            parse: ParseResult = self.parser(response_text)
+            ordered_calls = parse["calls"]
+            tool_outputs: list[dict[str, Any]] = []
+
+            # Execute tools IN ORDER OF APPEARANCE
+            for j, call in enumerate(ordered_calls):
+                try:
+                    service = self.registry.get(call.tool)
+                    kwargs = dict(call.args)
+                    if self.pass_state_to_tools:
+                        kwargs["_state"] = self._export_state_for_tool(next_tensordict)
+
+                    out = service(**kwargs)
+                    out["_tool"] = call.tool
+                    out["_index"] = j
+                    if call.tag:
+                        out["_tag"] = call.tag
+                    tool_outputs.append(out)
+                except Exception as e:
+                    err = {"_tool": call.tool, "_index": j, "error": str(e)}
+                    tool_outputs.append(err)
+                    if self.stop_on_error:
+                        break
+
+            # Store results and calls in tensordict
+            if tool_outputs:
+                # Format tool results as history entries
+                results_text = self._format_tool_results(tool_outputs)
+                if results_text:
+                    procs.append([History(role="tool", content=results_text)])
+                else:
+                    procs.append(None)
+            else:
+                procs.append(None)
+
+        # Add tool results to history if any tools were executed
+        if not all(p is None for p in procs):
+            if any(p is None for p in procs):
+                procs = [p if p is not None else [] for p in procs]
+
+            # Ensure all batch elements have same length
+            if len(procs) > 1 and not all(len(p) == len(procs[0]) for p in procs):
+
+                def fill_procs(proc: list[History], max_len: int) -> list[History]:
+                    if len(proc) == max_len:
+                        return proc
+                    return proc + [History(role="tool", content="")] * (
+                        max_len - len(proc)
+                    )
+
+                max_len = max(len(p) for p in procs)
+                procs = [fill_procs(p, max_len) for p in procs]
+
+            # Stack and extend history
+            procs = lazy_stack([lazy_stack(p) for p in procs])
+            history.extend(procs, dim=-1)
+            next_tensordict["history"].prompt = history
+
+        return next_tensordict
+
+    def _format_tool_results(self, tool_outputs: list[dict[str, Any]]) -> str:
+        """Format tool execution results as text.
+
+        Args:
+            tool_outputs (list[dict[str, Any]]): List of tool execution results.
+
+        Returns:
+            str: Formatted text representation of results.
+        """
+        if not tool_outputs:
+            return ""
+
+        lines = ["<tool_results>"]
+        for output in tool_outputs:
+            tool_name = output.pop("_tool", "unknown")
+            index = output.pop("_index", 0)
+            tag = output.pop("_tag", None)
+
+            if "error" in output:
+                lines.append(f"Tool {tool_name} (call {index + 1}) failed:")
+                lines.append(f"  Error: {output['error']}")
+            else:
+                header = f"Tool {tool_name} (call {index + 1})"
+                if tag:
+                    header += f" [tag: {tag}]"
+                header += " succeeded:"
+                lines.append(header)
+                lines.append(f"  Result: {json.dumps(output, indent=2)}")
+
+        lines.append("</tool_results>")
+        return "\n".join(lines)
+
+    def _export_state_for_tool(self, td: TensorDictBase) -> dict[str, Any]:
+        """Export a filtered, read-only view of TD state for tools.
+
+        Args:
+            td (TensorDictBase): The tensordict to export from.
+
+        Returns:
+            dict[str, Any]: Filtered state dictionary.
+        """
+        # Minimal, safe view; customize as needed
+        keys_for_tools = [("history", "prompt"), ("env", "step"), ("episode", "id")]
+        out = {}
+        for k in keys_for_tools:
+            if td.get(k, None) is not None:
+                value = td.get(k)
+                # Convert to Python types if needed
+                if isinstance(value, torch.Tensor):
+                    value = value.tolist() if value.numel() > 1 else value.item()
+                out["/".join(k if isinstance(k, tuple) else (k,))] = value
+        return out
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Handle reset (no-op for this transform).
+
+        Args:
+            tensordict (TensorDictBase): Input tensordict.
+            tensordict_reset (TensorDictBase): Reset tensordict.
+
+        Returns:
+            TensorDictBase: Unchanged reset tensordict.
+        """
+        return tensordict_reset
 
 
 class PersistentPythonProcess:
