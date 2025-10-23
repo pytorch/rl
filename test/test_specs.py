@@ -4585,6 +4585,26 @@ class TestCompositeNames:
         assert "Composite" in repr_str
         assert "obs" in repr_str
 
+    def test_zero_create_names(self):
+        """Test that creating tensors with 'zero' propagates names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+        td = spec.zero()
+        td.names = ["batch"]
+
+    def test_rand_create_names(self):
+        """Test that creating tensors with 'rand' propagates names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+        td = spec.rand()
+        td.names = ["batch"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
