@@ -475,6 +475,18 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 # Apply to local policy
                 if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
                     strategy.apply_weights(self.policy, weights)
+            elif (
+                hasattr(self, "_original_policy")
+                and isinstance(self._original_policy, nn.Module)
+                and hasattr(self, "policy")
+                and isinstance(self.policy, nn.Module)
+            ):
+                # If no weights were provided, mirror weights from the original (trainer) policy
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                strategy = WeightStrategy(extract_as="tensordict")
+                weights = strategy.extract_weights(self._original_policy)
+                strategy.apply_weights(self.policy, weights)
             # Otherwise, no action needed - policy is local and changes are immediately visible
 
     def __iter__(self) -> Iterator[TensorDictBase]:
