@@ -15,10 +15,10 @@ from tensordict import TensorDict
 from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.envs.llm import RetrieveLogProb
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
+from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
@@ -479,42 +479,40 @@ def get_hf_model(
         torch.set_default_dtype(original_dtype)
 
 
-def make_weight_updater(
-    policy_training=None,
+def make_weight_sync_scheme(
     master_address=None,
     master_port=None,
-    model_metadata=None,
-    vllm_tp_size=None,
-) -> vLLMUpdater:
-    """Creates a vLLM weight updater for the policy.
+    vllm_tp_size=1,
+) -> VLLMWeightSyncScheme:
+    """Creates a vLLM weight synchronization scheme using NCCL collectives.
 
-    This function can be used in two ways:
-    1. Synchronous mode (expert-iteration-sync.py): Pass policy_training to get an initialized updater with metadata
-    2. Async mode (expert-iteration-async.py): Pass master_address, master_port, model_metadata, and remote_actor
+    This function creates a weight sync scheme that uses NCCL for high-performance
+    GPU-to-GPU weight transfers from the training model to vLLM inference workers.
 
     Args:
-        policy_training (Optional[TransformersWrapper]): The training policy model. Required for sync mode.
-        master_address (Optional[str]): Ray master address for async mode.
-        master_port (Optional[int]): Ray master port for async mode.
-        model_metadata (Optional[dict]): Model metadata for async mode. If not provided but policy_training is,
-            it will be extracted from the policy.
-        vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
+        master_address (Optional[str]): Address of the master node for distributed init.
+            Defaults to "localhost".
+        master_port (Optional[int]): Port of the master node for distributed init.
+            If None, will auto-assign.
+        vllm_tp_size (int): vLLM tensor parallel size (gpus_per_replica). Defaults to 1.
 
     Returns:
-        vLLMUpdater: An instance of the weight updater configured to update
-            the vLLM worker's weights.
+        VLLMWeightSyncScheme: A weight sync scheme configured for the vLLM engine.
     """
-    if model_metadata is None and policy_training is not None:
-        # Extract metadata from training policy
-        model_metadata = {
-            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
-        }
+    if master_address is None:
+        master_address = "localhost"
 
-    return vLLMUpdater(
+    torchrl_logger.info(
+        f"Creating VLLMWeightSyncScheme with tp_size={vllm_tp_size}, "
+        f"master_address={master_address}, master_port={master_port}"
+    )
+
+    return VLLMWeightSyncScheme(
         master_address=master_address,
         master_port=master_port,
-        model_metadata=model_metadata,
-        vllm_tp_size=vllm_tp_size,
+        gpus_per_replica=vllm_tp_size,
+        num_replicas=1,  # For expert iteration, typically 1 replica
+        strategy="state_dict",
     )
 
 
