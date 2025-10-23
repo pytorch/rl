@@ -32,7 +32,7 @@ jobs:
       runner: "linux.g6.4xlarge.experimental.nvidia.gpu"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -45,7 +45,7 @@ jobs:
 
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu117"
+        export CU_VERSION="cu128"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export TF_CPP_MIN_LOG_LEVEL=0
