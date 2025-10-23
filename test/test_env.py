@@ -3836,6 +3836,8 @@ class TestNonTensorEnv:
         finally:
             env.close(raise_if_closed=False)
             del env
+            time.sleep(0.1)
+            gc.collect()
 
     class AddString(Transform):
         def __init__(self):
