@@ -6,28 +6,19 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
-apt-get update && apt-get upgrade -y && apt-get install -y git cmake
+export DEBIAN_FRONTEND=noninteractive
+export TZ=UTC
+apt-get update
+apt-get install -yq --no-install-recommends git wget unzip curl patchelf
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-apt-get install -y wget \
-    gcc \
-    g++ \
-    unzip \
-    curl \
-    patchelf \
-    libosmesa6-dev \
-    libgl1-mesa-glx \
-    libglfw3 \
-    swig3.0 \
-    libglew-dev \
-    libglvnd0 \
-    libgl1 \
-    libglx0 \
-    libegl1 \
-    libgles2
+# The base PyTorch devel image provides compilers, CMake >= 3.22, and most build deps.
+# Install only minimal utilities not guaranteed to be present.
 
-# Upgrade specific package
-apt-get upgrade -y libstdc++6
+# CMake available in the PyTorch devel image (Ubuntu 22.04) is sufficient.
+
+# Cleanup APT cache
+apt-get clean && rm -rf /var/lib/apt/lists/*
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 root_dir="$(git rev-parse --show-toplevel)"
