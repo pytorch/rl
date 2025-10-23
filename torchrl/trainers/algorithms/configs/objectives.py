@@ -148,30 +148,3 @@ class HardUpdateConfig(TargetNetUpdaterConfig):
 
     _target_: str = "torchrl.objectives.utils.HardUpdate."
     value_network_update_interval: int = 1000
-
-
-@dataclass
-class GAEConfig(LossConfig):
-    """A class to configure a GAELoss."""
-
-    gamma: float | None = None
-    lmbda: float | None = None
-    value_network: Any = None
-    average_gae: bool = True
-    differentiable: bool = False
-    vectorized: bool | None = None
-    skip_existing: bool | None = None
-    advantage_key: str | None = None
-    value_target_key: str | None = None
-    value_key: str | None = None
-    shifted: bool = False
-    device: Any = None
-    time_dim: int | None = None
-    auto_reset_env: bool = False
-    deactivate_vmap: bool = False
-    _target_: str = "torchrl.objectives.value.GAE"
-    _partial_: bool = False
-
-    def __post_init__(self) -> None:
-        """Post-initialization hook for GAELoss configurations."""
-        super().__post_init__()

@@ -66,42 +66,6 @@ class PPOTrainer(Trainer):
 
     Logging can be configured via constructor parameters to enable/disable specific metrics.
 
-    Args:
-        collector (DataCollectorBase): The data collector for gathering training data.
-        total_frames (int): Total number of frames to train for.
-        frame_skip (int): Frame skip value for the environment.
-        optim_steps_per_batch (int): Number of optimization steps per batch.
-        loss_module (LossModule): The loss module for computing policy and value losses.
-        optimizer (optim.Optimizer, optional): The optimizer for training.
-        logger (Logger, optional): Logger for tracking training metrics.
-        clip_grad_norm (bool, optional): Whether to clip gradient norms. Default: True.
-        clip_norm (float, optional): Maximum gradient norm value.
-        progress_bar (bool, optional): Whether to show a progress bar. Default: True.
-        seed (int, optional): Random seed for reproducibility.
-        save_trainer_interval (int, optional): Interval for saving trainer state. Default: 10000.
-        log_interval (int, optional): Interval for logging metrics. Default: 10000.
-        save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state.
-        num_epochs (int, optional): Number of epochs per batch. Default: 4.
-        replay_buffer (ReplayBuffer, optional): Replay buffer for storing data.
-        batch_size (int, optional): Batch size for optimization.
-        gamma (float, optional): Discount factor for GAE. Default: 0.9.
-        lmbda (float, optional): Lambda parameter for GAE. Default: 0.99.
-        enable_logging (bool, optional): Whether to enable logging. Default: True.
-        log_rewards (bool, optional): Whether to log rewards. Default: True.
-        log_actions (bool, optional): Whether to log actions. Default: True.
-        log_observations (bool, optional): Whether to log observations. Default: False.
-        async_collection (bool, optional): Whether to use async collection. Default: False.
-        add_gae (bool, optional): Whether to add GAE computation. Default: True.
-        gae (Callable, optional): Custom GAE module. If None and add_gae is True, a default GAE will be created.
-        weight_update_map (dict[str, str], optional): Mapping from collector destination paths (keys in
-            collector's weight_sync_schemes) to trainer source paths. Required if collector has
-            weight_sync_schemes configured. Example: {"policy": "loss_module.actor_network",
-            "replay_buffer.transforms[0]": "loss_module.critic_network"}
-        log_timings (bool, optional): If True, automatically register a LogTiming hook to log
-            timing information for all hooks to the logger (e.g., wandb, tensorboard).
-            Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
-            Default is False.
-
     Examples:
         >>> # Basic usage with manual configuration
         >>> from torchrl.trainers.algorithms.ppo import PPOTrainer
@@ -147,10 +111,6 @@ class PPOTrainer(Trainer):
         log_actions: bool = True,
         log_observations: bool = False,
         async_collection: bool = False,
-        add_gae: bool = True,
-        gae: Callable[[TensorDictBase], TensorDictBase] | None = None,
-        weight_update_map: dict[str, str] | None = None,
-        log_timings: bool = False,
     ) -> None:
         warnings.warn(
             "PPOTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -175,21 +135,17 @@ class PPOTrainer(Trainer):
             save_trainer_file=save_trainer_file,
             num_epochs=num_epochs,
             async_collection=async_collection,
-            log_timings=log_timings,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
 
-        if add_gae and gae is None:
-            gae = GAE(
-                gamma=gamma,
-                lmbda=lmbda,
-                value_network=self.loss_module.critic_network,
-                average_gae=True,
-            )
-            self.register_op("pre_epoch", gae)
-        elif not add_gae and gae is not None:
-            raise ValueError("gae must not be provided if add_gae is False")
+        gae = GAE(
+            gamma=gamma,
+            lmbda=lmbda,
+            value_network=self.loss_module.critic_network,
+            average_gae=True,
+        )
+        self.register_op("pre_epoch", gae)
 
         if (
             not self.async_collection
@@ -211,62 +167,16 @@ class PPOTrainer(Trainer):
             )
 
             if not self.async_collection:
-                # rb has been extended by the collector
-                raise RuntimeError
                 self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
 
-        # Set up weight updates
-        # Validate weight_update_map if collector has weight_sync_schemes
-        if (
-            hasattr(self.collector, "_weight_sync_schemes")
-            and self.collector._weight_sync_schemes
-        ):
-            if weight_update_map is None:
-                raise ValueError(
-                    "Collector has weight_sync_schemes configured, but weight_update_map was not provided. "
-                    f"Please provide a mapping for all destinations: {list(self.collector._weight_sync_schemes.keys())}"
-                )
-
-            # Validate that all scheme destinations are covered in the map
-            scheme_destinations = set(self.collector._weight_sync_schemes.keys())
-            map_destinations = set(weight_update_map.keys())
-
-            if scheme_destinations != map_destinations:
-                missing = scheme_destinations - map_destinations
-                extra = map_destinations - scheme_destinations
-                error_msg = "weight_update_map does not match collector's weight_sync_schemes.\n"
-                if missing:
-                    error_msg += f"  Missing destinations: {missing}\n"
-                if extra:
-                    error_msg += f"  Extra destinations: {extra}\n"
-                raise ValueError(error_msg)
-
-            # Use the weight_update_map approach
-            update_weights = UpdateWeights(
-                self.collector,
-                1,
-                weight_update_map=weight_update_map,
-                trainer=self,
-            )
-        else:
-            # Fall back to legacy approach for backward compatibility
-            if weight_update_map is not None:
-                warnings.warn(
-                    "weight_update_map was provided but collector has no weight_sync_schemes. "
-                    "Ignoring weight_update_map and using legacy policy_weights_getter.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
-            policy_weights_getter = partial(
-                TensorDict.from_module, self.loss_module.actor_network
-            )
-            update_weights = UpdateWeights(
-                self.collector, 1, policy_weights_getter=policy_weights_getter
-            )
-
+        policy_weights_getter = partial(
+            TensorDict.from_module, self.loss_module.actor_network
+        )
+        update_weights = UpdateWeights(
+            self.collector, 1, policy_weights_getter=policy_weights_getter
+        )
         self.register_op("post_steps", update_weights)
 
         # Store logging configuration

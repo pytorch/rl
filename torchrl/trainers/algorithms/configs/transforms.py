@@ -938,19 +938,3 @@ class FlattenTensorDictConfig(TransformConfig):
     def __post_init__(self) -> None:
         """Post-initialization hook for FlattenTensorDict configuration."""
         super().__post_init__()
-
-
-@dataclass
-class ModuleTransformConfig(TransformConfig):
-    """Configuration for ModuleTransform."""
-
-    module: Any = None
-    device: Any = None
-    no_grad: bool = False
-    inverse: bool = False
-    _target_: str = "torchrl.envs.transforms.module.ModuleTransform"
-    _partial_: bool = False
-
-    def __post_init__(self) -> None:
-        """Post-initialization hook for ModuleTransform configuration."""
-        super().__post_init__()

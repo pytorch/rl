@@ -9,12 +9,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from tensordict.nn import TensorDictModuleBase
 
 from torchrl.collectors import DataCollectorBase
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.objectives.value.advantages import GAE
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
@@ -56,7 +54,6 @@ class SACTrainerConfig(TrainerConfig):
     critic_network: Any = None
     target_net_updater: Any = None
     async_collection: bool = False
-    log_timings: bool = False
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -90,7 +87,6 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     kwargs.pop("create_env_fn")
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
-    log_timings = kwargs.pop("log_timings", False)
 
     # Instantiate networks first
     if actor_network is not None:
@@ -156,7 +152,6 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         replay_buffer=replay_buffer,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
-        log_timings=log_timings,
     )
 
 
@@ -166,37 +161,6 @@ class PPOTrainerConfig(TrainerConfig):
 
     This class defines the configuration parameters for creating a PPO trainer,
     including both required and optional fields with sensible defaults.
-
-    Args:
-        collector: The data collector for gathering training data.
-        total_frames: Total number of frames to train for.
-        optim_steps_per_batch: Number of optimization steps per batch.
-        loss_module: The loss module for computing policy and value losses.
-        optimizer: The optimizer for training.
-        logger: Logger for tracking training metrics.
-        save_trainer_file: File path for saving trainer state.
-        replay_buffer: Replay buffer for storing data.
-        frame_skip: Frame skip value for the environment. Default: 1.
-        clip_grad_norm: Whether to clip gradient norms. Default: True.
-        clip_norm: Maximum gradient norm value.
-        progress_bar: Whether to show a progress bar. Default: True.
-        seed: Random seed for reproducibility.
-        save_trainer_interval: Interval for saving trainer state. Default: 10000.
-        log_interval: Interval for logging metrics. Default: 10000.
-        create_env_fn: Environment creation function.
-        actor_network: Actor network configuration.
-        critic_network: Critic network configuration.
-        num_epochs: Number of epochs per batch. Default: 4.
-        async_collection: Whether to use async collection. Default: False.
-        add_gae: Whether to add GAE computation. Default: True.
-        gae: Custom GAE module configuration.
-        weight_update_map: Mapping from collector destination paths to trainer source paths.
-            Required if collector has weight_sync_schemes configured.
-            Example: {"policy": "loss_module.actor_network",
-                     "replay_buffer.transforms[0]": "loss_module.critic_network"}
-        log_timings: Whether to automatically log timing information for all hooks.
-            If True, timing metrics will be logged to the logger (e.g., wandb, tensorboard)
-            with prefix "time/" (e.g., "time/hook/UpdateWeights"). Default: False.
     """
 
     collector: Any
@@ -219,10 +183,6 @@ class PPOTrainerConfig(TrainerConfig):
     critic_network: Any = None
     num_epochs: int = 4
     async_collection: bool = False
-    add_gae: bool = True
-    gae: Any = None
-    weight_update_map: dict[str, str] | None = None
-    log_timings: bool = False
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
@@ -253,12 +213,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
-    add_gae = kwargs.pop("add_gae", True)
-    gae = kwargs.pop("gae")
     create_env_fn = kwargs.pop("create_env_fn")
-    weight_update_map = kwargs.pop("weight_update_map", None)
-    log_timings = kwargs.pop("log_timings", False)
-
     if create_env_fn is not None:
         # could be referenced somewhere else, no need to raise an error
         pass
@@ -270,19 +225,6 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         actor_network = actor_network()
     if critic_network is not None:
         critic_network = critic_network()
-    else:
-        critic_network = loss_module.critic_network
-
-    # Ensure GAE in replay buffer uses the same value network instance as loss module
-    # This fixes the issue where Hydra instantiates separate instances of value_model
-    if (
-        replay_buffer is not None
-        and hasattr(replay_buffer, "_transform")
-        and len(replay_buffer._transform) > 1
-        and hasattr(replay_buffer._transform[1], "module")
-        and hasattr(replay_buffer._transform[1].module, "value_network")
-    ):
-        replay_buffer._transform[1].module.value_network = critic_network
 
     if not isinstance(collector, DataCollectorBase):
         # then it's a partial config
@@ -316,9 +258,6 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         )
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
-    # instantiate gae if it is a partial config
-    if not isinstance(gae, (GAE, TensorDictModuleBase)) and gae is not None:
-        gae = gae()
 
     return PPOTrainer(
         collector=collector,
@@ -338,8 +277,4 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         replay_buffer=replay_buffer,
         num_epochs=num_epochs,
         async_collection=async_collection,
-        add_gae=add_gae,
-        gae=gae,
-        weight_update_map=weight_update_map,
-        log_timings=log_timings,
     )

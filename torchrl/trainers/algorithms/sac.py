@@ -125,7 +125,6 @@ class SACTrainer(Trainer):
         log_observations: bool = False,
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
-        log_timings: bool = False,
     ) -> None:
         warnings.warn(
             "SACTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -152,7 +151,6 @@ class SACTrainer(Trainer):
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
             async_collection=async_collection,
-            log_timings=log_timings,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
