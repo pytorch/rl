@@ -162,7 +162,7 @@ class WrappablePolicy(nn.Module):
         output = self.linear(observation)
         if self.multiple_outputs:
             return output, output.sum(), output.min(), output.max()
-        return self.linear(observation)
+        return output
 
 
 class UnwrappablePolicy(nn.Module):
