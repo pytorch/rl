@@ -118,9 +118,9 @@ Usage
 Adding Custom Templates
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-You can add custom chat templates for new model families using the :func:`torchrl.data.llm.chat.add_chat_template` function.
+You can add custom chat templates for new model families using the :func:`torchrl.data.llm.add_chat_template` function.
 
-.. autofunction:: torchrl.data.llm.chat.add_chat_template
+.. autofunction:: torchrl.data.llm.add_chat_template
 
 Usage Examples
 ^^^^^^^^^^^^^^
@@ -130,7 +130,7 @@ Adding a Llama Template
 
 .. code-block:: python
 
-    >>> from torchrl.data.llm.chat import add_chat_template, History
+    >>> from torchrl.data.llm import add_chat_template, History
     >>> from transformers import AutoTokenizer
     >>> 
     >>> # Define the Llama chat template
