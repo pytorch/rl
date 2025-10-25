@@ -243,13 +243,13 @@ When you create a collector with weight sync schemes, the following initializati
                         |                  |
                         | Configuration:   |
                         | - strategy       |
-                        | - transport_type |
+                        | - transport type |
                         |                  |
                         +--------+---------+
                                  |
                     +------------+-------------+
                     |                          |
-                creates                    creates
+                    | creates                  | creates
                     |                          |
                     v                          v
             Main Process                 Worker Process
@@ -258,7 +258,7 @@ When you create a collector with weight sync schemes, the following initializati
             |              |             |               |
             | - strategy   |             | - strategy    |
             | - transports |             | - transport   |
-            | - model_ref  |             | - model_ref   |
+            | - model ref  |             | - model ref   |
             |              |             |               |
             | Registers:   |             | Registers:    |
             | - model      |             | - model       |
@@ -266,18 +266,18 @@ When you create a collector with weight sync schemes, the following initializati
             +--------------+             +---------------+
                     |                            |
                     |   Transport Layer          |
-                    |   +----------------+       |
-                    +-->+ MPTransport    |<------+
-                    |   | (pipes)        |       |
-                    |   +----------------+       |
+                    |    +----------------+      |
+                    +--> | MPTransport    | <----+
+                    |    | (pipes)        |      |
+                    |    +----------------+      |
                     |                            |
                     |   +--------------------+   |
-                    +-->+ SharedMemTransport |<--+
-                    |   | (shared mem)       |   |
+                    +-> | SharedMemTransport | <-+
+                    |   | (shared memory)    |   |
                     |   +--------------------+   |
                     |                            |
                     |   +----------------+       |
-                    +-->+ RayTransport   |<------+
+                    +-> | RayTransport   | <-----+
                         | (Ray store)    |
                         +----------------+
 
@@ -299,29 +299,29 @@ When you call ``collector.update_policy_weights_()``, the weight synchronization
 
         Main Process                                    Worker Process
         
-    +-------------------+                           +-------------------+
-    | WeightSender      |                           | WeightReceiver    |
-    |                   |                           |                   |
-    | 1. Extract        |                           | 4. Poll transport |
-    |    weights from   |                           |    for weights    |
-    |    model using    |                           |                   |
-    |    strategy       |                           |                   |
-    |                   |    2. Send via            |                   |
-    | +-------------+   |       Transport           | +--------------+  |
-    | | Strategy    |   |    +------------+         | | Strategy     |  |
-    | | extract()   |   |    |            |         | | apply()      |  |
-    | +-------------+   +----+ Transport  +-------->+ +--------------+  |
-    |        |          |    |            |         |        |          |
-    |        v          |    +------------+         |        v          |
-    | +-------------+   |                           | +--------------+  |
-    | | Model       |   |                           | | Model        |  |
-    | | (source)    |   |  3. Ack (optional)        | | (dest)       |  |
-    | +-------------+   | <-----------------------+ | +--------------+  |
-    |                   |                           |                   |
-    +-------------------+                           | 5. Apply weights  |
-                                                    |    to model using |
-                                                    |    strategy       |
-                                                    +-------------------+
+    +-------------------+                               +-------------------+
+    | WeightSender      |                               | WeightReceiver    |
+    |                   |                               |                   |
+    | 1. Extract        |                               | 4. Poll transport |
+    |    weights from   |                               |                   |
+    |    model using    |                               |    for weights    |
+    |    strategy       |                               |                   |
+    |                   |    2. Send via                |                   |
+    | +-------------+   |       Transport               | +--------------+  |
+    | | Strategy    |   |    +------------+             | | Strategy     |  |
+    | | extract()   |   |    |            |             | | apply()      |  |
+    | +-------------+   +----+ Transport  +------------>+ +--------------+  |
+    |        |          |    |            |             |        |          |
+    |        v          |    +------------+             |        v          |
+    | +-------------+   |                               | +--------------+  |
+    | | Model       |   |                               | | Model (dest) |  |
+    | | (source)    |   |  3. Acknowledgment (optional) | |              |  |
+    | +-------------+   | <---------------------------+ | +--------------+  |
+    |                   |                               |                   |
+    +-------------------+                               | 5. Apply weights  |
+                                                        |    to model using |
+                                                        |    strategy       |
+                                                        +-------------------+
 
 1. **Extract**: Sender extracts weights from the source model (state_dict or TensorDict)
 2. **Send**: Sender broadcasts weights through all registered transports
@@ -339,27 +339,27 @@ One of the key features is support for synchronizing multiple models independent
     :scale: 130
     :textual:
 
-      Main Process                 Worker Process 1         Worker Process 2
-      
-    +-----------------+            +---------------+        +---------------+
-    | Collector       |            | Collector     |        | Collector     |
-    |                 |            |               |        |               |
-    | Models:         |            | Models:       |        | Models:       |
-    |  +----------+   |            |  +--------+   |        |  +--------+   |
-    |  | Policy A |   |            |  |Policy A|   |        |  |Policy A|   |
-    |  +----------+   |            |  +--------+   |        |  +--------+   |
-    |  +----------+   |            |  +--------+   |        |  +--------+   |
-    |  | Model  B |   |            |  |Model  B|   |        |  |Model  B|   |
-    |  +----------+   |            |  +--------+   |        |  +--------+   |
-    |                 |            |               |        |               |
-    | Weight Senders: |            | Weight        |        | Weight        |
-    |  +----------+   |            | Receivers:    |        | Receivers:    |
-    |  | Sender A +---+------------+->Receiver A   |        |  Receiver A   |
-    |  +----------+   |            |               |        |               |
-    |  +----------+   |            |  +--------+   |        |  +--------+   |
-    |  | Sender B +---+------------+->Receiver B   |        |  Receiver B   |
-    |  +----------+   |  Pipes     |               |  Pipes |               |
-    +-----------------+            +-------+-------+        +-------+-------+
+      Main Process                 Worker Processes (1, 2, ..., B)
+
+    +-----------------+            +-------------------+
+    | Orchestrator    |            | Collector         |
+    |                 |            |                   |
+    | Models:         |            | Models:           |
+    |  +----------+   |            |  +--------+       |
+    |  | Policy A |   |            |  |Policy A|       |
+    |  +----------+   |            |  +--------+       |
+    |  +----------+   |            |  +--------+       |
+    |  | Model  B |   |            |  |Model  B|       |
+    |  +----------+   |            |  +--------+       |
+    |                 |            |                   |
+    | Weight Senders: |            | Weight Receivers: |
+    |  +----------+   |            |                   |
+    |  | Sender A +---+------------+->Receiver A       |
+    |  +----------+   |            |                   |
+    |  +----------+   |            |  +--------+       |
+    |  | Sender B +---+------------+->Receiver B       |
+    |  +----------+   |  Pipes     |                   |
+    +-----------------+            +-------------------+
 
 Each model gets its own sender/receiver pair, allowing independent synchronization frequencies,
 different transport mechanisms per model, and model-specific strategies.
