@@ -507,7 +507,7 @@ Training and Optimization Configurations
     SparseAdamConfig
 
 Logging Configurations
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: torchrl.trainers.algorithms.configs.logging
 
