@@ -3847,10 +3847,11 @@ class TestPolicyFactory:
         )
         policy = policy_factory()
         policy_weights = TensorDict.from_module(policy)
+        kwargs = {}
         if weight_updater == "scheme_shared":
-            kwargs = {"weight_schemes": {"policy": SharedMemWeightSyncScheme()}}
-        elif weight_updater == "scheme_pip":
-            kwargs = {"weight_schemes": {"policy": SharedMemWeightSyncScheme()}}
+            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
+        elif weight_updater == "scheme_pipe":
+            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
         elif weight_updater == "weight_updater":
             kwargs = {"weight_updater": self.MPSWeightUpdaterBase(policy_weights, 2)}
         else:
