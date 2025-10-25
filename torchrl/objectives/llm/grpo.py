@@ -8,7 +8,7 @@ import contextlib
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeVar
 
 import torch
 from tensordict import (
@@ -33,8 +33,12 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, _sum_td_features
 
 
-class GRPOLossOutput(TensorClass["nocast"]):
-    """GRPO Loss Output."""
+class LLMLossOutput(TensorClass["nocast"]):
+    """Base class for LLM loss outputs.
+
+    This base class defines the common structure for all LLM-based policy optimization
+    loss outputs (GRPO, DAPO, CISPO, etc.).
+    """
 
     loss_objective: torch.Tensor
     clip_fraction: torch.Tensor
@@ -46,6 +50,21 @@ class GRPOLossOutput(TensorClass["nocast"]):
     kl_to_ref: torch.Tensor | None = None
     loss_kl_to_inference: torch.Tensor | None = None
     kl_to_inference: torch.Tensor | None = None
+
+
+LLMOutputType = TypeVar("LLMOutputType", bound=LLMLossOutput)
+
+
+class GRPOLossOutput(LLMLossOutput):
+    """GRPO Loss Output."""
+
+
+class DAPOLossOutput(LLMLossOutput):
+    """DAPO Loss Output."""
+
+
+class CISPOLossOutput(LLMLossOutput):
+    """CISPO Loss Output."""
 
 
 class GRPOLoss(LossModule):
@@ -123,6 +142,7 @@ class GRPOLoss(LossModule):
     """
 
     actor_network: LLMWrapperBase
+    output_type: type[LLMLossOutput] = GRPOLossOutput
 
     @dataclass
     class _AcceptedKeys(LossModule._AcceptedKeys):
@@ -136,6 +156,33 @@ class GRPOLoss(LossModule):
         action: NestedKey = ("tokens", "full")
         sample_log_prob: NestedKey = ("log_probs", "full")
         ref_log_probs: NestedKey = ("next", "ref_log_probs", "full")
+
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        """Access the tensordict key configuration for this loss.
+
+        This property provides access to the configurable keys used by the loss module
+        to read tensors from input TensorDicts. These keys include:
+
+        - ``advantage``: key for the advantage values
+        - ``action``: key for the action tokens (default: ``("tokens", "full")``)
+        - ``sample_log_prob``: key for the log probabilities from the reference policy (default: ``("log_probs", "full")``)
+        - ``ref_log_probs``: key for the reference policy log probabilities (default: ``("next", "ref_log_probs", "full")``)
+
+        To modify these keys, use the :meth:`~.set_keys` method.
+
+        Examples:
+            >>> loss = GRPOLoss(actor_network)
+            >>> # Access current keys
+            >>> print(loss.tensor_keys.advantage)  # "advantage"
+            >>> # Modify keys
+            >>> loss.set_keys(advantage="my_advantage_key")
+            >>> print(loss.tensor_keys.advantage)  # "my_advantage_key"
+
+        Returns:
+            An instance of _AcceptedKeys containing all configurable tensordict keys.
+        """
+        return self._tensor_keys
 
     def __init__(
         self,
@@ -316,7 +363,7 @@ class GRPOLoss(LossModule):
             )
         return log_prob, dist, False
 
-    def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
+    def forward(self, tensordict: TensorDictBase) -> LLMOutputType:
         # Some sanity checks and housekeeping:
         # - We may not have the tokens yet. If not, we will use the tokenizer of the actor to tokenize the text.
         #   We default to history rather than text because the history will account for multiturn, or multimodal inputs.
@@ -398,7 +445,7 @@ class GRPOLoss(LossModule):
             td_out["loss_kl_to_inference"] = loss_kl
             td_out["kl_to_inference"] = kl_penalty.detach()
         del tensordict["_cur_log_prob"]
-        return GRPOLossOutput.from_tensordict(td_out)
+        return self.output_type.from_tensordict(td_out)
 
     def _compute_policy_objective(
         self, log_weight: torch.Tensor, advantage: torch.Tensor
@@ -557,9 +604,11 @@ class GRPOLoss(LossModule):
 class DAPO(GRPOLoss):
     """DAPO (Clip-Higher over GRPO).
 
-    Validates asymmetric clip thresholds; recommended (0.20, 0.28), see Eq. (10) in DAPO
-    [arXiv](https://arxiv.org/html/2503.14476).
+    Validates asymmetric clip thresholds; recommended (0.20, 0.28), see Eq. (10) in
+    the `DAPO <https://arxiv.org/html/2503.14476>`_ paper.
     """
+
+    output_type: type[LLMLossOutput] = DAPOLossOutput
 
     def __init__(
         self,
@@ -610,8 +659,10 @@ class CISPO(GRPOLoss):
     replaces the PPO-style min with a clipped-importance objective:
         loss = - clip(weight, [1 - eps_low, 1 + eps_high]) * advantage
 
-    See MiniMax-M1 (CISPO) [arXiv](https://arxiv.org/html/2506.13585).
+    See the `MiniMax-M1 (CISPO) <https://arxiv.org/html/2506.13585>`_ paper.
     """
+
+    output_type: type[LLMLossOutput] = CISPOLossOutput
 
     def _compute_policy_objective(
         self, log_weight: torch.Tensor, advantage: torch.Tensor
