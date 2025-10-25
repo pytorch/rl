@@ -468,7 +468,10 @@ as an introduction to other frameworks.</p>
 the gym library installed, as well as the atari suite. You can get this
 installed by installing the following packages:</p>
 <blockquote>
-<div></div></blockquote>
+<div><div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>gym<span class="w"> </span>atari-py<span class="w"> </span>ale-py<span class="w"> </span>gym<span class="o">[</span>accept-rom-license<span class="o">]</span><span class="w"> </span>pygame
+</pre></div>
+</div>
+</div></blockquote>
 <p>To unify all frameworks, torchrl environments are built inside the
 <code class="docutils literal notranslate"><span class="pre">__init__</span></code> method with a private method called <code class="docutils literal notranslate"><span class="pre">_build_env</span></code> that
 will pass the arguments and keyword arguments to the root library builder.</p>

@@ -1677,7 +1677,12 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">lib</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModuleType</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">gym_backend</span><span class="p">()</span>
+        <span class="n">gym</span> <span class="o">=</span> <span class="n">gym_backend</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">gym</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Gym backend is not available. Please install gym or gymnasium.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">gym</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>

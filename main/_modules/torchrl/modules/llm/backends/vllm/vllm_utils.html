@@ -429,6 +429,9 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.distributed.device_communicators.pynccl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyNcclCommunicator</span>
@@ -444,7 +447,7 @@
 
 
 <div class="viewcode-block" id="stateless_init_process_group"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">stateless_init_process_group</span><span class="p">(</span>
-    <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">master_port</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">device</span>
+    <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">master_port</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Initializes a stateless process group for distributed communication.</span>
 
@@ -458,7 +461,7 @@
 <span class="sd">        master_port (str | None): The port used by the master node. Automatically assigns an open port if not specified.</span>
 <span class="sd">        rank (int): The rank of the current process.</span>
 <span class="sd">        world_size (int): The total number of processes in the distributed group.</span>
-<span class="sd">        device: The device to use for communication.</span>
+<span class="sd">        device: The device to use for communication. Defaults to None.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        PyNcclCommunicator: A PyNcclCommunicator instance initialized with the created StatelessProcessGroup.</span>
@@ -478,9 +481,14 @@
     <span class="k">if</span> <span class="n">master_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">master_port</span> <span class="o">=</span> <span class="n">get_open_port</span><span class="p">()</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">get_open_port</span><span class="p">)</span> <span class="k">else</span> <span class="mi">29500</span>
 
+    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Initializing stateless process group: rank=</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, master_address=</span><span class="si">{</span><span class="n">master_address</span><span class="si">}</span><span class="s2">, master_port=</span><span class="si">{</span><span class="n">master_port</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
     <span class="n">pg</span> <span class="o">=</span> <span class="n">StatelessProcessGroup</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
         <span class="n">host</span><span class="o">=</span><span class="n">master_address</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">master_port</span><span class="p">),</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span>
     <span class="p">)</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
     <span class="n">pynccl</span> <span class="o">=</span> <span class="n">PyNcclCommunicator</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">pynccl</span></div>
 

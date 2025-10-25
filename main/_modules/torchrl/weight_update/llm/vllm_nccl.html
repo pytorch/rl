@@ -1,0 +1,1509 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.weight_update.llm.vllm_nccl &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.0.0+unknown) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.weight_update.llm.vllm_nccl</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.weight_update.llm.vllm_nccl</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="sd">&quot;&quot;&quot;vLLM weight synchronization for the v2 API.</span>
+
+<span class="sd">This module provides weight synchronization for vLLM engines using a two-layer</span>
+<span class="sd">architecture:</span>
+
+<span class="sd">**Architecture Overview**</span>
+
+<span class="sd">The weight synchronization uses two separate layers:</span>
+
+<span class="sd">1. **RPC Layer** (Coordination)</span>
+<span class="sd">   - Signals workers when a collective operation will begin</span>
+<span class="sd">   - Can be implemented with different backends (Ray, torch.distributed.rpc, etc.)</span>
+<span class="sd">   - Tells vLLM workers: &quot;prepare to receive weights via collective&quot;</span>
+<span class="sd">   - Currently supports Ray as the RPC backend</span>
+
+<span class="sd">2. **Collective Layer** (Data Transfer)</span>
+<span class="sd">   - Performs the actual weight broadcast using NCCL</span>
+<span class="sd">   - High-bandwidth GPU-to-GPU communication</span>
+<span class="sd">   - All ranks participate simultaneously in the collective</span>
+
+<span class="sd">**Why Two Layers?**</span>
+
+<span class="sd">Separating RPC and collectives provides:</span>
+<span class="sd">- **Flexibility**: Swap RPC backends (Ray, RPC, gRPC) without changing collectives</span>
+<span class="sd">- **Clarity**: Coordination logic separate from data transfer</span>
+<span class="sd">- **Performance**: Use optimal transport for each (RPC for signals, NCCL for data)</span>
+
+<span class="sd">**Flow Example (Ray Backend)**</span>
+
+<span class="sd">.. code-block::</span>
+
+<span class="sd">    Trainer (rank 0)                    vLLM Workers (ranks 1+)</span>
+<span class="sd">    ================                    =======================</span>
+
+<span class="sd">    # 1. RPC: Signal collective start</span>
+<span class="sd">    trainer.update_weights() ---------&gt; [Ray RPC] --------&gt; receiver.init_all_workers_group()</span>
+<span class="sd">                                                            &quot;I&#39;m ready for collective&quot;</span>
+
+<span class="sd">    # 2. Collective: Broadcast weights</span>
+<span class="sd">    NCCL broadcast -------------------- [GPU-GPU] ---------&gt; NCCL receive</span>
+<span class="sd">    (high bandwidth)                                        (parallel)</span>
+
+<span class="sd">    # 3. RPC: Confirmation (optional)</span>
+<span class="sd">    &quot;broadcast done&quot; &lt;----------------- [Ray RPC] --------- &quot;weights applied&quot;</span>
+
+<span class="sd">**Extending to Other Backends**</span>
+
+<span class="sd">To add a new RPC backend (e.g., torch.distributed.rpc):</span>
+
+<span class="sd">1. Implement an RPC coordinator in the sender/receiver</span>
+<span class="sd">2. Replace Ray remote calls with your RPC mechanism</span>
+<span class="sd">3. Keep the collective layer unchanged (it&#39;s backend-agnostic)</span>
+
+<span class="sd">.. rubric:: Example</span>
+
+<span class="sd">.. code-block:: python</span>
+
+<span class="sd">    class TorchRPCVLLMReceiver(VLLMWeightReceiver):</span>
+<span class="sd">        def init_all_workers_group(self, metadata):</span>
+<span class="sd">            # Use torch.distributed.rpc instead of Ray</span>
+<span class="sd">            torch.distributed.rpc.rpc_sync(</span>
+<span class="sd">                &quot;trainer&quot;,</span>
+<span class="sd">                lambda: &quot;ready&quot;,</span>
+<span class="sd">            )</span>
+<span class="sd">            super().init_all_workers_group(metadata)  # Collective init</span>
+
+<span class="sd">**Current Implementation (Ray Backend)**</span>
+
+<span class="sd">The test suite in ``test_weightsync.py`` demonstrates the Ray-based RPC:</span>
+
+<span class="sd">.. code-block:: python</span>
+
+<span class="sd">    # Trainer actor (provides RPC endpoint)</span>
+<span class="sd">    trainer = RayWorkerTransformer.as_remote().options(</span>
+<span class="sd">        name=&quot;Trainer&quot;  # Named for discovery</span>
+<span class="sd">    ).remote(scheme_config)</span>
+
+<span class="sd">    # Receiver actor (uses RPC to coordinate)</span>
+<span class="sd">    receiver = RayWorkerVLLM.as_remote().remote(</span>
+<span class="sd">        scheme_config, trainer_actor_name=&quot;Trainer&quot;</span>
+<span class="sd">    )</span>
+
+<span class="sd">    # RPC Layer: Both actors call init() via Ray remote calls</span>
+<span class="sd">    # This coordinates the collective handshake</span>
+<span class="sd">    ray.get([trainer.init.remote(), receiver.init.remote()])</span>
+
+<span class="sd">    # RPC Layer: Trigger update via Ray remote call</span>
+<span class="sd">    # Collective Layer: NCCL broadcast happens automatically</span>
+<span class="sd">    ray.get(trainer.update_weights.remote(modify_weights=True))</span>
+
+<span class="sd">In this setup:</span>
+<span class="sd">- **Ray provides RPC**: Named actors, ``remote()`` calls, ``ray.get()``</span>
+<span class="sd">- **NCCL provides collectives**: GPU-GPU weight broadcast</span>
+<span class="sd">- **Loose coupling**: Can replace Ray with any RPC mechanism</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">WeightReceiver</span><span class="p">,</span>
+    <span class="n">WeightSender</span><span class="p">,</span>
+    <span class="n">WeightStrategy</span><span class="p">,</span>
+    <span class="n">WeightSyncScheme</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># ============================================================================</span>
+<span class="c1"># vLLM Transport using Collective Communication</span>
+<span class="c1"># ============================================================================</span>
+
+
+<div class="viewcode-block" id="VLLMCollectiveTransport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMCollectiveTransport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transport for vLLM using collective communication (NCCL).</span>
+
+<span class="sd">    **COLLECTIVE LAYER ONLY** - This class handles the data transfer layer.</span>
+<span class="sd">    RPC coordination is handled separately by the caller (sender/receiver).</span>
+
+<span class="sd">    This transport uses PyTorch distributed collectives to broadcast weights</span>
+<span class="sd">    from a trainer (rank 0) to vLLM workers (ranks 1+).</span>
+
+<span class="sd">    **Separation of Concerns:**</span>
+<span class="sd">    - This class: NCCL collective operations (GPU-GPU data transfer)</span>
+<span class="sd">    - Caller (sender/receiver): RPC coordination (when to start collective)</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        master_address: Address of the master node for distributed init.</span>
+<span class="sd">        master_port: Port of the master node for distributed init.</span>
+<span class="sd">        rank: Rank of this process (0 for trainer, 1+ for vLLM workers).</span>
+<span class="sd">        world_size: Total number of processes (1 + num_replicas * gpus_per_replica).</span>
+<span class="sd">        device: Device to use for communication (typically cuda:0).</span>
+<span class="sd">        vllm_engine: Optional vLLM engine reference (for receiver side).</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The RPC layer (e.g., Ray remote calls) must ensure all ranks call</span>
+<span class="sd">        init_all_workers_group() simultaneously before any collective operations.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">master_port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vllm_engine</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span> <span class="o">=</span> <span class="n">master_address</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">master_port</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">=</span> <span class="n">world_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="o">=</span> <span class="n">vllm_engine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Ray sets CUDA_VISIBLE_DEVICES, so each actor sees only device 0</span>
+        <span class="c1"># PyNcclCommunicator expects an integer device index</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Default to device 0 (Ray convention)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="c1"># Extract device index from &quot;cuda:X&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">device</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="s2">&quot;:&quot;</span> <span class="ow">in</span> <span class="n">device</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+            <span class="c1"># Extract index from torch.device</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span> <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+
+<div class="viewcode-block" id="VLLMCollectiveTransport.init_all_workers_group"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.init_all_workers_group">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init_all_workers_group</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="n">model_metadata</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Trainer side - initialize process group</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Initializing trainer collective group: rank=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="c1"># Ray sets CUDA_VISIBLE_DEVICES, so we always use device 0</span>
+            <span class="c1"># Set CUDA device before initializing NCCL to avoid segfaults</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Set CUDA device to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Trainer collective group initialized successfully&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># vLLM worker side - initialize through engine</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;vllm_engine must be provided for worker ranks&quot;</span><span class="p">)</span>
+
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;Initializing vLLM worker collective group through engine&quot;</span>
+            <span class="p">)</span>
+            <span class="c1"># Call vLLM engine&#39;s init method - it returns futures for all workers</span>
+            <span class="c1"># Workers will start NCCL init in background threads and return immediately</span>
+            <span class="n">refs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">init_weight_update_group</span><span class="p">(</span>
+                <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+                <span class="n">master_port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Wait for RPCs to complete - ensures workers have dispatched their NCCL init threads</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;All </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span><span class="si">}</span><span class="s2"> vLLM workers have dispatched NCCL init RPCs&quot;</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Small delay to ensure worker background threads have entered the NCCL collective</span>
+            <span class="c1"># This prevents a race where the trainer starts NCCL before workers are ready</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Mark as initialized</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;vLLM workers should now be blocked in NCCL collective, ready for trainer&quot;</span>
+            <span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMCollectiveTransport.send_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.send_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">send_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Broadcast weights to all workers using NCCL.</span>
+
+<span class="sd">        This method follows AsyncVLLM&#39;s periodic-mono pattern:</span>
+<span class="sd">        For each weight: RPC → NCCL broadcast → Wait for RPC completion</span>
+
+<span class="sd">        This should only be called from rank 0 (trainer).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_id: ID of the model (used for logging).</span>
+<span class="sd">            weights: TensorDict or dict of weights to broadcast.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># This code is a duplicate from AsyncVLLM</span>
+        <span class="c1"># We are waiting for vLLM server to accept tokens endpoints, at which point we will be</span>
+        <span class="c1"># able to remove all dependencies on Ray for vllm distributed features.</span>
+        <span class="c1"># This will allow a more natural integration with the sender/receiver API.</span>
+
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;send_weights should only be called from rank 0&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Communication group not initialized. Call init_all_workers_group first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Model metadata not set&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;vllm_engine must be provided to sender for RPC coordination&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Set CUDA device for this operation</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Convert to dict if needed</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="n">weights_dict</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">weights_dict</span> <span class="o">=</span> <span class="n">weights</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Broadcasting </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Broadcast each weight using periodic-mono pattern (like AsyncVLLM)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Weight &#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; not found in weights. Weights keys: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">weights_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())[:</span><span class="mi">10</span><span class="p">]</span><span class="si">}</span><span class="s2">...&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">tensor</span> <span class="o">=</span> <span class="n">weights_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">dtype_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># &quot;torch.float16&quot; -&gt; &quot;float16&quot;</span>
+
+            <span class="c1"># Step 1: Send RPC to workers for this weight</span>
+            <span class="n">futures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">collective_rpc</span><span class="p">(</span>
+                <span class="s2">&quot;update_weight&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dtype_name</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">))</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Step 2: Immediately broadcast this weight</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
+                <span class="n">tensor</span><span class="p">,</span>
+                <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Step 3: Wait for workers to complete this weight</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+            <span class="k">del</span> <span class="n">tensor</span>
+
+        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcast complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMCollectiveTransport.receive_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.receive_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">receive_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive weights from broadcaster.</span>
+
+<span class="sd">        This should only be called from worker ranks (rank &gt; 0).</span>
+<span class="sd">        This method is called by vLLM engine internally through collective operations.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None - vLLM handles weight application internally via collectives.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># vLLM handles this through its own collective operations</span>
+        <span class="c1"># The weights are received and applied by the engine during broadcast</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="VLLMCollectiveTransport.check_connection"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.check_connection">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">check_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the communication group is initialized.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div></div>
+
+
+<span class="c1"># ============================================================================</span>
+<span class="c1"># vLLM Weight Synchronization Components</span>
+<span class="c1"># ============================================================================</span>
+
+
+<div class="viewcode-block" id="VLLMWeightSyncScheme"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightSyncScheme</span><span class="p">(</span><span class="n">WeightSyncScheme</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Weight synchronization scheme for vLLM engines.</span>
+
+<span class="sd">    This scheme uses collective communication (NCCL) to broadcast weights from</span>
+<span class="sd">    a trainer to vLLM inference workers with parallelism support.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        master_address: Address of the master node. Defaults to &quot;localhost&quot;.</span>
+<span class="sd">        master_port: Port of the master node. If None, will auto-assign.</span>
+<span class="sd">        gpus_per_replica: Number of GPUs per replica (tp_size × dp_size × pp_size).</span>
+<span class="sd">        num_replicas: Number of vLLM engine replicas. Defaults to 1.</span>
+<span class="sd">        strategy: Weight extraction strategy (&quot;tensordict&quot; or &quot;state_dict&quot;).</span>
+<span class="sd">        device: Device index to use for communication. Defaults to 0.</span>
+<span class="sd">            Note: When using Ray, each actor sees only its assigned GPU as device 0</span>
+<span class="sd">            due to CUDA_VISIBLE_DEVICES isolation. You should typically use 0.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        Collective communication requires ALL ranks to participate simultaneously.</span>
+<span class="sd">        Both the sender (trainer, rank 0) and all receivers (vLLM workers, ranks 1+)</span>
+<span class="sd">        must call ``init_all_workers_group()`` at approximately the same time for the collective</span>
+<span class="sd">        handshake to succeed. Do NOT wait for one init to complete before starting</span>
+<span class="sd">        the other - start both and wait for both together.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The world_size for NCCL will be: 1 (trainer) + num_replicas × gpus_per_replica (vLLM workers)</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # Single replica with 2 GPUs (e.g., tp_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; scheme = VLLMWeightSyncScheme(</span>
+<span class="sd">        ...     master_port=12345,</span>
+<span class="sd">        ...     gpus_per_replica=2,</span>
+<span class="sd">        ...     num_replicas=1,</span>
+<span class="sd">        ...     strategy=&quot;tensordict&quot;</span>
+<span class="sd">        ... )  # world_size = 1 + 1*2 = 3</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Multiple replicas with 1 GPU each</span>
+<span class="sd">        &gt;&gt;&gt; scheme = VLLMWeightSyncScheme(</span>
+<span class="sd">        ...     master_port=12345,</span>
+<span class="sd">        ...     gpus_per_replica=1,</span>
+<span class="sd">        ...     num_replicas=2,</span>
+<span class="sd">        ...     strategy=&quot;tensordict&quot;</span>
+<span class="sd">        ... )  # world_size = 1 + 2*1 = 3</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Multiple replicas with tp_size=2, dp_size=1, pp_size=1</span>
+<span class="sd">        &gt;&gt;&gt; scheme = VLLMWeightSyncScheme(</span>
+<span class="sd">        ...     master_port=12345,</span>
+<span class="sd">        ...     gpus_per_replica=2,  # 2*1*1</span>
+<span class="sd">        ...     num_replicas=3,</span>
+<span class="sd">        ...     strategy=&quot;tensordict&quot;</span>
+<span class="sd">        ... )  # world_size = 1 + 3*2 = 7</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # In trainer process (rank 0)</span>
+<span class="sd">        &gt;&gt;&gt; sender = VLLMWeightSender(scheme)</span>
+<span class="sd">        &gt;&gt;&gt; sender.register_model(policy)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # In vLLM worker process (rank 1+)</span>
+<span class="sd">        &gt;&gt;&gt; receiver = VLLMWeightReceiver(scheme, vllm_engine)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # IMPORTANT: Both must init simultaneously for collective handshake</span>
+<span class="sd">        &gt;&gt;&gt; # With Ray:</span>
+<span class="sd">        &gt;&gt;&gt; init_sender = sender_actor.init_all_workers_group.remote(metadata)</span>
+<span class="sd">        &gt;&gt;&gt; init_receiver = receiver_actor.init_all_workers_group.remote(metadata)</span>
+<span class="sd">        &gt;&gt;&gt; ray.get([init_sender, init_receiver])  # Wait for both together</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # After init, updates work normally</span>
+<span class="sd">        &gt;&gt;&gt; sender.update_weights()</span>
+<span class="sd">        &gt;&gt;&gt; # Weights are received automatically via collectives</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">master_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gpus_per_replica</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;tensordict&quot;</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">master_address</span> <span class="k">if</span> <span class="n">master_address</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;localhost&quot;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">master_port</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpus_per_replica</span> <span class="o">=</span> <span class="n">gpus_per_replica</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">=</span> <span class="n">num_replicas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strategy_name</span> <span class="o">=</span> <span class="n">strategy</span>
+        <span class="c1"># Ray sets CUDA_VISIBLE_DEVICES for each actor, so device 0 is typical</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+
+        <span class="c1"># Auto-assign port if not provided</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_open_port</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">get_open_port</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+                <span class="c1"># Fallback if vLLM not available</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">socket</span>
+
+                <span class="k">with</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+                    <span class="n">s</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
+
+<div class="viewcode-block" id="VLLMWeightSyncScheme.create_transport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pipe_or_context</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMCollectiveTransport</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create transport for collective communication.</span>
+
+<span class="sd">        For vLLM, this creates a transport but requires additional setup via init_all_workers_group().</span>
+<span class="sd">        This method is required by the base class but transport creation for vLLM</span>
+<span class="sd">        is more complex and typically handled by sender/receiver initialization.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            pipe_or_context: Not used for vLLM (kept for API compatibility).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A VLLMCollectiveTransport instance (needs init_all_workers_group() to be called).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Return a transport with default rank 0 (trainer)</span>
+        <span class="c1"># Actual initialization happens in sender/receiver</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpus_per_replica</span>
+        <span class="k">return</span> <span class="n">VLLMCollectiveTransport</span><span class="p">(</span>
+            <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+            <span class="n">master_port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMWeightSyncScheme.create_sender"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_sender">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMWeightSender</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a weight sender for the trainer process.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">VLLMWeightSender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMWeightSyncScheme.create_receiver"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_receiver">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_receiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMWeightReceiver</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a weight receiver for a vLLM worker process.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            vllm_engine: The vLLM engine instance (must implement RLvLLMEngine interface).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">VLLMWeightReceiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="VLLMWeightSender"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightSender</span><span class="p">(</span><span class="n">WeightSender</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sends weights to vLLM workers using collective communication.</span>
+
+<span class="sd">    **RPC + Collective Implementation**</span>
+
+<span class="sd">    This class implements both layers:</span>
+
+<span class="sd">    1. **RPC Layer**: Currently uses Ray remote calls (implicit in test setup)</span>
+<span class="sd">       - Can be extended to other RPC backends (torch.distributed.rpc, gRPC)</span>
+<span class="sd">       - In the test, Ray actors provide the RPC mechanism</span>
+
+<span class="sd">    2. **Collective Layer**: Uses VLLMCollectiveTransport for NCCL broadcast</span>
+<span class="sd">       - Broadcasts weights from trainer (rank 0) to workers (ranks 1+)</span>
+<span class="sd">       - High-bandwidth GPU-to-GPU transfer</span>
+
+<span class="sd">    **Extending RPC Backends**</span>
+
+<span class="sd">    To use a different RPC backend, subclass and override coordination:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        class TorchRPCVLLMSender(VLLMWeightSender):</span>
+<span class="sd">            def update_weights(self, weights=None):</span>
+<span class="sd">                # Custom RPC: Signal workers to prepare</span>
+<span class="sd">                for worker in self.workers:</span>
+<span class="sd">                    torch.distributed.rpc.rpc_async(worker, &quot;prepare_receive&quot;)</span>
+
+<span class="sd">                # Then do collective (unchanged)</span>
+<span class="sd">                super().update_weights(weights)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scheme</span><span class="p">:</span> <span class="n">VLLMWeightSyncScheme</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span> <span class="o">=</span> <span class="n">scheme</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="VLLMWeightSender.register_model"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.register_model">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register the model to extract weights from.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMWeightSender.init_all_workers_group"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.init_all_workers_group">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init_all_workers_group</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]],</span>
+        <span class="n">vllm_engine</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
+<span class="sd">            vllm_engine: Optional vLLM engine for RPC coordination. Required for NCCL broadcasts.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_metadata</span> <span class="o">=</span> <span class="n">model_metadata</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span> <span class="o">=</span> <span class="n">vllm_engine</span>
+
+        <span class="c1"># Create transport for trainer (rank 0)</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">gpus_per_replica</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="n">VLLMCollectiveTransport</span><span class="p">(</span>
+            <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+            <span class="n">master_port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># Trainer is always rank 0</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">vllm_engine</span><span class="o">=</span><span class="n">vllm_engine</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Initializing transport from sender with world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">model_metadata</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMWeightSender.update_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.update_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract and broadcast weights to vLLM workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Optional weights to send. If None, extracts from registered model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Transport not initialized. Call init_all_workers_group first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Extract weights if not provided</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Model reference is dead&quot;</span><span class="p">)</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Ensure weights are in the right format</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">):</span>
+                <span class="c1"># It&#39;s a module, extract</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+
+        <span class="c1"># Send via transport</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;vllm_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="VLLMWeightReceiver"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightReceiver</span><span class="p">(</span><span class="n">WeightReceiver</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Receives weights in a vLLM worker using collective communication.</span>
+
+<span class="sd">    **RPC + Collective Implementation**</span>
+
+<span class="sd">    This class implements both layers:</span>
+
+<span class="sd">    1. **RPC Layer**: Currently uses Ray for coordination</span>
+<span class="sd">       - `init()` in test uses Ray `ray.get_actor()` to find trainer</span>
+<span class="sd">       - Fetches metadata via Ray remote call</span>
+<span class="sd">       - Signals readiness to participate in collective</span>
+
+<span class="sd">    2. **Collective Layer**: Participates in NCCL broadcast</span>
+<span class="sd">       - Receives weights via collective operations</span>
+<span class="sd">       - vLLM engine applies weights internally during broadcast</span>
+
+<span class="sd">    **Extending RPC Backends**</span>
+
+<span class="sd">    To use a different RPC backend:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        class TorchRPCVLLMReceiver(VLLMWeightReceiver):</span>
+<span class="sd">            def init(self):</span>
+<span class="sd">                # Custom RPC: Get metadata from trainer</span>
+<span class="sd">                metadata = torch.distributed.rpc.rpc_sync(</span>
+<span class="sd">                    &quot;trainer&quot;,</span>
+<span class="sd">                    lambda: get_metadata()</span>
+<span class="sd">                )</span>
+
+<span class="sd">                # Then init collective (unchanged)</span>
+<span class="sd">                self.receiver.init_all_workers_group(metadata)</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The RPC and collective layers are loosely coupled. The RPC layer</span>
+<span class="sd">        ensures all ranks are ready before the collective starts, but the</span>
+<span class="sd">        actual data transfer is independent of the RPC mechanism.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scheme</span><span class="p">:</span> <span class="n">VLLMWeightSyncScheme</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span> <span class="o">=</span> <span class="n">scheme</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span> <span class="o">=</span> <span class="n">vllm_engine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="VLLMWeightReceiver.init_all_workers_group"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.init_all_workers_group">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init_all_workers_group</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the collective communication group.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_metadata: Dict mapping param names to (dtype, shape) tuples.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># For vLLM receiver, we use rank=1 as a placeholder</span>
+        <span class="c1"># The engine handles actual rank assignment internally for all workers</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">gpus_per_replica</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="n">VLLMCollectiveTransport</span><span class="p">(</span>
+            <span class="n">master_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+            <span class="n">master_port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Placeholder - engine assigns actual ranks</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">vllm_engine</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Initializing transport from receiver with world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">model_metadata</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="VLLMWeightReceiver.apply_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply weights to vLLM engine.</span>
+
+<span class="sd">        Note: For vLLM, weights are applied automatically during the collective</span>
+<span class="sd">        broadcast operation. This method is a no-op but kept for API consistency.</span>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+        <span class="c1"># vLLM handles weight application through its collective operations</span>
+        <span class="c1"># The weights are already applied by the time broadcast completes</span>
+
+<div class="viewcode-block" id="VLLMWeightReceiver.poll_and_apply"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.poll_and_apply">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">poll_and_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Poll for and apply weights.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            False - vLLM uses push-based updates via collectives, not polling.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># vLLM uses collective broadcasts (push), not polling</span>
+        <span class="c1"># This is handled by the engine&#39;s collective operations</span>
+        <span class="k">return</span> <span class="kc">False</span></div></div>
+
+
+<span class="c1"># ============================================================================</span>
+<span class="c1"># Helper Functions</span>
+<span class="c1"># ============================================================================</span>
+
+
+<div class="viewcode-block" id="get_model_metadata"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.get_model_metadata.html#torchrl.weight_update.llm.get_model_metadata">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">get_model_metadata</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract model metadata from a model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model: A model with state_dict() or a model wrapper.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict mapping parameter names to (dtype, shape) tuples.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        This function must extract keys in the same format as WeightStrategy.extract_weights()</span>
+<span class="sd">        to ensure consistency between metadata and actual weight keys during broadcasting.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract state_dict directly from the model</span>
+    <span class="c1"># This ensures keys match what extract_weights() will produce</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;merge_and_unload&quot;</span><span class="p">):</span>
+            <span class="c1"># LoRA model</span>
+            <span class="n">sd</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">sd</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot extract state_dict from </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">sd</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

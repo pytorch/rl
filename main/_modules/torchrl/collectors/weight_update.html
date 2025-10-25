@@ -442,6 +442,10 @@
 <div class="viewcode-block" id="WeightUpdaterBase"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">WeightUpdaterBase</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A base class for updating remote policy weights on inference workers.</span>
 
+<span class="sd">    .. deprecated::</span>
+<span class="sd">        WeightUpdaterBase is deprecated and will be removed in a future version.</span>
+<span class="sd">        Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead.</span>
+
 <span class="sd">    The weight updater is the central piece of the weight update scheme:</span>
 
 <span class="sd">    - In leaf collector nodes, it is responsible for sending the weights to the policy, which can be as simple as</span>
@@ -492,6 +496,18 @@
 
     <span class="n">_collector_wrs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_post_hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Creating </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> which inherits from WeightUpdaterBase is deprecated. &quot;</span>
+            <span class="s2">&quot;Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead. &quot;</span>
+            <span class="s2">&quot;This will be removed in a future version.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">post_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]]:</span>

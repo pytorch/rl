@@ -280,7 +280,7 @@ Both wrappers can compute log probabilities without generating new tokens.
 .. GENERATED FROM PYTHON SOURCE LINES 228-231
 
 Example 5: TensorClass Structure Exploration
--------------------------------------------
+----------------------------------------------
 Let's explore the structured outputs provided by both wrappers.
 
 .. GENERATED FROM PYTHON SOURCE LINES 231-283
@@ -380,7 +380,7 @@ Both wrappers provide clear error messages for invalid inputs.
 .. GENERATED FROM PYTHON SOURCE LINES 314-317
 
 Example 7: RL Environment Integration
-------------------------------------
+--------------------------------------
 The wrappers are designed to work seamlessly with TorchRL environments.
 
 .. GENERATED FROM PYTHON SOURCE LINES 317-346

@@ -6162,16 +6162,22 @@
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">cls</span> <span class="o">=</span> <span class="n">TensorDict</span>
+
+        <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">TensorDict</span>
+        <span class="k">if</span> <span class="bp">cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">TensorDict</span><span class="p">:</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td_dim_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;names for cls </span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2"> is not supported for rand.&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td_dim_names</span><span class="p">}</span>
+
         <span class="c1"># No need to run checks since we know Composite is compliant with</span>
         <span class="c1"># TensorDict requirements</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
             <span class="n">_dict</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">_size</span><span class="p">([</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="n">_remove_neg_shapes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)]),</span>
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Composite.keys"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.keys">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">keys</span><span class="p">(</span>
@@ -6439,10 +6445,13 @@
         <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
             <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span>
+        <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">TensorDict</span>
+        <span class="k">if</span> <span class="bp">cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">TensorDict</span><span class="p">:</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td_dim_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;names for cls </span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2"> is not supported for zero.&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">cls</span> <span class="o">=</span> <span class="n">TensorDict</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_td_dim_names</span><span class="p">}</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
             <span class="p">{</span>
@@ -6452,6 +6461,7 @@
             <span class="p">},</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">_size</span><span class="p">([</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span><span class="p">]),</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>

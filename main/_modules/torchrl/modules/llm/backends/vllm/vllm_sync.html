@@ -751,6 +751,7 @@
     <span class="n">num_devices</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">make_ray_worker</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">enforce_eager</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">enable_fp32_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RayLLMWorker</span> <span class="o">|</span> <span class="n">LocalLLMWrapper</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates a vLLM inference engine with tensor parallelism support.</span>
@@ -761,6 +762,9 @@
 <span class="sd">        num_devices (int, optional): Number of devices to use. Exclusive with devices.</span>
 <span class="sd">        make_ray_worker (bool, optional): Whether to create a Ray actor. Defaults to True.</span>
 <span class="sd">        enforce_eager (bool, optional): Whether to enforce eager execution. Defaults to `False`.</span>
+<span class="sd">        enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.</span>
+<span class="sd">            This can help with numerical stability for certain models. Requires model-specific support in</span>
+<span class="sd">            torchrl.modules.llm.backends._models.</span>
 <span class="sd">        **kwargs: Additional arguments passed to vLLM.LLM.__init__.</span>
 
 <span class="sd">    Returns:</span>
@@ -771,10 +775,20 @@
 <span class="sd">        &gt;&gt;&gt; worker = make_vllm_worker(&quot;Qwen/Qwen2.5-3B&quot;, num_devices=2)</span>
 <span class="sd">        &gt;&gt;&gt; # Create a local LLM instance on GPU 1</span>
 <span class="sd">        &gt;&gt;&gt; llm = make_vllm_worker(&quot;Qwen/Qwen2.5-3B&quot;, devices=[1], make_ray_worker=False)</span>
+<span class="sd">        &gt;&gt;&gt; # Create with FP32 output enabled</span>
+<span class="sd">        &gt;&gt;&gt; worker = make_vllm_worker(&quot;Qwen/Qwen2.5-3B&quot;, num_devices=2, enable_fp32_output=True)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_vllm</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
             <span class="s2">&quot;vllm is not installed. Please install it with `pip install vllm`.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Set FP32 output environment variable if requested</span>
+    <span class="k">if</span> <span class="n">enable_fp32_output</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_ENABLE_FP32_OUTPUT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). &quot;</span>
+            <span class="s2">&quot;This will use FP32 for the final output layer if the model supports it.&quot;</span>
         <span class="p">)</span>
 
     <span class="c1"># Handle device specification</span>

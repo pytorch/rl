@@ -742,6 +742,8 @@
         <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.add">(torchrl.data.TensorDictReplayBuffer method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/llms.html#torchrl.data.llm.add_chat_template">add_chat_template() (in module torchrl.data.llm)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.add_collectors">add_collectors() (torchrl.collectors.distributed.RayCollector method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.add_module">add_module() (torchrl.data.BinaryToDecimal method)</a>
@@ -948,8 +950,6 @@
         <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.all_worker_ids">(torchrl.collectors.WeightUpdaterBase method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.alpha_loss">alpha_loss() (torchrl.objectives.CrossQLoss method)</a>
 
       <ul>
@@ -958,6 +958,8 @@
         <li><a href="reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.alpha_loss">(torchrl.objectives.SACLoss method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool.any_done">any_done() (torchrl.envs.AsyncEnvPool method)</a>
 
       <ul>
@@ -1180,6 +1182,16 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.apply_chat_template">apply_chat_template() (torchrl.data.llm.History method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.apply_weights">apply_weights() (torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights">(torchrl.weight_update.llm.VLLMWeightReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformReceiver.html#torchrl.weight_update.RayModuleTransformReceiver.apply_weights">(torchrl.weight_update.RayModuleTransformReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver.apply_weights">(torchrl.weight_update.WeightReceiver method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor">as_nested_tensor (class in torchrl.envs.llm.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor">as_padded_tensor (class in torchrl.envs.llm.transforms)</a>
@@ -1962,6 +1974,32 @@
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory">ChatHistory (class in torchrl.modules.llm)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.check_ack">check_ack() (torchrl.weight_update.MPTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.check_ack">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.check_ack">(torchrl.weight_update.SharedMemTransport method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.check_connection">check_connection() (torchrl.weight_update.DistributedTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.check_connection">(torchrl.weight_update.llm.VLLMCollectiveTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.check_connection">(torchrl.weight_update.llm.VLLMDoubleBufferTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.check_connection">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.check_connection">(torchrl.weight_update.RayTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport.check_connection">(torchrl.weight_update.RPCTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.check_connection">(torchrl.weight_update.SharedMemTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend.check_connection">(torchrl.weight_update.TransportBackend method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.check_env_specs.html#torchrl.envs.check_env_specs">check_env_specs() (in module torchrl.envs)</a>
 
       <ul>
@@ -2420,8 +2458,6 @@
         <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.collectors">(torchrl.collectors.WeightUpdaterBase property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.compile">compile() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -2524,6 +2560,8 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.compile">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose">Compose (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.ComposeConfig.html#torchrl.trainers.algorithms.configs.transforms.ComposeConfig">ComposeConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -2832,8 +2870,74 @@
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.create_load_balancer">create_load_balancer() (torchrl.modules.llm.AsyncVLLM method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedWeightSyncScheme.html#torchrl.weight_update.DistributedWeightSyncScheme.create_receiver">create_receiver() (torchrl.weight_update.DistributedWeightSyncScheme method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_receiver">(torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_receiver">(torchrl.weight_update.llm.VLLMWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme.create_receiver">(torchrl.weight_update.MultiProcessWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.NoWeightSyncScheme.html#torchrl.weight_update.NoWeightSyncScheme.create_receiver">(torchrl.weight_update.NoWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformScheme.html#torchrl.weight_update.RayModuleTransformScheme.create_receiver">(torchrl.weight_update.RayModuleTransformScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayWeightSyncScheme.html#torchrl.weight_update.RayWeightSyncScheme.create_receiver">(torchrl.weight_update.RayWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCWeightSyncScheme.html#torchrl.weight_update.RPCWeightSyncScheme.create_receiver">(torchrl.weight_update.RPCWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.create_receiver">(torchrl.weight_update.SharedMemWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme.create_receiver">(torchrl.weight_update.WeightSyncScheme method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.RolloutFromModel.html#torchrl.data.RolloutFromModel.create_rollout_td">create_rollout_td() (torchrl.data.RolloutFromModel method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedWeightSyncScheme.html#torchrl.weight_update.DistributedWeightSyncScheme.create_sender">create_sender() (torchrl.weight_update.DistributedWeightSyncScheme method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_sender">(torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_sender">(torchrl.weight_update.llm.VLLMWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme.create_sender">(torchrl.weight_update.MultiProcessWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.NoWeightSyncScheme.html#torchrl.weight_update.NoWeightSyncScheme.create_sender">(torchrl.weight_update.NoWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformScheme.html#torchrl.weight_update.RayModuleTransformScheme.create_sender">(torchrl.weight_update.RayModuleTransformScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayWeightSyncScheme.html#torchrl.weight_update.RayWeightSyncScheme.create_sender">(torchrl.weight_update.RayWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCWeightSyncScheme.html#torchrl.weight_update.RPCWeightSyncScheme.create_sender">(torchrl.weight_update.RPCWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.create_sender">(torchrl.weight_update.SharedMemWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme.create_sender">(torchrl.weight_update.WeightSyncScheme method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedWeightSyncScheme.html#torchrl.weight_update.DistributedWeightSyncScheme.create_transport">create_transport() (torchrl.weight_update.DistributedWeightSyncScheme method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_transport">(torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_transport">(torchrl.weight_update.llm.VLLMWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme.create_transport">(torchrl.weight_update.MultiProcessWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.NoWeightSyncScheme.html#torchrl.weight_update.NoWeightSyncScheme.create_transport">(torchrl.weight_update.NoWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformScheme.html#torchrl.weight_update.RayModuleTransformScheme.create_transport">(torchrl.weight_update.RayModuleTransformScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayWeightSyncScheme.html#torchrl.weight_update.RayWeightSyncScheme.create_transport">(torchrl.weight_update.RayWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCWeightSyncScheme.html#torchrl.weight_update.RPCWeightSyncScheme.create_transport">(torchrl.weight_update.RPCWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.create_transport">(torchrl.weight_update.SharedMemWeightSyncScheme method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme.create_transport">(torchrl.weight_update.WeightSyncScheme method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.Crop.html#torchrl.envs.transforms.Crop">Crop (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.CropConfig.html#torchrl.trainers.algorithms.configs.transforms.CropConfig">CropConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -3115,8 +3219,6 @@
 </li>
         <li><a href="reference/generated/torchrl.objectives.IQLLoss.html#torchrl.objectives.IQLLoss.default_keys">(torchrl.objectives.IQLLoss attribute)</a>
 </li>
-        <li><a href="reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss.default_keys">(torchrl.objectives.llm.GRPOLoss attribute)</a>
-</li>
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.default_keys">(torchrl.objectives.llm.SFTLoss attribute)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.multiagent.QMixerLoss.html#torchrl.objectives.multiagent.QMixerLoss.default_keys">(torchrl.objectives.multiagent.QMixerLoss attribute)</a>
@@ -3297,6 +3399,10 @@
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector">DistributedDataCollector (class in torchrl.collectors.distributed)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector">DistributedSyncDataCollector (class in torchrl.collectors.distributed)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport">DistributedTransport (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedWeightSyncScheme.html#torchrl.weight_update.DistributedWeightSyncScheme">DistributedWeightSyncScheme (class in torchrl.weight_update)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater">DistributedWeightUpdater (class in torchrl.collectors.distributed)</a>
 </li>
@@ -5974,6 +6080,8 @@
 </li>
       <li><a href="reference/generated/torchrl.modules.TanhNormal.html#torchrl.modules.TanhNormal.get_mode">get_mode() (torchrl.modules.TanhNormal method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.get_model_metadata.html#torchrl.weight_update.llm.get_model_metadata">get_model_metadata (class in torchrl.weight_update.llm)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.get_model_metadata">get_model_metadata() (torchrl.collectors.llm.vLLMUpdater class method)</a>
 
       <ul>
@@ -6716,6 +6824,14 @@
         <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.init">(torchrl.envs.transforms.Transform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.init">(torchrl.objectives.llm.MCAdvantage method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.init_all_workers_group">init_all_workers_group() (torchrl.weight_update.llm.VLLMCollectiveTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.init_all_workers_group">(torchrl.weight_update.llm.VLLMWeightReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.init_all_workers_group">(torchrl.weight_update.llm.VLLMWeightSender method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.MultiStepActorWrapper.html#torchrl.modules.tensordict_module.MultiStepActorWrapper.init_key">init_key (torchrl.modules.tensordict_module.MultiStepActorWrapper property)</a>
@@ -7747,8 +7863,6 @@
       <li><a href="reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss.loss_critic">loss_critic() (torchrl.objectives.A2CLoss method)</a>
 
       <ul>
-        <li><a href="reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss.loss_critic">(torchrl.objectives.llm.GRPOLoss method)</a>
-</li>
         <li><a href="reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss.loss_critic">(torchrl.objectives.PPOLoss method)</a>
 </li>
       </ul></li>
@@ -8360,6 +8474,8 @@
 </li>
       <li><a href="reference/generated/torchrl.modules.MPPIPlanner.html#torchrl.modules.MPPIPlanner">MPPIPlanner (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport">MPTransport (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.mtia">mtia() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -8485,6 +8601,8 @@
       <li><a href="reference/generated/torchrl.data.MultiOneHotDiscreteTensorSpec.html#torchrl.data.MultiOneHotDiscreteTensorSpec">MultiOneHotDiscreteTensorSpec (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater">MultiProcessedWeightUpdater (class in torchrl.collectors)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme">MultiProcessWeightSyncScheme (class in torchrl.weight_update)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.MultiStep.html#torchrl.data.MultiStep">MultiStep (class in torchrl.data)</a>
 </li>
@@ -9104,6 +9222,8 @@
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig.html#torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig">NoopResetEnvConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.NoWeightSyncScheme.html#torchrl.weight_update.NoWeightSyncScheme">NoWeightSyncScheme (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.num_children">num_children (torchrl.data.Tree property)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper.num_samples">num_samples (torchrl.modules.llm.RemoteTransformersWrapper property)</a>
@@ -9666,10 +9786,10 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.PettingZooEnv.html#torchrl.envs.PettingZooEnv">PettingZooEnv() (in module torchrl.envs)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig">PettingZooEnvConfig (class in torchrl.trainers.algorithms.configs.envs_libs)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.PettingZooWrapper.html#torchrl.envs.PettingZooWrapper">PettingZooWrapper() (in module torchrl.envs)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.PinMemoryTransform.html#torchrl.envs.transforms.PinMemoryTransform">PinMemoryTransform (class in torchrl.envs.transforms)</a>
@@ -9704,6 +9824,12 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion">PolicyVersion (class in torchrl.envs.llm.transforms)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.poll_and_apply">poll_and_apply() (torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.poll_and_apply">(torchrl.weight_update.llm.VLLMWeightReceiver method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.pop">pop() (torchrl.data.Composite method)</a>
 
       <ul>
@@ -10066,13 +10192,25 @@
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.data.RandomSamplerConfig.html#torchrl.trainers.algorithms.configs.data.RandomSamplerConfig">RandomSamplerConfig (class in torchrl.trainers.algorithms.configs.data)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport">RayActorTransport (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector">RayCollector (class in torchrl.collectors.distributed)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer">RayDataLoadingPrimer (class in torchrl.envs.llm.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector">RayLLMCollector (class in torchrl.collectors.llm)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformReceiver.html#torchrl.weight_update.RayModuleTransformReceiver">RayModuleTransformReceiver (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformScheme.html#torchrl.weight_update.RayModuleTransformScheme">RayModuleTransformScheme (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformSender.html#torchrl.weight_update.RayModuleTransformSender">RayModuleTransformSender (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer">RayReplayBuffer (class in torchrl.data)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport">RayTransport (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.RayWeightSyncScheme.html#torchrl.weight_update.RayWeightSyncScheme">RayWeightSyncScheme (class in torchrl.weight_update)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater">RayWeightUpdater (class in torchrl.collectors)</a>
 </li>
@@ -10098,6 +10236,26 @@
 
       <ul>
         <li><a href="reference/generated/torchrl.envs.llm.MLGymWrapper.html#torchrl.envs.llm.MLGymWrapper.read_reward">(torchrl.envs.llm.MLGymWrapper method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.receive_weights">receive_weights() (torchrl.weight_update.DistributedTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.receive_weights">(torchrl.weight_update.llm.VLLMCollectiveTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.receive_weights">(torchrl.weight_update.llm.VLLMDoubleBufferTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.receive_weights">(torchrl.weight_update.MPTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.receive_weights">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.receive_weights">(torchrl.weight_update.RayTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport.receive_weights">(torchrl.weight_update.RPCTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.receive_weights">(torchrl.weight_update.SharedMemTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend.receive_weights">(torchrl.weight_update.TransportBackend method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.recurrent_mode.html#torchrl.modules.recurrent_mode">recurrent_mode (class in torchrl.modules)</a>
@@ -11096,6 +11254,20 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.register_model">register_model() (torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.register_model">(torchrl.weight_update.llm.VLLMDoubleBufferWeightSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.register_model">(torchrl.weight_update.llm.VLLMWeightReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.register_model">(torchrl.weight_update.llm.VLLMWeightSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformReceiver.html#torchrl.weight_update.RayModuleTransformReceiver.register_model">(torchrl.weight_update.RayModuleTransformReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver.register_model">(torchrl.weight_update.WeightReceiver method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.register_module">register_module() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -11300,6 +11472,8 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.register_parameter">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.register_pipe">register_pipe() (torchrl.weight_update.SharedMemTransport method)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.register_post_hook">register_post_hook() (torchrl.collectors.distributed.DistributedWeightUpdater method)</a>
 
       <ul>
@@ -11352,6 +11526,8 @@
         <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.register_save_hook">(torchrl.data.TensorDictReplayBuffer method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.register_shared_weights">register_shared_weights() (torchrl.weight_update.SharedMemWeightSyncScheme method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.register_state_dict_post_hook">register_state_dict_post_hook() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -11554,6 +11730,28 @@
         <li><a href="reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.register_state_dict_pre_hook">(torchrl.objectives.llm.MCAdvantage method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.register_state_dict_pre_hook">(torchrl.objectives.llm.SFTLoss method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.register_weights">register_weights() (torchrl.weight_update.SharedMemTransport method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.register_worker">register_worker() (torchrl.weight_update.llm.VLLMDoubleBufferWeightSender method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.register_worker">(torchrl.weight_update.llm.VLLMWeightSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformSender.html#torchrl.weight_update.RayModuleTransformSender.register_worker">(torchrl.weight_update.RayModuleTransformSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightSender.html#torchrl.weight_update.WeightSender.register_worker">(torchrl.weight_update.WeightSender method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.register_worker_transport">register_worker_transport() (torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.register_worker_transport">(torchrl.weight_update.llm.VLLMWeightReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformReceiver.html#torchrl.weight_update.RayModuleTransformReceiver.register_worker_transport">(torchrl.weight_update.RayModuleTransformReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver.register_worker_transport">(torchrl.weight_update.WeightReceiver method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.ReinforceLoss.html#torchrl.objectives.ReinforceLoss">ReinforceLoss (class in torchrl.objectives)</a>
@@ -12150,6 +12348,10 @@
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector">RPCDataCollector (class in torchrl.collectors.distributed)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport">RPCTransport (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.RPCWeightSyncScheme.html#torchrl.weight_update.RPCWeightSyncScheme">RPCWeightSyncScheme (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater">RPCWeightUpdater (class in torchrl.collectors.distributed)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.utils.RpropConfig.html#torchrl.trainers.algorithms.configs.utils.RpropConfig">RpropConfig (class in torchrl.trainers.algorithms.configs.utils)</a>
@@ -12436,6 +12638,46 @@
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.SelectTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.SelectTransformConfig">SelectTransformConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.send_ack">send_ack() (torchrl.weight_update.MPTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.send_ack">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.send_ack">(torchrl.weight_update.SharedMemTransport method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.send_weights">send_weights() (torchrl.weight_update.DistributedTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.send_weights">(torchrl.weight_update.llm.VLLMCollectiveTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.send_weights">(torchrl.weight_update.llm.VLLMDoubleBufferTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.send_weights">(torchrl.weight_update.MPTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.send_weights">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.send_weights">(torchrl.weight_update.RayTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport.send_weights">(torchrl.weight_update.RPCTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.send_weights">(torchrl.weight_update.SharedMemTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend.send_weights">(torchrl.weight_update.TransportBackend method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.send_weights_async">send_weights_async() (torchrl.weight_update.DistributedTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.send_weights_async">(torchrl.weight_update.MPTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.send_weights_async">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.send_weights_async">(torchrl.weight_update.RayTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport.send_weights_async">(torchrl.weight_update.RPCTransport method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.separates">separates() (torchrl.data.Composite method)</a>
 
       <ul>
@@ -12486,12 +12728,26 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.set">(torchrl.objectives.llm.SFTLossOutput method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.set_actor">set_actor() (torchrl.weight_update.RayActorTransport method)</a>
+</li>
       <li><a href="reference/generated/torchrl.set_auto_unwrap_transformed_env.html#torchrl.set_auto_unwrap_transformed_env">set_auto_unwrap_transformed_env (class in torchrl)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.set_container">set_container() (torchrl.envs.llm.transforms.RayDataLoadingPrimer method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.set_container">(torchrl.envs.transforms.Transform method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.set_context">set_context() (torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.set_context">(torchrl.weight_update.llm.VLLMWeightReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformReceiver.html#torchrl.weight_update.RayModuleTransformReceiver.set_context">(torchrl.weight_update.RayModuleTransformReceiver method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformSender.html#torchrl.weight_update.RayModuleTransformSender.set_context">(torchrl.weight_update.RayModuleTransformSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver.set_context">(torchrl.weight_update.WeightReceiver method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.set_exploration_type.html#torchrl.envs.set_exploration_type">set_exploration_type() (in module torchrl.envs)</a>
@@ -12960,6 +13216,8 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss">SFTLoss (class in torchrl.objectives.llm)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput">SFTLossOutput (class in torchrl.objectives.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.utils.SGDConfig.html#torchrl.trainers.algorithms.configs.utils.SGDConfig">SGDConfig (class in torchrl.trainers.algorithms.configs.utils)</a>
@@ -13002,8 +13260,6 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.shape">(torchrl.envs.TicTacToeEnv property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.share_memory">share_memory() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -13106,6 +13362,10 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.share_memory">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport">SharedMemTransport (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme">SharedMemWeightSyncScheme (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.shutdown">shutdown() (torchrl.collectors.aSyncDataCollector method)</a>
 
       <ul>
@@ -14206,6 +14466,12 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.to_empty">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text.to_history">to_history() (torchrl.modules.llm.Text method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens.to_history">(torchrl.modules.llm.Tokens method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.to_numpy">to_numpy() (torchrl.data.Binary method)</a>
 
       <ul>
@@ -14344,6 +14610,18 @@
         <li><a href="reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput.to_tensordict">(torchrl.objectives.llm.GRPOLossOutput method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.to_tensordict">(torchrl.objectives.llm.SFTLossOutput method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory.to_text">to_text() (torchrl.modules.llm.ChatHistory method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens.to_text">(torchrl.modules.llm.Tokens method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory.to_tokens">to_tokens() (torchrl.modules.llm.ChatHistory method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text.to_tokens">(torchrl.modules.llm.Text method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader">TokenizedDatasetLoader (class in torchrl.data)</a>
@@ -15110,6 +15388,8 @@
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper">TransformersWrapper (class in torchrl.modules.llm)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend">TransportBackend (class in torchrl.weight_update)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree">Tree (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.TruncatedNormal.html#torchrl.modules.TruncatedNormal">TruncatedNormal (class in torchrl.modules)</a>
@@ -15523,6 +15803,14 @@
 </li>
         <li><a href="reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.update_weights">(torchrl.modules.llm.AsyncVLLM method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.update_weights">(torchrl.weight_update.llm.VLLMDoubleBufferWeightSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender.update_weights">(torchrl.weight_update.llm.VLLMWeightSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayModuleTransformSender.html#torchrl.weight_update.RayModuleTransformSender.update_weights">(torchrl.weight_update.RayModuleTransformSender method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.WeightSender.html#torchrl.weight_update.WeightSender.update_weights">(torchrl.weight_update.WeightSender method)</a>
+</li>
       </ul></li>
       <li><a href="reference/generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights">UpdateWeights (class in torchrl.trainers)</a>
 </li>
@@ -15680,9 +15968,25 @@
 </li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.visits">visits (torchrl.data.Tree property)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport">VLLMCollectiveTransport (class in torchrl.weight_update.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme">VLLMDoubleBufferSyncScheme (class in torchrl.weight_update.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport">VLLMDoubleBufferTransport (class in torchrl.weight_update.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver">VLLMDoubleBufferWeightReceiver (class in torchrl.weight_update.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender">VLLMDoubleBufferWeightSender (class in torchrl.weight_update.llm)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater">vLLMUpdater (class in torchrl.collectors.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdaterV2.html#torchrl.collectors.llm.vLLMUpdaterV2">vLLMUpdaterV2 (class in torchrl.collectors.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver">VLLMWeightReceiver (class in torchrl.weight_update.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender">VLLMWeightSender (class in torchrl.weight_update.llm)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme">VLLMWeightSyncScheme (class in torchrl.weight_update.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper">vLLMWrapper (class in torchrl.modules.llm)</a>
 </li>
@@ -15708,11 +16012,29 @@
 <h2 id="W">W</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.wait_ack">wait_ack() (torchrl.weight_update.DistributedTransport method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.wait_ack">(torchrl.weight_update.MPTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayActorTransport.html#torchrl.weight_update.RayActorTransport.wait_ack">(torchrl.weight_update.RayActorTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.wait_ack">(torchrl.weight_update.RayTransport method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.weight_update.RPCTransport.html#torchrl.weight_update.RPCTransport.wait_ack">(torchrl.weight_update.RPCTransport method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger">WandbLogger() (in module torchrl.record.loggers.wandb)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig">WandbLoggerConfig (class in torchrl.trainers.algorithms.configs.logging)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.weight_updater">weight_updater (torchrl.collectors.llm.RayLLMCollector property)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver">WeightReceiver (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.WeightSender.html#torchrl.weight_update.WeightSender">WeightSender (class in torchrl.weight_update)</a>
+</li>
+      <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme">WeightSyncScheme (class in torchrl.weight_update)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">WeightUpdaterBase (class in torchrl.collectors)</a>
 </li>

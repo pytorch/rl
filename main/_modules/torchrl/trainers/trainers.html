@@ -440,7 +440,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">pad</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">pad</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict._tensorcollection</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorCollection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_right</span>
@@ -451,6 +451,7 @@
     <span class="n">KeyDependentDefaultDict</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
+    <span class="n">timeit</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCollectorBase</span>
@@ -572,6 +573,10 @@
 <span class="sd">            This will only work if the replay buffer is registed within the data collector.</span>
 <span class="sd">            If using this, the UTD ratio (Update to Data) will be logged under the key &quot;utd_ratio&quot;.</span>
 <span class="sd">            Default is False.</span>
+<span class="sd">        log_timings (bool, optional): If True, automatically register a LogTiming hook to log</span>
+<span class="sd">            timing information for all hooks to the logger (e.g., wandb, tensorboard).</span>
+<span class="sd">            Timing metrics will be logged with prefix &quot;time/&quot; (e.g., &quot;time/hook/UpdateWeights&quot;).</span>
+<span class="sd">            Default is False.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
@@ -608,6 +613,7 @@
         <span class="n">save_trainer_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="c1"># objects</span>
@@ -689,12 +695,44 @@
             <span class="n">optimizer_hook</span> <span class="o">=</span> <span class="n">OptimizerHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="p">)</span>
             <span class="n">optimizer_hook</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
+        <span class="k">if</span> <span class="n">log_timings</span><span class="p">:</span>
+            <span class="n">log_timing_hook</span> <span class="o">=</span> <span class="n">LogTiming</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="n">percall</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">erase</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">log_timing_hook</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">register_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">module_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modules</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2"> is already registered, choose a different name.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_modules</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wrap_hook_with_timing</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">op</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">hook_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrap a hook with timing measurement.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            op: The hook/operation to wrap</span>
+<span class="sd">            hook_name: Optional name for the hook. If not provided, will be inferred from op.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A wrapped version of the hook that measures execution time.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">hook_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">hook_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="n">op</span><span class="p">,</span>
+                <span class="s2">&quot;__name__&quot;</span><span class="p">,</span>
+                <span class="n">op</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="s2">&quot;__class__&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;unknown_hook&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">timed_hook</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">timeit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;hook/</span><span class="si">{</span><span class="n">hook_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">op</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Preserve original attributes for debugging</span>
+        <span class="n">timed_hook</span><span class="o">.</span><span class="n">__wrapped__</span> <span class="o">=</span> <span class="n">op</span>
+        <span class="n">timed_hook</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">=</span> <span class="n">hook_name</span>
+        <span class="k">return</span> <span class="n">timed_hook</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">_CKPT_BACKEND</span> <span class="o">==</span> <span class="s2">&quot;torchsnapshot&quot;</span><span class="p">:</span>
@@ -819,79 +857,89 @@
         <span class="n">op</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Wrap hook with timing for performance monitoring</span>
+        <span class="c1"># Get hook name from registered modules if available</span>
+        <span class="n">hook_name</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modules</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">module</span> <span class="ow">is</span> <span class="n">op</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">callable</span><span class="p">(</span><span class="n">module</span><span class="p">)</span> <span class="ow">and</span> <span class="n">module</span><span class="o">.</span><span class="fm">__call__</span> <span class="ow">is</span> <span class="n">op</span><span class="p">):</span>
+                <span class="n">hook_name</span> <span class="o">=</span> <span class="n">name</span>
+                <span class="k">break</span>
+
+        <span class="n">timed_op</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrap_hook_with_timing</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">hook_name</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;batch_process&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_batch_process_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch_process_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;pre_optim_steps&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_optim_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_optim_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;process_optim_batch&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_loss&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;optimizer&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_steps&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_optim&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;pre_steps_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_steps_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_optim_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;pre_epoch_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_epoch_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_epoch_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_epoch_log&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_log_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;pre_epoch&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_epoch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pre_epoch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;post_epoch&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_epoch_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1028,7 +1076,7 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-            <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">):</span>
+            <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">getattr_rb</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
 
             <span class="c1"># Create async iterator that monitors write_count progress</span>
@@ -1503,6 +1551,83 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">interval</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LogTiming</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hook to log timing information collected by timeit context managers.</span>
+
+<span class="sd">    This hook extracts timing data from the global timeit registry and logs it</span>
+<span class="sd">    to the trainer&#39;s logger (e.g., wandb, tensorboard). It&#39;s useful for profiling</span>
+<span class="sd">    different parts of the training loop.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prefix (str, optional): Prefix to add to timing metric names.</span>
+<span class="sd">            Default is &quot;time&quot;.</span>
+<span class="sd">        percall (bool, optional): If True, log average time per call.</span>
+<span class="sd">            If False, log total time. Default is True.</span>
+<span class="sd">        erase (bool, optional): If True, reset timing data after each log.</span>
+<span class="sd">            Default is False.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Log timing data after each optimization step</span>
+<span class="sd">        &gt;&gt;&gt; log_timing = LogTiming(prefix=&quot;time&quot;, percall=True)</span>
+<span class="sd">        &gt;&gt;&gt; trainer.register_op(&quot;post_optim_log&quot;, log_timing)</span>
+
+<span class="sd">        &gt;&gt;&gt; # Log timing data after each batch collection</span>
+<span class="sd">        &gt;&gt;&gt; log_timing = LogTiming(prefix=&quot;time&quot;, erase=True)</span>
+<span class="sd">        &gt;&gt;&gt; trainer.register_op(&quot;post_steps_log&quot;, log_timing)</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        This hook works with timing data collected using the `timeit` context manager.</span>
+<span class="sd">        For example, hooks registered with `register_op` are automatically wrapped</span>
+<span class="sd">        with timing measurement.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;time&quot;</span><span class="p">,</span>
+        <span class="n">percall</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">erase</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefix</span> <span class="o">=</span> <span class="n">prefix</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">percall</span> <span class="o">=</span> <span class="n">percall</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">erase</span> <span class="o">=</span> <span class="n">erase</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract timing data and return as a dict for logging.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            batch: The batch (unused, but required by hook signature)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary of timing metrics with the format {metric_name: value}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">timing_dict</span> <span class="o">=</span> <span class="n">timeit</span><span class="o">.</span><span class="n">todict</span><span class="p">(</span><span class="n">percall</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">percall</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">erase</span><span class="p">:</span>
+            <span class="n">timeit</span><span class="o">.</span><span class="n">erase</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">timing_dict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return state dict for checkpointing.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;prefix&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="p">,</span>
+            <span class="s2">&quot;percall&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">percall</span><span class="p">,</span>
+            <span class="s2">&quot;erase&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">erase</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load state dict from checkpoint.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefix</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prefix&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">percall</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;percall&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">erase</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;erase&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;log_timing&quot;</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">register_module</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps_log&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="LogScalar"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LogScalar</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
@@ -2057,6 +2182,29 @@
         <span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_module</span><span class="p">(</span><span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve a module from a trainer using a string path.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        trainer (Trainer): The trainer instance to resolve from.</span>
+<span class="sd">        path (str): A dot-separated path to the module (e.g., &quot;loss_module.actor_network&quot;).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The resolved module.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        AttributeError: If the path cannot be resolved.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; module = _resolve_module(trainer, &quot;loss_module.actor_network&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; module = _resolve_module(trainer, &quot;collector.policy&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">obj</span> <span class="o">=</span> <span class="n">trainer</span>
+    <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">obj</span>
+
+
 <div class="viewcode-block" id="UpdateWeights"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">UpdateWeights</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A collector weights update hook class.</span>
 
@@ -2070,9 +2218,33 @@
 <span class="sd">            must be synced.</span>
 <span class="sd">        update_weights_interval (int): Interval (in terms of number of batches</span>
 <span class="sd">            collected) where the sync must take place.</span>
+<span class="sd">        policy_weights_getter (Callable, optional): A callable that returns the policy</span>
+<span class="sd">            weights to sync. Used for backward compatibility. If both this and</span>
+<span class="sd">            weight_update_map are provided, weight_update_map takes precedence.</span>
+<span class="sd">        weight_update_map (dict[str, str], optional): A mapping from destination paths</span>
+<span class="sd">            (keys in collector&#39;s weight_sync_schemes) to source paths on the trainer.</span>
+<span class="sd">            Example: {&quot;policy&quot;: &quot;loss_module.actor_network&quot;,</span>
+<span class="sd">                     &quot;replay_buffer.transforms[0]&quot;: &quot;loss_module.critic_network&quot;}</span>
+<span class="sd">        trainer (Trainer, optional): The trainer instance, required when using</span>
+<span class="sd">            weight_update_map to resolve source paths.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; update_weights = UpdateWeights(trainer.collector, T)</span>
+<span class="sd">        &gt;&gt;&gt; # Legacy usage with policy_weights_getter</span>
+<span class="sd">        &gt;&gt;&gt; update_weights = UpdateWeights(</span>
+<span class="sd">        ...     trainer.collector, T,</span>
+<span class="sd">        ...     policy_weights_getter=lambda: TensorDict.from_module(policy)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; trainer.register_op(&quot;post_steps&quot;, update_weights)</span>
+
+<span class="sd">        &gt;&gt;&gt; # New usage with weight_update_map</span>
+<span class="sd">        &gt;&gt;&gt; update_weights = UpdateWeights(</span>
+<span class="sd">        ...     trainer.collector, T,</span>
+<span class="sd">        ...     weight_update_map={</span>
+<span class="sd">        ...         &quot;policy&quot;: &quot;loss_module.actor_network&quot;,</span>
+<span class="sd">        ...         &quot;replay_buffer.transforms[0]&quot;: &quot;loss_module.critic_network&quot;</span>
+<span class="sd">        ...     },</span>
+<span class="sd">        ...     trainer=trainer</span>
+<span class="sd">        ... )</span>
 <span class="sd">        &gt;&gt;&gt; trainer.register_op(&quot;post_steps&quot;, update_weights)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -2082,24 +2254,65 @@
         <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">,</span>
         <span class="n">update_weights_interval</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">policy_weights_getter</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_update_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collector</span> <span class="o">=</span> <span class="n">collector</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">update_weights_interval</span> <span class="o">=</span> <span class="n">update_weights_interval</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights_getter</span> <span class="o">=</span> <span class="n">policy_weights_getter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_update_map</span> <span class="o">=</span> <span class="n">weight_update_map</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trainer</span> <span class="o">=</span> <span class="n">trainer</span>
+
+        <span class="c1"># Validate inputs</span>
+        <span class="k">if</span> <span class="n">weight_update_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">trainer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;trainer must be provided when using weight_update_map&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_weights_interval</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights_getter</span><span class="p">()</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights_getter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+            <span class="c1"># New approach: use weight_update_map if provided</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_update_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_with_map</span><span class="p">()</span>
+            <span class="c1"># Legacy approach: use policy_weights_getter</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights_getter</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights_getter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_with_map</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weights using the weight_update_map.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightStrategy</span>
+
+        <span class="n">weights_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">destination</span><span class="p">,</span> <span class="n">source_path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_update_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Resolve the source module from the trainer</span>
+            <span class="n">source_module</span> <span class="o">=</span> <span class="n">_resolve_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trainer</span><span class="p">,</span> <span class="n">source_path</span><span class="p">)</span>
+
+            <span class="c1"># Get the scheme for this destination to know the extraction strategy</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="s2">&quot;_weight_sync_schemes&quot;</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
+                <span class="ow">and</span> <span class="n">destination</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
+            <span class="p">):</span>
+                <span class="n">scheme</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">[</span><span class="n">destination</span><span class="p">]</span>
+                <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy</span><span class="p">)</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">source_module</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback: use TensorDict extraction if no scheme found</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">source_module</span><span class="p">)</span>
+
+            <span class="n">weights_dict</span><span class="p">[</span><span class="n">destination</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights</span>
+
+        <span class="c1"># Send all weights atomically</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights_dict</span><span class="o">=</span><span class="n">weights_dict</span><span class="p">)</span>
 
 <div class="viewcode-block" id="UpdateWeights.register"><a class="viewcode-back" href="../../../reference/generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights.register">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;update_weights&quot;</span><span class="p">):</span>
         <span class="n">trainer</span><span class="o">.</span><span class="n">register_module</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>

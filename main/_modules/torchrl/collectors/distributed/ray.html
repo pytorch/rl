@@ -450,6 +450,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
 
 <span class="n">RAY_ERR</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="k">try</span><span class="p">:</span>
@@ -553,7 +554,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
@@ -680,11 +681,15 @@
 
 <span class="sd">            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a</span>
 <span class="sd">                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.</span>
-<span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
+<span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.</span>
 <span class="sd">            If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging</span>
 <span class="sd">            Ray&#39;s distributed capabilities.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary mapping model identifiers to</span>
+<span class="sd">            :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme` instances.</span>
+<span class="sd">            This is the recommended way to configure weight synchronization. If not provided,</span>
+<span class="sd">            defaults to ``{&quot;policy&quot;: RayWeightSyncScheme()}``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
@@ -748,6 +753,7 @@
         <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
         <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
         <span class="k">if</span> <span class="n">remote_configs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -858,9 +864,9 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
             <span class="n">policy_factory</span> <span class="o">=</span> <span class="p">[</span><span class="n">policy_factory</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span> <span class="o">=</span> <span class="n">policy</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-            <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>  <span class="c1"># Store policy for weight extraction</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -898,7 +904,10 @@
 
         <span class="c1"># update collector kwargs</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">collector_kwarg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">):</span>
-            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="c1"># Don&#39;t pass policy_factory if we have a policy - remote collectors need the policy object</span>
+            <span class="c1"># to be able to apply weight updates</span>
+            <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">max_frames_per_traj</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;init_random_frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">init_random_frames</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span>
@@ -932,19 +941,84 @@
                 <span class="n">collector_kwargs</span><span class="p">,</span>
                 <span class="n">remote_configs</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">weight_updater</span> <span class="o">=</span> <span class="n">RayWeightUpdater</span><span class="p">(</span>
-                <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span>
-                <span class="n">remote_collectors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span>
-                <span class="n">max_interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+        <span class="c1"># Set up weight synchronization - prefer new schemes over legacy updater</span>
+        <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Default to Ray weight sync scheme for Ray collectors</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">RayWeightSyncScheme</span>
 
-        <span class="c1"># Print info of all remote workers</span>
-        <span class="n">pending_samples</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">e</span><span class="o">.</span><span class="n">print_remote_collector_info</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span>
-        <span class="p">]</span>
-        <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">pending_samples</span><span class="p">)</span>
+            <span class="n">weight_sync_schemes</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">RayWeightSyncScheme</span><span class="p">()}</span>
+
+        <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use new weight synchronization system</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="n">weight_sync_schemes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
+
+            <span class="c1"># Set up weight senders now that remote collectors exist</span>
+            <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">sender</span> <span class="o">=</span> <span class="n">scheme</span><span class="o">.</span><span class="n">create_sender</span><span class="p">()</span>
+                <span class="n">sender</span><span class="o">.</span><span class="n">_model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+
+                <span class="c1"># Register each remote collector as a separate worker</span>
+                <span class="c1"># This follows the same pattern as multiprocess collectors</span>
+                <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">remote_collector</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">):</span>
+                    <span class="c1"># Create a transport for this specific collector</span>
+                    <span class="c1"># Pass the collector as context so the transport knows which one to talk to</span>
+                    <span class="n">sender</span><span class="o">.</span><span class="n">register_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">,</span> <span class="n">remote_collector</span><span class="p">)</span>
+
+                <span class="c1"># Set context and register model</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="s2">&quot;set_context&quot;</span><span class="p">):</span>
+                    <span class="n">sender</span><span class="o">.</span><span class="n">set_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+
+                <span class="c1"># Store reference to source model for automatic extraction</span>
+                <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
+                    <span class="n">sender</span><span class="o">.</span><span class="n">_source_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">sender</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Don&#39;t use legacy system</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fall back to legacy weight updater system</span>
+            <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">weight_updater</span> <span class="o">=</span> <span class="n">RayWeightUpdater</span><span class="p">(</span>
+                    <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span>
+                    <span class="n">remote_collectors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span>
+                    <span class="n">max_interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Print info of all remote workers (fire and forget - no need to wait)</span>
+        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">:</span>
+            <span class="n">e</span><span class="o">.</span><span class="n">print_remote_collector_info</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extract_weights_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract weights from a model if needed.</span>
+
+<span class="sd">        For Ray collectors, when weights is None and we have a weight sync scheme,</span>
+<span class="sd">        extract fresh weights from the tracked policy model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">scheme</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">scheme</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Extract fresh weights from the source model</span>
+            <span class="n">sender</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">sender</span>
+                <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="s2">&quot;_source_model&quot;</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">sender</span><span class="o">.</span><span class="n">_source_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightStrategy</span>
+
+                <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">sender</span><span class="o">.</span><span class="n">_source_model</span><span class="p">)</span>
+
+        <span class="c1"># Fall back to base class behavior</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">num_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>

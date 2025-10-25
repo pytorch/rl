@@ -548,7 +548,7 @@
 <span class="sd">    .. note::</span>
 <span class="sd">        The input tensordict is expected to contain the following keys by default:</span>
 <span class="sd">            - ``(&quot;next&quot;, &quot;history&quot;)``: The chat history</span>
-<span class="sd">            - ``(&quot;next&quot;, &quot;ref_log_prob&quot;)`` (optional): Reference model log probabilities, required if kl_to_ref_coeff is set</span>
+<span class="sd">            - ``(&quot;next&quot;, &quot;ref_log_probs&quot;)`` (optional): Reference model log probabilities, required if kl_to_ref_coeff is set</span>
 
 <span class="sd">        These keys can be customized using the ``set_keys()`` method.</span>
 
@@ -637,7 +637,7 @@
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt; # Apply the transform to get reference log probabilities</span>
 <span class="sd">        &gt;&gt;&gt; data = transform(data)</span>
-<span class="sd">        &gt;&gt;&gt; assert &quot;ref_log_prob&quot; in data[&quot;next&quot;].keys()</span>
+<span class="sd">        &gt;&gt;&gt; assert &quot;ref_log_probs&quot; in data[&quot;next&quot;].keys()</span>
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt; # Use with SFTLoss for KL regularization</span>
 <span class="sd">        &gt;&gt;&gt; loss = SFTLoss(</span>
@@ -666,7 +666,7 @@
 <span class="sd">            history (NestedKey): The input tensordict key where the chat history is expected.</span>
 <span class="sd">                Defaults to ``(&quot;next&quot;, &quot;history&quot;)``.</span>
 <span class="sd">            ref_log_prob (NestedKey): The input tensordict key where the reference model log probabilities are expected.</span>
-<span class="sd">                Only used when kl_to_ref_coeff is set. Defaults to ``(&quot;next&quot;, &quot;ref_log_prob&quot;)``.</span>
+<span class="sd">                Only used when kl_to_ref_coeff is set. Defaults to ``(&quot;next&quot;, &quot;ref_log_probs&quot;)``.</span>
 <span class="sd">            log_probs (NestedKey): The output tensordict key where the model&#39;s log probabilities will be written.</span>
 <span class="sd">                Defaults to ``&quot;log_probs&quot;``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -869,7 +869,7 @@
             <span class="n">ref_log_probs</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">ref_log_probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Reference log probs not found at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="si">=}</span><span class="s2"> in tensordict with keys </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2"> but loss_function is &#39;minor_sft&#39;&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Reference log probs not found at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="si">=}</span><span class="s2"> in tensordict with keys </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span><span class="w"> </span><span class="kc">True</span><span class="p">)</span><span class="si">}</span><span class="s2"> but loss_function is &#39;minor_sft&#39;&quot;</span>
                 <span class="p">)</span>
 
             <span class="c1"># we need to re-sum ref_log_probs as they are not summed per-sequence</span>

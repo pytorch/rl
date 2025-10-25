@@ -1384,6 +1384,106 @@
     <span class="n">remote_collector</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">remote_config</span><span class="p">)(</span><span class="bp">cls</span><span class="p">)</span>
     <span class="n">remote_collector</span><span class="o">.</span><span class="n">is_remote</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="k">return</span> <span class="n">remote_collector</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_ray_default_runtime_env</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the default Ray runtime environment configuration for TorchRL.</span>
+
+<span class="sd">    This function returns a runtime environment configuration that excludes</span>
+<span class="sd">    large directories and files that should not be uploaded to Ray workers.</span>
+<span class="sd">    This helps prevent issues with Ray&#39;s working_dir size limits (512MB default).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: A dictionary containing the default runtime_env configuration with</span>
+<span class="sd">            excludes for common large directories.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import ray</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl._utils import get_ray_default_runtime_env</span>
+<span class="sd">        &gt;&gt;&gt; ray_init_config = {&quot;num_cpus&quot;: 4}</span>
+<span class="sd">        &gt;&gt;&gt; ray_init_config[&quot;runtime_env&quot;] = get_ray_default_runtime_env()</span>
+<span class="sd">        &gt;&gt;&gt; ray.init(**ray_init_config)</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The excludes list includes:</span>
+<span class="sd">        - Virtual environments (.venv/, venv/, etc.)</span>
+<span class="sd">        - Test files and caches</span>
+<span class="sd">        - Documentation builds</span>
+<span class="sd">        - Benchmarks</span>
+<span class="sd">        - Examples and tutorials</span>
+<span class="sd">        - CI/CD configurations</span>
+<span class="sd">        - IDE configurations</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;excludes&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="s2">&quot;.venv/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;venv/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;env/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;ENV/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;env.bak/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;venv.bak/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;test/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;tests/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;docs/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;benchmarks/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;tutorials/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;examples/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;.github/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;.pytest_cache/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;.mypy_cache/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;.ruff_cache/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;__pycache__/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;*.pyc&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;*.pyo&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;*.egg-info/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;.idea/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;.vscode/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;dev/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;main/&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;*.html&quot;</span><span class="p">,</span>
+        <span class="p">]</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">merge_ray_runtime_env</span><span class="p">(</span><span class="n">ray_init_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge user-provided ray_init_config with default runtime_env excludes.</span>
+
+<span class="sd">    This function ensures that the default TorchRL runtime_env excludes are applied</span>
+<span class="sd">    to prevent large directories from being uploaded to Ray workers, while preserving</span>
+<span class="sd">    any user-provided configuration.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ray_init_config (dict): The ray init configuration dictionary to merge.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: The merged configuration with default runtime_env excludes applied.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl._utils import merge_ray_runtime_env</span>
+<span class="sd">        &gt;&gt;&gt; ray_init_config = {&quot;num_cpus&quot;: 4}</span>
+<span class="sd">        &gt;&gt;&gt; ray_init_config = merge_ray_runtime_env(ray_init_config)</span>
+<span class="sd">        &gt;&gt;&gt; ray.init(**ray_init_config)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">default_runtime_env</span> <span class="o">=</span> <span class="n">get_ray_default_runtime_env</span><span class="p">()</span>
+    <span class="n">runtime_env</span> <span class="o">=</span> <span class="n">ray_init_config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;runtime_env&quot;</span><span class="p">,</span> <span class="p">{})</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">runtime_env</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">)</span>
+        <span class="n">ray_init_config</span><span class="p">[</span><span class="s2">&quot;runtime_env&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">runtime_env</span>
+
+    <span class="c1"># Merge excludes lists</span>
+    <span class="n">excludes</span> <span class="o">=</span> <span class="n">runtime_env</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;excludes&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;excludes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">default_runtime_env</span><span class="p">[</span><span class="s2">&quot;excludes&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">excludes</span><span class="p">))</span>
+
+    <span class="c1"># Ensure env_vars exists</span>
+    <span class="k">if</span> <span class="s2">&quot;env_vars&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">runtime_env</span><span class="p">:</span>
+        <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">ray_init_config</span>
 </pre></div>
 
              </article>

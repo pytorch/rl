@@ -439,42 +439,19 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span><span class="p">,</span> <span class="n">wait</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="c1"># Import RLvLLMEngine and shared utilities</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">RLvLLMEngine</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.vllm_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
 
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">ray.util.placement_group</span><span class="w"> </span><span class="kn">import</span> <span class="n">placement_group</span><span class="p">,</span> <span class="n">remove_placement_group</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">ray.util.scheduling_strategies</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlacementGroupSchedulingStrategy</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">ray</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">placement_group</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Placement group is not available when ray is not installed.&quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">remove_placement_group</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remove placement group is not available when ray is not installed.&quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">class</span><span class="w"> </span><span class="nc">PlacementGroupSchedulingStrategy</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Placement group scheduling strategy is not available when ray is not installed.&quot;&quot;&quot;</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
-            <span class="p">)</span>
-
+<span class="n">_has_vllm</span> <span class="o">=</span> <span class="kc">True</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.engine.async_llm_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncEngineArgs</span>
@@ -492,33 +469,27 @@
     <span class="n">_has_vllm</span> <span class="o">=</span> <span class="kc">False</span>
 
 
-<span class="k">if</span> <span class="ow">not</span> <span class="n">_has_vllm</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_ray</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Import Ray on demand to avoid global import side-effects.</span>
 
-    <span class="k">class</span><span class="w"> </span><span class="nc">Worker</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Placeholder for Worker class when vLLM is not installed.&quot;&quot;&quot;</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        ModuleType: The imported Ray module.</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">&quot;vllm is not installed. Please install it with `pip install vllm`.&quot;</span>
-            <span class="p">)</span>
-
-<span class="k">else</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.worker.worker</span><span class="w"> </span><span class="kn">import</span> <span class="n">Worker</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">_AsyncvLLMWorker</span><span class="p">(</span><span class="n">Worker</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Async vLLM worker for Ray with weight update capabilities.</span>
-
-<span class="sd">    This worker extends the base vLLM Worker to support async operations</span>
-<span class="sd">    and weight updates via NCCL communication groups.</span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ImportError: If Ray is not installed.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>  <span class="c1"># type: ignore</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__&quot;</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;visible devices </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;CUDA_VISIBLE_DEVICES&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;device count </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">ray</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>  <span class="c1"># pragma: no cover - surfaced to callers</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_AsyncvLLMWorker</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Async vLLM worker extension for Ray with weight update capabilities.&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">init_weight_update_group</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -527,7 +498,10 @@
         <span class="n">rank_offset</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize weight update group for this worker.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize weight update group for this worker (non-blocking).</span>
+
+<span class="sd">        This method starts NCCL initialization in a background thread and returns immediately,</span>
+<span class="sd">        allowing the RPC to complete. The NCCL collective will complete when the trainer joins.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            master_address (str): The master address for distributed training.</span>
@@ -535,10 +509,12 @@
 <span class="sd">            rank_offset (int): Rank offset for this worker in the global weight update group.</span>
 <span class="sd">            world_size (int): Total number of processes in the weight update group.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+
         <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.distributed.parallel_state</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_world_group</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.init_weight_update_group&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;model_update_group&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Model update group already initialized&quot;</span><span class="p">)</span>
             <span class="k">return</span>
 
@@ -550,18 +526,35 @@
         <span class="c1"># Calculate the global rank for weight update group</span>
         <span class="n">rank</span> <span class="o">=</span> <span class="n">local_rank</span> <span class="o">+</span> <span class="n">rank_offset</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Initializing </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> weight update group with &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Starting </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> weight update group init (non-blocking) with &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">master_address</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">master_port</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">rank</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">world_size</span><span class="si">=}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
 
-        <span class="c1"># Import synchronous version for workers too</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.vllm_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
+        <span class="c1"># Start NCCL init in a background thread so this RPC can return immediately</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_init_nccl_background</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">.vllm_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
-            <span class="n">master_address</span><span class="p">,</span> <span class="n">master_port</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Worker rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">: Starting NCCL init (will block until collective completes)...&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
+                    <span class="n">master_address</span><span class="p">,</span> <span class="n">master_port</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">: NCCL init complete!&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">: NCCL init failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">raise</span>
+
+        <span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">_init_nccl_background</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+        <span class="c1"># Store thread reference for potential cleanup</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_init_thread</span> <span class="o">=</span> <span class="n">thread</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.init_weight_update_group dispatched (non-blocking)&quot;</span>
         <span class="p">)</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.init_weight_update_group success&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dtype_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weight via broadcast from master (rank 0) - periodic-mono pattern.</span>
@@ -590,6 +583,41 @@
         <span class="n">ready</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_update_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker NCCL group ready: </span><span class="si">{</span><span class="n">ready</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">ready</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_weights_from_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load weights from shared storage (double-buffer approach).</span>
+
+<span class="sd">        This method reads weights from a memory-mapped TensorDict directory</span>
+<span class="sd">        and loads them into the model. Used for file-based weight synchronization</span>
+<span class="sd">        as an alternative to NCCL collectives.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            storage_path: Path to the directory containing memory-mapped weights</span>
+<span class="sd">            num_threads: Number of threads for reading (default: 1)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker loading weights from </span><span class="si">{</span><span class="n">storage_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Read weights from shared storage</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">storage_path</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Convert to list of (name, tensor) tuples</span>
+        <span class="n">weights_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker loading </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights into model&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">num_threads</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+            <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_runner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">load_weights</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">weights_list</span>
+            <span class="p">]</span>
+            <span class="n">wait</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Worker successfully loaded </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights from storage&quot;</span>
+        <span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_AsyncLLMEngine</span><span class="p">:</span>
@@ -625,17 +653,9 @@
 
         <span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncLLMEngine</span>
 
-        <span class="n">worker_cls</span> <span class="o">=</span> <span class="s2">&quot;torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker&quot;</span>
-        <span class="k">if</span> <span class="n">engine_args</span><span class="o">.</span><span class="n">worker_cls</span> <span class="o">!=</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
-            <span class="n">old_worker_cls</span> <span class="o">=</span> <span class="n">engine_args</span><span class="o">.</span><span class="n">worker_cls</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Overriding worker_cls from </span><span class="si">{</span><span class="n">old_worker_cls</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">worker_cls</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-
         <span class="k">if</span> <span class="n">bundle_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_RAY_BUNDLE_INDICES&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">bundle_indices</span><span class="p">))</span>
 
-        <span class="n">engine_args</span><span class="o">.</span><span class="n">worker_cls</span> <span class="o">=</span> <span class="n">worker_cls</span>
         <span class="n">engine_args</span><span class="o">.</span><span class="n">enable_prefix_caching</span> <span class="o">=</span> <span class="n">enable_prefix_caching</span>
 
         <span class="c1"># Create the engine directly - this is the source of the blocking ray.get issue</span>
@@ -681,7 +701,7 @@
                 <span class="s2">&quot;vllm is not installed. Please install it with `pip install vllm`.&quot;</span>
             <span class="p">)</span>
 
-        <span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">RequestOutput</span><span class="p">,</span> <span class="n">SamplingParams</span><span class="p">,</span> <span class="n">TokensPrompt</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamplingParams</span><span class="p">,</span> <span class="n">TokensPrompt</span>
 
         <span class="c1"># Track whether input was originally a single prompt</span>
         <span class="n">single_prompt_input</span> <span class="o">=</span> <span class="kc">False</span>
@@ -888,41 +908,7 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_bundle_indices</span><span class="p">(</span><span class="n">placement_group</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get bundle indices for a placement group.</span>
-
-<span class="sd">    Address https://github.com/ray-project/ray/issues/51117</span>
-<span class="sd">    This function is used to get the bundle indices of a placement group</span>
-<span class="sd">    and ensure that the bundles placed on the same node are grouped together.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        placement_group: Ray placement group.</span>
-<span class="sd">        index (int): Index of the current replica.</span>
-<span class="sd">        length (int): Number of bundles per replica.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        list[int]: Bundle indices for this replica.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">ray</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">pg_infos</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">placement_group_table</span><span class="p">(</span><span class="n">placement_group</span><span class="p">)</span>
-
-    <span class="n">node_id_to_bundles</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">bundle</span><span class="p">,</span> <span class="n">node_id</span> <span class="ow">in</span> <span class="n">pg_infos</span><span class="p">[</span><span class="s2">&quot;bundles_to_node_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="n">node_id_to_bundles</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">node_id</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bundle</span><span class="p">)</span>
-
-    <span class="n">sorted_bundle_indices</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">node_id_to_bundles</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="p">[])</span>
-    <span class="k">return</span> <span class="n">sorted_bundle_indices</span><span class="p">[</span><span class="n">index</span> <span class="o">*</span> <span class="n">length</span> <span class="p">:</span> <span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">length</span><span class="p">]</span>
-
-
-<span class="c1"># Create Ray remote versions</span>
-<span class="k">if</span> <span class="n">ray</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_has_vllm</span><span class="p">:</span>
-    <span class="n">_AsyncLLMEngineActor</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">num_cpus</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_gpus</span><span class="o">=</span><span class="mi">0</span><span class="p">)(</span><span class="n">_AsyncLLMEngine</span><span class="p">)</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="n">_AsyncLLMEngineActor</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="c1"># Ray actor wrapper is created lazily in __init__ to avoid global Ray import.</span>
 
 
 <div class="viewcode-block" id="AsyncVLLM"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">AsyncVLLM</span><span class="p">(</span><span class="n">RLvLLMEngine</span><span class="p">):</span>
@@ -948,7 +934,7 @@
 <span class="sd">                See `this issue &lt;https://github.com/vllm-project/vllm/issues/8268&gt;`_ for more details.</span>
 
 <span class="sd">    Example:</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.backends.vllm_async import AsyncVLLM</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm import AsyncVLLM</span>
 <span class="sd">        &gt;&gt;&gt; from vllm import SamplingParams</span>
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt; # Simple usage - single GPU, single replica</span>
@@ -1027,17 +1013,18 @@
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;vllm is not installed. Please install it with `pip install vllm`.&quot;</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="n">ray</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
-            <span class="p">)</span>
+        <span class="c1"># Lazily import ray only when constructing the actor class to avoid global import</span>
 
         <span class="c1"># Enable prefix caching by default for better performance</span>
         <span class="n">engine_args</span><span class="o">.</span><span class="n">enable_prefix_caching</span> <span class="o">=</span> <span class="n">enable_prefix_caching</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span> <span class="o">=</span> <span class="n">engine_args</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">=</span> <span class="n">num_replicas</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">actor_class</span> <span class="o">=</span> <span class="n">actor_class</span> <span class="ow">or</span> <span class="n">_AsyncLLMEngineActor</span>
+        <span class="k">if</span> <span class="n">actor_class</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_class</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">num_cpus</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_gpus</span><span class="o">=</span><span class="mi">0</span><span class="p">)(</span><span class="n">_AsyncLLMEngine</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_class</span> <span class="o">=</span> <span class="n">actor_class</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_launched</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_service_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[</span>
@@ -1052,12 +1039,10 @@
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;AsyncVLLMEngineService already launched&quot;</span><span class="p">)</span>
             <span class="k">return</span>
 
-        <span class="c1"># Check if CUDA is available since vLLM requires GPU</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="s2">&quot;AsyncVLLM requires CUDA but no GPU devices are available. &quot;</span>
-                <span class="s2">&quot;Please run on a machine with GPU support.&quot;</span>
-            <span class="p">)</span>
+        <span class="c1"># Local imports to avoid global Ray dependency</span>
+        <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">ray.util.placement_group</span><span class="w"> </span><span class="kn">import</span> <span class="n">placement_group</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">ray.util.scheduling_strategies</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlacementGroupSchedulingStrategy</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Launching </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2"> async vLLM engine actors...&quot;</span>
@@ -1073,10 +1058,8 @@
             <span class="p">)</span>
 
             <span class="c1"># Create individual placement group for this replica</span>
-            <span class="n">bundles</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="p">{</span><span class="s2">&quot;GPU&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">&quot;CPU&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">}</span>
-                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="o">.</span><span class="n">tensor_parallel_size</span><span class="p">)</span>
-            <span class="p">]</span>
+            <span class="n">num_gpus</span> <span class="o">=</span> <span class="n">_gpus_per_replica</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">)</span>
+            <span class="n">bundles</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;GPU&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">&quot;CPU&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">)]</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Creating placement group for replica </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bundles</span><span class="p">)</span><span class="si">}</span><span class="s2"> bundles&quot;</span>
             <span class="p">)</span>
@@ -1092,8 +1075,8 @@
 
             <span class="c1"># Calculate bundle indices for tensor parallelism</span>
             <span class="n">bundle_indices</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="o">.</span><span class="n">tensor_parallel_size</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="n">bundle_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="o">.</span><span class="n">tensor_parallel_size</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">num_gpus</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">bundle_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_gpus</span><span class="p">))</span>
             <span class="n">bundle_index</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Always use first bundle since each replica has its own placement group</span>
 
             <span class="n">scheduling_strategy</span> <span class="o">=</span> <span class="n">PlacementGroupSchedulingStrategy</span><span class="p">(</span>
@@ -1113,7 +1096,6 @@
                 <span class="n">bundle_indices</span><span class="o">=</span><span class="n">bundle_indices</span><span class="p">,</span>
                 <span class="n">enable_prefix_caching</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="o">.</span><span class="n">enable_prefix_caching</span><span class="p">,</span>
             <span class="p">)</span>
-
             <span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for actors to be ready&quot;</span><span class="p">)</span>
@@ -1169,6 +1151,7 @@
         <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="nb">compile</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">enable_fp32_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncVLLM</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an AsyncVLLM instance from a pretrained model.</span>
@@ -1182,6 +1165,7 @@
 <span class="sd">            num_replicas (int): Number of engine replicas to create.</span>
 <span class="sd">            verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.</span>
 <span class="sd">            compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.</span>
+<span class="sd">            enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.</span>
 <span class="sd">            **kwargs: Additional arguments passed to AsyncEngineArgs.</span>
 
 <span class="sd">        Returns:</span>
@@ -1202,6 +1186,12 @@
 <span class="sd">            &gt;&gt;&gt; # Generate text</span>
 <span class="sd">            &gt;&gt;&gt; from vllm import SamplingParams</span>
 <span class="sd">            &gt;&gt;&gt; result = service.generate(&quot;Hello, world!&quot;, SamplingParams(max_tokens=50))</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Enable FP32 output for better numerical stability</span>
+<span class="sd">            &gt;&gt;&gt; service = AsyncVLLM.from_pretrained(</span>
+<span class="sd">            ...     &quot;Qwen/Qwen2.5-3B&quot;,</span>
+<span class="sd">            ...     enable_fp32_output=True</span>
+<span class="sd">            ... )</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">make_async_vllm_engine</span><span class="p">(</span>
             <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
@@ -1209,6 +1199,7 @@
             <span class="n">num_replicas</span><span class="o">=</span><span class="n">num_replicas</span><span class="p">,</span>
             <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
             <span class="nb">compile</span><span class="o">=</span><span class="nb">compile</span><span class="p">,</span>
+            <span class="n">enable_fp32_output</span><span class="o">=</span><span class="n">enable_fp32_output</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
@@ -1392,6 +1383,7 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            RequestOutput | list[RequestOutput]: Generated outputs from vLLM.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
         <span class="c1"># Check if this is a batch request</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_batch</span><span class="p">(</span><span class="n">prompts</span><span class="p">,</span> <span class="n">prompt_token_ids</span><span class="p">):</span>
             <span class="c1"># Handle batched input by unbinding and sending individual requests</span>
@@ -1516,6 +1508,9 @@
             <span class="sa">f</span><span class="s2">&quot;Shutting down </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">)</span><span class="si">}</span><span class="s2"> async vLLM engine actors...&quot;</span>
         <span class="p">)</span>
 
+        <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">ray.util.placement_group</span><span class="w"> </span><span class="kn">import</span> <span class="n">remove_placement_group</span>
+
         <span class="c1"># Kill all actors</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">actor</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">):</span>
             <span class="k">try</span><span class="p">:</span>
@@ -1585,28 +1580,65 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_cached_master_port</span> <span class="o">=</span> <span class="mi">29500</span>  <span class="c1"># Default port</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_master_port</span></div>
 
-<div class="viewcode-block" id="AsyncVLLM.init_weight_update_group"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.init_weight_update_group">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init_weight_update_group</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the weight update communication group (RLvLLMEngine interface).&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="AsyncVLLM.init_weight_update_group"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.init_weight_update_group">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init_weight_update_group</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">master_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward the request to init NCCL weight update group to all actors.</span>
+
+<span class="sd">        This method initializes the weight update group for all vLLM workers.</span>
+<span class="sd">        The external trainer should be rank 0, and vLLM workers will be ranks 1+.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            master_address: Master address for NCCL communication.</span>
+<span class="sd">            master_port: Master port for NCCL communication.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of Ray futures for the initialization calls.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            The caller must wait on the returned futures (ray.get(refs)) to ensure</span>
+<span class="sd">            all workers have completed initialization before sending weights.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_launched</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;AsyncVLLM service must be launched before initializing weight update group&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">master_address</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_master_address</span><span class="p">()</span>
-        <span class="n">master_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_master_port</span><span class="p">()</span>
+        <span class="n">gpus_per_replica</span> <span class="o">=</span> <span class="n">_gpus_per_replica</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">)</span>
+        <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span> <span class="o">*</span> <span class="n">gpus_per_replica</span> <span class="o">+</span> <span class="mi">1</span>
 
-        <span class="c1"># Call the internal method with the auto-detected parameters (like V1)</span>
-        <span class="n">refs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_weight_update_group_internal</span><span class="p">(</span><span class="n">master_address</span><span class="p">,</span> <span class="n">master_port</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Initializing weight update group for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_replicas</span><span class="si">}</span><span class="s2"> replicas &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;with </span><span class="si">{</span><span class="n">gpus_per_replica</span><span class="si">}</span><span class="s2"> GPUs each (world_size=</span><span class="si">{</span><span class="n">weight_sync_world_size</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
 
-        <span class="c1"># CRITICAL: Initialize master NCCL group immediately (like V1) - don&#39;t wait for workers</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Setting up master NCCL group (rank 0)...&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_nccl_master_group</span><span class="p">()</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">envs</span>
 
-        <span class="c1"># Now wait for workers to complete (like V1 does)</span>
-        <span class="k">if</span> <span class="n">ray</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
+        <span class="n">refs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">actor</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">):</span>
+            <span class="n">rank_offset</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">gpus_per_replica</span>
+            <span class="k">if</span> <span class="n">envs</span> <span class="ow">and</span> <span class="n">envs</span><span class="o">.</span><span class="n">VLLM_USE_V1</span><span class="p">:</span>
+                <span class="n">actor_collective_rpc</span> <span class="o">=</span> <span class="n">actor</span><span class="o">.</span><span class="n">collective_rpc_v1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">actor_collective_rpc</span> <span class="o">=</span> <span class="n">actor</span><span class="o">.</span><span class="n">collective_rpc_v0</span>
+            <span class="n">refs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">actor_collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                    <span class="s2">&quot;init_weight_update_group&quot;</span><span class="p">,</span>
+                    <span class="n">args</span><span class="o">=</span><span class="p">(</span>
+                        <span class="n">master_address</span><span class="p">,</span>
+                        <span class="nb">str</span><span class="p">(</span><span class="n">master_port</span><span class="p">),</span>
+                        <span class="n">rank_offset</span><span class="p">,</span>
+                        <span class="n">weight_sync_world_size</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Requested init for actor </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> with rank_offset </span><span class="si">{</span><span class="n">rank_offset</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;AsyncVLLM weight update group initialized&quot;</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">refs</span></div>
 
 <div class="viewcode-block" id="AsyncVLLM.update_weights"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.update_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update model weights across all replicas using NCCL broadcast.</span>
@@ -1671,6 +1703,7 @@
         <span class="p">)</span>
 
         <span class="n">updated_weights</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>  <span class="c1"># Ensure we&#39;re on the correct CUDA device</span>
             <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">weight</span> <span class="ow">in</span> <span class="n">gpu_weights</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="c1"># Convert dtype to string name (like periodic-mono)</span>
@@ -1747,6 +1780,7 @@
                 <span class="s2">&quot;AsyncVLLM service must be launched before getting request counts&quot;</span>
             <span class="p">)</span>
 
+        <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">actor_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">actor_index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">)):</span>
                 <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span>
@@ -1777,6 +1811,7 @@
                 <span class="s2">&quot;AsyncVLLM service must be launched before getting cache usage&quot;</span>
             <span class="p">)</span>
 
+        <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">actor_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">actor_index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">)):</span>
                 <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span>
@@ -2089,6 +2124,7 @@
             <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">actor</span><span class="o">.</span><span class="n">get_num_unfinished_requests</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actors</span>
             <span class="p">]</span>
+            <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
             <span class="n">request_counts</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
 
         <span class="c1"># Find the actor with minimum pending requests</span>
@@ -2116,6 +2152,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Query actors directly</span>
             <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">actor</span><span class="o">.</span><span class="n">get_cache_usage</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actors</span><span class="p">]</span>
+            <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
             <span class="n">cache_usages</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
 
         <span class="c1"># Find the actor with minimum cache usage</span>
@@ -2255,7 +2292,8 @@
                 <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span>
                     <span class="n">actor</span><span class="o">.</span><span class="n">get_num_unfinished_requests</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actors</span>
                 <span class="p">]</span>
-                <span class="n">request_counts</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+            <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
+            <span class="n">request_counts</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="ow">not</span> <span class="n">request_counts</span><span class="p">:</span>
                 <span class="k">return</span> <span class="kc">False</span>
@@ -2304,8 +2342,9 @@
                 <span class="n">cache_futures</span> <span class="o">=</span> <span class="p">[</span>
                     <span class="n">actor</span><span class="o">.</span><span class="n">get_cache_usage</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">actor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actors</span>
                 <span class="p">]</span>
-                <span class="n">request_counts</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">request_futures</span><span class="p">)</span>
-                <span class="n">cache_usages</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cache_futures</span><span class="p">)</span>
+            <span class="n">ray</span> <span class="o">=</span> <span class="n">_get_ray</span><span class="p">()</span>
+            <span class="n">request_counts</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">request_futures</span><span class="p">)</span>
+            <span class="n">cache_usages</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cache_futures</span><span class="p">)</span>
 
             <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="n">cache_usage</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
                 <span class="nb">zip</span><span class="p">(</span><span class="n">request_counts</span><span class="p">,</span> <span class="n">cache_usages</span><span class="p">)</span>
@@ -2326,21 +2365,32 @@
 
 
 <div class="viewcode-block" id="make_async_vllm_engine"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.make_async_vllm_engine.html#torchrl.modules.llm.make_async_vllm_engine">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_async_vllm_engine</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
     <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">num_devices</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">num_replicas</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="nb">compile</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">enable_fp32_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">tensor_parallel_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">data_parallel_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">pipeline_parallel_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncVLLM</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create an async vLLM engine service.</span>
 
-<span class="sd">    Args:</span>
+<span class="sd">    Keyword Args:</span>
 <span class="sd">        model_name (str): The model name to pass to vLLM.</span>
 <span class="sd">        num_devices (int, optional): Number of devices to use, per replica.</span>
 <span class="sd">        num_replicas (int): Number of engine replicas to create.</span>
 <span class="sd">        verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.</span>
 <span class="sd">        compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.</span>
+<span class="sd">        enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.</span>
+<span class="sd">            This can help with numerical stability for certain models. Requires model-specific support in</span>
+<span class="sd">            torchrl.modules.llm.backends._models.</span>
+<span class="sd">        tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.</span>
+<span class="sd">        data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.</span>
+<span class="sd">        pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.</span>
 <span class="sd">        **kwargs: Additional arguments passed to AsyncEngineArgs.</span>
 
 <span class="sd">    Returns:</span>
@@ -2358,6 +2408,9 @@
 <span class="sd">        &gt;&gt;&gt; service = make_async_vllm_engine(&quot;Qwen/Qwen2.5-3B&quot;, num_devices=2, num_replicas=2)</span>
 <span class="sd">        &gt;&gt;&gt; # Generate text</span>
 <span class="sd">        &gt;&gt;&gt; result = service.generate(&quot;Hello, world!&quot;, sampling_params)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create with FP32 output enabled</span>
+<span class="sd">        &gt;&gt;&gt; service = make_async_vllm_engine(&quot;Qwen/Qwen2.5-3B&quot;, enable_fp32_output=True)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_vllm</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
@@ -2366,16 +2419,13 @@
 
     <span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncEngineArgs</span>
 
-    <span class="c1"># Check if CUDA is available since vLLM requires GPU</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;AsyncVLLM requires CUDA but no GPU devices are available. &quot;</span>
-            <span class="s2">&quot;Please run on a machine with GPU support.&quot;</span>
+    <span class="c1"># Set FP32 output environment variable if requested</span>
+    <span class="k">if</span> <span class="n">enable_fp32_output</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_ENABLE_FP32_OUTPUT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). &quot;</span>
+            <span class="s2">&quot;This will use FP32 for the final output layer if the model supports it.&quot;</span>
         <span class="p">)</span>
-
-    <span class="c1"># Handle device specification</span>
-    <span class="k">if</span> <span class="n">num_devices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">num_devices</span> <span class="o">=</span> <span class="mi">1</span>
 
     <span class="c1"># Configure verbose logging if requested</span>
     <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
@@ -2390,6 +2440,21 @@
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="s2">&quot;Enabled verbose vLLM logging - throughput statistics will be displayed&quot;</span>
         <span class="p">)</span>
+
+    <span class="c1"># Set tensor_parallel_size to num_devices if not set</span>
+    <span class="k">if</span> <span class="n">tensor_parallel_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">num_devices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tensor_parallel_size</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tensor_parallel_size</span> <span class="o">=</span> <span class="n">num_devices</span>
+    <span class="k">elif</span> <span class="n">num_devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tensor_parallel_size</span> <span class="o">!=</span> <span class="n">num_devices</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;tensor_parallel_size must be set to </span><span class="si">{</span><span class="n">num_devices</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">data_parallel_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">data_parallel_size</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">if</span> <span class="n">pipeline_parallel_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">pipeline_parallel_size</span> <span class="o">=</span> <span class="mi">1</span>
 
     <span class="c1"># Create engine args</span>
     <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;distributed_executor_backend&quot;</span><span class="p">,</span> <span class="s2">&quot;ray&quot;</span><span class="p">)</span>
@@ -2406,8 +2471,10 @@
 
     <span class="n">engine_args</span> <span class="o">=</span> <span class="n">AsyncEngineArgs</span><span class="p">(</span>
         <span class="n">model</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
-        <span class="n">tensor_parallel_size</span><span class="o">=</span><span class="n">num_devices</span><span class="p">,</span>
-        <span class="n">worker_cls</span><span class="o">=</span><span class="s2">&quot;torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker&quot;</span><span class="p">,</span>
+        <span class="n">tensor_parallel_size</span><span class="o">=</span><span class="n">tensor_parallel_size</span><span class="p">,</span>
+        <span class="n">data_parallel_size</span><span class="o">=</span><span class="n">data_parallel_size</span><span class="p">,</span>
+        <span class="n">pipeline_parallel_size</span><span class="o">=</span><span class="n">pipeline_parallel_size</span><span class="p">,</span>
+        <span class="n">worker_extension_cls</span><span class="o">=</span><span class="s2">&quot;torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker&quot;</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span>
 

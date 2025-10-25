@@ -431,7 +431,15 @@
 <li class="toctree-l1"><a class="reference internal" href="collectors.html">torchrl.collectors package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="collectors.html#collectors-and-batch-size">Collectors and batch size</a></li>
 <li class="toctree-l2"><a class="reference internal" href="collectors.html#collectors-and-policy-copies">Collectors and policy copies</a></li>
-<li class="toctree-l2"><a class="reference internal" href="collectors.html#weight-synchronization-in-distributed-environments">Weight Synchronization in Distributed Environments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#weight-synchronization-using-weight-update-schemes">Weight Synchronization using Weight Update Schemes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="collectors.html#usage-examples">Usage Examples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="collectors.html#weight-senders">Weight Senders</a></li>
+<li class="toctree-l3"><a class="reference internal" href="collectors.html#weight-receivers">Weight Receivers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="collectors.html#transports">Transports</a></li>
+<li class="toctree-l3"><a class="reference internal" href="collectors.html#schemes">Schemes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="collectors.html#legacy-weight-synchronization-in-distributed-environments">Legacy: Weight Synchronization in Distributed Environments</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="collectors.html#sending-and-receiving-model-weights-with-weightupdaters">Sending and receiving model weights with WeightUpdaters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="collectors.html#extending-the-updater-class">Extending the Updater Class</a></li>
 </ul>
@@ -673,7 +681,9 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="llms.html#collectors">Collectors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="llms.html#vllm-weight-synchronization-schemes">vLLM Weight Synchronization Schemes</a></li>
 <li class="toctree-l3"><a class="reference internal" href="llms.html#policy-version-tracking">Policy Version Tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="llms.html#legacy-weight-updaters-deprecated">Legacy Weight Updaters (Deprecated)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="llms.html#environments">Environments</a><ul>

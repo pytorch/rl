@@ -473,11 +473,7 @@
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">MultiProcessedWeightUpdater</span><span class="p">,</span>
-    <span class="n">VanillaWeightUpdater</span><span class="p">,</span>
-    <span class="n">WeightUpdaterBase</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_do_nothing</span><span class="p">,</span> <span class="n">EnvBase</span>
@@ -491,6 +487,13 @@
     <span class="n">ExplorationType</span><span class="p">,</span>
     <span class="n">RandomPolicy</span><span class="p">,</span>
     <span class="n">set_exploration_type</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_resolve_model</span><span class="p">,</span>
+    <span class="n">MultiProcessWeightSyncScheme</span><span class="p">,</span>
+    <span class="n">WeightReceiver</span><span class="p">,</span>
+    <span class="n">WeightSender</span><span class="p">,</span>
+    <span class="n">WeightSyncScheme</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">try</span><span class="p">:</span>
@@ -579,6 +582,9 @@
     <span class="n">compiled_policy</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">cudagraphed_policy</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">_weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_weight_senders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSender</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_weight_receivers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightReceiver</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
@@ -619,15 +625,6 @@
         <span class="k">if</span> <span class="n">policy_device</span> <span class="ow">is</span> <span class="n">NO_DEFAULT</span><span class="p">:</span>
             <span class="n">policy_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span><span class="p">:</span>
-            <span class="n">env</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">policy</span> <span class="o">=</span> <span class="n">_make_compatible_policy</span><span class="p">(</span>
-                <span class="n">policy</span><span class="p">,</span>
-                <span class="nb">getattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;observation_spec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-                <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
-                <span class="n">env_maker</span><span class="o">=</span><span class="n">env_maker</span><span class="p">,</span>
-                <span class="n">env_maker_kwargs</span><span class="o">=</span><span class="n">env_maker_kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">policy_device</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="kc">None</span>
 
@@ -707,20 +704,82 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Shuts down the collector when started asynchronously with the `start` method.</span>
 
-<span class="sd">        Arg:</span>
+<span class="sd">        Args:</span>
 <span class="sd">            timeout (float, optional): The maximum time to wait for the collector to shutdown.</span>
 <span class="sd">            close_env (bool, optional): If True, the collector will close the contained environment.</span>
 <span class="sd">                Defaults to `True`.</span>
 
 <span class="sd">        .. seealso:: :meth:`~.start`</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">close_env</span><span class="o">=</span><span class="n">close_env</span><span class="p">)</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extract_weights_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract weights from a model if needed.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Either already-extracted weights or a model to extract from.</span>
+<span class="sd">            model_id: The model identifier for resolving string paths.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Extracted weights in the appropriate format.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">scheme</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+        <span class="c1"># If no weights were provided and a sync scheme exists, extract the latest</span>
+        <span class="c1"># weights from the current model using the scheme strategy (state_dict or tensordict).</span>
+        <span class="c1"># This ensures we don&#39;t return stale cached weights.</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">scheme</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+                <span class="n">_resolve_model</span><span class="p">,</span>
+                <span class="n">WeightStrategy</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy</span><span class="p">)</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;policy_weights&quot;</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
+            <span class="k">elif</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_policy_weights_dict&quot;</span><span class="p">):</span>
+                <span class="n">policy_device</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">policy_device</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">scheme</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">weights</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">_resolve_model</span><span class="p">,</span>
+            <span class="n">WeightStrategy</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">weights</span>
 
 <div class="viewcode-block" id="DataCollectorBase.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</span>
@@ -739,9 +798,15 @@
 <span class="sd">            worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the</span>
 <span class="sd">                workers that need to be updated. This is relevant when the collector has more than one worker associated</span>
 <span class="sd">                with it.</span>
+<span class="sd">            model_id (str | None, optional): The model identifier to update. If provided, only updates this specific</span>
+<span class="sd">                model. Cannot be used together with weights_dict.</span>
+<span class="sd">            weights_dict (dict[str, Any] | None, optional): Dictionary mapping model_id to weights for updating</span>
+<span class="sd">                multiple models atomically. Keys should match the model_ids registered in weight_sync_schemes.</span>
+<span class="sd">                Cannot be used together with model_id or policy_or_weights.</span>
 
 <span class="sd">        Raises:</span>
 <span class="sd">            TypeError: If `worker_ids` is provided but no `weight_updater` is configured.</span>
+<span class="sd">            ValueError: If conflicting parameters are provided (e.g., both model_id and weights_dict).</span>
 
 <span class="sd">        .. note:: Users should extend the `WeightUpdaterBase` classes to customize</span>
 <span class="sd">            the weight update logic for specific use cases. This method should not be overwritten.</span>
@@ -757,9 +822,98 @@
             <span class="p">)</span>
             <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="p">(</span>
-            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span></div>
+        <span class="k">if</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;weights_dict&#39; and &#39;model_id&#39;&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot specify both &#39;weights_dict&#39; and &#39;policy_or_weights&#39;&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Priority: new weight sync schemes &gt; old weight updater system</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">weights_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">target_model_id</span><span class="p">,</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">target_model_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Model &#39;</span><span class="si">{</span><span class="n">target_model_id</span><span class="si">}</span><span class="s2">&#39; not found in registered weight senders. &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;Available models: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">processed_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span>
+                        <span class="n">weights</span><span class="p">,</span> <span class="n">target_model_id</span>
+                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="n">target_model_id</span><span class="p">]</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span>
+                        <span class="n">processed_weights</span>
+                    <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">model_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">model_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39; not found in registered weight senders. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Available models: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">processed_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span>
+                    <span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">model_id</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">processed_weights</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">:</span>
+                    <span class="n">processed_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span>
+                        <span class="n">policy_or_weights</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span>
+                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">processed_weights</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">single_model_id</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+                    <span class="n">single_sender</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="n">single_model_id</span><span class="p">]</span>
+                    <span class="n">processed_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span>
+                        <span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">single_model_id</span>
+                    <span class="p">)</span>
+                    <span class="n">single_sender</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">processed_weights</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">target_model_id</span><span class="p">,</span> <span class="n">sender</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="n">processed_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_weights_if_needed</span><span class="p">(</span>
+                            <span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">target_model_id</span>
+                        <span class="p">)</span>
+                        <span class="n">sender</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">processed_weights</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fall back to old weight updater system</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="p">(</span>
+                <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No weight updater configured</span>
+            <span class="c1"># For single-process collectors, apply weights locally if explicitly provided</span>
+            <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightStrategy</span>
+
+                <span class="c1"># Use WeightStrategy to apply weights properly</span>
+                <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="s2">&quot;tensordict&quot;</span><span class="p">)</span>
+
+                <span class="c1"># Extract weights if needed</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                    <span class="n">weights</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">weights</span> <span class="o">=</span> <span class="n">policy_or_weights</span>
+
+                <span class="c1"># Apply to local policy</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                    <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="p">(</span>
+                <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_original_policy&quot;</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_original_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="c1"># If no weights were provided, mirror weights from the original (trainer) policy</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightStrategy</span>
+
+                <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="s2">&quot;tensordict&quot;</span><span class="p">)</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_original_policy</span><span class="p">)</span>
+                <span class="c1"># Cast weights to the policy device before applying</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">)</span>
+                <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div>
+            <span class="c1"># Otherwise, no action needed - policy is local and changes are immediately visible</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
@@ -864,7 +1018,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
@@ -969,14 +1123,19 @@
 <span class="sd">            but populate the buffer instead.</span>
 <span class="sd">            Defaults to ``None``.</span>
 
-<span class="sd">            .. seealso:: By default, the buffer is populated every time a (batch of) frames is collected.</span>
-<span class="sd">                If the buffer needs to be extended with entire rollouts, set `extend_buffer` to `True`.</span>
+<span class="sd">            .. seealso:: By default (``extend_buffer=True``), the buffer is extended with entire rollouts.</span>
+<span class="sd">                If the buffer needs to be populated with individual frames as they are collected,</span>
+<span class="sd">                set ``extend_buffer=False`` (deprecated).</span>
 
-<span class="sd">            .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` is prohibited unless</span>
+<span class="sd">            .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` requires</span>
 <span class="sd">                `extend_buffer=True`, as the whole batch needs to be observed to apply these transforms.</span>
 
 <span class="sd">        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not</span>
-<span class="sd">            with single steps. Defaults to `False`.</span>
+<span class="sd">            with single steps. Defaults to `True`.</span>
+
+<span class="sd">            .. note:: Setting this to `False` is deprecated and will be removed in a future version.</span>
+<span class="sd">                Extending the buffer with entire rollouts is the recommended approach for better</span>
+<span class="sd">                compatibility with postprocessing and trajectory splitting.</span>
 <span class="sd">        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be</span>
 <span class="sd">            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules</span>
 <span class="sd">            and ``False`` otherwise.</span>
@@ -1058,6 +1217,8 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">_ignore_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">create_env_fn</span><span class="p">:</span> <span class="p">(</span>
@@ -1086,7 +1247,8 @@
         <span class="n">set_truncated</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1094,6 +1256,7 @@
         <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
         <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
@@ -1216,33 +1379,38 @@
 
         <span class="c1"># Policy version tracking setup</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
-        <span class="k">if</span> <span class="n">PolicyVersion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="n">track_policy_version</span><span class="p">:</span>
-                <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="n">track_policy_version</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
 
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">BatchedEnvBase</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                        <span class="s2">&quot;BatchedEnvBase is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, &quot;</span>
-                        <span class="s2">&quot;and pass that transform to the collector.&quot;</span>
-                    <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">PolicyVersion</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
-            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span>
-                <span class="n">track_policy_version</span><span class="p">,</span> <span class="s2">&quot;increment_version&quot;</span>
-            <span class="p">):</span>  <span class="c1"># Check if it&#39;s a PolicyVersion instance</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">track_policy_version</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                    <span class="s2">&quot;PolicyVersion is not available. Please install the LLM dependencies or set track_policy_version=False.&quot;</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">BatchedEnvBase</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;BatchedEnvBase is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, &quot;</span>
+                    <span class="s2">&quot;and pass that transform to the collector.&quot;</span>
                 <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">PolicyVersion</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span>
+            <span class="n">track_policy_version</span><span class="p">,</span> <span class="s2">&quot;increment_version&quot;</span>
+        <span class="p">):</span>  <span class="c1"># Check if it&#39;s a PolicyVersion instance</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span> <span class="o">=</span> <span class="n">extend_buffer</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="c1"># Handle local_init_rb deprecation for SyncDataCollector</span>
+        <span class="k">if</span> <span class="n">local_init_rb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">local_init_rb</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># Default for SyncDataCollector</span>
+            <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">local_init_rb</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;local_init_rb=False is deprecated and will be removed in v0.12. &quot;</span>
+                    <span class="s2">&quot;The new storage-level initialization provides better performance.&quot;</span><span class="p">,</span>
+                    <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="o">=</span> <span class="n">local_init_rb</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                     <span class="s2">&quot;postproc must be None when a replay buffer is passed, or extend_buffer must be set to True.&quot;</span>
@@ -1274,23 +1442,37 @@
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;register_collector&quot;</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
-        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_policy_and_device</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_original_policy</span> <span class="o">=</span> <span class="n">policy</span>
+        <span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_policy_and_device</span><span class="p">(</span>
             <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">wrapped_policy</span> <span class="o">=</span> <span class="n">_make_compatible_policy</span><span class="p">(</span>
+                <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+                <span class="n">observation_spec</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;observation_spec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+                <span class="n">env</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">wrapped_policy</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">policy</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span><span class="o">.</span><span class="n">data</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">compile_with_warmup</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy_kwargs</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">compile_with_warmup</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy_kwargs</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">CudaGraphModule</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">CudaGraphModule</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span>
                 <span class="n">in_keys</span><span class="o">=</span><span class="p">[],</span>
                 <span class="n">out_keys</span><span class="o">=</span><span class="p">[],</span>
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span>
@@ -1397,16 +1579,44 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
 
-        <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">weight_updater</span> <span class="o">=</span> <span class="n">VanillaWeightUpdater</span><span class="p">(</span>
-                <span class="n">weight_getter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">,</span> <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">,</span> <span class="n">WeightUpdaterBase</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;weight_updater must be a subclass of WeightUpdaterBase. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
-            <span class="p">)</span>
+        <span class="c1"># Set up weight synchronization - prefer new schemes over legacy updater</span>
+        <span class="c1"># For single-process SyncDataCollector, no weight sync is needed (policy is local)</span>
+        <span class="c1"># Weight sync schemes are only needed for multi-process/distributed collectors</span>
+        <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use new simplified weight synchronization system</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="n">weight_sync_schemes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+            <span class="c1"># For single-process collectors, we don&#39;t need senders/receivers</span>
+            <span class="c1"># The policy is local and changes are immediately visible</span>
+            <span class="c1"># Senders will be set up in multiprocess collectors during _run_processes</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Don&#39;t use legacy system</span>
+        <span class="k">elif</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use legacy weight updater system if explicitly provided</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">,</span> <span class="n">WeightUpdaterBase</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">):</span>
+                    <span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;weight_updater must be a subclass of WeightUpdaterBase. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;Using WeightUpdaterBase is deprecated. Please use weight_sync_schemes instead. &quot;</span>
+                <span class="s2">&quot;This will be removed in a future version.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No weight sync needed for single-process collectors</span>
+            <span class="c1"># The policy is local and changes are immediately visible</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_traj_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1456,18 +1666,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">make_rollout</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;spec&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="s2">&quot;spec&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="o">.</span><span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
         <span class="p">):</span>
             <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
                 <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
             <span class="p">):</span>
                 <span class="c1"># if policy spec is non-empty, all the values are not None and the keys</span>
                 <span class="c1"># match the out_keys we assume the user has given all relevant information</span>
                 <span class="c1"># the policy could have more keys than the env:</span>
-                <span class="n">policy_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">spec</span>
+                <span class="n">policy_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="o">.</span><span class="n">spec</span>
                 <span class="k">if</span> <span class="n">policy_spec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
                     <span class="n">policy_spec</span> <span class="o">=</span> <span class="n">policy_spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">policy_spec</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
@@ -1477,10 +1687,10 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
         <span class="k">elif</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="n">make_rollout</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;out_keys&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">out_keys</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="s2">&quot;out_keys&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="o">.</span><span class="n">out_keys</span>
         <span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
                 <span class="c1"># otherwise, we perform a small number of steps with the policy to</span>
@@ -1500,7 +1710,7 @@
                 <span class="p">)</span>  <span class="c1"># to test if values have changed in-place</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
                     <span class="n">cudagraph_mark_step_begin</span><span class="p">()</span>
-                <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
+                <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
 
                 <span class="c1"># check that we don&#39;t have exclusive keys, because they don&#39;t appear in keys</span>
                 <span class="k">def</span><span class="w"> </span><span class="nf">check_exclusive</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
@@ -1741,7 +1951,7 @@
                             <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                             <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
                     <span class="k">yield</span> <span class="n">tensordict_out</span>
-                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
                         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
@@ -1961,7 +2171,7 @@
                     <span class="c1"># we still do the assignment for security</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
                         <span class="n">cudagraph_mark_step_begin</span><span class="p">()</span>
-                    <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
+                    <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
                         <span class="n">policy_output</span> <span class="o">=</span> <span class="n">policy_output</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">policy_output</span><span class="p">:</span>
@@ -1997,7 +2207,11 @@
                         <span class="n">next_data</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">next_data</span><span class="p">)</span>
 
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span>
+                <span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="p">)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_increment_frames</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">numel</span><span class="p">()):</span>
                         <span class="k">return</span>
@@ -2028,7 +2242,11 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                     <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span><span class="o">.</span><span class="n">collection_stopped</span><span class="p">()</span>
                 <span class="p">):</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span>
+                        <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span>
+                    <span class="p">):</span>
                         <span class="k">return</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
@@ -2065,7 +2283,11 @@
                                 <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
                                 <span class="n">out</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="p">,</span>
                             <span class="p">)</span>
-                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span><span class="p">:</span>
+                <span class="k">elif</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span>
+                <span class="p">):</span>
                     <span class="k">return</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
@@ -2197,7 +2419,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">env_str</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;env=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
-            <span class="n">policy_str</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;policy=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
+            <span class="n">policy_str</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;policy=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
             <span class="n">td_out_str</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;td_out=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_final_rollout&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span>
             <span class="p">)</span>
@@ -2242,7 +2464,7 @@
 <div class="viewcode-block" id="SyncDataCollector.getattr_policy"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.getattr_policy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getattr_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an attribute from the policy.&quot;&quot;&quot;</span>
         <span class="c1"># send command to policy to return the attr</span>
-        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="SyncDataCollector.getattr_env"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.getattr_env">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getattr_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an attribute from the environment.&quot;&quot;&quot;</span>
@@ -2283,7 +2505,7 @@
 <span class="sd">              ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
@@ -2424,6 +2646,11 @@
 <span class="sd">            but populate the buffer instead. Defaults to ``None``.</span>
 <span class="sd">        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not</span>
 <span class="sd">            with single steps. Defaults to `True` for multiprocessed data collectors.</span>
+<span class="sd">        local_init_rb (bool, optional): if ``False``, the collector will use fake data to initialize</span>
+<span class="sd">            the replay buffer in the main process (legacy behavior). If ``True``, the storage-level</span>
+<span class="sd">            coordination will handle initialization with real data from worker processes.</span>
+<span class="sd">            Defaults to ``None``, which maintains backward compatibility but shows a deprecation warning.</span>
+<span class="sd">            This parameter is deprecated and will be removed in v0.12.</span>
 <span class="sd">        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be</span>
 <span class="sd">            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules</span>
 <span class="sd">            and ``False`` otherwise.</span>
@@ -2443,6 +2670,8 @@
 <span class="sd">            If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,</span>
 <span class="sd">            which handles weight synchronization across multiple processes.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        weight_sync_schemes (dict[str, WeightSyncScheme], optional): A dictionary of weight sync schemes for the different models.</span>
+<span class="sd">            If not provided, a :class:`~torchrl.collectors.MultiProcessWeightSyncScheme` will be used by default.</span>
 <span class="sd">        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.</span>
 <span class="sd">            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.</span>
 <span class="sd">            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track</span>
@@ -2486,6 +2715,7 @@
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">replay_buffer_chunk</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_init_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2493,6 +2723,7 @@
         <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
         <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
@@ -2564,6 +2795,21 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
+
+        <span class="c1"># Handle local_init_rb deprecation</span>
+        <span class="k">if</span> <span class="n">local_init_rb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># v0.11: Default to False (current behavior), show deprecation warning</span>
+            <span class="c1"># v0.12: Default to True (new behavior)</span>
+            <span class="n">local_init_rb</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># Will become True in 0.12</span>
+            <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">local_init_rb</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;local_init_rb=False is deprecated and will be removed in v0.12. &quot;</span>
+                    <span class="s2">&quot;The new storage-level initialization provides better performance.&quot;</span><span class="p">,</span>
+                    <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="o">=</span> <span class="n">local_init_rb</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_replay_buffer_init</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">replay_buffer_chunk</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">extend_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -2608,17 +2854,20 @@
                 <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
                     <span class="n">policy</span> <span class="o">=</span> <span class="n">policy_new_device</span>
                 <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+                    <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
                     <span class="k">else</span> <span class="n">TensorDict</span><span class="p">()</span>
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">[</span><span class="n">policy_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn</span> <span class="o">=</span> <span class="n">get_weights_fn</span>
             <span class="k">if</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">weight_updater</span> <span class="o">=</span> <span class="n">MultiProcessedWeightUpdater</span><span class="p">(</span>
-                    <span class="n">get_server_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn</span><span class="p">,</span>
-                    <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">,</span>
-                <span class="p">)</span>
+                <span class="c1"># For multiprocessed collectors, use MultiProcessWeightSyncScheme by default</span>
+                <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">weight_sync_schemes</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">MultiProcessWeightSyncScheme</span><span class="p">()}</span>
+                <span class="c1"># Don&#39;t create legacy weight updater if we have schemes</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Legacy weight updater was explicitly provided</span>
+                <span class="k">pass</span>
         <span class="k">elif</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="s2">&quot;weight_updater is None, but policy_factory is provided. This means that the server will &quot;</span>
@@ -2629,7 +2878,18 @@
                 <span class="s2">&quot;This will work whenever your inference and training policies are nn.Module instances with similar structures.&quot;</span>
             <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+        <span class="c1"># Set up weight synchronization - prefer new schemes over legacy updater</span>
+        <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use new simplified weight synchronization system</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="n">weight_sync_schemes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="c1"># Senders will be created in _run_processes when pipes are available</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Don&#39;t use legacy system</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fall back to legacy weight updater system</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="c1"># Policy version tracking setup</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
@@ -2723,8 +2983,17 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_check_replay_buffer_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="n">is_init</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;initialized&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">is_init</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;initialized&quot;</span><span class="p">,</span> <span class="kc">True</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_init</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span><span class="p">:</span>
+                <span class="c1"># New behavior: storage handles all coordination itself</span>
+                <span class="c1"># Nothing to do here - the storage will coordinate during first write</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">share</span><span class="p">()</span>
+                <span class="k">return</span>
+
+            <span class="c1"># Legacy behavior: fake tensordict initialization</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">EnvCreator</span><span class="p">):</span>
                 <span class="n">fake_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">meta_data</span><span class="o">.</span><span class="n">tensordict</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">EnvBase</span><span class="p">):</span>
@@ -2816,6 +3085,15 @@
                 <span class="mi">1</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_num_threads</span><span class="p">()</span> <span class="o">-</span> <span class="n">total_workers</span>
             <span class="p">)</span>  <span class="c1"># 1 more thread for this proc</span>
 
+        <span class="c1"># Initialize weight senders for multiprocess collectors</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">:</span>
+            <span class="c1"># Create one sender per model using scheme&#39;s factory method</span>
+            <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">sender</span> <span class="o">=</span> <span class="n">scheme</span><span class="o">.</span><span class="n">create_sender</span><span class="p">()</span>
+                <span class="n">sender</span><span class="o">.</span><span class="n">_model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="s2">&quot;set_context&quot;</span><span class="p">):</span>
+                    <span class="n">sender</span><span class="o">.</span><span class="n">set_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">sender</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span><span class="p">)</span>
         <span class="n">queue_out</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queue_len</span><span class="p">)</span>  <span class="c1"># sends data from proc to main</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">procs</span> <span class="o">=</span> <span class="p">[]</span>
@@ -2887,6 +3165,7 @@
                     <span class="s2">&quot;postproc&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                     <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;weight_sync_schemes&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
                 <span class="p">}</span>
                 <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_main_async_collector</span><span class="p">,</span>
@@ -2896,6 +3175,21 @@
                 <span class="c1"># proc.daemon can&#39;t be set as daemonic processes may be launched by the process itself</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">proc</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="s2">&quot;cannot pickle&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;A non-serializable object was passed to the collector workers.&quot;</span>
+                        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+                <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="s2">&quot;Cowardly refusing to serialize non-leaf tensor&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;At least one of the tensors in the policy, replay buffer, environment constructor or postprocessor requires gradients. &quot;</span>
+                            <span class="s2">&quot;This is not supported in multiprocessed data collectors.</span><span class="se">\n</span><span class="s2">- For ReplayBuffer transforms, use a `transform_factory` instead with `delayed_init=True`.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                            <span class="s2">&quot;- Make sure your environment constructor does not reference tensors already instantiated on the main process.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                            <span class="s2">&quot;- Since no gradient can be propagated through the Collector pipes, the backward graph is never needed. Consider using detached tensors instead.&quot;</span>
+                        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">err</span>
                 <span class="k">except</span> <span class="n">_pickle</span><span class="o">.</span><span class="n">PicklingError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">if</span> <span class="s2">&quot;&lt;lambda&gt;&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
                         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -2910,11 +3204,62 @@
                 <span class="n">pipe_child</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">proc</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pipe_parent</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">pipe_parent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">:</span>
+
+                <span class="c1"># Register worker with senders</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sender</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="n">sender</span><span class="o">.</span><span class="n">register_worker</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">pipe_parent</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">pipe_parent</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">):</span>
             <span class="n">pipe_parent</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">INSTANTIATE_TIMEOUT</span><span class="p">)</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="n">pipe_parent</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="n">pipe_parent</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">EOFError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> failed to initialize and closed the connection before sending status. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;This typically indicates that the worker process crashed during initialization. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Check the worker process logs for the actual error.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;instantiated&quot;</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="c1"># Check if it&#39;s an error dict from worker</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">):</span>
+                    <span class="c1"># Reconstruct the exception from the worker</span>
+                    <span class="n">exc_type_name</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;exception_type&quot;</span><span class="p">]</span>
+                    <span class="n">exc_msg</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;exception_msg&quot;</span><span class="p">]</span>
+                    <span class="n">traceback_str</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;traceback&quot;</span><span class="p">]</span>
+
+                    <span class="c1"># Try to get the actual exception class</span>
+                    <span class="n">exc_class</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="n">exc_module</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;exception_module&quot;</span><span class="p">]</span>
+
+                    <span class="k">if</span> <span class="n">exc_module</span> <span class="o">==</span> <span class="s2">&quot;builtins&quot;</span><span class="p">:</span>
+                        <span class="c1"># Get from builtins</span>
+                        <span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
+
+                        <span class="n">exc_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">builtins</span><span class="p">,</span> <span class="n">exc_type_name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Try to import from the module</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+                            <span class="n">mod</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">exc_module</span><span class="p">)</span>
+                            <span class="n">exc_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">exc_type_name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                            <span class="k">pass</span>
+
+                    <span class="c1"># Re-raise with original exception type if possible</span>
+                    <span class="k">if</span> <span class="n">exc_class</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">exc_class</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">exc_msg</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">Worker traceback:</span><span class="se">\n</span><span class="si">{</span><span class="n">traceback_str</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Fall back to RuntimeError if we can&#39;t get the original type</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> raised </span><span class="si">{</span><span class="n">exc_type_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc_msg</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">Worker traceback:</span><span class="se">\n</span><span class="si">{</span><span class="n">traceback_str</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Legacy string error message</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span> <span class="o">=</span> <span class="n">queue_out</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -3356,8 +3701,8 @@
 <span class="sd">        ...         if i == 2:</span>
 <span class="sd">        ...             print(data)</span>
 <span class="sd">        ...             break</span>
-<span class="sd">        &gt;&gt;&gt; collector.shutdown()</span>
-<span class="sd">        &gt;&gt;&gt; del collector</span>
+<span class="sd">        ...     collector.shutdown()</span>
+<span class="sd">        ...     del collector</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
 <span class="sd">                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -3479,6 +3824,7 @@
                     <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue_random&quot;</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
+                <span class="c1"># Debug: sending &#39;continue&#39;</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="n">msg</span><span class="p">))</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
@@ -3542,13 +3888,13 @@
                     <span class="c1"># mask buffers if cat, and create a mask if stack</span>
                     <span class="k">if</span> <span class="n">cat_results</span> <span class="o">!=</span> <span class="s2">&quot;stack&quot;</span><span class="p">:</span>
                         <span class="n">buffers</span> <span class="o">=</span> <span class="p">{}</span>
-                        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                             <span class="n">valid</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">))</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span>
                             <span class="k">if</span> <span class="n">valid</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
                                 <span class="n">valid</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
                             <span class="k">if</span> <span class="n">valid</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
                                 <span class="n">valid</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-                            <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">buffer</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">valid</span><span class="p">]</span>
+                            <span class="n">buffers</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">buffer</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">valid</span><span class="p">]</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="k">for</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                             <span class="k">with</span> <span class="n">buffer</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
@@ -3559,6 +3905,11 @@
                         <span class="n">buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span>
+
+                <span class="c1"># Skip frame counting if this worker didn&#39;t send data this iteration</span>
+                <span class="c1"># (happens when reusing buffers or on first iteration with some workers)</span>
+                <span class="k">if</span> <span class="n">idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">buffers</span><span class="p">:</span>
+                    <span class="k">continue</span>
 
                 <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
 
@@ -3578,7 +3929,7 @@
             <span class="c1"># we have to correct the traj_ids to make sure that they don&#39;t overlap</span>
             <span class="c1"># We can count the number of frames collected for free in this loop</span>
             <span class="n">n_collected</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">buffers</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
                 <span class="n">buffer</span> <span class="o">=</span> <span class="n">buffers</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
                 <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">))</span>
                 <span class="k">if</span> <span class="n">preempt</span><span class="p">:</span>
@@ -3737,8 +4088,8 @@
 <span class="sd">        ...         if i == 2:</span>
 <span class="sd">        ...             print(data)</span>
 <span class="sd">        ...             break</span>
-<span class="sd">        ... collector.shutdown()</span>
-<span class="sd">        ... del collector</span>
+<span class="sd">        ...     collector.shutdown()</span>
+<span class="sd">        ...     del collector</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
 <span class="sd">                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -3973,7 +4324,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
@@ -3987,8 +4338,8 @@
 <span class="sd">            total number of frames returned by the collector</span>
 <span class="sd">            during its lifespan. If the ``total_frames`` is not divisible by</span>
 <span class="sd">            ``frames_per_batch``, an exception is raised.</span>
-<span class="sd">             Endless collectors can be created by passing ``total_frames=-1``.</span>
-<span class="sd">             Defaults to ``-1`` (never ending collector).</span>
+<span class="sd">            Endless collectors can be created by passing ``total_frames=-1``.</span>
+<span class="sd">            Defaults to ``-1`` (never ending collector).</span>
 <span class="sd">        device (int, str or torch.device, optional): The generic device of the</span>
 <span class="sd">            collector. The ``device`` args fills any non-specified device: if</span>
 <span class="sd">            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or</span>
@@ -4197,6 +4548,7 @@
     <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">collector_class</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">DataCollectorBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">collector_class</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">collector_class</span> <span class="o">=</span> <span class="n">SyncDataCollector</span>
@@ -4204,40 +4556,77 @@
     <span class="c1"># init variables that will be cleared when closing</span>
     <span class="n">collected_tensordict</span> <span class="o">=</span> <span class="n">data</span> <span class="o">=</span> <span class="n">next_data</span> <span class="o">=</span> <span class="n">data_in</span> <span class="o">=</span> <span class="n">inner_collector</span> <span class="o">=</span> <span class="n">dc_iter</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="n">inner_collector</span> <span class="o">=</span> <span class="n">collector_class</span><span class="p">(</span>
-        <span class="n">create_env_fn</span><span class="p">,</span>
-        <span class="n">create_env_kwargs</span><span class="o">=</span><span class="n">create_env_kwargs</span><span class="p">,</span>
-        <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
-        <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
-        <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
-        <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
-        <span class="n">reset_at_each_iter</span><span class="o">=</span><span class="n">reset_at_each_iter</span><span class="p">,</span>
-        <span class="n">postproc</span><span class="o">=</span><span class="n">postproc</span><span class="p">,</span>
-        <span class="n">split_trajs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">storing_device</span><span class="o">=</span><span class="n">storing_device</span><span class="p">,</span>
-        <span class="n">policy_device</span><span class="o">=</span><span class="n">policy_device</span><span class="p">,</span>
-        <span class="n">env_device</span><span class="o">=</span><span class="n">env_device</span><span class="p">,</span>
-        <span class="n">exploration_type</span><span class="o">=</span><span class="n">exploration_type</span><span class="p">,</span>
-        <span class="n">reset_when_done</span><span class="o">=</span><span class="n">reset_when_done</span><span class="p">,</span>
-        <span class="n">return_same_td</span><span class="o">=</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">interruptor</span><span class="o">=</span><span class="n">interruptor</span><span class="p">,</span>
-        <span class="n">set_truncated</span><span class="o">=</span><span class="n">set_truncated</span><span class="p">,</span>
-        <span class="n">use_buffers</span><span class="o">=</span><span class="n">use_buffers</span><span class="p">,</span>
-        <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">extend_buffer</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">extend_buffer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">traj_pool</span><span class="o">=</span><span class="n">traj_pool</span><span class="p">,</span>
-        <span class="n">trust_policy</span><span class="o">=</span><span class="n">trust_policy</span><span class="p">,</span>
-        <span class="n">compile_policy</span><span class="o">=</span><span class="n">compile_policy</span><span class="p">,</span>
-        <span class="n">cudagraph_policy</span><span class="o">=</span><span class="n">cudagraph_policy</span><span class="p">,</span>
-        <span class="n">no_cuda_sync</span><span class="o">=</span><span class="n">no_cuda_sync</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">use_buffers</span> <span class="o">=</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">_use_buffers</span>
-    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Sync data collector created&quot;</span><span class="p">)</span>
-    <span class="n">dc_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">inner_collector</span><span class="p">)</span>
-    <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;instantiated&quot;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">collector_class</span><span class="o">.</span><span class="n">_ignore_rb</span> <span class="o">=</span> <span class="n">extend_buffer</span>
+        <span class="n">inner_collector</span> <span class="o">=</span> <span class="n">collector_class</span><span class="p">(</span>
+            <span class="n">create_env_fn</span><span class="p">,</span>
+            <span class="n">create_env_kwargs</span><span class="o">=</span><span class="n">create_env_kwargs</span><span class="p">,</span>
+            <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+            <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
+            <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
+            <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
+            <span class="n">reset_at_each_iter</span><span class="o">=</span><span class="n">reset_at_each_iter</span><span class="p">,</span>
+            <span class="n">postproc</span><span class="o">=</span><span class="n">postproc</span><span class="p">,</span>
+            <span class="n">split_trajs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">storing_device</span><span class="o">=</span><span class="n">storing_device</span><span class="p">,</span>
+            <span class="n">policy_device</span><span class="o">=</span><span class="n">policy_device</span><span class="p">,</span>
+            <span class="n">env_device</span><span class="o">=</span><span class="n">env_device</span><span class="p">,</span>
+            <span class="n">exploration_type</span><span class="o">=</span><span class="n">exploration_type</span><span class="p">,</span>
+            <span class="n">reset_when_done</span><span class="o">=</span><span class="n">reset_when_done</span><span class="p">,</span>
+            <span class="n">return_same_td</span><span class="o">=</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">interruptor</span><span class="o">=</span><span class="n">interruptor</span><span class="p">,</span>
+            <span class="n">set_truncated</span><span class="o">=</span><span class="n">set_truncated</span><span class="p">,</span>
+            <span class="n">use_buffers</span><span class="o">=</span><span class="n">use_buffers</span><span class="p">,</span>
+            <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+            <span class="n">extend_buffer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">traj_pool</span><span class="o">=</span><span class="n">traj_pool</span><span class="p">,</span>
+            <span class="n">trust_policy</span><span class="o">=</span><span class="n">trust_policy</span><span class="p">,</span>
+            <span class="n">compile_policy</span><span class="o">=</span><span class="n">compile_policy</span><span class="p">,</span>
+            <span class="n">cudagraph_policy</span><span class="o">=</span><span class="n">cudagraph_policy</span><span class="p">,</span>
+            <span class="n">no_cuda_sync</span><span class="o">=</span><span class="n">no_cuda_sync</span><span class="p">,</span>
+            <span class="n">weight_sync_schemes</span><span class="o">=</span><span class="n">weight_sync_schemes</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Set up weight receivers for worker process</span>
+        <span class="k">if</span> <span class="n">weight_sync_schemes</span><span class="p">:</span>
+            <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="n">weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">receiver</span> <span class="o">=</span> <span class="n">scheme</span><span class="o">.</span><span class="n">create_receiver</span><span class="p">()</span>
+                <span class="n">receiver</span><span class="o">.</span><span class="n">set_context</span><span class="p">(</span><span class="n">inner_collector</span><span class="p">)</span>
+                <span class="n">receiver</span><span class="o">.</span><span class="n">register_worker_transport</span><span class="p">(</span><span class="n">pipe_child</span><span class="p">)</span>
+
+                <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="n">inner_collector</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+                <span class="n">receiver</span><span class="o">.</span><span class="n">register_model</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+                <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">receiver</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="n">use_buffers</span> <span class="o">=</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">_use_buffers</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Sync data collector created&quot;</span><span class="p">)</span>
+        <span class="n">dc_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">inner_collector</span><span class="p">)</span>
+        <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;instantiated&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Send error information to main process</span>
+        <span class="c1"># We send a dict with the exception info so we can recreate it in the main process</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+
+        <span class="n">error_info</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;exception_type&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+            <span class="s2">&quot;exception_module&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__module__</span><span class="p">,</span>
+            <span class="s2">&quot;exception_msg&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+            <span class="s2">&quot;traceback&quot;</span><span class="p">:</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">(),</span>
+        <span class="p">}</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">error_info</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="c1"># If pipe is broken, nothing we can do</span>
+            <span class="k">pass</span>
+        <span class="k">return</span>
 
     <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
@@ -4310,7 +4699,81 @@
                 <span class="n">data_in</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="c1"># TODO: this does not work with random frames</span>
                 <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
+        <span class="c1"># Note: The &quot;continue&quot; message handling has been moved below after update_weights handling</span>
+        <span class="c1"># to allow falling through from update_weights to continue</span>
+
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;update&quot;</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> updating the params...&quot;</span><span class="p">)</span>
+            <span class="n">inner_collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">data_in</span><span class="p">)</span>
+            <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">j</span><span class="p">,</span> <span class="s2">&quot;updated&quot;</span><span class="p">))</span>
+            <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;register_shared_weights&quot;</span><span class="p">:</span>
+            <span class="c1"># Shared memory lazy registration: main process sends buffer reference</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> received shared memory buffer registration&quot;</span>
+                <span class="p">)</span>
+            <span class="n">model_id</span><span class="p">,</span> <span class="n">shared_buffer</span> <span class="o">=</span> <span class="n">data_in</span>
+
+            <span class="c1"># Store the shared buffer reference for this model</span>
+            <span class="c1"># The receiver will use this buffer for all future weight accesses</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span>
+                <span class="ow">and</span> <span class="n">model_id</span> <span class="ow">in</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span>
+            <span class="p">):</span>
+                <span class="c1"># Update receiver&#39;s buffer reference</span>
+                <span class="n">receiver</span> <span class="o">=</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span>
+                <span class="c1"># Store the shared buffer - the model&#39;s parameters should point to this</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">receiver</span><span class="p">,</span> <span class="s2">&quot;_shared_weights&quot;</span><span class="p">):</span>
+                    <span class="n">receiver</span><span class="o">.</span><span class="n">_shared_weights</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">shared_buffer</span>
+
+                <span class="c1"># Apply the buffer to the model immediately</span>
+                <span class="n">receiver</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">shared_buffer</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> registered shared buffer for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> received shared buffer for unknown model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Send acknowledgment back to main process</span>
+            <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;registered&quot;</span><span class="p">))</span>
+            <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;update_weights&quot;</span><span class="p">:</span>
+            <span class="c1"># New weight update protocol for simplified weight sync system</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> received weight update via new protocol&quot;</span>
+                <span class="p">)</span>
+            <span class="n">model_id</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">data_in</span>
+
+            <span class="c1"># Apply weights using the appropriate receiver for this model</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span>
+                <span class="ow">and</span> <span class="n">model_id</span> <span class="ow">in</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span>
+            <span class="p">):</span>
+                <span class="n">inner_collector</span><span class="o">.</span><span class="n">_weight_receivers</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> received weights for unknown model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># After applying weights, we continue collecting immediately as if we received</span>
+            <span class="c1"># a &quot;continue&quot; message. This ensures the worker keeps collecting data without</span>
+            <span class="c1"># waiting for an explicit continue from the main process.</span>
+            <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
+            <span class="c1"># Now check if we should continue collecting</span>
+
         <span class="k">if</span> <span class="n">msg</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;continue&quot;</span><span class="p">,</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">):</span>
+            <span class="c1"># This block handles both explicit continue messages and implicit ones after weight updates</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">:</span>
                 <span class="n">inner_collector</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -4402,14 +4865,7 @@
                 <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="k">continue</span>
 
-        <span class="k">elif</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;update&quot;</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> updating the params...&quot;</span><span class="p">)</span>
-            <span class="n">inner_collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">data_in</span><span class="p">)</span>
-            <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">j</span><span class="p">,</span> <span class="s2">&quot;updated&quot;</span><span class="p">))</span>
-            <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">continue</span>
-
-        <span class="k">elif</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;seed&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;seed&quot;</span><span class="p">:</span>
             <span class="n">data_in</span><span class="p">,</span> <span class="n">static_seed</span> <span class="o">=</span> <span class="n">data_in</span>
             <span class="n">new_seed</span> <span class="o">=</span> <span class="n">inner_collector</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">data_in</span><span class="p">,</span> <span class="n">static_seed</span><span class="o">=</span><span class="n">static_seed</span><span class="p">)</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">data_in</span><span class="p">)</span>

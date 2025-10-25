@@ -594,6 +594,7 @@
 
 <span class="sd">    Input Keys:</span>
 <span class="sd">        The input key depends on both `input_mode` and `generate`:</span>
+
 <span class="sd">        - If `input_mode=&quot;history&quot;` and `generate=True`: `input_key` (defaults to `(&quot;history&quot;, &quot;prompt&quot;)`)</span>
 <span class="sd">        - If `input_mode=&quot;history&quot;` and `generate=False`: `input_key` (defaults to `(&quot;history&quot;, &quot;full&quot;)`)</span>
 <span class="sd">        - If `input_mode=&quot;text&quot;` and `generate=True`: `input_key` (defaults to `(&quot;text&quot;, &quot;prompt&quot;)`)</span>
@@ -2638,7 +2639,8 @@
                 <span class="s2">&quot;Input contains empty sequences. Packing/padding requires at least one token per sequence.&quot;</span>
             <span class="p">)</span>
         <span class="c1"># Error handling for overlong sequences</span>
-        <span class="n">max_len</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;max_position_embeddings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;config&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">max_len</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="s2">&quot;max_position_embeddings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">max_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tokens_full_padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">max_len</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Input sequence length (</span><span class="si">{</span><span class="n">tokens_full_padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">) exceeds model&#39;s max_position_embeddings (</span><span class="si">{</span><span class="n">max_len</span><span class="si">}</span><span class="s2">). Consider truncating or splitting your input.&quot;</span>
