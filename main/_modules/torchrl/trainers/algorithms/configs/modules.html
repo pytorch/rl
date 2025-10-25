@@ -644,7 +644,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">module</span><span class="p">:</span> <span class="n">MLPConfig</span> <span class="o">=</span> <span class="n">MISSING</span>
-    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tensordict.nn.TensorDictModule&quot;</span>
+    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;torchrl.trainers.algorithms.configs.modules._make_tensordict_module&quot;</span>
+    <span class="p">)</span>
     <span class="n">_partial_</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -714,6 +716,30 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span></div>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_tensordict_module</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper function to create a TensorDictModule.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">hydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">instantiate</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
+
+    <span class="n">module</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;module&quot;</span><span class="p">)</span>
+    <span class="n">shared</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># Instantiate the module if it&#39;s a config</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;_target_&quot;</span><span class="p">):</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">instantiate</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">module</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;func&quot;</span><span class="p">):</span>  <span class="c1"># partial function</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">module</span><span class="p">()</span>
+
+    <span class="c1"># Create the TensorDictModule</span>
+    <span class="n">tensordict_module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># Apply share_memory if needed</span>
+    <span class="k">if</span> <span class="n">shared</span><span class="p">:</span>
+        <span class="n">tensordict_module</span> <span class="o">=</span> <span class="n">tensordict_module</span><span class="o">.</span><span class="n">share_memory</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">tensordict_module</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_make_tanh_normal_model</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper function to create a TanhNormal model with ProbabilisticTensorDictSequential.&quot;&quot;&quot;</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">hydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">instantiate</span>
@@ -773,13 +799,27 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_make_value_model</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper function to create a ValueOperator with the given network.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">hydra.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">instantiate</span>
+
     <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValueOperator</span>
 
     <span class="n">network</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;network&quot;</span><span class="p">)</span>
     <span class="n">shared</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># Instantiate the network if it&#39;s a config</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="s2">&quot;_target_&quot;</span><span class="p">):</span>
+        <span class="n">network</span> <span class="o">=</span> <span class="n">instantiate</span><span class="p">(</span><span class="n">network</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">network</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="s2">&quot;func&quot;</span><span class="p">):</span>  <span class="c1"># partial function</span>
+        <span class="n">network</span> <span class="o">=</span> <span class="n">network</span><span class="p">()</span>
+
+    <span class="c1"># Create the ValueOperator</span>
+    <span class="n">value_operator</span> <span class="o">=</span> <span class="n">ValueOperator</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># Apply share_memory if needed</span>
     <span class="k">if</span> <span class="n">shared</span><span class="p">:</span>
-        <span class="n">network</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">share_memory</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">ValueOperator</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">value_operator</span> <span class="o">=</span> <span class="n">value_operator</span><span class="o">.</span><span class="n">share_memory</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">value_operator</span>
 </pre></div>
 
              </article>

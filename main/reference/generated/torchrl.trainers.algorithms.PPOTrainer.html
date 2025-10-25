@@ -450,6 +450,46 @@ This trainer defaults to 4 epochs, which is a common choice for PPO implementati
 - Episode completion rates
 - Observation statistics (optional)</p>
 <p>Logging can be configured via constructor parameters to enable/disable specific metrics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><em>DataCollectorBase</em></a>) – The data collector for gathering training data.</p></li>
+<li><p><strong>total_frames</strong> (<em>int</em>) – Total number of frames to train for.</p></li>
+<li><p><strong>frame_skip</strong> (<em>int</em>) – Frame skip value for the environment.</p></li>
+<li><p><strong>optim_steps_per_batch</strong> (<em>int</em>) – Number of optimization steps per batch.</p></li>
+<li><p><strong>loss_module</strong> (<a class="reference internal" href="torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><em>LossModule</em></a>) – The loss module for computing policy and value losses.</p></li>
+<li><p><strong>optimizer</strong> (<em>optim.Optimizer</em><em>, </em><em>optional</em>) – The optimizer for training.</p></li>
+<li><p><strong>logger</strong> (<em>Logger</em><em>, </em><em>optional</em>) – Logger for tracking training metrics.</p></li>
+<li><p><strong>clip_grad_norm</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to clip gradient norms. Default: True.</p></li>
+<li><p><strong>clip_norm</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum gradient norm value.</p></li>
+<li><p><strong>progress_bar</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to show a progress bar. Default: True.</p></li>
+<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – Random seed for reproducibility.</p></li>
+<li><p><strong>save_trainer_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – Interval for saving trainer state. Default: 10000.</p></li>
+<li><p><strong>log_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – Interval for logging metrics. Default: 10000.</p></li>
+<li><p><strong>save_trainer_file</strong> (<em>str</em><em> | </em><em>pathlib.Path</em><em>, </em><em>optional</em>) – File path for saving trainer state.</p></li>
+<li><p><strong>num_epochs</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of epochs per batch. Default: 4.</p></li>
+<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><em>ReplayBuffer</em></a><em>, </em><em>optional</em>) – Replay buffer for storing data.</p></li>
+<li><p><strong>batch_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Batch size for optimization.</p></li>
+<li><p><strong>gamma</strong> (<em>float</em><em>, </em><em>optional</em>) – Discount factor for GAE. Default: 0.9.</p></li>
+<li><p><strong>lmbda</strong> (<em>float</em><em>, </em><em>optional</em>) – Lambda parameter for GAE. Default: 0.99.</p></li>
+<li><p><strong>enable_logging</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable logging. Default: True.</p></li>
+<li><p><strong>log_rewards</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log rewards. Default: True.</p></li>
+<li><p><strong>log_actions</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log actions. Default: True.</p></li>
+<li><p><strong>log_observations</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log observations. Default: False.</p></li>
+<li><p><strong>async_collection</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use async collection. Default: False.</p></li>
+<li><p><strong>add_gae</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to add GAE computation. Default: True.</p></li>
+<li><p><strong>gae</strong> (<em>Callable</em><em>, </em><em>optional</em>) – Custom GAE module. If None and add_gae is True, a default GAE will be created.</p></li>
+<li><p><strong>weight_update_map</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Mapping from collector destination paths (keys in
+collector’s weight_sync_schemes) to trainer source paths. Required if collector has
+weight_sync_schemes configured. Example: {“policy”: “loss_module.actor_network”,
+“replay_buffer.transforms[0]”: “loss_module.critic_network”}</p></li>
+<li><p><strong>log_timings</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, automatically register a LogTiming hook to log
+timing information for all hooks to the logger (e.g., wandb, tensorboard).
+Timing metrics will be logged with prefix “time/” (e.g., “time/hook/UpdateWeights”).
+Default is False.</p></li>
+</ul>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic usage with manual configuration</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers.algorithms.ppo</span><span class="w"> </span><span class="kn">import</span> <span class="n">PPOTrainer</span>
