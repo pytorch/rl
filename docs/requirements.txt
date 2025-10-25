@@ -16,7 +16,7 @@ sphinx_design
 torchvision
 dm_control
 mujoco<3.3.6
-gym[classic_control,accept-rom-license,ale-py,atari]
+gymnasium[classic_control,atari]
 pygame
 tqdm
 ipython

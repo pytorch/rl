@@ -282,12 +282,13 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     ) -> None:
         """Shuts down the collector when started asynchronously with the `start` method.
 
-        Arg:
+        Args:
             timeout (float, optional): The maximum time to wait for the collector to shutdown.
             close_env (bool, optional): If True, the collector will close the contained environment.
                 Defaults to `True`.
 
         .. seealso:: :meth:`~.start`
+
         """
         return self.shutdown(timeout=timeout, close_env=close_env)
 
@@ -595,7 +596,7 @@ class SyncDataCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], optional): a callable that returns
@@ -2082,7 +2083,7 @@ class _MultiDataCollector(DataCollectorBase):
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
@@ -3278,8 +3279,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        >>> collector.shutdown()
-        >>> del collector
+        ...     collector.shutdown()
+        ...     del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -3665,8 +3666,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        ... collector.shutdown()
-        ... del collector
+        ...     collector.shutdown()
+        ...     del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -3901,7 +3902,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], optional): a callable that returns
@@ -3915,8 +3916,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             total number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
-             Endless collectors can be created by passing ``total_frames=-1``.
-             Defaults to ``-1`` (never ending collector).
+            Endless collectors can be created by passing ``total_frames=-1``.
+            Defaults to ``-1`` (never ending collector).
         device (int, str or torch.device, optional): The generic device of the
             collector. The ``device`` args fills any non-specified device: if
             ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
