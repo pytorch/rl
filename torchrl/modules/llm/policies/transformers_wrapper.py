@@ -172,6 +172,7 @@ class TransformersWrapper(LLMWrapperBase):
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
+
         - If `input_mode="history"` and `generate=True`: `input_key` (defaults to `("history", "prompt")`)
         - If `input_mode="history"` and `generate=False`: `input_key` (defaults to `("history", "full")`)
         - If `input_mode="text"` and `generate=True`: `input_key` (defaults to `("text", "prompt")`)
