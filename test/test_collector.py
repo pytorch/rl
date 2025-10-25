@@ -79,6 +79,7 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from torchrl.weight_update import SharedMemWeightSyncScheme
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -3835,14 +3836,25 @@ class TestPolicyFactory:
 
     @pytest.mark.skipif(not _has_cuda, reason="requires cuda another device than CPU.")
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
-    def test_weight_update(self):
+    @pytest.mark.parametrize(
+        "weight_updater", ["scheme_shared", "scheme_pipe", "weight_updater"]
+    )
+    def test_weight_update(self, weight_updater):
         device = "cuda:0"
         env_maker = lambda: GymEnv(PENDULUM_VERSIONED(), device="cpu")
         policy_factory = lambda: TensorDictModule(
-            nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
-        ).to(device)
+            nn.Linear(3, 1, device=device), in_keys=["observation"], out_keys=["action"]
+        )
         policy = policy_factory()
         policy_weights = TensorDict.from_module(policy)
+        if weight_updater == "scheme_shared":
+            kwargs = {"weight_schemes": {"policy": SharedMemWeightSyncScheme()}}
+        elif weight_updater == "scheme_pip":
+            kwargs = {"weight_schemes": {"policy": SharedMemWeightSyncScheme()}}
+        elif weight_updater == "weight_updater":
+            kwargs = {"weight_updater": self.MPSWeightUpdaterBase(policy_weights, 2)}
+        else:
+            raise NotImplementedError
 
         collector = MultiSyncDataCollector(
             create_env_fn=[env_maker, env_maker],
@@ -3854,7 +3866,7 @@ class TestPolicyFactory:
             reset_at_each_iter=False,
             device=device,
             storing_device="cpu",
-            weight_updater=self.MPSWeightUpdaterBase(policy_weights, 2),
+            **kwargs,
         )
 
         collector.update_policy_weights_()
