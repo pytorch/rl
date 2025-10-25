@@ -222,7 +222,9 @@ class TensorDictModuleConfig(ModelConfig):
     """
 
     module: MLPConfig = MISSING
-    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_tensordict_module"
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_tensordict_module"
+    )
     _partial_: bool = False
 
     def __post_init__(self) -> None:
