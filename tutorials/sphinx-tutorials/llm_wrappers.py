@@ -226,7 +226,7 @@ except NameError:
 
 # %%
 # Example 5: TensorClass Structure Exploration
-# -------------------------------------------
+# ----------------------------------------------
 # Let's explore the structured outputs provided by both wrappers.
 
 try:
@@ -312,7 +312,7 @@ except ValueError as e:
 
 # %%
 # Example 7: RL Environment Integration
-# ------------------------------------
+# --------------------------------------
 # The wrappers are designed to work seamlessly with TorchRL environments.
 
 print("\nRL Environment Integration:")
