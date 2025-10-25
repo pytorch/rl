@@ -5423,8 +5423,8 @@ class Hash(UnaryTransform):
         """Look up the input that was given for a particular hash output.
 
         This feature is only available if, during initialization, either the
-        :arg:`repertoire` argument was given or both the :arg:`in_keys_inv` and
-        :arg:`out_keys_inv` arguments were given.
+        ``repertoire`` argument was given or both the ``in_keys_inv`` and
+        ``out_keys_inv`` arguments were given.
 
         Args:
             hash_tensor (Tensor): The hash output.
