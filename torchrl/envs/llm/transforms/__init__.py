@@ -15,22 +15,37 @@ from .kl import KLComputation, KLRewardTransform, RetrieveKL, RetrieveLogProb
 from .policy_version import PolicyVersion
 from .reason import AddThinkingPrompt
 from .tokenizer import Tokenizer
-from .tools import MCPToolTransform, PythonInterpreter
+from .tools import (
+    ExecuteToolsInOrder,
+    JSONCallParser,
+    MCPToolTransform,
+    PythonInterpreter,
+    ToolCall,
+    ToolRegistry,
+    ToolService,
+    XMLBlockParser,
+)
 
 __all__ = [
+    "AddThinkingPrompt",
     "BrowserTransform",
     "DataLoadingPrimer",
-    "RayDataLoadingPrimer",
+    "ExecuteToolsInOrder",
+    "JSONCallParser",
+    "KLComputation",
     "KLRewardTransform",
-    "RetrieveLogProb",
-    "RetrieveKL",
     "MCPToolTransform",
     "PolicyVersion",
     "PythonInterpreter",
-    "AddThinkingPrompt",
-    "KLComputation",
+    "RayDataLoadingPrimer",
+    "RetrieveKL",
+    "RetrieveLogProb",
     "TemplateTransform",
     "Tokenizer",
+    "ToolCall",
+    "ToolRegistry",
+    "ToolService",
+    "XMLBlockParser",
     "as_nested_tensor",
     "as_padded_tensor",
 ]
