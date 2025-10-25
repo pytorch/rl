@@ -28,6 +28,7 @@ dependencies:
     - dm_control
     - mujoco<3.3.6
     - mlflow
+    - trackio
     - av
     - coverage
     - ray
