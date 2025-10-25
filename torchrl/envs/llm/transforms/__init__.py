@@ -15,7 +15,7 @@ from .kl import KLComputation, KLRewardTransform, RetrieveKL, RetrieveLogProb
 from .policy_version import PolicyVersion
 from .reason import AddThinkingPrompt
 from .tokenizer import Tokenizer
-from .tools import MCPToolTransform, PythonInterpreter
+from .tools import MCPToolTransform, PythonInterpreter, ToolTransformBase
 
 __all__ = [
     "BrowserTransform",
@@ -31,6 +31,7 @@ __all__ = [
     "KLComputation",
     "TemplateTransform",
     "Tokenizer",
+    "ToolTransformBase",
     "as_nested_tensor",
     "as_padded_tensor",
 ]

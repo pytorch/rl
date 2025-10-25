@@ -869,7 +869,8 @@ Transforms are the main way to extend ChatEnv with specific capabilities:
 
 - **Reward computation**: :class:`~torchrl.envs.llm.transforms.KLRewardTransform` for KL divergence rewards
 - **Tool execution**: :class:`~torchrl.envs.llm.transforms.PythonInterpreter` for Python code 
-  execution, :class:`~torchrl.envs.llm.transforms.MCPToolTransform` for general tool calling.
+  execution, :class:`~torchrl.envs.llm.transforms.ExecuteToolsInOrder` for order-preserving tool execution with 
+  pluggable services, :class:`~torchrl.envs.llm.transforms.MCPToolTransform` for general tool calling (legacy).
 - **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets
 - **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning
 - **Policy tracking**: :class:`~torchrl.envs.llm.transforms.PolicyVersion` for version control
@@ -928,6 +929,75 @@ Transforms
 Transforms are used to modify the data before it is passed to the LLM.
 Tools are usually implemented as transforms, and appended to a base environment
 such as :class:`~torchrl.envs.llm.ChatEnv`.
+
+Tool Service Library
+^^^^^^^^^^^^^^^^^^^^
+
+TorchRL provides a flexible tool service library for adding tool-calling capabilities to LLM agents.
+The :class:`~torchrl.envs.llm.transforms.ExecuteToolsInOrder` transform enables LLMs to call external tools
+(e.g., web search, calculators, databases) in a structured, order-preserving manner.
+
+**Key Features:**
+
+- **Order-Preserving Execution**: Tools execute in the order they appear in the LLM output, respecting the LLM's reasoning
+- **Pluggable Parsers**: Support for different tool-calling formats (XML, JSON, custom) via :class:`~torchrl.envs.llm.transforms.XMLBlockParser` and :class:`~torchrl.envs.llm.transforms.JSONCallParser`
+- **Protocol-Based Services**: Clean interfaces using :class:`~torchrl.envs.llm.transforms.ToolService` protocol for easy extension
+- **Service Registry**: :class:`~torchrl.envs.llm.transforms.ToolRegistry` manages available tool services
+- **State Passing**: Optional filtered TensorDict state access for tools
+- **Error Handling**: Configurable fail-fast or continue-on-error behavior
+
+**Basic Usage:**
+
+.. code-block:: python
+
+    from torchrl.envs.llm.transforms import (
+        ExecuteToolsInOrder,
+        ToolRegistry,
+        XMLBlockParser,
+    )
+    from torchrl.envs.llm import ChatEnv
+    from torchrl.envs.transforms import TransformedEnv
+    
+    # Define a tool service
+    class WebSearchService:
+        name = "search"
+        schema_in = {"query": str}
+        schema_out = {"results": list}
+        
+        def __call__(self, query: str, **kwargs):
+            # Implement your search logic
+            return {"results": [...]}
+    
+    # Create registry and parser
+    registry = ToolRegistry([WebSearchService()])
+    parser = XMLBlockParser()  # Or JSONCallParser()
+    
+    # Create environment with tool execution
+    env = ChatEnv(batch_size=(1,), input_mode="history")
+    env = TransformedEnv(
+        env,
+        ExecuteToolsInOrder(
+            registry=registry,
+            parser=parser,
+            stop_on_error=False,
+            pass_state_to_tools=True,
+        )
+    )
+
+The LLM generates responses with tool calls (e.g., ``<tool name="search">{"query": "TorchRL"}</tool>``),
+and the transform automatically parses, executes, and injects results back into the conversation history.
+
+**Parser Formats:**
+
+- **XML Style** (:class:`~torchrl.envs.llm.transforms.XMLBlockParser`): Parses ``<tool name="..." tag="...">JSON</tool>`` blocks
+- **JSON Style** (:class:`~torchrl.envs.llm.transforms.JSONCallParser`): Parses ``{"message": "...", "tools": [...]}`` format
+- **Custom Parsers**: Implement the :class:`~torchrl.envs.llm.transforms.LLMToolParser` protocol for custom formats
+
+For more details and examples, see ``examples/llm/tool_service_example.py`` and the comprehensive guide at
+``torchrl/envs/llm/transforms/TOOL_SERVICE_GUIDE.md``.
+
+Python Interpreter Example
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An example of a tool transform is the :class:`~torchrl.envs.llm.transforms.PythonInterpreter` transform, which is used
 to execute Python code in the context of the LLM.
@@ -1137,6 +1207,8 @@ By following these design principles, reward transforms can be effectively integ
     AddThinkingPrompt
     BrowserTransform
     DataLoadingPrimer
+    ExecuteToolsInOrder
+    JSONCallParser
     KLComputation
     KLRewardTransform
     MCPToolTransform
@@ -1147,6 +1219,10 @@ By following these design principles, reward transforms can be effectively integ
     RetrieveLogProb
     TemplateTransform
     Tokenizer
+    ToolCall
+    ToolRegistry
+    ToolService
+    XMLBlockParser
     as_nested_tensor
     as_padded_tensor
 
