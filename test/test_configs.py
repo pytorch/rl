@@ -835,7 +835,10 @@ class TestModuleConfigs:
             in_keys=["observation"],
             out_keys=["action"],
         )
-        assert cfg._target_ == "tensordict.nn.TensorDictModule"
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_tensordict_module"
+        )
         assert cfg.module._target_ == "torchrl.modules.MLP"
         assert cfg.in_keys == ["observation"]
         assert cfg.out_keys == ["action"]
