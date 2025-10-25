@@ -1,7 +1,7 @@
 .. currentmodule:: torchrl
 
 torchrl._utils package
-====================
+======================
 
 Set of utility methods that are used internally by the library.
 

@@ -132,7 +132,7 @@ class RayCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable

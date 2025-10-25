@@ -622,7 +622,7 @@ class Ordinal(D.Categorical):
     not impose any notion of proximity or ordering over its support's atoms.
     The `Ordinal` distribution explicitly encodes those concepts, which is
     useful for learning discrete sampling from continuous sets. See §5 of
-    `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
+    `Tang & Agrawal, 2020 <https://arxiv.org/pdf/1901.10500.pdf>`_ for details.
 
     .. note::
         This class is mostly useful when you want to learn a distribution over
