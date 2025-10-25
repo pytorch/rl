@@ -18,7 +18,7 @@ from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
-from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+from torchrl.modules.llm import AsyncVLLM
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
