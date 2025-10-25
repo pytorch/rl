@@ -212,7 +212,6 @@ class PPOTrainer(Trainer):
 
             if not self.async_collection:
                 # rb has been extended by the collector
-                raise RuntimeError
                 self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)

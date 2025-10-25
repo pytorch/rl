@@ -222,7 +222,7 @@ class TensorDictModuleConfig(ModelConfig):
     """
 
     module: MLPConfig = MISSING
-    _target_: str = "tensordict.nn.TensorDictModule"
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_tensordict_module"
     _partial_: bool = False
 
     def __post_init__(self) -> None:
@@ -292,6 +292,30 @@ class ValueModelConfig(ModelConfig):
         super().__post_init__()
 
 
+def _make_tensordict_module(*args, **kwargs):
+    """Helper function to create a TensorDictModule."""
+    from hydra.utils import instantiate
+    from tensordict.nn import TensorDictModule
+
+    module = kwargs.pop("module")
+    shared = kwargs.pop("shared", False)
+
+    # Instantiate the module if it's a config
+    if hasattr(module, "_target_"):
+        module = instantiate(module)
+    elif callable(module) and hasattr(module, "func"):  # partial function
+        module = module()
+
+    # Create the TensorDictModule
+    tensordict_module = TensorDictModule(module, **kwargs)
+
+    # Apply share_memory if needed
+    if shared:
+        tensordict_module = tensordict_module.share_memory()
+
+    return tensordict_module
+
+
 def _make_tanh_normal_model(*args, **kwargs):
     """Helper function to create a TanhNormal model with ProbabilisticTensorDictSequential."""
     from hydra.utils import instantiate
@@ -351,10 +375,24 @@ def _make_tanh_normal_model(*args, **kwargs):
 
 def _make_value_model(*args, **kwargs):
     """Helper function to create a ValueOperator with the given network."""
+    from hydra.utils import instantiate
+
     from torchrl.modules import ValueOperator
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
+
+    # Instantiate the network if it's a config
+    if hasattr(network, "_target_"):
+        network = instantiate(network)
+    elif callable(network) and hasattr(network, "func"):  # partial function
+        network = network()
+
+    # Create the ValueOperator
+    value_operator = ValueOperator(network, **kwargs)
+
+    # Apply share_memory if needed
     if shared:
-        network = network.share_memory()
-    return ValueOperator(network, **kwargs)
+        value_operator = value_operator.share_memory()
+
+    return value_operator
