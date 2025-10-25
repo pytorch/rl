@@ -233,7 +233,7 @@ When you create a collector with weight sync schemes, the following initializati
 .. aafig::
     :aspect: 60
     :scale: 130
-    :proportional:
+    :textual:
 
     INITIALIZATION PHASE
     ====================
@@ -270,10 +270,12 @@ When you create a collector with weight sync schemes, the following initializati
                     +-->+ MPTransport    |<------+
                     |   | (pipes)        |       |
                     |   +----------------+       |
-                    |   +----------------+       |
-                    +-->+ SharedMemTrans |<------+
-                    |   | (shared mem)   |       |
-                    |   +----------------+       |
+                    |                            |
+                    |   +--------------------+   |
+                    +-->+ SharedMemTransport |<--+
+                    |   | (shared mem)       |   |
+                    |   +--------------------+   |
+                    |                            |
                     |   +----------------+       |
                     +-->+ RayTransport   |<------+
                         | (Ray store)    |
@@ -290,7 +292,7 @@ When you call ``collector.update_policy_weights_()``, the weight synchronization
 .. aafig::
     :aspect: 60
     :scale: 130
-    :proportional:
+    :textual:
 
     SYNCHRONIZATION PHASE
     =====================
@@ -335,7 +337,7 @@ One of the key features is support for synchronizing multiple models independent
 .. aafig::
     :aspect: 60
     :scale: 130
-    :proportional:
+    :textual:
 
       Main Process                 Worker Process 1         Worker Process 2
       
