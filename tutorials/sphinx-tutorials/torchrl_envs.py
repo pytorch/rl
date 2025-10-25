@@ -26,7 +26,8 @@ TorchRL envs
 # the gym library installed, as well as the atari suite. You can get this
 # installed by installing the following packages:
 #
-#   .. code-block::
+#   .. code-block:: bash
+#
 #     $ pip install gym atari-py ale-py gym[accept-rom-license] pygame
 #
 # To unify all frameworks, torchrl environments are built inside the
