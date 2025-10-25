@@ -51,7 +51,9 @@ class SyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    weight_sync_schemes: Any = None
     track_policy_version: bool = False
+    local_init_rb: bool = False
     _target_: str = "torchrl.collectors.SyncDataCollector"
     _partial_: bool = False
 
@@ -94,7 +96,9 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    weight_sync_schemes: Any = None
     track_policy_version: bool = False
+    local_init_rb: bool = False
     _target_: str = "torchrl.collectors.aSyncDataCollector"
     _partial_: bool = False
 
@@ -136,7 +140,9 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    weight_sync_schemes: Any = None
     track_policy_version: bool = False
+    local_init_rb: bool = False
     _target_: str = "torchrl.collectors.MultiSyncDataCollector"
     _partial_: bool = False
 
@@ -179,7 +185,9 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
+    weight_sync_schemes: Any = None
     track_policy_version: bool = False
+    local_init_rb: bool = False
     _target_: str = "torchrl.collectors.MultiaSyncDataCollector"
     _partial_: bool = False
 

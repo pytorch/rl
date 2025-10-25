@@ -687,36 +687,14 @@ class WeightStrategy:
 
         # Auto-detect format from weights type
         if isinstance(weights, dict):
-            # Apply state_dict format
-            if isinstance(destination, nn.Module):
-                destination.load_state_dict(weights)
-            elif isinstance(destination, dict):
-                destination = TensorDict(destination)
-                weights = TensorDict(weights)
-                destination.data.update_(weights.data)
-            elif isinstance(destination, TensorDictBase):
-                weights_td = TensorDict(weights)
-                if (dest_keys := sorted(destination.keys(True, True))) != sorted(
-                    weights.keys(True, True)
-                ):
-                    weights_td = weights_td.unflatten_keys(".")
-                    weights_keys = sorted(weights_td.keys(True, True))
-                    if dest_keys != weights_keys:
-                        raise ValueError(
-                            f"The keys of the weights and destination do not match: {dest_keys} != {weights_keys}"
-                        )
-                destination.data.update_(weights_td.data)
-            else:
-                raise ValueError(
-                    f"Unsupported destination type for state_dict: {type(destination)}"
-                )
-        elif isinstance(weights, TensorDictBase):
+            weights = TensorDict(weights).unflatten_keys(".")
+
+        if isinstance(weights, TensorDictBase):
             # Apply TensorDict format
             if isinstance(destination, nn.Module):
-                weights.to_module(destination)
-            elif isinstance(destination, TensorDictBase):
-                destination.data.update_(weights.data)
-            elif isinstance(destination, dict):
+                destination = TensorDict.from_module(destination)
+
+            if isinstance(destination, dict):
                 destination_td = TensorDict(destination)
                 if (dest_keys := sorted(destination_td.keys(True, True))) != sorted(
                     weights.keys(True, True)
@@ -727,11 +705,15 @@ class WeightStrategy:
                         raise ValueError(
                             f"The keys of the weights and destination do not match: {dest_keys} != {weights_keys}"
                         )
-                destination_td.data.update_(weights.data)
+                destination = destination_td
+
+            if isinstance(destination, TensorDictBase):
+                destination.data.update_(weights.data)
             else:
                 raise ValueError(
                     f"Unsupported destination type for TensorDict: {type(destination)}"
                 )
+
         else:
             raise ValueError(
                 f"Unsupported weights type: {type(weights)}. Expected dict or TensorDictBase."

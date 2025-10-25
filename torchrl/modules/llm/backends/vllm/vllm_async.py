@@ -512,7 +512,7 @@ class AsyncVLLM(RLvLLMEngine):
                 See `this issue <https://github.com/vllm-project/vllm/issues/8268>`_ for more details.
 
     Example:
-        >>> from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+        >>> from torchrl.modules.llm import AsyncVLLM
         >>> from vllm import SamplingParams
         >>>
         >>> # Simple usage - single GPU, single replica
