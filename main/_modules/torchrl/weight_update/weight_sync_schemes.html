@@ -1109,36 +1109,14 @@
 
         <span class="c1"># Auto-detect format from weights type</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="c1"># Apply state_dict format</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                <span class="n">destination</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-                <span class="n">destination</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
-                <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-                <span class="n">destination</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
-                <span class="n">weights_td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-                <span class="k">if</span> <span class="p">(</span><span class="n">dest_keys</span> <span class="o">:=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">destination</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)))</span> <span class="o">!=</span> <span class="nb">sorted</span><span class="p">(</span>
-                    <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-                <span class="p">):</span>
-                    <span class="n">weights_td</span> <span class="o">=</span> <span class="n">weights_td</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
-                    <span class="n">weights_keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">weights_td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
-                    <span class="k">if</span> <span class="n">dest_keys</span> <span class="o">!=</span> <span class="n">weights_keys</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;The keys of the weights and destination do not match: </span><span class="si">{</span><span class="n">dest_keys</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="n">weights_keys</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span>
-                <span class="n">destination</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_td</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unsupported destination type for state_dict: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
             <span class="c1"># Apply TensorDict format</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                <span class="n">weights</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
-                <span class="n">destination</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">destination</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                 <span class="n">destination_td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
                 <span class="k">if</span> <span class="p">(</span><span class="n">dest_keys</span> <span class="o">:=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">destination_td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)))</span> <span class="o">!=</span> <span class="nb">sorted</span><span class="p">(</span>
                     <span class="n">weights</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
@@ -1149,11 +1127,15 @@
                         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                             <span class="sa">f</span><span class="s2">&quot;The keys of the weights and destination do not match: </span><span class="si">{</span><span class="n">dest_keys</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="n">weights_keys</span><span class="si">}</span><span class="s2">&quot;</span>
                         <span class="p">)</span>
-                <span class="n">destination_td</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+                <span class="n">destination</span> <span class="o">=</span> <span class="n">destination_td</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+                <span class="n">destination</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Unsupported destination type for TensorDict: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
+
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Unsupported weights type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">}</span><span class="s2">. Expected dict or TensorDictBase.&quot;</span>
