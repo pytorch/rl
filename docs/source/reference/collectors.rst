@@ -261,8 +261,8 @@ When you create a collector with weight sync schemes, the following initializati
             | - model ref  |             | - model ref   |
             |              |             |               |
             | Registers:   |             | Registers:    |
-            | - model      |             | - model       |
-            | - workers    |             | - transport   |
+            | - "model"    |             | - model       |
+            | - "workers"  |             | - transport   |
             +--------------+             +---------------+
                     |                            |
                     |   Transport Layer          |
@@ -272,8 +272,8 @@ When you create a collector with weight sync schemes, the following initializati
                     |    +----------------+      |
                     |                            |
                     |   +--------------------+   |
-                    +-> | SharedMemTransport | <-+
-                    |   | (shared memory)    |   |
+                    +-> |"SharedMemTransport"| <-+
+                    |   |"(shared memory)""   |   |
                     |   +--------------------+   |
                     |                            |
                     |   +----------------+       |
@@ -348,17 +348,19 @@ One of the key features is support for synchronizing multiple models independent
     |  +----------+   |            |  +--------+       |
     |  | Policy A |   |            |  |Policy A|       |
     |  +----------+   |            |  +--------+       |
+    |                 |            |                   |
     |  +----------+   |            |  +--------+       |
     |  | Model  B |   |            |  |Model  B|       |
     |  +----------+   |            |  +--------+       |
     |                 |            |                   |
     | Weight Senders: |            | Weight Receivers: |
-    |  +----------+   |            |                   |
-    |  | Sender A +---+------------+->Receiver A       |
-    |  +----------+   |            |                   |
-    |  +----------+   |            |  +--------+       |
-    |  | Sender B +---+------------+->Receiver B       |
-    |  +----------+   |  Pipes     |                   |
+    |  +----------+   |            |   +------------+  |
+    |  | Sender A +---+------------+-> + Receiver A |  |
+    |  +----------+   |            |   +------------+  |
+    |                 |            |                   |
+    |  +----------+   |            |  +------------+   |
+    |  | Sender B +---+------------+->+ Receiver B |   |
+    |  +----------+   |  "Pipes"   |  +------------+   |
     +-----------------+            +-------------------+
 
 Each model gets its own sender/receiver pair, allowing independent synchronization frequencies,
