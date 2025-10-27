@@ -972,6 +972,77 @@ while True:
         self.cleanup()
 
 
+class PythonExecutorService:
+    """Ray actor that manages a pool of persistent Python interpreters.
+
+    This service allows multiple environments to share a pool of Python
+    interpreters, reducing resource usage and improving efficiency.
+
+    Args:
+        pool_size (int): Number of Python interpreter processes to maintain.
+        timeout (float): Timeout for code execution in seconds.
+
+    Examples:
+        >>> # Register the service
+        >>> from torchrl.services import get_services
+        >>> services = get_services(backend="ray")
+        >>> services.register(
+        ...     "python_executor",
+        ...     PythonExecutorService,
+        ...     pool_size=32,
+        ...     timeout=10.0,
+        ...     num_cpus=32,
+        ...     max_concurrency=32
+        ... )
+        >>>
+        >>> # Use in transform
+        >>> env = env.append_transform(
+        ...     PythonInterpreter(services="ray")
+        ... )
+    """
+
+    def __init__(self, pool_size: int = 32, timeout: float = 10.0):
+        self.pool_size = pool_size
+        self.timeout = timeout
+        self.processes = [
+            PersistentPythonProcess(timeout=timeout) for _ in range(pool_size)
+        ]
+        self.next_idx = 0
+        self._lock = threading.Lock()
+
+    def execute(self, code: str) -> dict:
+        """Execute Python code using next available process (round-robin).
+
+        Args:
+            code: Python code to execute.
+
+        Returns:
+            dict: Execution result with keys 'success', 'stdout', 'stderr', 'returncode'.
+        """
+        # Simple round-robin - Ray handles the queuing via max_concurrency
+        with self._lock:
+            process = self.processes[self.next_idx]
+            self.next_idx = (self.next_idx + 1) % self.pool_size
+
+        return process.execute(code)
+
+    def cleanup(self):
+        """Cleanup all processes in the pool."""
+        if hasattr(self, "processes"):
+            for process in self.processes:
+                if process:
+                    process.cleanup()
+            self.processes = []
+
+    def __del__(self):
+        """Ensure cleanup on deletion."""
+        try:
+            self.cleanup()
+        except Exception:
+            # Ignore errors during cleanup - we might be in Ray actor context
+            pass
+
+
 class PythonInterpreter(ToolTransformBase):
     r"""A transform that executes Python code in the LLM response.
 
@@ -983,6 +1054,13 @@ class PythonInterpreter(ToolTransformBase):
         tool_name: The name of the tool in the chat history. Defaults to `"tool"`.
         persistent: Whether to use persistent processes. Defaults to `False`.
         timeout: The timeout for the persistent processes. Defaults to `10.0`.
+        services: Backend for shared Python executor service. If `"ray"`, uses
+            a shared Ray actor service for execution. If `None`, uses local
+            processes. Defaults to `None`.
+        service_name: Name of the service in the registry. Only used if
+            `services="ray"`. Defaults to `"python_executor"`.
+        namespace: Ray namespace for the service. Only used if `services="ray"`.
+            If `None`, uses the default namespace. Defaults to `None`.
 
     Examples:
         >>> from torchrl.envs.llm.transforms import PythonInterpreter
@@ -1019,6 +1097,24 @@ class PythonInterpreter(ToolTransformBase):
          '\n'
          '</tool_response><|im_end|>\n'
          '<|im_start|>assistant\n']
+
+        Using shared Ray service:
+        >>> from torchrl.services import get_services
+        >>>
+        >>> # Register service once (e.g., in main process)
+        >>> services = get_services(backend="ray")
+        >>> if "python_executor" not in services:
+        ...     services.register(
+        ...         "python_executor",
+        ...         PythonExecutorService,
+        ...         pool_size=32,
+        ...         timeout=10.0,
+        ...         num_cpus=32,
+        ...         max_concurrency=32
+        ...     )
+        >>>
+        >>> # Use in transform (all 128 envs share the 32 interpreters)
+        >>> env = env.append_transform(PythonInterpreter(services="ray"))
     """
 
     use_step = True  # Use _step() method
@@ -1029,22 +1125,56 @@ class PythonInterpreter(ToolTransformBase):
         tool_name: str = "tool",
         persistent: bool = False,
         timeout: float = 10.0,
+        services: str | None = None,
+        service_name: str = "python_executor",
+        namespace: str | None = None,
     ):
         super().__init__()
         self.tokenizer = tokenizer
         self.tool_role = tool_name  # Set the role for history entries
         self.persistent = persistent
         self.timeout = timeout
-        # Initialize as empty list if persistent, None otherwise
-        self.processes: list[PersistentPythonProcess | None] = [] if persistent else []
+        self.services = services
+        self.service_name = service_name
+        self.namespace = namespace
+
+        # Initialize attributes to avoid AttributeError in __del__
+        self.python_service = None
+        self.processes = None
+
+        # Initialize based on service mode
+        if services == "ray":
+            # Use shared Ray service
+            try:
+                from torchrl.services import get_services
+
+                service_registry = get_services(backend="ray", namespace=namespace)
+                self.python_service = service_registry[service_name]
+                self.processes = None
+                torchrl_logger.info(
+                    f"PythonInterpreter using Ray service '{service_name}'"
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to get Ray service '{service_name}'. "
+                    f"Make sure the service is registered. Error: {e}"
+                ) from e
+        elif services is None:
+            # Use local processes
+            self.python_service = None
+            self.processes = [] if persistent else []
+        else:
+            raise ValueError(
+                f"Invalid services backend: {services}. Must be 'ray' or None."
+            )
 
     def close(self):
         """Close the transform."""
-        if self.processes:
+        if self.python_service is None and self.processes:
             for process in self.processes:
                 if process:
                     process.cleanup()
-        self.processes = []
+            self.processes = []
 
     def clone(self):
         """Clone the transform."""
@@ -1053,6 +1183,9 @@ class PythonInterpreter(ToolTransformBase):
             tool_name=self.tool_role,  # tool_role is the instance attribute
             persistent=self.persistent,
             timeout=self.timeout,
+            services=self.services,
+            service_name=self.service_name,
+            namespace=self.namespace,
         )
 
     def _ensure_processes(self, batch_size: int):
@@ -1078,7 +1211,22 @@ class PythonInterpreter(ToolTransformBase):
 
     def _execute_python_code(self, code: str, i: int) -> dict:
         """Safely execute Python code and return results."""
-        if self.persistent:
+        if self.python_service is not None:
+            # Use shared Ray service
+            try:
+                import ray
+
+                result = ray.get(self.python_service.execute.remote(code))
+                return result
+            except Exception as e:
+                return {
+                    "success": False,
+                    "stdout": "",
+                    "stderr": f"Ray service execution failed: {str(e)}",
+                    "returncode": -1,
+                }
+        elif self.persistent:
+            # Use local persistent process
             # Ensure we have enough processes
             if i >= len(self.processes):
                 self._ensure_processes(i + 1)
@@ -1182,19 +1330,28 @@ class PythonInterpreter(ToolTransformBase):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         """Override to handle batch size management for persistent processes."""
-        # Ensure we have enough processes for the entire batch
-        if self.persistent and next_tensordict.batch_dims == 1:
+        # Ensure we have enough processes for the entire batch (only for local persistent mode)
+        if (
+            self.python_service is None
+            and self.persistent
+            and next_tensordict.batch_dims == 1
+        ):
             self._ensure_processes(len(next_tensordict))
 
         # Delegate to base class for all the heavy lifting
         return super()._step(tensordict, next_tensordict)
 
     def __del__(self):
-        """Cleanup persistent processes on deletion."""
-        if self.processes:
-            for process in self.processes:
-                if process:
-                    process.cleanup()
+        """Ensure cleanup on deletion."""
+        try:
+            if hasattr(self, "python_service") and self.python_service is None:
+                if hasattr(self, "processes") and self.processes:
+                    for process in self.processes:
+                        if process:
+                            process.cleanup()
+        except Exception:
+            # Ignore errors during cleanup
+            pass
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
@@ -1207,7 +1364,9 @@ class PythonInterpreter(ToolTransformBase):
             reset = torch.ones(
                 tensordict.shape, device=tensordict.device, dtype=torch.bool
             )
-        if self.persistent:
+
+        # Only reset local persistent processes, not the shared service
+        if self.python_service is None and self.persistent:
             for i, process in enumerate(self.processes):
                 if reset[i] and process is not None:
                     process.cleanup()
