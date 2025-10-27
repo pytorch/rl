@@ -198,7 +198,19 @@ texinfo_documents = [
 ]
 
 
-aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}
+# aafigure configuration
+# Ensure SVG output for HTML and PDF for LaTeX, while keeping text builder raw
+aafig_format = {"latex": "pdf", "html": "svg", "text": None}
+
+# Use monospace + textual rendering by default for better ASCII alignment
+# Values are percentages (without the % sign)
+aafig_default_options = {
+    "scale": 130,
+    "aspect": 60,
+    "proportional": False,
+    "textual": True,
+    "line_width": 1.2,
+}
 
 # -- Generate knowledge base references -----------------------------------
 current_path = os.path.dirname(os.path.realpath(__file__))
