@@ -318,8 +318,28 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             )
 
             strategy = WeightStrategy(extract_as=scheme.strategy)
-            model = _resolve_model(self, model_id)
-            return strategy.extract_weights(model)
+            try:
+                model = _resolve_model(self, model_id)
+            except AttributeError:
+                # Model not found, try fallback policy
+                model = None
+
+            # If model is None, try to use the fallback policy
+            if model is None and model_id == "policy":
+                if (
+                    hasattr(self, "_fallback_policy")
+                    and self._fallback_policy is not None
+                ):
+                    model = self._fallback_policy
+                elif (
+                    hasattr(self, "_fallback_policy_ref")
+                    and self._fallback_policy_ref is not None
+                ):
+                    model = self._fallback_policy_ref()
+
+            if model is not None:
+                return strategy.extract_weights(model)
+            # If still None, fall through to legacy code below
 
         if weights is None:
             if model_id == "policy" and hasattr(self, "policy_weights"):
@@ -407,6 +427,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             raise ValueError(
                 "Cannot specify both 'weights_dict' and 'policy_or_weights'"
             )
+
+        if policy_or_weights is not None:
+            weights_dict = {"policy": policy_or_weights}
 
         # Priority: new weight sync schemes > old weight updater system
         if self._weight_senders:
@@ -838,11 +861,121 @@ class SyncDataCollector(DataCollectorBase):
         track_policy_version: bool = False,
         **kwargs,
     ):
+        self.closed = True
+
+        # Initialize environment
+        env = self._init_env(create_env_fn, create_env_kwargs)
+
+        # Initialize policy
+        policy = self._init_policy(policy, policy_factory, env, trust_policy)
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+
+        # Handle trajectory pool and validate kwargs
+        self._traj_pool_val = kwargs.pop("traj_pool", None)
+        if kwargs:
+            raise TypeError(
+                f"Keys {list(kwargs.keys())} are unknown to {type(self).__name__}."
+            )
+
+        # Set up devices and synchronization
+        self._setup_devices(
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            no_cuda_sync=no_cuda_sync,
+        )
+
+        self.env: EnvBase = env
+        del env
+
+        # Set up policy version tracking
+        self._setup_policy_version_tracking(track_policy_version)
+
+        # Set up replay buffer
+        self._setup_replay_buffer(
+            replay_buffer=replay_buffer,
+            extend_buffer=extend_buffer,
+            local_init_rb=local_init_rb,
+            postproc=postproc,
+            split_trajs=split_trajs,
+            return_same_td=return_same_td,
+            use_buffers=use_buffers,
+        )
+
+        self.closed = False
+
+        # Validate reset_when_done
+        if not reset_when_done:
+            raise ValueError("reset_when_done is deprecated.")
+        self.reset_when_done = reset_when_done
+        self.n_env = self.env.batch_size.numel()
+
+        # Register collector with policy and env
+        if hasattr(policy, "register_collector"):
+            policy.register_collector(self)
+        if hasattr(self.env, "register_collector"):
+            self.env.register_collector(self)
+
+        # Set up policy and weights
+        self._setup_policy_and_weights(policy)
+
+        # Apply environment device
+        self._apply_env_device()
+
+        # Set up max frames per trajectory
+        self._setup_max_frames_per_traj(max_frames_per_traj)
+
+        # Validate and set total frames
+        self.reset_at_each_iter = reset_at_each_iter
+        self._setup_total_frames(total_frames, frames_per_batch)
+
+        # Set up init random frames
+        self._setup_init_random_frames(init_random_frames, frames_per_batch)
+
+        # Set up postproc
+        self._setup_postproc(postproc)
+
+        # Calculate frames per batch
+        self._setup_frames_per_batch(frames_per_batch)
+
+        # Set exploration and other options
+        self.exploration_type = (
+            exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
+        )
+        self.return_same_td = return_same_td
+        self.set_truncated = set_truncated
+
+        # Create shuttle and rollout buffers
+        self._make_shuttle()
+        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
+        self._set_truncated_keys()
+
+        # Set split trajectories option
+        if split_trajs is None:
+            split_trajs = False
+        self.split_trajs = split_trajs
+        self._exclude_private_keys = True
+
+        # Set up interruptor and frame tracking
+        self.interruptor = interruptor
+        self._frames = 0
+        self._iter = -1
+
+        # Set up weight synchronization
+        self._setup_weight_sync(weight_updater, weight_sync_schemes)
+
+    def _init_env(
+        self,
+        create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],
+        create_env_kwargs: dict[str, Any] | None,
+    ) -> EnvBase:
+        """Initialize and configure the environment."""
         from torchrl.envs.batched_envs import BatchedEnvBase
 
-        self.closed = True
         if create_env_kwargs is None:
             create_env_kwargs = {}
+
         if not isinstance(create_env_fn, EnvBase):
             env = create_env_fn(**create_env_kwargs)
         else:
@@ -854,7 +987,16 @@ class SyncDataCollector(DataCollectorBase):
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
+        return env
 
+    def _init_policy(
+        self,
+        policy: TensorDictModule | Callable | None,
+        policy_factory: Callable[[], Callable] | None,
+        env: EnvBase,
+        trust_policy: bool | None,
+    ) -> TensorDictModule | Callable:
+        """Initialize and configure the policy."""
         if policy is None:
             if policy_factory is not None:
                 policy = policy_factory()
@@ -862,33 +1004,26 @@ class SyncDataCollector(DataCollectorBase):
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
-        # If the underlying policy has a state_dict, we keep a reference to the policy and
-        # do all policy weight saving/loading through it
+
+        # If the underlying policy has a state_dict, keep a reference to it
         if hasattr(policy, "state_dict"):
             self._policy_w_state_dict = policy
 
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
-        self._read_compile_kwargs(compile_policy, cudagraph_policy)
 
-        ##########################
-        # Trajectory pool
-        self._traj_pool_val = kwargs.pop("traj_pool", None)
-        if kwargs:
-            raise TypeError(
-                f"Keys {list(kwargs.keys())} are unknown to {type(self).__name__}."
-            )
+        return policy
 
-        ##########################
-        # Setting devices:
-        # The rule is the following:
-        # - If no device is passed, all devices are assumed to work OOB.
-        #   The tensordict used for output is not on any device (ie, actions and observations
-        #   can be on a different device).
-        # - If the ``device`` is passed, it is used for all devices (storing, env and policy)
-        #   unless overridden by another kwarg.
-        # - The rest of the kwargs control the respective device.
+    def _setup_devices(
+        self,
+        device: DEVICE_TYPING | None,
+        storing_device: DEVICE_TYPING | None,
+        policy_device: DEVICE_TYPING | None,
+        env_device: DEVICE_TYPING | None,
+        no_cuda_sync: bool,
+    ) -> None:
+        """Set up devices and synchronization functions."""
         storing_device, policy_device, env_device = self._get_devices(
             storing_device=storing_device,
             policy_device=policy_device,
@@ -897,65 +1032,39 @@ class SyncDataCollector(DataCollectorBase):
         )
 
         self.storing_device = storing_device
-        if self.storing_device is not None and self.storing_device.type != "cuda":
-            # Cuda handles sync
-            if torch.cuda.is_available():
-                self._sync_storage = torch.cuda.synchronize
-            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
-                # Will break for older PT versions which don't have torch.mps
-                self._sync_storage = torch.mps.synchronize
-            elif hasattr(torch, "npu") and torch.npu.is_available():
-                self._sync_storage = torch.npu.synchronize
-            elif self.storing_device.type == "cpu":
-                self._sync_storage = _do_nothing
-            else:
-                raise RuntimeError("Non supported device")
-        else:
-            self._sync_storage = _do_nothing
+        self._sync_storage = self._get_sync_fn(storing_device)
 
         self.env_device = env_device
-        if self.env_device is not None and self.env_device.type != "cuda":
-            # Cuda handles sync
-            if torch.cuda.is_available():
-                self._sync_env = torch.cuda.synchronize
-            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
-                self._sync_env = torch.mps.synchronize
-            elif hasattr(torch, "npu") and torch.npu.is_available():
-                self._sync_env = torch.npu.synchronize
-            elif self.env_device.type == "cpu":
-                self._sync_env = _do_nothing
-            else:
-                raise RuntimeError("Non supported device")
-        else:
-            self._sync_env = _do_nothing
+        self._sync_env = self._get_sync_fn(env_device)
+
         self.policy_device = policy_device
-        if self.policy_device is not None and self.policy_device.type != "cuda":
-            # Cuda handles sync
-            if torch.cuda.is_available():
-                self._sync_policy = torch.cuda.synchronize
-            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
-                self._sync_policy = torch.mps.synchronize
-            elif hasattr(torch, "npu") and torch.npu.is_available():
-                self._sync_policy = torch.npu.synchronize
-            elif self.policy_device.type == "cpu":
-                self._sync_policy = _do_nothing
-            else:
-                raise RuntimeError("Non supported device")
-        else:
-            self._sync_policy = _do_nothing
+        self._sync_policy = self._get_sync_fn(policy_device)
+
         self.device = device
         self.no_cuda_sync = no_cuda_sync
-        # Check if we need to cast things from device to device
-        # If the policy has a None device and the env too, no need to cast (we don't know
-        # and assume the user knows what she's doing).
-        # If the devices match we're happy too.
-        # Only if the values differ we need to cast
         self._cast_to_policy_device = self.policy_device != self.env_device
 
-        self.env: EnvBase = env
-        del env
+    def _get_sync_fn(self, device: torch.device | None) -> Callable:
+        """Get the appropriate synchronization function for a device."""
+        if device is not None and device.type != "cuda":
+            # Cuda handles sync
+            if torch.cuda.is_available():
+                return torch.cuda.synchronize
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
+                return torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                return torch.npu.synchronize
+            elif device.type == "cpu":
+                return _do_nothing
+            else:
+                raise RuntimeError("Non supported device")
+        else:
+            return _do_nothing
 
-        # Policy version tracking setup
+    def _setup_policy_version_tracking(
+        self, track_policy_version: bool | PolicyVersion
+    ) -> None:
+        """Set up policy version tracking if requested."""
         self.policy_version_tracker = track_policy_version
         if isinstance(track_policy_version, bool) and track_policy_version:
             from torchrl.envs.batched_envs import BatchedEnvBase
@@ -967,19 +1076,29 @@ class SyncDataCollector(DataCollectorBase):
                 )
             self.policy_version_tracker = PolicyVersion()
             self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
-        elif hasattr(
-            track_policy_version, "increment_version"
-        ):  # Check if it's a PolicyVersion instance
+        elif hasattr(track_policy_version, "increment_version"):
             self.policy_version_tracker = track_policy_version
             self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
         else:
             self.policy_version_tracker = None
+
+    def _setup_replay_buffer(
+        self,
+        replay_buffer: ReplayBuffer | None,
+        extend_buffer: bool,
+        local_init_rb: bool | None,
+        postproc: Callable | None,
+        split_trajs: bool | None,
+        return_same_td: bool,
+        use_buffers: bool | None,
+    ) -> None:
+        """Set up replay buffer configuration and validate compatibility."""
         self.replay_buffer = replay_buffer
         self.extend_buffer = extend_buffer
 
-        # Handle local_init_rb deprecation for SyncDataCollector
+        # Handle local_init_rb deprecation
         if local_init_rb is None:
-            local_init_rb = False  # Default for SyncDataCollector
+            local_init_rb = False
             if replay_buffer is not None and not local_init_rb:
                 warnings.warn(
                     "local_init_rb=False is deprecated and will be removed in v0.12. "
@@ -988,6 +1107,7 @@ class SyncDataCollector(DataCollectorBase):
                 )
         self.local_init_rb = local_init_rb
 
+        # Validate replay buffer compatibility
         if self.replay_buffer is not None and not self._ignore_rb:
             if postproc is not None and not self.extend_buffer:
                 raise TypeError(
@@ -1003,27 +1123,15 @@ class SyncDataCollector(DataCollectorBase):
                 )
             if use_buffers:
                 raise TypeError("replay_buffer is exclusive with use_buffers.")
+
         if use_buffers is None:
             use_buffers = not self.env._has_dynamic_specs and self.replay_buffer is None
         self._use_buffers = use_buffers
-        self.replay_buffer = replay_buffer
 
-        self.closed = False
-
-        if not reset_when_done:
-            raise ValueError("reset_when_done is deprecated.")
-        self.reset_when_done = reset_when_done
-        self.n_env = self.env.batch_size.numel()
-
-        if hasattr(policy, "register_collector"):
-            policy.register_collector(self)
-        if hasattr(self.env, "register_collector"):
-            self.env.register_collector(self)
-
+    def _setup_policy_and_weights(self, policy: TensorDictModule | Callable) -> None:
+        """Set up policy, wrapped policy, and extract weights."""
         self._original_policy = policy
-        (policy, self.get_weights_fn,) = self._get_policy_and_device(
-            policy=policy,
-        )
+        policy, self.get_weights_fn = self._get_policy_and_device(policy=policy)
 
         if not self.trust_policy:
             self.policy = policy
@@ -1037,6 +1145,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy = self._wrapped_policy = policy
 
+        # Extract policy weights
         if isinstance(self._wrapped_policy, nn.Module):
             self.policy_weights = TensorDict.from_module(
                 self._wrapped_policy, as_module=True
@@ -1044,6 +1153,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy_weights = TensorDict()
 
+        # Apply compilation/cudagraph
         if self.compiled_policy:
             self._wrapped_policy = compile_with_warmup(
                 self._wrapped_policy, **self.compiled_policy_kwargs
@@ -1057,24 +1167,26 @@ class SyncDataCollector(DataCollectorBase):
                 **self.cudagraphed_policy_kwargs,
             )
 
+    def _apply_env_device(self) -> None:
+        """Apply device to environment if specified."""
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
         elif self.env.device is not None:
-            # we did not receive an env device, we use the device of the env
+            # Use the device of the env if none was provided
             self.env_device = self.env.device
 
-        # If the storing device is not the same as the policy device, we have
-        # no guarantee that the "next" entry from the policy will be on the
-        # same device as the collector metadata.
+        # Check if we need to cast to env device
         self._cast_to_env_device = self._cast_to_policy_device or (
             self.env.device != self.storing_device
         )
 
+    def _setup_max_frames_per_traj(self, max_frames_per_traj: int | None) -> None:
+        """Set up maximum frames per trajectory and add StepCounter if needed."""
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
         if self.max_frames_per_traj is not None and self.max_frames_per_traj > 0:
-            # let's check that there is no StepCounter yet
+            # Check that there is no StepCounter yet
             for key in self.env.output_spec.keys(True, True):
                 if isinstance(key, str):
                     key = (key,)
@@ -1090,6 +1202,8 @@ class SyncDataCollector(DataCollectorBase):
                 self.env, StepCounter(max_steps=self.max_frames_per_traj)
             )
 
+    def _setup_total_frames(self, total_frames: int, frames_per_batch: int) -> None:
+        """Validate and set total frames."""
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
@@ -1103,7 +1217,11 @@ class SyncDataCollector(DataCollectorBase):
         self.total_frames = (
             int(total_frames) if total_frames != float("inf") else total_frames
         )
-        self.reset_at_each_iter = reset_at_each_iter
+
+    def _setup_init_random_frames(
+        self, init_random_frames: int | None, frames_per_batch: int
+    ) -> None:
+        """Set up initial random frames."""
         self.init_random_frames = (
             int(init_random_frames) if init_random_frames not in (None, -1) else 0
         )
@@ -1119,6 +1237,8 @@ class SyncDataCollector(DataCollectorBase):
                 "To silence this message, set the environment variable RL_WARNINGS to False."
             )
 
+    def _setup_postproc(self, postproc: Callable | None) -> None:
+        """Set up post-processing transform."""
         self.postproc = postproc
         if (
             self.postproc is not None
@@ -1129,6 +1249,8 @@ class SyncDataCollector(DataCollectorBase):
             if postproc is not self.postproc and postproc is not None:
                 self.postproc = postproc
 
+    def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
+        """Calculate and validate frames per batch."""
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch ({frames_per_batch}) is not exactly divisible by the number of batched environments ({self.n_env}), "
@@ -1138,37 +1260,20 @@ class SyncDataCollector(DataCollectorBase):
             )
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.requested_frames_per_batch = self.frames_per_batch * self.n_env
-        self.exploration_type = (
-            exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
-        )
-        self.return_same_td = return_same_td
-        self.set_truncated = set_truncated
 
-        self._make_shuttle()
-        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
-        self._set_truncated_keys()
-
-        if split_trajs is None:
-            split_trajs = False
-        self.split_trajs = split_trajs
-        self._exclude_private_keys = True
-
-        self.interruptor = interruptor
-        self._frames = 0
-        self._iter = -1
-
-        # Set up weight synchronization - prefer new schemes over legacy updater
-        # For single-process SyncDataCollector, no weight sync is needed (policy is local)
-        # Weight sync schemes are only needed for multi-process/distributed collectors
+    def _setup_weight_sync(
+        self,
+        weight_updater: WeightUpdaterBase | Callable | None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up weight synchronization system."""
         if weight_sync_schemes is not None:
             # Use new simplified weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
             self._weight_senders = {}
-
             # For single-process collectors, we don't need senders/receivers
             # The policy is local and changes are immediately visible
             # Senders will be set up in multiprocess collectors during _run_processes
-
             self.weight_updater = None  # Don't use legacy system
         elif weight_updater is not None:
             # Use legacy weight updater system if explicitly provided
@@ -1179,7 +1284,6 @@ class SyncDataCollector(DataCollectorBase):
                     raise TypeError(
                         f"weight_updater must be a subclass of WeightUpdaterBase. Got {type(weight_updater)} instead."
                     )
-
             warnings.warn(
                 "Using WeightUpdaterBase is deprecated. Please use weight_sync_schemes instead. "
                 "This will be removed in a future version.",
@@ -1191,7 +1295,6 @@ class SyncDataCollector(DataCollectorBase):
             self._weight_senders = {}
         else:
             # No weight sync needed for single-process collectors
-            # The policy is local and changes are immediately visible
             self.weight_updater = None
             self._weight_sync_schemes = None
             self._weight_senders = {}
@@ -2305,6 +2408,110 @@ class _MultiDataCollector(DataCollectorBase):
         track_policy_version: bool = False,
     ):
         self.closed = True
+
+        # Set up workers and environment functions
+        create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
+            create_env_fn, num_workers, frames_per_batch
+        )
+
+        # Set up basic configuration
+        self.set_truncated = set_truncated
+        self.num_sub_threads = num_sub_threads
+        self.num_threads = num_threads
+        self.create_env_fn = create_env_fn
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+
+        # Set up environment kwargs
+        self.create_env_kwargs = self._setup_env_kwargs(create_env_kwargs)
+
+        # Set up devices
+        storing_devices, policy_devices, env_devices = self._get_devices(
+            storing_device=storing_device,
+            env_device=env_device,
+            policy_device=policy_device,
+            device=device,
+        )
+        self.storing_device = storing_devices
+        self.policy_device = policy_devices
+        self.env_device = env_devices
+        self.collector_class = collector_class
+        del storing_device, env_device, policy_device, device
+        self.no_cuda_sync = no_cuda_sync
+
+        # Set up replay buffer
+        self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+        self._setup_multi_replay_buffer(
+            local_init_rb, replay_buffer, replay_buffer_chunk, extend_buffer
+        )
+
+        # Set up policy and weights
+        if trust_policy is None:
+            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
+        self.trust_policy = trust_policy
+
+        policy_factory = self._setup_policy_factory(policy_factory)
+        self._setup_multi_policy_and_weights(
+            policy, policy_factory, weight_updater, weight_sync_schemes
+        )
+
+        # Set up weight synchronization
+        self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
+
+        # Set up policy version tracking
+        self._setup_multi_policy_version_tracking(track_policy_version)
+
+        # Store policy and policy_factory
+        self.policy = policy
+        self.policy_factory = policy_factory
+
+        # Set up fallback policy for weight extraction
+        self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
+
+        # Set up total frames and other parameters
+        self._setup_multi_total_frames(
+            total_frames, total_frames_per_batch, frames_per_batch
+        )
+        self.reset_at_each_iter = reset_at_each_iter
+        self.postprocs = postproc
+        self.max_frames_per_traj = (
+            int(max_frames_per_traj) if max_frames_per_traj is not None else 0
+        )
+
+        # Set up split trajectories
+        self.requested_frames_per_batch = total_frames_per_batch
+        self.reset_when_done = reset_when_done
+        self._setup_split_trajs(split_trajs, reset_when_done)
+
+        # Set up other parameters
+        self.init_random_frames = (
+            int(init_random_frames) if init_random_frames is not None else 0
+        )
+        self.update_at_each_batch = update_at_each_batch
+        self.exploration_type = exploration_type
+        self.frames_per_worker = np.inf
+
+        # Set up preemptive threshold
+        self._setup_preemptive_threshold(preemptive_threshold)
+
+        # Run worker processes
+        self._run_processes()
+
+        # Set up frame tracking and other options
+        self._exclude_private_keys = True
+        self._frames = 0
+        self._iter = -1
+
+        # Validate cat_results
+        self._validate_cat_results(cat_results)
+
+    def _setup_workers_and_env_fns(
+        self,
+        create_env_fn: Sequence[Callable] | Callable,
+        num_workers: int | None,
+        frames_per_batch: int | Sequence[int],
+    ) -> tuple[list[Callable], int]:
+        """Set up workers and environment functions."""
         if isinstance(create_env_fn, Sequence):
             self.num_workers = len(create_env_fn)
         else:
@@ -2327,11 +2534,12 @@ class _MultiDataCollector(DataCollectorBase):
             else frames_per_batch
         )
 
-        self.set_truncated = set_truncated
-        self.num_sub_threads = num_sub_threads
-        self.num_threads = num_threads
-        self.create_env_fn = create_env_fn
-        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+        return create_env_fn, total_frames_per_batch
+
+    def _setup_env_kwargs(
+        self, create_env_kwargs: Sequence[dict] | dict | None
+    ) -> list[dict]:
+        """Set up environment kwargs for each worker."""
         if isinstance(create_env_kwargs, Mapping):
             create_env_kwargs = [create_env_kwargs] * self.num_workers
         elif create_env_kwargs is None:
@@ -2342,53 +2550,29 @@ class _MultiDataCollector(DataCollectorBase):
                 raise ValueError(
                     f"len(create_env_kwargs) must be equal to num_workers, got {len(create_env_kwargs)=} and {self.num_workers=}"
                 )
-        self.create_env_kwargs = create_env_kwargs
-        # Preparing devices:
-        # We want the user to be able to choose, for each worker, on which
-        # device will the policy live and which device will be used to store
-        # data. Those devices may or may not match.
-        # One caveat is that, if there is only one device for the policy, and
-        # if there are multiple workers, sending the same device and policy
-        # to be copied to each worker will result in multiple copies of the
-        # same policy on the same device.
-        # To go around this, we do the copies of the policy in the server
-        # (this object) to each possible device, and send to all the
-        # processes their copy of the policy.
+        return create_env_kwargs
 
-        storing_devices, policy_devices, env_devices = self._get_devices(
-            storing_device=storing_device,
-            env_device=env_device,
-            policy_device=policy_device,
-            device=device,
-        )
-
-        # to avoid confusion
-        self.storing_device = storing_devices
-        self.policy_device = policy_devices
-        self.env_device = env_devices
-        self.collector_class = collector_class
-
-        del storing_device, env_device, policy_device, device
-        self.no_cuda_sync = no_cuda_sync
-
-        self._use_buffers = use_buffers
-        self.replay_buffer = replay_buffer
-
+    def _setup_multi_replay_buffer(
+        self,
+        local_init_rb: bool | None,
+        replay_buffer: ReplayBuffer | None,
+        replay_buffer_chunk: bool | None,
+        extend_buffer: bool,
+    ) -> None:
+        """Set up replay buffer for multi-process collector."""
         # Handle local_init_rb deprecation
         if local_init_rb is None:
-            # v0.11: Default to False (current behavior), show deprecation warning
-            # v0.12: Default to True (new behavior)
-            local_init_rb = False  # Will become True in 0.12
+            local_init_rb = False
             if replay_buffer is not None and not local_init_rb:
                 warnings.warn(
                     "local_init_rb=False is deprecated and will be removed in v0.12. "
                     "The new storage-level initialization provides better performance.",
                     FutureWarning,
                 )
-
         self.local_init_rb = local_init_rb
 
         self._check_replay_buffer_init()
+
         if replay_buffer_chunk is not None:
             if extend_buffer is None:
                 replay_buffer_chunk = extend_buffer
@@ -2401,6 +2585,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "conflicting values for replay_buffer_chunk and extend_buffer."
                 )
         self.extend_buffer = extend_buffer
+
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -2409,21 +2594,31 @@ class _MultiDataCollector(DataCollectorBase):
             torchrl_logger.warning("Replay buffer is not shared. Sharing it.")
             replay_buffer.share()
 
-        self._policy_weights_dict = {}
-
-        if trust_policy is None:
-            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
-        self.trust_policy = trust_policy
-
+    def _setup_policy_factory(
+        self, policy_factory: Callable | list[Callable] | None
+    ) -> list[Callable | None]:
+        """Set up policy factory for each worker."""
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * self.num_workers
+        return policy_factory
+
+    def _setup_multi_policy_and_weights(
+        self,
+        policy: TensorDictModule | Callable | None,
+        policy_factory: list[Callable | None],
+        weight_updater: WeightUpdaterBase | Callable | None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up policy and extract weights for each device."""
+        self._policy_weights_dict = {}
+
         if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
         elif not any(policy_factory):
             for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
-                (policy_new_device, get_weights_fn,) = self._get_policy_and_device(
+                policy_new_device, get_weights_fn = self._get_policy_and_device(
                     policy=policy,
                     policy_device=policy_device,
                     env_maker=env_maker,
@@ -2442,10 +2637,6 @@ class _MultiDataCollector(DataCollectorBase):
                 # For multiprocessed collectors, use MultiProcessWeightSyncScheme by default
                 if weight_sync_schemes is None:
                     weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
-                # Don't create legacy weight updater if we have schemes
-            else:
-                # Legacy weight updater was explicitly provided
-                pass
         elif weight_updater is None:
             warnings.warn(
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
@@ -2456,7 +2647,12 @@ class _MultiDataCollector(DataCollectorBase):
                 "This will work whenever your inference and training policies are nn.Module instances with similar structures."
             )
 
-        # Set up weight synchronization - prefer new schemes over legacy updater
+    def _setup_multi_weight_sync(
+        self,
+        weight_updater: WeightUpdaterBase | Callable | None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up weight synchronization for multi-process collector."""
         if weight_sync_schemes is not None:
             # Use new simplified weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
@@ -2469,14 +2665,15 @@ class _MultiDataCollector(DataCollectorBase):
             self._weight_sync_schemes = None
             self._weight_senders = {}
 
-        # Policy version tracking setup
+    def _setup_multi_policy_version_tracking(
+        self, track_policy_version: bool | PolicyVersion
+    ) -> None:
+        """Set up policy version tracking for multi-process collector."""
         self.policy_version_tracker = track_policy_version
         if PolicyVersion is not None:
             if isinstance(track_policy_version, bool) and track_policy_version:
                 self.policy_version_tracker = PolicyVersion()
-            elif hasattr(
-                track_policy_version, "increment_version"
-            ):  # Check if it's a PolicyVersion instance
+            elif hasattr(track_policy_version, "increment_version"):
                 self.policy_version_tracker = track_policy_version
             else:
                 self.policy_version_tracker = None
@@ -2487,10 +2684,50 @@ class _MultiDataCollector(DataCollectorBase):
                 )
             self.policy_version_tracker = None
 
-        self.policy = policy
-        self.policy_factory = policy_factory
+    def _setup_fallback_policy(
+        self,
+        policy: TensorDictModule | Callable | None,
+        policy_factory: list[Callable | None],
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up fallback policy for weight extraction when using policy_factory."""
+        if policy is None and any(policy_factory) and weight_sync_schemes is not None:
+            # Create a policy instance from the first factory for weight extraction
+            import weakref
 
-        remainder = 0
+            first_factory = (
+                policy_factory[0]
+                if isinstance(policy_factory, list)
+                else policy_factory
+            )
+            if first_factory is not None:
+                fallback_policy = first_factory()
+                # For shared memory schemes (CPU or CUDA), store the actual policy
+                # For pipe-based schemes, store a weak reference
+                first_scheme = next(iter(weight_sync_schemes.values()))
+                from torchrl.weight_update.weight_sync_schemes import (
+                    SharedMemWeightSyncScheme,
+                )
+
+                if isinstance(first_scheme, SharedMemWeightSyncScheme):
+                    # Shared memory: store actual policy (weights are in shared mem)
+                    self._fallback_policy = fallback_policy
+                else:
+                    # Pipe-based: store weak reference
+                    self._fallback_policy_ref = weakref.ref(fallback_policy)
+                    # Keep the policy alive by storing it
+                    self._fallback_policy = fallback_policy
+        else:
+            self._fallback_policy = None
+            self._fallback_policy_ref = None
+
+    def _setup_multi_total_frames(
+        self,
+        total_frames: int,
+        total_frames_per_batch: int,
+        frames_per_batch: int | Sequence[int],
+    ) -> None:
+        """Validate and set total frames for multi-process collector."""
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
@@ -2504,27 +2741,21 @@ class _MultiDataCollector(DataCollectorBase):
         self.total_frames = (
             int(total_frames) if total_frames != float("inf") else total_frames
         )
-        self.reset_at_each_iter = reset_at_each_iter
-        self.postprocs = postproc
-        self.max_frames_per_traj = (
-            int(max_frames_per_traj) if max_frames_per_traj is not None else 0
-        )
 
-        self.requested_frames_per_batch = total_frames_per_batch
-        self.reset_when_done = reset_when_done
+    def _setup_split_trajs(
+        self, split_trajs: bool | None, reset_when_done: bool
+    ) -> None:
+        """Set up split trajectories option."""
         if split_trajs is None:
             split_trajs = False
-        elif not self.reset_when_done and split_trajs:
+        elif not reset_when_done and split_trajs:
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self.init_random_frames = (
-            int(init_random_frames) if init_random_frames is not None else 0
-        )
-        self.update_at_each_batch = update_at_each_batch
-        self.exploration_type = exploration_type
-        self.frames_per_worker = np.inf
+
+    def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
+        """Set up preemptive threshold for early stopping."""
         if preemptive_threshold is not None:
             if _is_osx:
                 raise NotImplementedError(
@@ -2537,10 +2768,9 @@ class _MultiDataCollector(DataCollectorBase):
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None
-        self._run_processes()
-        self._exclude_private_keys = True
-        self._frames = 0
-        self._iter = -1
+
+    def _validate_cat_results(self, cat_results: str | int | None) -> None:
+        """Validate cat_results parameter."""
         if cat_results is not None and (
             not isinstance(cat_results, (int, str))
             or (isinstance(cat_results, str) and cat_results != "stack")
