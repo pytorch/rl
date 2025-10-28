@@ -930,7 +930,9 @@ Tools are usually implemented as transforms, and appended to a base environment
 such as :class:`~torchrl.envs.llm.ChatEnv`.
 
 An example of a tool transform is the :class:`~torchrl.envs.llm.transforms.PythonInterpreter` transform, which is used
-to execute Python code in the context of the LLM.
+to execute Python code in the context of the LLM. The PythonInterpreter can optionally use a shared 
+:class:`~torchrl.envs.llm.transforms.PythonExecutorService` for efficient resource usage across multiple environments.
+See :ref:`ref_services` for more details on the service registry system.
 
     >>> from torchrl.envs.llm.transforms import PythonInterpreter
     >>> from torchrl.envs.llm import ChatEnv
@@ -1141,6 +1143,7 @@ By following these design principles, reward transforms can be effectively integ
     KLRewardTransform
     MCPToolTransform
     PolicyVersion
+    PythonExecutorService
     PythonInterpreter
     RayDataLoadingPrimer
     RetrieveKL

@@ -61,3 +61,17 @@ python -m pip install -e . --no-build-isolation
 
 # smoke test
 python -c "import torchrl"
+
+# Install MCP dependencies for tool execution tests
+printf "* Installing MCP dependencies (uvx, Deno)\n"
+
+# Install uvx (universal package runner)
+pip install uvx
+
+# Install Deno (required by mcp-run-python)
+curl -fsSL https://deno.land/install.sh | sh
+export PATH="$HOME/.deno/bin:$PATH"
+
+# Verify installations
+uvx --version || echo "Warning: uvx not installed"
+deno --version || echo "Warning: Deno not installed"
