@@ -3884,14 +3884,16 @@ class TestPolicyFactory:
             **kwargs,
         )
 
-        collector.update_policy_weights_()
+        # When using policy_factory, must pass weights explicitly
+        collector.update_policy_weights_(policy_weights)
         try:
             for i, data in enumerate(collector):
                 if i == 2:
                     assert (data["action"] != 0).any()
                     # zero the policy
                     policy_weights.data.zero_()
-                    collector.update_policy_weights_()
+                    # When using policy_factory, must pass weights explicitly
+                    collector.update_policy_weights_(policy_weights)
                 elif i == 3:
                     assert (data["action"] == 0).all(), data["action"]
                     break

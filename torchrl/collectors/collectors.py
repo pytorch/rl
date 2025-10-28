@@ -331,11 +331,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     and self._fallback_policy is not None
                 ):
                     model = self._fallback_policy
-                elif (
-                    hasattr(self, "_fallback_policy_ref")
-                    and self._fallback_policy_ref is not None
-                ):
-                    model = self._fallback_policy_ref()
 
             if model is not None:
                 return strategy.extract_weights(model)
@@ -2611,6 +2606,7 @@ class _MultiDataCollector(DataCollectorBase):
     ) -> None:
         """Set up policy and extract weights for each device."""
         self._policy_weights_dict = {}
+        self._fallback_policy = None  # Policy to use for weight extraction fallback
 
         if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
@@ -2632,6 +2628,9 @@ class _MultiDataCollector(DataCollectorBase):
                     else TensorDict()
                 )
                 self._policy_weights_dict[policy_device] = weights
+                # Store the first policy instance for fallback weight extraction
+                if self._fallback_policy is None:
+                    self._fallback_policy = policy_new_device
             self._get_weights_fn = get_weights_fn
             if weight_updater is None:
                 # For multiprocessed collectors, use MultiProcessWeightSyncScheme by default
@@ -2690,36 +2689,14 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory: list[Callable | None],
         weight_sync_schemes: dict[str, WeightSyncScheme] | None,
     ) -> None:
-        """Set up fallback policy for weight extraction when using policy_factory."""
-        if policy is None and any(policy_factory) and weight_sync_schemes is not None:
-            # Create a policy instance from the first factory for weight extraction
-            import weakref
-
-            first_factory = (
-                policy_factory[0]
-                if isinstance(policy_factory, list)
-                else policy_factory
-            )
-            if first_factory is not None:
-                fallback_policy = first_factory()
-                # For shared memory schemes (CPU or CUDA), store the actual policy
-                # For pipe-based schemes, store a weak reference
-                first_scheme = next(iter(weight_sync_schemes.values()))
-                from torchrl.weight_update.weight_sync_schemes import (
-                    SharedMemWeightSyncScheme,
-                )
-
-                if isinstance(first_scheme, SharedMemWeightSyncScheme):
-                    # Shared memory: store actual policy (weights are in shared mem)
-                    self._fallback_policy = fallback_policy
-                else:
-                    # Pipe-based: store weak reference
-                    self._fallback_policy_ref = weakref.ref(fallback_policy)
-                    # Keep the policy alive by storing it
-                    self._fallback_policy = fallback_policy
-        else:
-            self._fallback_policy = None
-            self._fallback_policy_ref = None
+        """Set up fallback policy for weight extraction.
+        
+        Note: _fallback_policy is set in _setup_multi_policy_and_weights when a policy
+        is passed directly (not policy_factory). When using policy_factory, users MUST
+        pass weights explicitly to update_policy_weights_().
+        """
+        # Nothing to do here - fallback is already set if a policy was provided
+        pass
 
     def _setup_multi_total_frames(
         self,
