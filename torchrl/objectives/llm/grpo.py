@@ -398,24 +398,24 @@ class GRPOLoss(LossModule):
         # Optional per-token trust-region filtering (KL-Mask) vs reference policy
         if self.kl_mask_threshold is not None and self.kl_mask_threshold > 0:
             try:
-                ref_log_prob = tensordict.get(
-                    self.tensor_keys.ref_log_probs,
+                inference_log_prob = tensordict.get(
+                    self.tensor_keys.sample_log_prob,
                     as_padded_tensor=True,
                     padding_side="left",
                     padding_value=0.0,
                 )
             except KeyError:
-                ref_log_prob = None
+                inference_log_prob = None
             cur_log_prob = tensordict.get("_cur_log_prob", None)
-            if (ref_log_prob is not None) and (cur_log_prob is not None):
+            if (inference_log_prob is not None) and (cur_log_prob is not None):
                 # Align to valid tokens only (safety)
                 cur_log_prob_masked = torch.where(
                     expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
                 )
-                ref_log_prob_masked = torch.where(
-                    expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
+                inference_log_prob_masked = torch.where(
+                    expand_as_right(mask, inference_log_prob), inference_log_prob, 0.0
                 )
-                log_is_ref = cur_log_prob_masked - ref_log_prob_masked
+                log_is_ref = cur_log_prob_masked - inference_log_prob_masked
                 kl_token = 0.5 * (log_is_ref**2)
                 tr_mask = kl_token <= self.kl_mask_threshold
                 # Combine with attention mask
