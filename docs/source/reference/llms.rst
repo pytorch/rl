@@ -1155,11 +1155,8 @@ Objectives
 
 LLM post-training requires specialized loss functions that are adapted to the unique characteristics of language models.
 
-GRPO
-~~~~
-
-The :class:`~torchrl.objectives.llm.GRPOLoss` class is a thin wrapper around the :class:`~torchrl.objectives.PPOLoss` class
-that codes the LLM-specific functionalities.
+GRPO, DAPO, CISPO
+^^^^^^^^^^^^^^^^^
 
 .. currentmodule:: torchrl.objectives.llm
 
@@ -1167,8 +1164,13 @@ that codes the LLM-specific functionalities.
     :toctree: generated/
     :template: rl_template.rst
 
+    LLMLossOutput
     GRPOLoss
     GRPOLossOutput
+    CISPOLoss
+    CISPOLossOutput
+    DAPO
+    DAPOLossOutput
     MCAdvantage
 
 SFT
