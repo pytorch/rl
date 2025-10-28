@@ -16,7 +16,13 @@ from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
-from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
+from torchrl.objectives.llm.grpo import (
+    CISPO,
+    CISPOLossOutput,
+    GRPOLoss,
+    GRPOLossOutput,
+    MCAdvantage,
+)
 from torchrl.objectives.llm.sft import SFTLoss
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -203,13 +209,74 @@ class TestLosses:
         loss_vals = loss_fn(data)
 
         # Assertions: Check output type and structure
-        from torchrl.objectives.llm.grpo import GRPOLossOutput
 
         assert isinstance(
             loss_vals, GRPOLossOutput
         ), f"Expected GRPOLossOutput, got {type(loss_vals)}"
 
         # Check that all expected keys are present
+        assert hasattr(loss_vals, "loss_objective"), "Missing loss_objective"
+        assert hasattr(loss_vals, "clip_fraction"), "Missing clip_fraction"
+        assert hasattr(loss_vals, "kl_approx"), "Missing kl_approx"
+        assert hasattr(loss_vals, "ESS"), "Missing ESS"
+        assert hasattr(loss_vals, "entropy"), "Missing entropy"
+        assert hasattr(loss_vals, "loss_entropy"), "Missing loss_entropy"
+
+        # Check tensor shapes (all losses should be scalars after reduction)
+        assert (
+            loss_vals.loss_objective.shape == ()
+        ), f"loss_objective should be scalar, got {loss_vals.loss_objective.shape}"
+        assert (
+            loss_vals.clip_fraction.shape == ()
+        ), f"clip_fraction should be scalar, got {loss_vals.clip_fraction.shape}"
+        assert (
+            loss_vals.kl_approx.shape == ()
+        ), f"kl_approx should be scalar, got {loss_vals.kl_approx.shape}"
+        assert (
+            loss_vals.ESS.shape == ()
+        ), f"ESS should be scalar, got {loss_vals.ESS.shape}"
+
+        # Check that losses are finite
+        assert torch.isfinite(loss_vals.loss_objective), "loss_objective is not finite"
+        assert torch.isfinite(loss_vals.ESS), "ESS is not finite"
+
+        # Check that clip_fraction is in valid range [0, 1]
+        assert (
+            0 <= loss_vals.clip_fraction <= 1
+        ), f"clip_fraction out of range: {loss_vals.clip_fraction}"
+
+    def test_cispo(self, mock_transformer_model):
+        """Test CISPO loss computation with mock models."""
+        vocab_size = 1024
+        device = torch.device("cpu")
+        eps = 0.20
+
+        # Create mock model and wrap it
+        model = mock_transformer_model(vocab_size=vocab_size, device=device)
+        actor_network = TransformersWrapper(
+            model,
+            generate=False,
+            pad_output=True,
+            input_mode="history",
+        )
+
+        # Create loss module
+
+        loss_fn = CISPO(actor_network, clip_epsilon=eps)
+
+        # Create fake data
+        data = _mock_data_grpo(vocab_size=vocab_size, device=device)
+
+        # Compute loss
+        loss_vals = loss_fn(data)
+
+        # Assertions: Check output type and structure
+
+        assert isinstance(
+            loss_vals, CISPOLossOutput
+        ), f"Expected CISPOLossOutput, got {type(loss_vals)}"
+
+        # Check that all expected keys are present (same as GRPO)
         assert hasattr(loss_vals, "loss_objective"), "Missing loss_objective"
         assert hasattr(loss_vals, "clip_fraction"), "Missing clip_fraction"
         assert hasattr(loss_vals, "kl_approx"), "Missing kl_approx"
