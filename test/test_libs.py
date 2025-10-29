@@ -5182,7 +5182,7 @@ class TestIsaacLab:
         # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
         flat_ranges = rb.sample()["step_count"]
         flat_ranges = flat_ranges.view(-1, 4)
-        flat_ranges = flat_ranges - flat_ranges[:1, :]  # substract baseline
+        flat_ranges = flat_ranges - flat_ranges[:, :1]  # substract baseline
         flat_ranges = flat_ranges.flatten()
         arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
         assert (flat_ranges == arange).all()
