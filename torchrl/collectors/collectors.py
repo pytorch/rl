@@ -366,6 +366,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         else:
             return weights
 
+    @property
+    def _legacy_weight_updater(self) -> bool:
+        return self._weight_updater is not None
+
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -408,6 +412,50 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
+        if self._legacy_weight_updater:
+            return self._legacy_weight_update_impl(
+                policy_or_weights=policy_or_weights,
+                worker_ids=worker_ids,
+                model_id=model_id,
+                weights_dict=weights_dict,
+                **kwargs,
+            )
+        else:
+            return self._weight_update_impl(
+                policy_or_weights=policy_or_weights,
+                worker_ids=worker_ids,
+                model_id=model_id,
+                weights_dict=weights_dict,
+                **kwargs,
+            )
+
+    def _legacy_weight_update_impl(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
+        if weights_dict is not None:
+            raise ValueError("weights_dict is not supported with legacy weight updater")
+        if model_id is not None:
+            raise ValueError("model_id is not supported with legacy weight updater")
+        # Fall back to old weight updater system
+        self.weight_updater(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+        )
+
+    def _weight_update_impl(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
         if "policy_weights" in kwargs:
             warnings.warn(
                 "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
@@ -428,54 +476,32 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         # Priority: new weight sync schemes > old weight updater system
         if self._weight_senders:
-            if weights_dict is not None:
-                for target_model_id, weights in weights_dict.items():
-                    if target_model_id not in self._weight_senders:
-                        raise KeyError(
-                            f"Model '{target_model_id}' not found in registered weight senders. "
-                            f"Available models: {list(self._weight_senders.keys())}"
-                        )
-                    processed_weights = self._extract_weights_if_needed(
-                        weights, target_model_id
+            if model_id is not None:
+                # Compose weight_dict
+                weights_dict = {model_id: policy_or_weights}
+            if weights_dict is None:
+                if "policy" in self._weight_senders:
+                    weights_dict = {"policy": policy_or_weights}
+                elif len(self._weight_senders) == 1:
+                    single_model_id = next(iter(self._weight_senders.keys()))
+                    weights_dict = {single_model_id: policy_or_weights}
+                else:
+                    raise ValueError(
+                        "Cannot determine the model to update. Please provide a weights_dict."
                     )
-                    self._weight_senders[target_model_id].update_weights(
-                        processed_weights
-                    )
-            elif model_id is not None:
-                if model_id not in self._weight_senders:
+            for target_model_id, weights in weights_dict.items():
+                if target_model_id not in self._weight_senders:
                     raise KeyError(
-                        f"Model '{model_id}' not found in registered weight senders. "
+                        f"Model '{target_model_id}' not found in registered weight senders. "
                         f"Available models: {list(self._weight_senders.keys())}"
                     )
                 processed_weights = self._extract_weights_if_needed(
-                    policy_or_weights, model_id
+                    weights, target_model_id
                 )
-                self._weight_senders[model_id].update_weights(processed_weights)
-            else:
-                if "policy" in self._weight_senders:
-                    processed_weights = self._extract_weights_if_needed(
-                        policy_or_weights, "policy"
-                    )
-                    self._weight_senders["policy"].update_weights(processed_weights)
-                elif len(self._weight_senders) == 1:
-                    single_model_id = next(iter(self._weight_senders.keys()))
-                    single_sender = self._weight_senders[single_model_id]
-                    processed_weights = self._extract_weights_if_needed(
-                        policy_or_weights, single_model_id
-                    )
-                    single_sender.update_weights(processed_weights)
-                else:
-                    for target_model_id, sender in self._weight_senders.items():
-                        processed_weights = self._extract_weights_if_needed(
-                            policy_or_weights, target_model_id
-                        )
-                        sender.update_weights(processed_weights)
-
+                self._weight_senders[target_model_id].update_weights(processed_weights)
         elif self._weight_updater is not None:
-            # Fall back to old weight updater system
-            self.weight_updater(
-                policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
-            )
+            # unreachable
+            raise RuntimeError
         else:
             # No weight updater configured
             # For single-process collectors, apply weights locally if explicitly provided
@@ -2689,14 +2715,21 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory: list[Callable | None],
         weight_sync_schemes: dict[str, WeightSyncScheme] | None,
     ) -> None:
-        """Set up fallback policy for weight extraction.
-        
-        Note: _fallback_policy is set in _setup_multi_policy_and_weights when a policy
-        is passed directly (not policy_factory). When using policy_factory, users MUST
-        pass weights explicitly to update_policy_weights_().
-        """
-        # Nothing to do here - fallback is already set if a policy was provided
-        pass
+        """Set up fallback policy for weight extraction when using policy_factory."""
+        # _fallback_policy is already set in _setup_multi_policy_and_weights if a policy was provided
+        # If policy_factory was used, create a policy instance to use as fallback
+        if policy is None and any(policy_factory) and weight_sync_schemes is not None:
+            if not hasattr(self, "_fallback_policy") or self._fallback_policy is None:
+                first_factory = (
+                    policy_factory[0]
+                    if isinstance(policy_factory, list)
+                    else policy_factory
+                )
+                if first_factory is not None:
+                    # Create a policy instance for weight extraction
+                    # This will be a reference to a policy with the same structure
+                    # For shared memory, modifications to any policy will be visible here
+                    self._fallback_policy = first_factory()
 
     def _setup_multi_total_frames(
         self,
