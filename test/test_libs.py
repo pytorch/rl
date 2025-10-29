@@ -5173,12 +5173,16 @@ class TestIsaacLab:
     def test_isaaclab_rb(self, env):
         env = env.append_transform(StepCounter())
         rb = ReplayBuffer(
-            storage=LazyTensorStorage(50, ndim=2), sampler=SliceSampler(num_slices=5)
+            storage=LazyTensorStorage(100_000, ndim=2),
+            sampler=SliceSampler(num_slices=5),
+            batch_size=20,
         )
-        rb.extend(env.rollout(20))
+        r = env.rollout(20, break_when_any_done=False)
+        rb.extend(r)
         # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
-        flat_ranges = rb["step_count"].flatten() % 4
+        flat_ranges = rb.sample()["step_count"].flatten() % 4
         arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
+        arange = (arange.view(-1, 4) + flat_ranges[::4].unsqueeze(-1)).flatten()
         assert (flat_ranges == arange).all()
 
     def test_isaac_collector(self, env):
