@@ -5180,9 +5180,11 @@ class TestIsaacLab:
         r = env.rollout(20, break_when_any_done=False)
         rb.extend(r)
         # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
-        flat_ranges = rb.sample()["step_count"].flatten() % 4
+        flat_ranges = rb.sample()["step_count"]
+        flat_ranges = flat_ranges.view(-1, 4)
+        flat_ranges = flat_ranges - flat_ranges[:1, :]  # substract baseline
+        flat_ranges = flat_ranges.flatten()
         arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
-        arange = (arange.view(-1, 4) + flat_ranges[::4].unsqueeze(-1)).flatten()
         assert (flat_ranges == arange).all()
 
     def test_isaac_collector(self, env):
