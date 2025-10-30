@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import threading
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
@@ -480,6 +480,8 @@ class RayCollector(DataCollectorBase):
         self.policy_device = policy_device
         self._batches_since_weight_update = [0 for _ in range(self.num_collectors)]
         self._sync = sync
+        self._collection_thread = None
+        self._stop_event = threading.Event()
 
         if self._sync:
             if frames_per_batch % self.num_collectors != 0:
@@ -717,6 +719,10 @@ class RayCollector(DataCollectorBase):
 
     def iterator(self):
         def proc(data):
+            # When using RayReplayBuffer, sub-collectors write directly to buffer
+            # and return None, so skip processing
+            if data is None:
+                return None
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
@@ -731,6 +737,10 @@ class RayCollector(DataCollectorBase):
 
     async def _asyncio_iterator(self):
         def proc(data):
+            # When using RayReplayBuffer, sub-collectors write directly to buffer
+            # and return None, so skip processing
+            if data is None:
+                return None
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
@@ -746,7 +756,7 @@ class RayCollector(DataCollectorBase):
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
-        while self.collected_frames < self.total_frames:
+        while self.collected_frames < self.total_frames and not self._stop_event.is_set():
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
                 torchrl_logger.info("Updating weights on all workers")
                 self.update_policy_weights_()
@@ -769,37 +779,54 @@ class RayCollector(DataCollectorBase):
                     r
                 )  # should not be necessary, deleted automatically when ref count is down to 0
                 out_td.append(rollouts)
-            if len(rollouts.batch_size):
-                out_td = torch.stack(out_td)
+            
+            # Handle case where replay_buffer is used and rollouts are None
+            if out_td[0] is None:
+                # Sub-collectors are writing directly to RayReplayBuffer
+                # Track frames and yield None to signal completion
+                self.collected_frames += self.frames_per_batch
+                yield None
             else:
-                out_td = torch.cat(out_td)
+                # Normal case: concatenate and yield rollouts
+                if len(rollouts.batch_size):
+                    out_td = torch.stack(out_td)
+                else:
+                    out_td = torch.cat(out_td)
 
-            self.collected_frames += out_td.numel()
+                self.collected_frames += out_td.numel()
+                yield out_td
 
-            yield out_td
-
-        if self._task is None:
+        if self._collection_thread is None:
             self.shutdown()
 
-    _task = None
+    def _run_collection_loop(self):
+        """Runs the collection loop in a background thread."""
+        try:
+            for data in self.iterator():
+                if self._stop_event.is_set():
+                    break
+                # When RayReplayBuffer is configured, sub-collectors write directly
+                # to the buffer and data will be None. Otherwise, data contains rollouts.
+        except Exception as e:
+            torchrl_logger.error(f"Error in collection thread: {e}")
+            raise
 
     def start(self):
-        """Starts the RayCollector."""
+        """Starts the RayCollector in a background thread."""
         if self.replay_buffer is None:
-            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
-        if self._task is None or self._task.done():
-            loop = asyncio.get_event_loop()
-            self._task = loop.create_task(self._run_iterator_silently())
-
-    async def _run_iterator_silently(self):
-        async for _ in self._asyncio_iterator():
-            # Process each item silently
-            continue
+            raise RuntimeError("Replay buffer must be defined for background execution.")
+        if self._collection_thread is None or not self._collection_thread.is_alive():
+            self._stop_event.clear()
+            self._collection_thread = threading.Thread(
+                target=self._run_collection_loop, daemon=True
+            )
+            self._collection_thread.start()
 
     async def async_shutdown(self):
         """Finishes processes started by ray.init() during async execution."""
-        if self._task is not None:
-            await self._task
+        self._stop_event.set()
+        if self._collection_thread is not None and self._collection_thread.is_alive():
+            self._collection_thread.join(timeout=5.0)
         self.stop_remote_collectors()
         ray.shutdown()
 
@@ -810,7 +837,7 @@ class RayCollector(DataCollectorBase):
             future = collector.next.remote()
             pending_tasks[future] = index
 
-        while self.collected_frames < self.total_frames:
+        while self.collected_frames < self.total_frames and not self._stop_event.is_set():
             if not len(list(pending_tasks.keys())) == len(self.remote_collectors):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
@@ -825,6 +852,9 @@ class RayCollector(DataCollectorBase):
             ray.internal.free(
                 [future]
             )  # should not be necessary, deleted automatically when ref count is down to 0
+            
+            # Track collected frames - use frames_per_batch since out_td might be None
+            # when using RayReplayBuffer (sub-collectors write directly to buffer)
             self.collected_frames += self.frames_per_batch
 
             yield out_td
@@ -847,7 +877,7 @@ class RayCollector(DataCollectorBase):
         #         object_ref=ref,
         #         force=False,
         #     )
-        if self._task is None:
+        if self._collection_thread is None:
             self.shutdown()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> list[int]:
@@ -875,6 +905,9 @@ class RayCollector(DataCollectorBase):
 
     def shutdown(self, timeout: float | None = None) -> None:
         """Finishes processes started by ray.init()."""
+        self._stop_event.set()
+        if self._collection_thread is not None and self._collection_thread.is_alive():
+            self._collection_thread.join(timeout=timeout if timeout is not None else 5.0)
         self.stop_remote_collectors()
         ray.shutdown()
 
