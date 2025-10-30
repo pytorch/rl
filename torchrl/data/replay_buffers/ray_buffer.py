@@ -113,7 +113,8 @@ class RayReplayBuffer(ReplayBuffer):
         ...         # break at some point
         ...         break
         ...
-        ...     await distributed_collector.async_shutdown()
+        ...     await distributed_collector.async_shutdown(shutdown_ray=False)
+        ...     buffer.close()  # Close buffer after collector
         >>>
         >>> if __name__ == "__main__":
         ...     asyncio.run(main())
@@ -153,10 +154,17 @@ class RayReplayBuffer(ReplayBuffer):
     def close(self):
         """Terminates the Ray actor associated with this replay buffer."""
         if hasattr(self, "_rb"):
-            torchrl_logger.info("Killing Ray actor.")
-            ray.kill(self._rb)  # Forcefully terminate the actor
-            delattr(self, "_rb")  # Remove the reference to the terminated actor
-            torchrl_logger.info("Ray actor killed.")
+            try:
+                torchrl_logger.info("Killing Ray actor.")
+                ray.kill(self._rb)  # Forcefully terminate the actor
+                torchrl_logger.info("Ray actor killed.")
+            except (ValueError, RuntimeError) as e:
+                # Actor may already be dead if ray.shutdown() was called
+                torchrl_logger.debug(
+                    f"Failed to kill Ray actor (may already be terminated): {e}"
+                )
+            finally:
+                delattr(self, "_rb")  # Remove the reference to the terminated actor
 
     @property
     def _replay_lock(self):

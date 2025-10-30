@@ -803,8 +803,10 @@ class RayCollector(DataCollectorBase):
                 self.collected_frames += out_td.numel()
                 yield out_td
 
+        # Only auto-shutdown if not running in a background thread.
+        # When using replay buffer, users should explicitly manage shutdown order.
         if self._collection_thread is None:
-            self.shutdown()
+            self.shutdown(shutdown_ray=False)
 
     def _run_collection_loop(self):
         """Runs the collection loop in a background thread."""
@@ -831,13 +833,22 @@ class RayCollector(DataCollectorBase):
             )
             self._collection_thread.start()
 
-    async def async_shutdown(self):
-        """Finishes processes started by ray.init() during async execution."""
+    async def async_shutdown(self, shutdown_ray: bool = False):
+        """Finishes processes started by the collector during async execution.
+
+        Args:
+            shutdown_ray (bool): If True, also shutdown the Ray cluster. Defaults to False.
+                Note: Setting this to True will kill all Ray actors in the cluster, including
+                any replay buffers or other services. Only set to True if you're sure you want
+                to shut down the entire Ray cluster.
+
+        """
         self._stop_event.set()
         if self._collection_thread is not None and self._collection_thread.is_alive():
             self._collection_thread.join(timeout=5.0)
         self.stop_remote_collectors()
-        ray.shutdown()
+        if shutdown_ray:
+            ray.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
         """Collects a data batch from a single remote collector in each iteration."""
@@ -914,15 +925,27 @@ class RayCollector(DataCollectorBase):
         for collector, state_dict in zip(self.remote_collectors, state_dicts):
             collector.load_state_dict.remote(state_dict)
 
-    def shutdown(self, timeout: float | None = None) -> None:
-        """Finishes processes started by ray.init()."""
+    def shutdown(
+        self, timeout: float | None = None, shutdown_ray: bool = False
+    ) -> None:
+        """Finishes processes started by the collector.
+
+        Args:
+            timeout (float, optional): Timeout for stopping the collection thread.
+            shutdown_ray (bool): If True, also shutdown the Ray cluster. Defaults to False.
+                Note: Setting this to True will kill all Ray actors in the cluster, including
+                any replay buffers or other services. Only set to True if you're sure you want
+                to shut down the entire Ray cluster.
+
+        """
         self._stop_event.set()
         if self._collection_thread is not None and self._collection_thread.is_alive():
             self._collection_thread.join(
                 timeout=timeout if timeout is not None else 5.0
             )
         self.stop_remote_collectors()
-        ray.shutdown()
+        if shutdown_ray:
+            ray.shutdown()
 
     def __repr__(self) -> str:
         string = f"{self.__class__.__name__}()"
