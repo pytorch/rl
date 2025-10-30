@@ -140,6 +140,9 @@ class RayCollector(DataCollectorBase):
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
+        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+            and ``False`` otherwise.
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
@@ -310,6 +313,7 @@ class RayCollector(DataCollectorBase):
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
+        trust_policy: bool | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] | None = None,
@@ -449,6 +453,7 @@ class RayCollector(DataCollectorBase):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory
         self.policy = policy  # Store policy for weight extraction
+        self.trust_policy = trust_policy
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
@@ -512,6 +517,7 @@ class RayCollector(DataCollectorBase):
             collector_kwarg["storing_device"] = self.storing_device[i]
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
+            collector_kwarg["trust_policy"] = trust_policy
 
         self.postproc = postproc
 

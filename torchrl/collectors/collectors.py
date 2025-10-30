@@ -1028,11 +1028,16 @@ class SyncDataCollector(DataCollectorBase):
         if not self.trust_policy:
             self.policy = policy
             env = getattr(self, "env", None)
-            wrapped_policy = _make_compatible_policy(
-                policy=policy,
-                observation_spec=getattr(env, "observation_spec", None),
-                env=self.env,
-            )
+            try:
+                wrapped_policy = _make_compatible_policy(
+                    policy=policy,
+                    observation_spec=getattr(env, "observation_spec", None),
+                    env=self.env,
+                )
+            except (TypeError, AttributeError, ValueError) as err:
+                raise TypeError(
+                    "Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True."
+                ) from err
             self._wrapped_policy = wrapped_policy
         else:
             self.policy = self._wrapped_policy = policy

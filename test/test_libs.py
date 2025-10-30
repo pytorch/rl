@@ -5198,6 +5198,7 @@ class TestIsaacLab:
             total_frames=8_000,
             replay_buffer=replay_buffer,
             num_collectors=4,
+            trust_policy=True,
         )
 
         try:
