@@ -163,7 +163,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
     _weight_senders: dict[str, WeightSender] | None = None
     _weight_receivers: dict[str, WeightReceiver] | None = None
-    verbose: bool = False
+    verbose: bool = True
 
     @property
     def weight_updater(self) -> WeightUpdaterBase:

@@ -341,6 +341,7 @@ class RayCollector(DataCollectorBase):
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         use_env_creator: bool = False,
+        no_cuda_sync: bool | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -448,6 +449,7 @@ class RayCollector(DataCollectorBase):
         if not hasattr(collector_class, "print_remote_collector_info"):
             collector_class.print_remote_collector_info = print_remote_collector_info
 
+        self.no_cuda_sync = no_cuda_sync
         self.replay_buffer = replay_buffer
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
@@ -520,6 +522,8 @@ class RayCollector(DataCollectorBase):
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
             collector_kwarg["trust_policy"] = trust_policy
+            if "no_cuda_sync" not in collector_kwarg and self.no_cuda_sync is not None:
+                collector_kwarg["no_cuda_sync"] = no_cuda_sync
 
         self.postproc = postproc
 

@@ -64,7 +64,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Unbounded,
-    UnboundedDiscreteTensorSpec,
+    UnboundedDiscreteTensorSpec, LazyMemmapStorage,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -5194,7 +5194,8 @@ class TestIsaacLab:
         replay_buffer = None
         if use_rb:
             replay_buffer = RayReplayBuffer(
-                storage=partial(LazyTensorStorage, 10_000, ndim=2),
+                # We place the storage on memmap to make it shareable
+                storage=partial(LazyMemmapStorage, 10_000, ndim=2),
                 ray_init_config={"num_cpus": 4},
             )
 
@@ -5206,6 +5207,7 @@ class TestIsaacLab:
             replay_buffer=replay_buffer,
             num_collectors=4,
             trust_policy=True,
+            no_cuda_sync=True,
         )
 
         try:

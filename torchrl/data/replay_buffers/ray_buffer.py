@@ -126,6 +126,7 @@ class RayReplayBuffer(ReplayBuffer):
         replay_buffer_cls: type[ReplayBuffer] | None = ReplayBuffer,
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
+        delayed_init: bool = False,
         **kwargs,
     ) -> None:
         if not _has_ray:
@@ -146,7 +147,7 @@ class RayReplayBuffer(ReplayBuffer):
             self.has_gpu = remote_config.get("num_gpus", 0) > 0
         else:
             self.has_gpu = False
-        self._rb = remote_cls(*args, **kwargs)
+        self._rb = remote_cls(*args, delayed_init=delayed_init, **kwargs)
         self._delayed_init = False
 
     def close(self):
