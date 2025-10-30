@@ -263,6 +263,10 @@ class RayCollector(DataCollectorBase):
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
             Ray's distributed capabilities.
             Consider using a constructor if the updater needs to be serialized.
+        use_env_creator (bool, optional): if ``True``, the environment constructor functions will be wrapped
+            in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory
+            needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.
+            Defaults to ``False``.
 
     Examples:
         >>> from torch import nn
@@ -326,6 +330,7 @@ class RayCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        use_env_creator: bool = False,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -400,9 +405,10 @@ class RayCollector(DataCollectorBase):
         create_env_fn, collector_kwargs, remote_configs = out_lists
         num_collectors = len(create_env_fn)
 
-        for i in range(len(create_env_fn)):
-            if not isinstance(create_env_fn[i], (EnvBase, EnvCreator)):
-                create_env_fn[i] = EnvCreator(create_env_fn[i])
+        if use_env_creator:
+            for i in range(len(create_env_fn)):
+                if not isinstance(create_env_fn[i], (EnvBase, EnvCreator)):
+                    create_env_fn[i] = EnvCreator(create_env_fn[i])
 
         # If ray available, try to connect to an existing Ray cluster or start one and connect to it.
         if not _has_ray:
