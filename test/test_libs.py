@@ -12,6 +12,7 @@ import importlib.util
 import os
 import urllib.error
 
+import torchrl.testing.env_helper
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -5131,37 +5132,13 @@ class TestMeltingpot:
 class TestIsaacLab:
     @pytest.fixture(scope="class")
     def env(self):
-        env = self.make_env()
+        env = torchrl.testing.env_helper.make_isaac_env()
         try:
             yield env
         finally:
             torchrl_logger.info("Closing IsaacLab env...")
             env.close()
             torchrl_logger.info("Closed")
-
-    def make_env(self):
-        torch.manual_seed(0)
-        import argparse
-
-        # This code block ensures that the Isaac app is started in headless mode
-        from isaaclab.app import AppLauncher
-
-        parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
-        AppLauncher.add_app_launcher_args(parser)
-        args_cli, hydra_args = parser.parse_known_args(["--headless"])
-        AppLauncher(args_cli)
-
-        # Imports and env
-        import gymnasium as gym
-        import isaaclab_tasks  # noqa: F401
-        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
-
-        torchrl_logger.info("Making IsaacLab env...")
-        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
-        torchrl_logger.info("Wrapping IsaacLab env...")
-        env = IsaacLabWrapper(env)
-        return env
 
     def test_isaaclab(self, env):
         assert env.batch_size == (4096,)
@@ -5215,7 +5192,7 @@ class TestIsaacLab:
             )
 
         col = RayCollector(
-            [self.make_env] * 4,
+            [torchrl.testing.env_helper.make_isaac_env] * 4,
             env.rand_action,
             frames_per_batch=1000,
             total_frames=8_000,
