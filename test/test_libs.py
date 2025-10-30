@@ -5178,6 +5178,8 @@ class TestIsaacLab:
 
     @pytest.fixture(scope="function")
     def clean_ray(self):
+        import ray
+
         ray.shutdown()
         ray.init(ignore_reinit_error=True)
         yield
