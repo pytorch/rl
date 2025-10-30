@@ -5229,7 +5229,7 @@ class TestIsaacLab:
                             sample = replay_buffer.sample(32)
                             assert sample.batch_size == (32,)
                             # Check that we have meaningful data (not all zeros/nans)
-                            assert sample["observation"].isfinite().any()
+                            assert sample["policy"].isfinite().any()
                             assert sample["action"].isfinite().any()
                             # Check shape is correct for Isaac Lab env (should have batch dim from env)
                             assert len(sample.shape) == 1
@@ -5244,7 +5244,7 @@ class TestIsaacLab:
                 for _ in range(5):
                     sample = replay_buffer.sample(16)
                     assert sample.batch_size == (16,)
-                    assert sample["observation"].isfinite().any()
+                    assert sample["policy"].isfinite().any()
 
             else:
                 # Without replay buffer, collector yields data normally
@@ -5303,7 +5303,7 @@ class TestIsaacLab:
                 raise RuntimeError("Timeout waiting for data")
             sample = rb.sample(4096)
             assert sample.batch_size == (4096,)
-            assert sample["observation"].isfinite().any()
+            assert sample["policy"].isfinite().any()
             assert sample["action"].isfinite().any()
         finally:
             col.shutdown()
