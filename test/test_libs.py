@@ -5193,7 +5193,7 @@ class TestIsaacLab:
 
         col = RayCollector(
             [torchrl.testing.env_helper.make_isaac_env] * 4,
-            env.full_action_spec.rand,
+            env.full_action_spec.rand_update,
             frames_per_batch=1000,
             total_frames=8_000,
             replay_buffer=replay_buffer,
