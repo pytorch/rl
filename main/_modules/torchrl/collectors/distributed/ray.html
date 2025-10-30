@@ -427,7 +427,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
@@ -562,6 +562,9 @@
 
 <span class="sd">            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.</span>
 
+<span class="sd">        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be</span>
+<span class="sd">            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules</span>
+<span class="sd">            and ``False`` otherwise.</span>
 <span class="sd">        frames_per_batch (int): A keyword-only argument representing the</span>
 <span class="sd">            total number of elements in a batch.</span>
 <span class="sd">        total_frames (int, Optional): lower bound of the total number of frames returned by the collector.</span>
@@ -690,6 +693,10 @@
 <span class="sd">            :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme` instances.</span>
 <span class="sd">            This is the recommended way to configure weight synchronization. If not provided,</span>
 <span class="sd">            defaults to ``{&quot;policy&quot;: RayWeightSyncScheme()}``.</span>
+<span class="sd">        use_env_creator (bool, optional): if ``True``, the environment constructor functions will be wrapped</span>
+<span class="sd">            in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory</span>
+<span class="sd">            needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
@@ -728,6 +735,7 @@
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
         <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -754,6 +762,8 @@
         <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_env_creator</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
         <span class="k">if</span> <span class="n">remote_configs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -828,9 +838,10 @@
         <span class="n">create_env_fn</span><span class="p">,</span> <span class="n">collector_kwargs</span><span class="p">,</span> <span class="n">remote_configs</span> <span class="o">=</span> <span class="n">out_lists</span>
         <span class="n">num_collectors</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">)):</span>
-                <span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">use_env_creator</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">)):</span>
+                    <span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
 
         <span class="c1"># If ray available, try to connect to an existing Ray cluster or start one and connect to it.</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>
@@ -860,11 +871,13 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">collector_class</span><span class="p">,</span> <span class="s2">&quot;print_remote_collector_info&quot;</span><span class="p">):</span>
             <span class="n">collector_class</span><span class="o">.</span><span class="n">print_remote_collector_info</span> <span class="o">=</span> <span class="n">print_remote_collector_info</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="o">=</span> <span class="n">no_cuda_sync</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
             <span class="n">policy_factory</span> <span class="o">=</span> <span class="p">[</span><span class="n">policy_factory</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>  <span class="c1"># Store policy for weight extraction</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span> <span class="o">=</span> <span class="n">trust_policy</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
@@ -891,6 +904,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="o">=</span> <span class="n">policy_device</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span><span class="p">)]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
@@ -928,6 +943,10 @@
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;storing_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;env_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;trust_policy&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">collector_kwarg</span><span class="p">:</span>
+                <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;trust_policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trust_policy</span>
+            <span class="k">if</span> <span class="s2">&quot;no_cuda_sync&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">collector_kwarg</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;no_cuda_sync&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">no_cuda_sync</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
 
@@ -1127,6 +1146,10 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">proc</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="c1"># When using RayReplayBuffer, sub-collectors write directly to buffer</span>
+            <span class="c1"># and return None, so skip processing</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1141,6 +1164,10 @@
 
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_asyncio_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">proc</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="c1"># When using RayReplayBuffer, sub-collectors write directly to buffer</span>
+            <span class="c1"># and return None, so skip processing</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1156,7 +1183,9 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_sync_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collects one data batch per remote collector in each iteration.&quot;&quot;&quot;</span>
-        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
+        <span class="k">while</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Updating weights on all workers&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
@@ -1179,39 +1208,69 @@
                     <span class="n">r</span>
                 <span class="p">)</span>  <span class="c1"># should not be necessary, deleted automatically when ref count is down to 0</span>
                 <span class="n">out_td</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rollouts</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rollouts</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
-                <span class="n">out_td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">out_td</span><span class="p">)</span>
+
+            <span class="c1"># Handle case where replay_buffer is used and rollouts are None</span>
+            <span class="k">if</span> <span class="n">out_td</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Sub-collectors are writing directly to RayReplayBuffer</span>
+                <span class="c1"># Track frames and yield None to signal completion</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span>
+                <span class="k">yield</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">out_td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">out_td</span><span class="p">)</span>
+                <span class="c1"># Normal case: concatenate and yield rollouts</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rollouts</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+                    <span class="n">out_td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">out_td</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">out_td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">out_td</span><span class="p">)</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="n">out_td</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="n">out_td</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                <span class="k">yield</span> <span class="n">out_td</span>
 
-            <span class="k">yield</span> <span class="n">out_td</span>
+        <span class="c1"># Only auto-shutdown if not running in a background thread.</span>
+        <span class="c1"># When using replay buffer, users should explicitly manage shutdown order.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">shutdown_ray</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
-
-    <span class="n">_task</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_run_collection_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Runs the collection loop in a background thread.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">():</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                    <span class="k">break</span>
+                <span class="c1"># When RayReplayBuffer is configured, sub-collectors write directly</span>
+                <span class="c1"># to the buffer and data will be None. Otherwise, data contains rollouts.</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error in collection thread: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span>
 
 <div class="viewcode-block" id="RayCollector.start"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.start">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the RayCollector.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the RayCollector in a background thread.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Replay buffer must be defined for asyncio execution.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
-            <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_iterator_silently</span><span class="p">())</span></div>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Replay buffer must be defined for background execution.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_collection_loop</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_run_iterator_silently</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">async</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_asyncio_iterator</span><span class="p">():</span>
-            <span class="c1"># Process each item silently</span>
-            <span class="k">continue</span>
+<div class="viewcode-block" id="RayCollector.async_shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.async_shutdown">[docs]</a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shutdown_ray</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by the collector during async execution.</span>
 
-<div class="viewcode-block" id="RayCollector.async_shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.async_shutdown">[docs]</a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by ray.init() during async execution.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span>
+<span class="sd">        Args:</span>
+<span class="sd">            shutdown_ray (bool): If True, also shutdown the Ray cluster. Defaults to False.</span>
+<span class="sd">                Note: Setting this to True will kill all Ray actors in the cluster, including</span>
+<span class="sd">                any replay buffers or other services. Only set to True if you&#39;re sure you want</span>
+<span class="sd">                to shut down the entire Ray cluster.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stop_remote_collectors</span><span class="p">()</span>
-        <span class="n">ray</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="n">shutdown_ray</span><span class="p">:</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collects a data batch from a single remote collector in each iteration.&quot;&quot;&quot;</span>
@@ -1220,7 +1279,9 @@
             <span class="n">future</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
             <span class="n">pending_tasks</span><span class="p">[</span><span class="n">future</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span>
 
-        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
+        <span class="k">while</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">pending_tasks</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Missing pending tasks, something went wrong&quot;</span><span class="p">)</span>
 
@@ -1235,6 +1296,9 @@
             <span class="n">ray</span><span class="o">.</span><span class="n">internal</span><span class="o">.</span><span class="n">free</span><span class="p">(</span>
                 <span class="p">[</span><span class="n">future</span><span class="p">]</span>
             <span class="p">)</span>  <span class="c1"># should not be necessary, deleted automatically when ref count is down to 0</span>
+
+            <span class="c1"># Track collected frames - use frames_per_batch since out_td might be None</span>
+            <span class="c1"># when using RayReplayBuffer (sub-collectors write directly to buffer)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span>
 
             <span class="k">yield</span> <span class="n">out_td</span>
@@ -1257,7 +1321,7 @@
         <span class="c1">#         object_ref=ref,</span>
         <span class="c1">#         force=False,</span>
         <span class="c1">#     )</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 
 <div class="viewcode-block" id="RayCollector.set_seed"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
@@ -1283,10 +1347,27 @@
         <span class="k">for</span> <span class="n">collector</span><span class="p">,</span> <span class="n">state_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span> <span class="n">state_dicts</span><span class="p">):</span>
             <span class="n">collector</span><span class="o">.</span><span class="n">load_state_dict</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="RayCollector.shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by ray.init().&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="RayCollector.shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">shutdown_ray</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by the collector.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout (float, optional): Timeout for stopping the collection thread.</span>
+<span class="sd">            shutdown_ray (bool): If True, also shutdown the Ray cluster. Defaults to False.</span>
+<span class="sd">                Note: Setting this to True will kill all Ray actors in the cluster, including</span>
+<span class="sd">                any replay buffers or other services. Only set to True if you&#39;re sure you want</span>
+<span class="sd">                to shut down the entire Ray cluster.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collection_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span> <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">5.0</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stop_remote_collectors</span><span class="p">()</span>
-        <span class="n">ray</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="n">shutdown_ray</span><span class="p">:</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">string</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">()&quot;</span>

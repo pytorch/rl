@@ -818,6 +818,13 @@ The primary use case of <code class="docutils literal notranslate"><span class="
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.ones_update">
+<span class="sig-name descname"><span class="pre">ones_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.ones_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates a TensorDict with 1-values according to the specs.</p>
+<p>Shapes are expected to be compatible with the specs.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.pop">
 <span class="sig-name descname"><span class="pre">pop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_NoDefault.ZERO</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.pop" title="Permalink to this definition">¶</a></dt>
 <dd><p>Removes and returns the value associated with the specified key from the composite spec.</p>
@@ -871,6 +878,13 @@ will be drawn.</p>
 <dd class="field-even"><p>a random tensor sampled in the TensorSpec box.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.rand_update">
+<span class="sig-name descname"><span class="pre">rand_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.rand_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates a TensorDict with random values according to the specs.</p>
+<p>Shapes are expected to be compatible with the specs.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1085,6 +1099,13 @@ The primary use case of <code class="docutils literal notranslate"><span class="
 <dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.zeros">
 <span class="sig-name descname"><span class="pre">zeros</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.9)"><span class="pre">Size</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.zeros" title="Permalink to this definition">¶</a></dt>
 <dd><p>Proxy to <a class="reference internal" href="#torchrl.data.LazyStackedCompositeSpec.zero" title="torchrl.data.LazyStackedCompositeSpec.zero"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zero()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.zeros_update">
+<span class="sig-name descname"><span class="pre">zeros_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.zeros_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates a TensorDict with zeroed values according to the specs.</p>
+<p>Shapes are expected to be compatible with the specs.</p>
 </dd></dl>
 
 </dd></dl>
