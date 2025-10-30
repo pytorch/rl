@@ -521,7 +521,8 @@ class RayCollector(DataCollectorBase):
             collector_kwarg["storing_device"] = self.storing_device[i]
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
-            collector_kwarg["trust_policy"] = trust_policy
+            if "trust_policy" not in collector_kwarg:
+                collector_kwarg["trust_policy"] = self.trust_policy
             if "no_cuda_sync" not in collector_kwarg and self.no_cuda_sync is not None:
                 collector_kwarg["no_cuda_sync"] = no_cuda_sync
 

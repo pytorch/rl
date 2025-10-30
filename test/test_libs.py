@@ -5206,8 +5206,11 @@ class TestIsaacLab:
             total_frames=65536,
             replay_buffer=replay_buffer,
             num_collectors=4,
-            trust_policy=True,
-            no_cuda_sync=True,
+            collector_kwargs={
+                "trust_policy": True,
+                "no_cuda_sync": True,
+                "extend_buffer": True,
+            },
         )
 
         try:
