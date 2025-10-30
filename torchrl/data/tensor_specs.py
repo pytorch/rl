@@ -5736,19 +5736,22 @@ class Composite(TensorSpec):
     def rand_update(self, val: TensorDictBase) -> TensorDictBase:
         """Updates a TensorDict with random values according to the specs.
 
-        Shapes are expected to be compatible with the specs."""
+        Shapes are expected to be compatible with the specs.
+        """
         return val.update(self.rand())
 
     def zeros_update(self, val: TensorDictBase) -> TensorDictBase:
         """Updates a TensorDict with zeroed values according to the specs.
 
-        Shapes are expected to be compatible with the specs."""
+        Shapes are expected to be compatible with the specs.
+        """
         return val.update(self.zeros())
 
     def ones_update(self, val: TensorDictBase) -> TensorDictBase:
         """Updates a TensorDict with 1-values according to the specs.
 
-        Shapes are expected to be compatible with the specs."""
+        Shapes are expected to be compatible with the specs.
+        """
         return val.update(self.ones())
 
     def rand(self, shape: torch.Size = None) -> TensorDictBase:

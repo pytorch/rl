@@ -163,7 +163,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
     _weight_senders: dict[str, WeightSender] | None = None
     _weight_receivers: dict[str, WeightReceiver] | None = None
-    verbose: bool = True
+    verbose: bool = False
 
     @property
     def weight_updater(self) -> WeightUpdaterBase:
@@ -1825,7 +1825,7 @@ class SyncDataCollector(DataCollectorBase):
                     else:
                         if self.verbose:
                             torchrl_logger.info(
-                                f"Collector: Adding to queue (no device)."
+                                "Collector: Adding to queue (no device)."
                             )
                         tensordicts.append(self._shuttle)
 

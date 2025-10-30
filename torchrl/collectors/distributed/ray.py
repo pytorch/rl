@@ -811,7 +811,7 @@ class RayCollector(DataCollectorBase):
     def _run_collection_loop(self):
         """Runs the collection loop in a background thread."""
         try:
-            for data in self.iterator():
+            for _ in self.iterator():
                 if self._stop_event.is_set():
                     break
                 # When RayReplayBuffer is configured, sub-collectors write directly
