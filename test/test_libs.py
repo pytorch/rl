@@ -5177,7 +5177,7 @@ class TestIsaacLab:
             col.shutdown(close_env=False)
 
     @pytest.mark.skipif(not _has_ray, reason="Ray not found")
-    @pytest.mark.parametrize("use_rb", [True, False])
+    @pytest.mark.parametrize("use_rb", [False, True])
     def test_isaaclab_ray_collector(self, env, use_rb):
         from functools import partial
 
@@ -5194,8 +5194,8 @@ class TestIsaacLab:
         col = RayCollector(
             [torchrl.testing.env_helper.make_isaac_env] * 4,
             env.full_action_spec.rand_update,
-            frames_per_batch=1000,
-            total_frames=8_000,
+            frames_per_batch=8192,
+            total_frames=65536,
             replay_buffer=replay_buffer,
             num_collectors=4,
             trust_policy=True,
