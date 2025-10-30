@@ -761,7 +761,9 @@ class RayCollector(DataCollectorBase):
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
-        while self.collected_frames < self.total_frames and not self._stop_event.is_set():
+        while (
+            self.collected_frames < self.total_frames and not self._stop_event.is_set()
+        ):
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
                 torchrl_logger.info("Updating weights on all workers")
                 self.update_policy_weights_()
@@ -784,7 +786,7 @@ class RayCollector(DataCollectorBase):
                     r
                 )  # should not be necessary, deleted automatically when ref count is down to 0
                 out_td.append(rollouts)
-            
+
             # Handle case where replay_buffer is used and rollouts are None
             if out_td[0] is None:
                 # Sub-collectors are writing directly to RayReplayBuffer
@@ -819,7 +821,9 @@ class RayCollector(DataCollectorBase):
     def start(self):
         """Starts the RayCollector in a background thread."""
         if self.replay_buffer is None:
-            raise RuntimeError("Replay buffer must be defined for background execution.")
+            raise RuntimeError(
+                "Replay buffer must be defined for background execution."
+            )
         if self._collection_thread is None or not self._collection_thread.is_alive():
             self._stop_event.clear()
             self._collection_thread = threading.Thread(
@@ -842,7 +846,9 @@ class RayCollector(DataCollectorBase):
             future = collector.next.remote()
             pending_tasks[future] = index
 
-        while self.collected_frames < self.total_frames and not self._stop_event.is_set():
+        while (
+            self.collected_frames < self.total_frames and not self._stop_event.is_set()
+        ):
             if not len(list(pending_tasks.keys())) == len(self.remote_collectors):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
@@ -857,7 +863,7 @@ class RayCollector(DataCollectorBase):
             ray.internal.free(
                 [future]
             )  # should not be necessary, deleted automatically when ref count is down to 0
-            
+
             # Track collected frames - use frames_per_batch since out_td might be None
             # when using RayReplayBuffer (sub-collectors write directly to buffer)
             self.collected_frames += self.frames_per_batch
@@ -912,7 +918,9 @@ class RayCollector(DataCollectorBase):
         """Finishes processes started by ray.init()."""
         self._stop_event.set()
         if self._collection_thread is not None and self._collection_thread.is_alive():
-            self._collection_thread.join(timeout=timeout if timeout is not None else 5.0)
+            self._collection_thread.join(
+                timeout=timeout if timeout is not None else 5.0
+            )
         self.stop_remote_collectors()
         ray.shutdown()
 

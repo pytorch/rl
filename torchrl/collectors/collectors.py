@@ -1842,9 +1842,7 @@ class SyncDataCollector(DataCollectorBase):
                     and self.interruptor.collection_stopped()
                 ):
                     if self.verbose:
-                        torchrl_logger.info(
-                            "Collector: Interruptor stopped."
-                        )
+                        torchrl_logger.info("Collector: Interruptor stopped.")
                     if (
                         self.replay_buffer is not None
                         and not self._ignore_rb
@@ -1894,7 +1892,9 @@ class SyncDataCollector(DataCollectorBase):
                 ):
                     return
                 else:
-                    torchrl_logger.info("Returning final rollout with NO buffer (maybe_dense_stack).")
+                    torchrl_logger.info(
+                        "Returning final rollout with NO buffer (maybe_dense_stack)."
+                    )
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 

@@ -57,6 +57,7 @@ from torchrl.data import (
     Bounded,
     Categorical,
     Composite,
+    LazyMemmapStorage,
     MultiCategorical,
     MultiOneHot,
     NonTensor,
@@ -64,7 +65,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Unbounded,
-    UnboundedDiscreteTensorSpec, LazyMemmapStorage,
+    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -5186,9 +5187,10 @@ class TestIsaacLab:
         ray.shutdown()
 
     @pytest.mark.skipif(not _has_ray, reason="Ray not found")
-    @pytest.mark.parametrize("use_rb", [False, True])
-    def test_isaaclab_ray_collector(self, env, use_rb, clean_ray):
-        from torchrl.data import LazyTensorStorage, RayReplayBuffer
+    @pytest.mark.parametrize("use_rb", [False, True], ids=["rb_false", "rb_true"])
+    @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
+    def test_isaaclab_ray_collector(self, env, use_rb, clean_ray, num_collectors):
+        from torchrl.data import RayReplayBuffer
 
         # Create replay buffer if requested
         replay_buffer = None
@@ -5200,12 +5202,12 @@ class TestIsaacLab:
             )
 
         col = RayCollector(
-            [torchrl.testing.env_helper.make_isaac_env] * 4,
+            [torchrl.testing.env_helper.make_isaac_env] * num_collectors,
             env.full_action_spec.rand_update,
             frames_per_batch=8192,
             total_frames=65536,
             replay_buffer=replay_buffer,
-            num_collectors=4,
+            num_collectors=num_collectors,
             collector_kwargs={
                 "trust_policy": True,
                 "no_cuda_sync": True,
@@ -5270,20 +5272,24 @@ class TestIsaacLab:
             if use_rb:
                 replay_buffer.close()
 
-    def test_isaaclab_ray_collector_start(self, env, clean_ray):
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
+    def test_isaaclab_ray_collector_start(self, env, clean_ray, num_collectors):
 
         from torchrl.data import LazyTensorStorage, RayReplayBuffer
+
         rb = RayReplayBuffer(
             storage=partial(LazyTensorStorage, 100_000, ndim=2),
             ray_init_config={"num_cpus": 4},
         )
         col = RayCollector(
-            [torchrl.testing.env_helper.make_isaac_env] * 4,
+            [torchrl.testing.env_helper.make_isaac_env] * num_collectors,
             env.full_action_spec.rand_update,
             frames_per_batch=8192,
             total_frames=65536,
             trust_policy=True,
             replay_buffer=rb,
+            num_collectors=num_collectors,
         )
         col.start()
         try:
