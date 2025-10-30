@@ -5176,11 +5176,16 @@ class TestIsaacLab:
             # We must do that, otherwise `__del__` calls `shutdown` and the next test will fail
             col.shutdown(close_env=False)
 
+    @pytest.fixture(scope="function")
+    def clean_ray(self):
+        ray.shutdown()
+        ray.init(ignore_reinit_error=True)
+        yield
+        ray.shutdown()
+
     @pytest.mark.skipif(not _has_ray, reason="Ray not found")
     @pytest.mark.parametrize("use_rb", [False, True])
-    def test_isaaclab_ray_collector(self, env, use_rb):
-        from functools import partial
-
+    def test_isaaclab_ray_collector(self, env, use_rb, clean_ray):
         from torchrl.data import LazyTensorStorage, RayReplayBuffer
 
         # Create replay buffer if requested
@@ -5257,6 +5262,39 @@ class TestIsaacLab:
             col.shutdown()
             if use_rb:
                 replay_buffer.close()
+
+    def test_isaaclab_ray_collector_start(self, env, clean_ray):
+
+        from torchrl.data import LazyTensorStorage, RayReplayBuffer
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100_000, ndim=2),
+            ray_init_config={"num_cpus": 4},
+        )
+        col = RayCollector(
+            [torchrl.testing.env_helper.make_isaac_env] * 4,
+            env.full_action_spec.rand_update,
+            frames_per_batch=8192,
+            total_frames=65536,
+            trust_policy=True,
+            replay_buffer=rb,
+        )
+        col.start()
+        try:
+            time_waiting = 0
+            while time_waiting < 30:
+                if len(rb) >= 4096:
+                    break
+                time.sleep(0.1)
+                time_waiting += 0.1
+            else:
+                raise RuntimeError("Timeout waiting for data")
+            sample = rb.sample(4096)
+            assert sample.batch_size == (4096,)
+            assert sample["observation"].isfinite().any()
+            assert sample["action"].isfinite().any()
+        finally:
+            col.shutdown()
+            rb.close()
 
     def test_isaaclab_reset(self, env):
         # Make a rollout that will stop as soon as a trajectory reaches a done state
