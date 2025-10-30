@@ -12,6 +12,7 @@ import importlib.util
 import os
 import urllib.error
 
+import torchrl.testing.env_helper
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -50,11 +51,13 @@ from torch import nn
 
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
+from torchrl.collectors.distributed import RayCollector
 from torchrl.data import (
     Binary,
     Bounded,
     Categorical,
     Composite,
+    LazyMemmapStorage,
     MultiCategorical,
     MultiOneHot,
     NonTensor,
@@ -134,6 +137,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 
+_has_ray = importlib.util.find_spec("ray") is not None
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         _make_multithreaded_env,
@@ -5129,28 +5133,8 @@ class TestMeltingpot:
 class TestIsaacLab:
     @pytest.fixture(scope="class")
     def env(self):
-        torch.manual_seed(0)
-        import argparse
-
-        # This code block ensures that the Isaac app is started in headless mode
-        from isaaclab.app import AppLauncher
-
-        parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
-        AppLauncher.add_app_launcher_args(parser)
-        args_cli, hydra_args = parser.parse_known_args(["--headless"])
-        AppLauncher(args_cli)
-
-        # Imports and env
-        import gymnasium as gym
-        import isaaclab_tasks  # noqa: F401
-        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
-
-        torchrl_logger.info("Making IsaacLab env...")
-        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
-        torchrl_logger.info("Wrapping IsaacLab env...")
+        env = torchrl.testing.env_helper.make_isaac_env()
         try:
-            env = IsaacLabWrapper(env)
             yield env
         finally:
             torchrl_logger.info("Closing IsaacLab env...")
@@ -5167,11 +5151,17 @@ class TestIsaacLab:
     def test_isaaclab_rb(self, env):
         env = env.append_transform(StepCounter())
         rb = ReplayBuffer(
-            storage=LazyTensorStorage(50, ndim=2), sampler=SliceSampler(num_slices=5)
+            storage=LazyTensorStorage(100_000, ndim=2),
+            sampler=SliceSampler(num_slices=5),
+            batch_size=20,
         )
-        rb.extend(env.rollout(20))
+        r = env.rollout(20, break_when_any_done=False)
+        rb.extend(r)
         # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
-        flat_ranges = rb["step_count"].flatten() % 4
+        flat_ranges = rb.sample()["step_count"]
+        flat_ranges = flat_ranges.view(-1, 4)
+        flat_ranges = flat_ranges - flat_ranges[:, :1]  # substract baseline
+        flat_ranges = flat_ranges.flatten()
         arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
         assert (flat_ranges == arange).all()
 
@@ -5186,6 +5176,138 @@ class TestIsaacLab:
         finally:
             # We must do that, otherwise `__del__` calls `shutdown` and the next test will fail
             col.shutdown(close_env=False)
+
+    @pytest.fixture(scope="function")
+    def clean_ray(self):
+        import ray
+
+        ray.shutdown()
+        ray.init(ignore_reinit_error=True)
+        yield
+        ray.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    @pytest.mark.parametrize("use_rb", [False, True], ids=["rb_false", "rb_true"])
+    @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
+    def test_isaaclab_ray_collector(self, env, use_rb, clean_ray, num_collectors):
+        from torchrl.data import RayReplayBuffer
+
+        # Create replay buffer if requested
+        replay_buffer = None
+        if use_rb:
+            replay_buffer = RayReplayBuffer(
+                # We place the storage on memmap to make it shareable
+                storage=partial(LazyMemmapStorage, 10_000, ndim=2),
+                ray_init_config={"num_cpus": 4},
+            )
+
+        col = RayCollector(
+            [torchrl.testing.env_helper.make_isaac_env] * num_collectors,
+            env.full_action_spec.rand_update,
+            frames_per_batch=8192,
+            total_frames=65536,
+            replay_buffer=replay_buffer,
+            num_collectors=num_collectors,
+            collector_kwargs={
+                "trust_policy": True,
+                "no_cuda_sync": True,
+                "extend_buffer": True,
+            },
+        )
+
+        try:
+            if use_rb:
+                # When replay buffer is provided, collector yields None and populates buffer
+                for i, data in enumerate(col):
+                    # Data is None when using replay buffer
+                    assert data is None, "Expected None when using replay buffer"
+
+                    # Check replay buffer is being populated
+                    if i >= 0:
+                        # Wait for buffer to have enough data to sample
+                        if len(replay_buffer) >= 32:
+                            sample = replay_buffer.sample(32)
+                            assert sample.batch_size == (32,)
+                            # Check that we have meaningful data (not all zeros/nans)
+                            assert sample["policy"].isfinite().any()
+                            assert sample["action"].isfinite().any()
+                            # Check shape is correct for Isaac Lab env (should have batch dim from env)
+                            assert len(sample.shape) == 1
+
+                    # Only collect a few batches for the test
+                    if i >= 2:
+                        break
+
+                # Verify replay buffer has data
+                assert len(replay_buffer) > 0, "Replay buffer should not be empty"
+                # Test that we can sample multiple times
+                for _ in range(5):
+                    sample = replay_buffer.sample(16)
+                    assert sample.batch_size == (16,)
+                    assert sample["policy"].isfinite().any()
+
+            else:
+                # Without replay buffer, collector yields data normally
+                collected_frames = 0
+                for i, data in enumerate(col):
+                    assert (
+                        data is not None
+                    ), "Expected data when not using replay buffer"
+                    # Check the data shape matches the batch size
+                    assert (
+                        data.numel() >= 1000
+                    ), f"Expected at least 1000 frames, got {data.numel()}"
+                    collected_frames += data.numel()
+
+                    # Only collect a few batches for the test
+                    if i >= 2:
+                        break
+
+                # Verify we collected some data
+                assert collected_frames > 0, "No frames were collected"
+
+        finally:
+            # Clean shutdown
+            col.shutdown()
+            if use_rb:
+                replay_buffer.close()
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
+    def test_isaaclab_ray_collector_start(self, env, clean_ray, num_collectors):
+
+        from torchrl.data import LazyTensorStorage, RayReplayBuffer
+
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100_000, ndim=2),
+            ray_init_config={"num_cpus": 4},
+        )
+        col = RayCollector(
+            [torchrl.testing.env_helper.make_isaac_env] * num_collectors,
+            env.full_action_spec.rand_update,
+            frames_per_batch=8192,
+            total_frames=65536,
+            trust_policy=True,
+            replay_buffer=rb,
+            num_collectors=num_collectors,
+        )
+        col.start()
+        try:
+            time_waiting = 0
+            while time_waiting < 30:
+                if len(rb) >= 4096:
+                    break
+                time.sleep(0.1)
+                time_waiting += 0.1
+            else:
+                raise RuntimeError("Timeout waiting for data")
+            sample = rb.sample(4096)
+            assert sample.batch_size == (4096,)
+            assert sample["policy"].isfinite().any()
+            assert sample["action"].isfinite().any()
+        finally:
+            col.shutdown()
+            rb.close()
 
     def test_isaaclab_reset(self, env):
         # Make a rollout that will stop as soon as a trajectory reaches a done state
