@@ -4025,6 +4025,15 @@ class TestAsyncCollection:
             frames_per_batch=16,
             **kwargs,
         )
+        if not isinstance(collector, SyncDataCollector):
+            if weight_sync_scheme is not None:
+                assert isinstance(
+                    collector._weight_sync_schemes["policy"], weight_sync_scheme
+                )
+            else:
+                assert isinstance(
+                    collector._weight_sync_schemes["policy"], SharedMemWeightSyncScheme
+                )
         try:
             collector.start()
             for _ in range(10):

@@ -296,6 +296,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
         """Extract weights from a model if needed.
 
+        For the new weight sync scheme system, weight preparation is handled
+        by the scheme's prepare_weights() method. This method now only handles
+        legacy weight updater cases.
+
         Args:
             weights: Either already-extracted weights or a model to extract from.
             model_id: The model identifier for resolving string paths.
@@ -303,40 +307,24 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         Returns:
             Extracted weights in the appropriate format.
         """
-        scheme = (
-            self._weight_sync_schemes.get(model_id)
-            if self._weight_sync_schemes
-            else None
-        )
+        # New weight sync schemes handle preparation themselves
+        if self._weight_sync_schemes:
+            # Just pass through - WeightSender will call scheme.prepare_weights()
+            return weights
 
-        # If no weights were provided and a sync scheme exists, extract the latest
-        # weights from the current model using the scheme strategy (state_dict or tensordict).
-        # This ensures we don't return stale cached weights.
-        if weights is None and scheme is not None:
-            from torchrl.weight_update.weight_sync_schemes import (
-                _resolve_model,
-                WeightStrategy,
-            )
+        # Legacy weight updater path
+        return self._legacy_extract_weights(weights, model_id)
 
-            strategy = WeightStrategy(extract_as=scheme.strategy)
-            try:
-                model = _resolve_model(self, model_id)
-            except AttributeError:
-                # Model not found, try fallback policy
-                model = None
+    def _legacy_extract_weights(self, weights: Any, model_id: str) -> Any:
+        """Legacy weight extraction for old weight updater system.
 
-            # If model is None, try to use the fallback policy
-            if model is None and model_id == "policy":
-                if (
-                    hasattr(self, "_fallback_policy")
-                    and self._fallback_policy is not None
-                ):
-                    model = self._fallback_policy
+        Args:
+            weights: Either already-extracted weights or a model to extract from.
+            model_id: The model identifier.
 
-            if model is not None:
-                return strategy.extract_weights(model)
-            # If still None, fall through to legacy code below
-
+        Returns:
+            Extracted weights.
+        """
         if weights is None:
             if model_id == "policy" and hasattr(self, "policy_weights"):
                 return self.policy_weights
@@ -349,23 +337,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 return self._policy_weights_dict.get(policy_device)
             return None
 
-        if scheme is None:
-            return weights
-
-        from torchrl.weight_update.weight_sync_schemes import (
-            _resolve_model,
-            WeightStrategy,
-        )
-
-        strategy = WeightStrategy(extract_as=scheme.strategy)
-
-        if isinstance(weights, nn.Module):
-            return strategy.extract_weights(weights)
-        elif isinstance(weights, str):
-            model = _resolve_model(self, weights)
-            return strategy.extract_weights(model)
-        else:
-            return weights
+        return weights
 
     @property
     def _legacy_weight_updater(self) -> bool:
@@ -2479,7 +2451,7 @@ class _MultiDataCollector(DataCollectorBase):
 
         # Set up weight synchronization
         if (
-            policy_factory is None
+            not any(policy_factory)
             and not weight_sync_schemes
             and weight_updater is None
         ):
@@ -2665,6 +2637,9 @@ class _MultiDataCollector(DataCollectorBase):
                     if isinstance(policy_new_device, nn.Module)
                     else TensorDict()
                 )
+                # For multi-process collectors, ensure weights are in shared memory
+                if policy_device and policy_device.type == "cpu":
+                    weights = weights.share_memory_()
                 self._policy_weights_dict[policy_device] = weights
                 # Store the first policy instance for fallback weight extraction
                 if self._fallback_policy is None:
@@ -3097,12 +3072,24 @@ also that the state dict is synchronised across processes if needed."""
             for model_id, scheme in self._weight_sync_schemes.items():
                 if isinstance(scheme, SharedMemWeightSyncScheme):
                     sender = self._weight_senders[model_id]
-                    # Extract weights from the policy (which should now be linked to shared memory)
-                    weights = self._extract_weights_if_needed(None, model_id)
+                    # Get the shared memory weights from _policy_weights_dict
+                    # Use prepare_weights with None to trigger cache lookup
+                    from torchrl.weight_update.weight_sync_schemes import _get_strategy
+
+                    strategy = _get_strategy(scheme.strategy)
+                    weights = scheme.prepare_weights(
+                        weights=None,
+                        model_id=model_id,
+                        strategy=strategy,
+                        context=self,
+                    )
                     if weights is not None:
-                        # Register the shared weights - this sends the buffer to workers
-                        # Workers are ready and waiting for messages, so they can receive this
-                        sender.update_weights(weights)
+                        # Register the shared weights directly with each transport
+                        # This ensures the transports use the same shared memory buffer
+                        # that we'll update later, rather than creating a clone
+                        for transport in sender._iterate_transports():
+                            if hasattr(transport, "register_weights"):
+                                transport.register_weights(model_id, weights)
 
         self.queue_out = queue_out
         self.closed = False
@@ -4574,7 +4561,15 @@ def _main_async_collector(
                     receiver._shared_weights[model_id] = shared_buffer
 
                 # Apply the buffer to the model immediately
-                receiver.apply_weights(shared_buffer)
+                # Only apply if the model is an nn.Module (has learnable parameters)
+                try:
+                    model = receiver._resolve_model_ref()
+                    if isinstance(model, nn.Module):
+                        receiver.apply_weights(shared_buffer)
+                except (ValueError, AttributeError):
+                    # Model not registered or not an nn.Module (e.g., RandomPolicy)
+                    # Skip weight application - this is expected for policies without parameters
+                    pass
 
                 if verbose:
                     torchrl_logger.info(
