@@ -158,11 +158,35 @@ class RayTransform(Transform, ABC):
         ```
     """
 
+    @property
+    def _ray(self):
+        ray = self.__dict__.get("_ray_val", None)
+        if ray is not None:
+            return ray
+        # Import ray here to avoid requiring it as a dependency
+        try:
+            import ray
+        except ImportError:
+            raise ImportError(
+                "Ray is required for RayTransform. Install with: pip install ray"
+            )
+        self.__dict__["_ray_val"] = ray
+        return ray
+
+    @_ray.setter
+    def _ray(self, value):
+        self.__dict__["_ray_val"] = value
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("_ray_val", None)
+        return state
+
     def __init__(
         self,
         *,
         num_cpus: int | None = None,
-        num_gpus: int = 0,
+        num_gpus: int | None = None,
         device: DEVICE_TYPING | None = None,
         actor_name: str | None = None,
         **kwargs,
@@ -176,20 +200,11 @@ class RayTransform(Transform, ABC):
             actor_name: Name of the Ray actor (for reuse)
             **kwargs: Additional arguments passed to Transform
         """
-        # Import ray here to avoid requiring it as a dependency
-        try:
-            import ray
-        except ImportError:
-            raise ImportError(
-                "Ray is required for RayTransform. Install with: pip install ray"
-            )
-        self._ray = ray
-
         super().__init__(
             in_keys=kwargs.get("in_keys", []), out_keys=kwargs.get("out_keys", [])
         )
 
-        self._num_cpus = num_cpus or 1
+        self._num_cpus = num_cpus
         self._num_gpus = num_gpus
         self._device = device
         self._actor_name = actor_name
@@ -237,10 +252,10 @@ class RayTransform(Transform, ABC):
             parent_batch_size = self.parent.batch_size
 
             # Set the batch size directly on the remote actor to override its initialization
-            self._ray.get(self._actor.set_attr.remote("batch_size", parent_batch_size))
+            self._ray.get(self._actor._set_attr.remote("batch_size", parent_batch_size))
 
             # Also disable validation on the remote actor since we'll handle consistency locally
-            self._ray.get(self._actor.set_attr.remote("_validated", True))
+            self._ray.get(self._actor._set_attr.remote("_validated", True))
 
         return result
 
@@ -446,7 +461,7 @@ class RayTransform(Transform, ABC):
         """Set primers."""
         self.__dict__["_primers"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("primers", value))
+            self._ray.get(self._actor._set_attr.remote("primers", value))
 
     def to(self, *args, **kwargs):
         """Move to device."""
@@ -470,7 +485,7 @@ class RayTransform(Transform, ABC):
         """Set in_keys property."""
         self.__dict__["_in_keys"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("in_keys", value))
+            self._ray.get(self._actor._set_attr.remote("in_keys", value))
 
     @property
     def out_keys(self):
@@ -482,7 +497,7 @@ class RayTransform(Transform, ABC):
         """Set out_keys property."""
         self.__dict__["_out_keys"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("out_keys", value))
+            self._ray.get(self._actor._set_attr.remote("out_keys", value))
 
     @property
     def in_keys_inv(self):
@@ -494,7 +509,7 @@ class RayTransform(Transform, ABC):
         """Set in_keys_inv property."""
         self.__dict__["_in_keys_inv"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("in_keys_inv", value))
+            self._ray.get(self._actor._set_attr.remote("in_keys_inv", value))
 
     @property
     def out_keys_inv(self):
@@ -506,7 +521,7 @@ class RayTransform(Transform, ABC):
         """Set out_keys_inv property."""
         self.__dict__["_out_keys_inv"] = value
         if hasattr(self, "_actor"):
-            self._ray.get(self._actor.set_attr.remote("out_keys_inv", value))
+            self._ray.get(self._actor._set_attr.remote("out_keys_inv", value))
 
     # Generic attribute access for any remaining attributes
     def __getattr__(self, name):
@@ -606,7 +621,7 @@ class RayTransform(Transform, ABC):
             # Try to set on remote actor for other attributes
             try:
                 if hasattr(self, "_actor") and self._actor is not None:
-                    self._ray.get(self._actor.set_attr.remote(name, value))
+                    self._ray.get(self._actor._set_attr.remote(name, value))
                 else:
                     super().__setattr__(name, value)
             except Exception:
@@ -621,16 +636,22 @@ class _RayServiceMetaClass(type):
     alternative class when instantiated with use_ray_service=True.
 
     Usage:
-        class MyClass(metaclass=_RayServiceMetaClass[MyRayClass]):
-            def __init__(self, use_ray_service=False, **kwargs):
-                # Regular implementation
-                pass
-
-        # Returns MyClass instance
-        obj1 = MyClass(use_ray_service=False)
-
-        # Returns MyRayClass instance
-        obj2 = MyClass(use_ray_service=True)
+        >>> class MyRayClass():
+        ...     def __init__(self, **kwargs):
+        ...         ...
+        ...
+        >>> class MyClass(metaclass=_RayServiceMetaClass):
+        ...     _RayServiceClass = MyRayClass
+        ...
+        ...     def __init__(self, use_ray_service=False, **kwargs):
+        ...         # Regular implementation
+        ...         pass
+        ...
+        >>> # Returns MyClass instance
+        >>> obj1 = MyClass(use_ray_service=False)
+        >>>
+        >>> # Returns MyRayClass instance
+        >>> obj2 = MyClass(use_ray_service=True)
     """
 
     def __call__(cls, *args, use_ray_service=False, **kwargs):

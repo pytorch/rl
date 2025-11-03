@@ -16,6 +16,7 @@ maintainers = [
 ]
 keywords = ["reinforcement-learning", "pytorch", "rl", "machine-learning"]
 classifiers = [
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -53,6 +54,7 @@ tests = [
     "pytest-benchmark",
     "pytest-rerunfailures",
     "pytest-error-for-skips",
+    "pytest-timeout",
 ]
 utils = [
     "tensorboard",
@@ -75,7 +77,7 @@ offline-data = [
 ]
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"]
 open_spiel = ["open_spiel>=1.5"]
-brax = ["jax[cuda12]>=0.7.0", "brax"]
+brax = ["jax>=0.7.0", "brax"]
 llm = [
     "transformers",
     "vllm",
@@ -143,3 +145,8 @@ exclude = [
 
 [tool.usort]
 first_party_detection = false
+
+[project.entry-points."vllm.general_plugins"]
+# Ensure FP32 overrides are registered in all vLLM processes (main, workers, and
+# the registry subprocess) before resolving model classes.
+fp32_overrides = "torchrl.modules.llm.backends.vllm.vllm_plugin:register_fp32_overrides"

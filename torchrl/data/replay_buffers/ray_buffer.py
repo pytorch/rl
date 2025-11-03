@@ -113,7 +113,8 @@ class RayReplayBuffer(ReplayBuffer):
         ...         # break at some point
         ...         break
         ...
-        ...     await distributed_collector.async_shutdown()
+        ...     await distributed_collector.async_shutdown(shutdown_ray=False)
+        ...     buffer.close()  # Close buffer after collector
         >>>
         >>> if __name__ == "__main__":
         ...     asyncio.run(main())
@@ -126,6 +127,7 @@ class RayReplayBuffer(ReplayBuffer):
         replay_buffer_cls: type[ReplayBuffer] | None = ReplayBuffer,
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
+        delayed_init: bool = False,
         **kwargs,
     ) -> None:
         if not _has_ray:
@@ -146,15 +148,23 @@ class RayReplayBuffer(ReplayBuffer):
             self.has_gpu = remote_config.get("num_gpus", 0) > 0
         else:
             self.has_gpu = False
-        self._rb = remote_cls(*args, **kwargs)
+        self._rb = remote_cls(*args, delayed_init=delayed_init, **kwargs)
+        self._delayed_init = False
 
     def close(self):
         """Terminates the Ray actor associated with this replay buffer."""
         if hasattr(self, "_rb"):
-            torchrl_logger.info("Killing Ray actor.")
-            ray.kill(self._rb)  # Forcefully terminate the actor
-            delattr(self, "_rb")  # Remove the reference to the terminated actor
-            torchrl_logger.info("Ray actor killed.")
+            try:
+                torchrl_logger.info("Killing Ray actor.")
+                ray.kill(self._rb)  # Forcefully terminate the actor
+                torchrl_logger.info("Ray actor killed.")
+            except (ValueError, RuntimeError) as e:
+                # Actor may already be dead if ray.shutdown() was called
+                torchrl_logger.debug(
+                    f"Failed to kill Ray actor (may already be terminated): {e}"
+                )
+            finally:
+                delattr(self, "_rb")  # Remove the reference to the terminated actor
 
     @property
     def _replay_lock(self):

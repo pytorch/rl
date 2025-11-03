@@ -17,42 +17,19 @@ import os
 import random
 import uuid
 from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
+
 from torchrl._utils import logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
 from .vllm_utils import stateless_init_process_group
 
-try:
-    import ray
-    from ray.util.placement_group import placement_group, remove_placement_group
-    from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-except ImportError:
-    ray = None
 
-    def placement_group(*args, **kwargs):
-        """Placement group is not available when ray is not installed."""
-        raise ImportError(
-            "ray is not installed. Please install it with `pip install ray`."
-        )
-
-    def remove_placement_group(*args, **kwargs):
-        """Remove placement group is not available when ray is not installed."""
-        raise ImportError(
-            "ray is not installed. Please install it with `pip install ray`."
-        )
-
-    class PlacementGroupSchedulingStrategy:
-        """Placement group scheduling strategy is not available when ray is not installed."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "ray is not installed. Please install it with `pip install ray`."
-            )
-
+_has_vllm = True
 
 if TYPE_CHECKING:
     from vllm.engine.async_llm_engine import AsyncEngineArgs
@@ -70,33 +47,27 @@ except ImportError:
     _has_vllm = False
 
 
-if not _has_vllm:
+def _get_ray():
+    """Import Ray on demand to avoid global import side-effects.
 
-    class Worker:
-        """Placeholder for Worker class when vLLM is not installed."""
+    Returns:
+        ModuleType: The imported Ray module.
 
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "vllm is not installed. Please install it with `pip install vllm`."
-            )
-
-else:
-    from vllm.worker.worker import Worker
-
-
-class _AsyncvLLMWorker(Worker):
-    """Async vLLM worker for Ray with weight update capabilities.
-
-    This worker extends the base vLLM Worker to support async operations
-    and weight updates via NCCL communication groups.
+    Raises:
+        ImportError: If Ray is not installed.
     """
+    try:
+        import ray  # type: ignore
 
-    def __init__(self, *args, **kwargs):
-        torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
-        torchrl_logger.info(f"visible devices {os.getenv('CUDA_VISIBLE_DEVICES')}")
-        torchrl_logger.info(f"device count {torch.cuda.device_count()}")
-        super().__init__(*args, **kwargs)
-        self.model_update_group = None
+        return ray
+    except Exception as e:  # pragma: no cover - surfaced to callers
+        raise ImportError(
+            "ray is not installed. Please install it with `pip install ray`."
+        ) from e
+
+
+class _AsyncvLLMWorker:
+    """Async vLLM worker extension for Ray with weight update capabilities."""
 
     def init_weight_update_group(
         self,
@@ -105,7 +76,10 @@ class _AsyncvLLMWorker(Worker):
         rank_offset: int,
         world_size: int,
     ):
-        """Initialize weight update group for this worker.
+        """Initialize weight update group for this worker (non-blocking).
+
+        This method starts NCCL initialization in a background thread and returns immediately,
+        allowing the RPC to complete. The NCCL collective will complete when the trainer joins.
 
         Args:
             master_address (str): The master address for distributed training.
@@ -113,10 +87,12 @@ class _AsyncvLLMWorker(Worker):
             rank_offset (int): Rank offset for this worker in the global weight update group.
             world_size (int): Total number of processes in the weight update group.
         """
+        import threading
+
         from vllm.distributed.parallel_state import get_world_group
 
         torchrl_logger.info(f"=> in {type(self).__name__}.init_weight_update_group")
-        if self.model_update_group is not None:
+        if getattr(self, "model_update_group", None) is not None:
             torchrl_logger.info("Model update group already initialized")
             return
 
@@ -128,18 +104,35 @@ class _AsyncvLLMWorker(Worker):
         # Calculate the global rank for weight update group
         rank = local_rank + rank_offset
         torchrl_logger.info(
-            f"Initializing {type(self).__name__} weight update group with "
+            f"Starting {type(self).__name__} weight update group init (non-blocking) with "
             f"{master_address=}, {master_port=}, {rank=}, {world_size=}, device={self.device}"
         )
 
-        # Import synchronous version for workers too
-        from .vllm_utils import stateless_init_process_group
+        # Start NCCL init in a background thread so this RPC can return immediately
+        def _init_nccl_background():
+            try:
+                from .vllm_utils import stateless_init_process_group
 
-        self.model_update_group = stateless_init_process_group(
-            master_address, master_port, rank, world_size, self.device
+                torchrl_logger.info(
+                    f"Worker rank {rank}: Starting NCCL init (will block until collective completes)..."
+                )
+                self.model_update_group = stateless_init_process_group(
+                    master_address, master_port, rank, world_size, self.device
+                )
+                torchrl_logger.info(f"Worker rank {rank}: NCCL init complete!")
+            except Exception as e:
+                torchrl_logger.error(f"Worker rank {rank}: NCCL init failed: {e}")
+                raise
+
+        thread = threading.Thread(target=_init_nccl_background, daemon=False)
+        thread.start()
+
+        # Store thread reference for potential cleanup
+        self._nccl_init_thread = thread
+
+        torchrl_logger.info(
+            f"{type(self).__name__}.init_weight_update_group dispatched (non-blocking)"
         )
-
-        torchrl_logger.info(f"{type(self).__name__}.init_weight_update_group success")
 
     def update_weight(self, name: str, dtype_name: str, shape: tuple[int, ...]):
         """Update weight via broadcast from master (rank 0) - periodic-mono pattern.
@@ -168,6 +161,41 @@ class _AsyncvLLMWorker(Worker):
         ready = self.model_update_group is not None
         torchrl_logger.info(f"Worker NCCL group ready: {ready}")
         return ready
+
+    def load_weights_from_storage(self, storage_path: str, num_threads: int = 1):
+        """Load weights from shared storage (double-buffer approach).
+
+        This method reads weights from a memory-mapped TensorDict directory
+        and loads them into the model. Used for file-based weight synchronization
+        as an alternative to NCCL collectives.
+
+        Args:
+            storage_path: Path to the directory containing memory-mapped weights
+            num_threads: Number of threads for reading (default: 1)
+        """
+        from tensordict import TensorDict
+
+        torchrl_logger.info(f"Worker loading weights from {storage_path}")
+
+        # Read weights from shared storage
+        weights = TensorDict.load_memmap(storage_path)
+        weights = weights.flatten_keys(".")
+
+        # Convert to list of (name, tensor) tuples
+        weights_list = list(weights.items())
+
+        torchrl_logger.info(f"Worker loading {len(weights_list)} weights into model")
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [
+                executor.submit(self.model_runner.model.load_weights, weights)
+                for weights in weights_list
+            ]
+            wait(futures)
+
+        torchrl_logger.info(
+            f"Worker successfully loaded {len(weights_list)} weights from storage"
+        )
 
 
 class _AsyncLLMEngine:
@@ -203,17 +231,9 @@ class _AsyncLLMEngine:
 
         from vllm import AsyncLLMEngine
 
-        worker_cls = "torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker"
-        if engine_args.worker_cls != "auto":
-            old_worker_cls = engine_args.worker_cls
-            torchrl_logger.warning(
-                f"Overriding worker_cls from {old_worker_cls} to {worker_cls}"
-            )
-
         if bundle_indices is not None:
             os.environ["VLLM_RAY_BUNDLE_INDICES"] = ",".join(map(str, bundle_indices))
 
-        engine_args.worker_cls = worker_cls
         engine_args.enable_prefix_caching = enable_prefix_caching
 
         # Create the engine directly - this is the source of the blocking ray.get issue
@@ -259,7 +279,7 @@ class _AsyncLLMEngine:
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
 
-        from vllm import RequestOutput, SamplingParams, TokensPrompt
+        from vllm import SamplingParams, TokensPrompt
 
         # Track whether input was originally a single prompt
         single_prompt_input = False
@@ -466,41 +486,7 @@ def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
     )
 
 
-def _get_bundle_indices(placement_group, index: int, length: int) -> list[int]:
-    """Get bundle indices for a placement group.
-
-    Address https://github.com/ray-project/ray/issues/51117
-    This function is used to get the bundle indices of a placement group
-    and ensure that the bundles placed on the same node are grouped together.
-
-    Args:
-        placement_group: Ray placement group.
-        index (int): Index of the current replica.
-        length (int): Number of bundles per replica.
-
-    Returns:
-        list[int]: Bundle indices for this replica.
-    """
-    if ray is None:
-        raise ImportError(
-            "ray is not installed. Please install it with `pip install ray`."
-        )
-
-    pg_infos = ray.util.placement_group_table(placement_group)
-
-    node_id_to_bundles = {}
-    for bundle, node_id in pg_infos["bundles_to_node_id"].items():
-        node_id_to_bundles.setdefault(node_id, []).append(bundle)
-
-    sorted_bundle_indices = sum(node_id_to_bundles.values(), [])
-    return sorted_bundle_indices[index * length : (index + 1) * length]
-
-
-# Create Ray remote versions
-if ray is not None and _has_vllm:
-    _AsyncLLMEngineActor = ray.remote(num_cpus=0, num_gpus=0)(_AsyncLLMEngine)
-else:
-    _AsyncLLMEngineActor = None
+# Ray actor wrapper is created lazily in __init__ to avoid global Ray import.
 
 
 class AsyncVLLM(RLvLLMEngine):
@@ -526,7 +512,7 @@ class AsyncVLLM(RLvLLMEngine):
                 See `this issue <https://github.com/vllm-project/vllm/issues/8268>`_ for more details.
 
     Example:
-        >>> from torchrl.modules.llm.backends.vllm_async import AsyncVLLM
+        >>> from torchrl.modules.llm import AsyncVLLM
         >>> from vllm import SamplingParams
         >>>
         >>> # Simple usage - single GPU, single replica
@@ -605,17 +591,18 @@ class AsyncVLLM(RLvLLMEngine):
             raise ImportError(
                 "vllm is not installed. Please install it with `pip install vllm`."
             )
-        if ray is None:
-            raise ImportError(
-                "ray is not installed. Please install it with `pip install ray`."
-            )
+        # Lazily import ray only when constructing the actor class to avoid global import
 
         # Enable prefix caching by default for better performance
         engine_args.enable_prefix_caching = enable_prefix_caching
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
-        self.actor_class = actor_class or _AsyncLLMEngineActor
+        if actor_class is None:
+            ray = _get_ray()
+            self.actor_class = ray.remote(num_cpus=0, num_gpus=0)(_AsyncLLMEngine)
+        else:
+            self.actor_class = actor_class
         self.actors: list = []
         self._launched = False
         self._service_id = uuid.uuid4().hex[
@@ -630,12 +617,10 @@ class AsyncVLLM(RLvLLMEngine):
             torchrl_logger.warning("AsyncVLLMEngineService already launched")
             return
 
-        # Check if CUDA is available since vLLM requires GPU
-        if not torch.cuda.is_available():
-            raise RuntimeError(
-                "AsyncVLLM requires CUDA but no GPU devices are available. "
-                "Please run on a machine with GPU support."
-            )
+        # Local imports to avoid global Ray dependency
+        ray = _get_ray()
+        from ray.util.placement_group import placement_group
+        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
         torchrl_logger.info(
             f"Launching {self.num_replicas} async vLLM engine actors..."
@@ -651,10 +636,8 @@ class AsyncVLLM(RLvLLMEngine):
             )
 
             # Create individual placement group for this replica
-            bundles = [
-                {"GPU": 1.0, "CPU": 1.0}
-                for _ in range(self.engine_args.tensor_parallel_size)
-            ]
+            num_gpus = _gpus_per_replica(self.engine_args)
+            bundles = [{"GPU": 1.0, "CPU": 1.0} for _ in range(num_gpus)]
             torchrl_logger.info(
                 f"Creating placement group for replica {i + 1} with {len(bundles)} bundles"
             )
@@ -670,8 +653,8 @@ class AsyncVLLM(RLvLLMEngine):
 
             # Calculate bundle indices for tensor parallelism
             bundle_indices = None
-            if self.engine_args.tensor_parallel_size > 1:
-                bundle_indices = list(range(self.engine_args.tensor_parallel_size))
+            if num_gpus > 1:
+                bundle_indices = list(range(num_gpus))
             bundle_index = 0  # Always use first bundle since each replica has its own placement group
 
             scheduling_strategy = PlacementGroupSchedulingStrategy(
@@ -691,7 +674,6 @@ class AsyncVLLM(RLvLLMEngine):
                 bundle_indices=bundle_indices,
                 enable_prefix_caching=self.engine_args.enable_prefix_caching,
             )
-
             self.actors.append(actor)
 
         torchrl_logger.info("Waiting for actors to be ready")
@@ -747,6 +729,7 @@ class AsyncVLLM(RLvLLMEngine):
         num_replicas: int = 1,
         verbose: bool = True,
         compile: bool = True,
+        enable_fp32_output: bool = False,
         **kwargs,
     ) -> AsyncVLLM:
         """Create an AsyncVLLM instance from a pretrained model.
@@ -760,6 +743,7 @@ class AsyncVLLM(RLvLLMEngine):
             num_replicas (int): Number of engine replicas to create.
             verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
             compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
+            enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             **kwargs: Additional arguments passed to AsyncEngineArgs.
 
         Returns:
@@ -780,6 +764,12 @@ class AsyncVLLM(RLvLLMEngine):
             >>> # Generate text
             >>> from vllm import SamplingParams
             >>> result = service.generate("Hello, world!", SamplingParams(max_tokens=50))
+            >>>
+            >>> # Enable FP32 output for better numerical stability
+            >>> service = AsyncVLLM.from_pretrained(
+            ...     "Qwen/Qwen2.5-3B",
+            ...     enable_fp32_output=True
+            ... )
         """
         return make_async_vllm_engine(
             model_name=model_name,
@@ -787,6 +777,7 @@ class AsyncVLLM(RLvLLMEngine):
             num_replicas=num_replicas,
             verbose=verbose,
             compile=compile,
+            enable_fp32_output=enable_fp32_output,
             **kwargs,
         )
 
@@ -970,6 +961,7 @@ class AsyncVLLM(RLvLLMEngine):
         Returns:
             RequestOutput | list[RequestOutput]: Generated outputs from vLLM.
         """
+        ray = _get_ray()
         # Check if this is a batch request
         if self._is_batch(prompts, prompt_token_ids):
             # Handle batched input by unbinding and sending individual requests
@@ -1094,6 +1086,9 @@ class AsyncVLLM(RLvLLMEngine):
             f"Shutting down {len(self.actors)} async vLLM engine actors..."
         )
 
+        ray = _get_ray()
+        from ray.util.placement_group import remove_placement_group
+
         # Kill all actors
         for i, actor in enumerate(self.actors):
             try:
@@ -1163,28 +1158,65 @@ class AsyncVLLM(RLvLLMEngine):
                 self._cached_master_port = 29500  # Default port
         return self._cached_master_port
 
-    def init_weight_update_group(self) -> None:
-        """Initialize the weight update communication group (RLvLLMEngine interface)."""
+    def init_weight_update_group(
+        self,
+        master_address: str,
+        master_port: int | str,
+    ) -> list[Any]:
+        """Forward the request to init NCCL weight update group to all actors.
+
+        This method initializes the weight update group for all vLLM workers.
+        The external trainer should be rank 0, and vLLM workers will be ranks 1+.
+
+        Args:
+            master_address: Master address for NCCL communication.
+            master_port: Master port for NCCL communication.
+
+        Returns:
+            List of Ray futures for the initialization calls.
+
+        Note:
+            The caller must wait on the returned futures (ray.get(refs)) to ensure
+            all workers have completed initialization before sending weights.
+        """
         if not self._launched:
             raise RuntimeError(
                 "AsyncVLLM service must be launched before initializing weight update group"
             )
 
-        master_address = self.get_master_address()
-        master_port = self.get_master_port()
+        gpus_per_replica = _gpus_per_replica(self.engine_args)
+        weight_sync_world_size = self.num_replicas * gpus_per_replica + 1
 
-        # Call the internal method with the auto-detected parameters (like V1)
-        refs = self._init_weight_update_group_internal(master_address, master_port)
+        torchrl_logger.info(
+            f"Initializing weight update group for {self.num_replicas} replicas "
+            f"with {gpus_per_replica} GPUs each (world_size={weight_sync_world_size})"
+        )
 
-        # CRITICAL: Initialize master NCCL group immediately (like V1) - don't wait for workers
-        torchrl_logger.info("Setting up master NCCL group (rank 0)...")
-        self._setup_nccl_master_group()
+        from vllm import envs
 
-        # Now wait for workers to complete (like V1 does)
-        if ray is not None:
-            ray.get(refs)
+        refs = []
+        for i, actor in enumerate(self.actors):
+            rank_offset = 1 + i * gpus_per_replica
+            if envs and envs.VLLM_USE_V1:
+                actor_collective_rpc = actor.collective_rpc_v1
+            else:
+                actor_collective_rpc = actor.collective_rpc_v0
+            refs.append(
+                actor_collective_rpc.remote(
+                    "init_weight_update_group",
+                    args=(
+                        master_address,
+                        str(master_port),
+                        rank_offset,
+                        weight_sync_world_size,
+                    ),
+                )
+            )
+            torchrl_logger.info(
+                f"Requested init for actor {i} with rank_offset {rank_offset}"
+            )
 
-        torchrl_logger.info("AsyncVLLM weight update group initialized")
+        return refs
 
     def update_weights(self, weights: Iterator[tuple[str, torch.Tensor]]) -> None:
         """Update model weights across all replicas using NCCL broadcast.
@@ -1249,6 +1281,7 @@ class AsyncVLLM(RLvLLMEngine):
         )
 
         updated_weights = 0
+        ray = _get_ray()
         with torch.cuda.device(0):  # Ensure we're on the correct CUDA device
             for name, weight in gpu_weights.items():
                 # Convert dtype to string name (like periodic-mono)
@@ -1325,6 +1358,7 @@ class AsyncVLLM(RLvLLMEngine):
                 "AsyncVLLM service must be launched before getting request counts"
             )
 
+        ray = _get_ray()
         if actor_index is not None:
             if not (0 <= actor_index < len(self.actors)):
                 raise IndexError(
@@ -1355,6 +1389,7 @@ class AsyncVLLM(RLvLLMEngine):
                 "AsyncVLLM service must be launched before getting cache usage"
             )
 
+        ray = _get_ray()
         if actor_index is not None:
             if not (0 <= actor_index < len(self.actors)):
                 raise IndexError(
@@ -1617,7 +1652,7 @@ class LoadBalancer:
         for i, strategy in enumerate(self.strategies):
             try:
                 torchrl_logger.debug(
-                    f"Trying strategy {i+1}/{len(self.strategies)}: {strategy}"
+                    f"Trying strategy {i + 1}/{len(self.strategies)}: {strategy}"
                 )
 
                 if strategy == "prefix-aware":
@@ -1667,6 +1702,7 @@ class LoadBalancer:
             futures = [
                 actor.get_num_unfinished_requests.remote() for actor in self.actors
             ]
+            ray = _get_ray()
             request_counts = ray.get(futures)
 
         # Find the actor with minimum pending requests
@@ -1694,6 +1730,7 @@ class LoadBalancer:
         else:
             # Query actors directly
             futures = [actor.get_cache_usage.remote() for actor in self.actors]
+            ray = _get_ray()
             cache_usages = ray.get(futures)
 
         # Find the actor with minimum cache usage
@@ -1833,7 +1870,8 @@ class LoadBalancer:
                 futures = [
                     actor.get_num_unfinished_requests.remote() for actor in self.actors
                 ]
-                request_counts = ray.get(futures)
+            ray = _get_ray()
+            request_counts = ray.get(futures)
 
             if not request_counts:
                 return False
@@ -1882,8 +1920,9 @@ class LoadBalancer:
                 cache_futures = [
                     actor.get_cache_usage.remote() for actor in self.actors
                 ]
-                request_counts = ray.get(request_futures)
-                cache_usages = ray.get(cache_futures)
+            ray = _get_ray()
+            request_counts = ray.get(request_futures)
+            cache_usages = ray.get(cache_futures)
 
             for i, (requests, cache_usage) in enumerate(
                 zip(request_counts, cache_usages)
@@ -1904,21 +1943,32 @@ class LoadBalancer:
 
 
 def make_async_vllm_engine(
+    *,
     model_name: str,
     num_devices: int | None = None,
     num_replicas: int = 1,
     verbose: bool = True,
     compile: bool = True,
+    enable_fp32_output: bool = False,
+    tensor_parallel_size: int | None = None,
+    data_parallel_size: int | None = None,
+    pipeline_parallel_size: int | None = None,
     **kwargs,
 ) -> AsyncVLLM:
     """Create an async vLLM engine service.
 
-    Args:
+    Keyword Args:
         model_name (str): The model name to pass to vLLM.
         num_devices (int, optional): Number of devices to use, per replica.
         num_replicas (int): Number of engine replicas to create.
         verbose (bool, optional): Whether to enable verbose logging with throughput statistics. Defaults to True.
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
+        enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
+            This can help with numerical stability for certain models. Requires model-specific support in
+            torchrl.modules.llm.backends._models.
+        tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
+        data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
+        pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1936,6 +1986,9 @@ def make_async_vllm_engine(
         >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B", num_devices=2, num_replicas=2)
         >>> # Generate text
         >>> result = service.generate("Hello, world!", sampling_params)
+        >>>
+        >>> # Create with FP32 output enabled
+        >>> service = make_async_vllm_engine("Qwen/Qwen2.5-3B", enable_fp32_output=True)
     """
     if not _has_vllm:
         raise ImportError(
@@ -1944,16 +1997,13 @@ def make_async_vllm_engine(
 
     from vllm import AsyncEngineArgs
 
-    # Check if CUDA is available since vLLM requires GPU
-    if not torch.cuda.is_available():
-        raise RuntimeError(
-            "AsyncVLLM requires CUDA but no GPU devices are available. "
-            "Please run on a machine with GPU support."
+    # Set FP32 output environment variable if requested
+    if enable_fp32_output:
+        os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        torchrl_logger.info(
+            "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
+            "This will use FP32 for the final output layer if the model supports it."
         )
-
-    # Handle device specification
-    if num_devices is None:
-        num_devices = 1
 
     # Configure verbose logging if requested
     if verbose:
@@ -1968,6 +2018,21 @@ def make_async_vllm_engine(
         torchrl_logger.info(
             "Enabled verbose vLLM logging - throughput statistics will be displayed"
         )
+
+    # Set tensor_parallel_size to num_devices if not set
+    if tensor_parallel_size is None:
+        if num_devices is None:
+            tensor_parallel_size = 1
+        else:
+            tensor_parallel_size = num_devices
+    elif num_devices is not None and tensor_parallel_size != num_devices:
+        raise ValueError(f"tensor_parallel_size must be set to {num_devices}")
+
+    if data_parallel_size is None:
+        data_parallel_size = 1
+
+    if pipeline_parallel_size is None:
+        pipeline_parallel_size = 1
 
     # Create engine args
     kwargs.setdefault("distributed_executor_backend", "ray")
@@ -1984,8 +2049,10 @@ def make_async_vllm_engine(
 
     engine_args = AsyncEngineArgs(
         model=model_name,
-        tensor_parallel_size=num_devices,
-        worker_cls="torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker",
+        tensor_parallel_size=tensor_parallel_size,
+        data_parallel_size=data_parallel_size,
+        pipeline_parallel_size=pipeline_parallel_size,
+        worker_extension_cls="torchrl.modules.llm.backends.vllm.vllm_async._AsyncvLLMWorker",
         **kwargs,
     )
 

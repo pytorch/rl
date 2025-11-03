@@ -42,6 +42,7 @@ from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 SUBMITIT_ERR = None
 try:
@@ -121,7 +122,7 @@ class RPCDataCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
@@ -135,8 +136,8 @@ class RPCDataCollector(DataCollectorBase):
             number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
-             Endless collectors can be created by passing ``total_frames=-1``.
-             Defaults to ``-1`` (endless collector).
+            Endless collectors can be created by passing ``total_frames=-1``.
+            Defaults to ``-1`` (endless collector).
         device (int, str or torch.device, optional): The generic device of the
             collector. The ``device`` args fills any non-specified device: if
             ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
@@ -308,6 +309,7 @@ class RPCDataCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -413,15 +415,63 @@ class RPCDataCollector(DataCollectorBase):
                 tensorpipe_options
             )
         self._init()
-        if weight_updater is None:
-            weight_updater = RPCWeightUpdater(
-                collector_infos=self.collector_infos,
-                collector_class=self.collector_class,
-                collector_rrefs=self.collector_rrefs,
-                policy_weights=self.policy_weights,
-                num_workers=self.num_workers,
-            )
-        self.weight_updater = weight_updater
+
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_updater is None and weight_sync_schemes is None:
+            # Default to RPC weight sync scheme for RPC collectors
+            from torchrl.weight_update.weight_sync_schemes import RPCWeightSyncScheme
+
+            weight_sync_schemes = {"policy": RPCWeightSyncScheme()}
+
+        if weight_sync_schemes is not None:
+            # Use new weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self._weight_senders = {}
+
+            # Set up weight senders now that remote collectors exist
+            for model_id, scheme in self._weight_sync_schemes.items():
+                sender = scheme.create_sender()
+                sender._model_id = model_id
+
+                # Create transports for each remote collector
+                for i in range(self.num_workers):
+                    transport = scheme.create_transport(
+                        (
+                            self.collector_infos[i],
+                            self.collector_rrefs[i],
+                            self.collector_class,
+                        )
+                    )
+                    sender._transports[i] = transport
+
+                # Set context and register model
+                if hasattr(sender, "set_context"):
+                    sender.set_context(self, model_id)
+
+                # Store reference to source model for automatic extraction
+                if (
+                    model_id == "policy"
+                    and hasattr(self, "policy")
+                    and self.policy is not None
+                ):
+                    sender._source_model = self.policy
+
+                self._weight_senders[model_id] = sender
+
+            self.weight_updater = None
+        else:
+            # Fall back to legacy weight updater system
+            if weight_updater is None:
+                weight_updater = RPCWeightUpdater(
+                    collector_infos=self.collector_infos,
+                    collector_class=self.collector_class,
+                    collector_rrefs=self.collector_rrefs,
+                    policy_weights=self.policy_weights,
+                    num_workers=self.num_workers,
+                )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
 
     @property
     def device(self) -> list[torch.device]:
@@ -763,6 +813,34 @@ class RPCDataCollector(DataCollectorBase):
             data.set_(("collector", "traj_ids"), traj_ids)
         self._collected_frames += data.numel()
         return data
+
+    def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
+        """Extract weights from a model if needed.
+
+        For RPC collectors, when weights is None and we have a weight sync scheme,
+        extract fresh weights from the tracked policy model.
+        """
+        scheme = (
+            self._weight_sync_schemes.get(model_id)
+            if self._weight_sync_schemes
+            else None
+        )
+
+        if weights is None and scheme is not None:
+            # Extract fresh weights from the source model
+            sender = self._weight_senders.get(model_id)
+            if (
+                sender
+                and hasattr(sender, "_source_model")
+                and sender._source_model is not None
+            ):
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                strategy = WeightStrategy(extract_as=scheme.strategy)
+                return strategy.extract_weights(sender._source_model)
+
+        # Fall back to base class implementation
+        return super()._extract_weights_if_needed(weights, model_id)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for worker in self.collector_infos:

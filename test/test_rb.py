@@ -188,7 +188,9 @@ TensorDictReplayBufferRNG = functools.partial(
 )
 @pytest.mark.parametrize("size", [3, 5, 100])
 class TestComposableBuffers:
-    def _get_rb(self, rb_type, size, sampler, writer, storage, compilable=False):
+    def _get_rb(
+        self, rb_type, size, sampler, writer, storage, compilable=False, **kwargs
+    ):
         if storage is not None:
             storage = storage(size, compilable=compilable)
 
@@ -204,6 +206,7 @@ class TestComposableBuffers:
             writer=writer,
             batch_size=3,
             compilable=compilable,
+            **kwargs,
         )
         return rb
 
@@ -375,7 +378,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -383,7 +386,7 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        length = min(rb._storage.max_size, len(rb) + data_shape)
+        length = min(rb.storage.max_size, len(rb) + data_shape)
         if writer is TensorDictMaxValueWriter:
             data["next", "reward"][-length:] = 1_000_000
         with (
@@ -406,7 +409,7 @@ class TestComposableBuffers:
 
             data_iter = data_iter()
         for d in data_iter:
-            for b in rb._storage:
+            for b in rb.storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
                     b = b.exclude("index").select(*keys, strict=False)
@@ -429,7 +432,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data2)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         with (
             pytest.warns(
@@ -533,7 +536,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -606,7 +609,7 @@ class TestComposableBuffers:
             OLD_TORCH
             and writer is not TensorDictMaxValueWriter
             and size < len(data)
-            and isinstance(rb._storage, TensorStorage)
+            and isinstance(rb.storage, TensorStorage)
         )
         if not is_tensor_collection(data) and writer is TensorDictMaxValueWriter:
             with pytest.raises(
@@ -624,7 +627,7 @@ class TestComposableBuffers:
         ):
             rb.extend(data)
         d1 = rb[2]
-        d2 = rb._storage[2]
+        d2 = rb.storage[2]
         if type(d1) is not type(d2):
             d1 = d1[0]
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
@@ -639,7 +642,12 @@ class TestComposableBuffers:
 
     def test_pickable(self, rb_type, sampler, writer, storage, size, datatype):
         rb = self._get_rb(
-            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+            rb_type=rb_type,
+            sampler=sampler,
+            writer=writer,
+            storage=storage,
+            size=size,
+            delayed_init=False,
         )
         serialized = pickle.dumps(rb)
         rb2 = pickle.loads(serialized)
@@ -1033,13 +1041,13 @@ class TestStorages:
         )
         assert (rb[3:4] == 0).all()
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
         assert (rb[10:20] == 0).all()
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[torch.arange(30, 40)] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
@@ -1068,13 +1076,13 @@ class TestStorages:
         )
         assert (rb[3:4] == 2).all(), rb[3:4]["a"]
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
         assert (rb[10:20] == 2).all()
         assert len(rb) == 100
-        assert rb._writer._cursor == 100
+        assert rb.writer._cursor == 100
         rb[torch.arange(30, 40)] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
         )
@@ -1125,17 +1133,17 @@ class TestStorages:
         )
         assert (rb[0, 3:4] == 0).all()
         assert (rb[1, 3:4] != 0).all()
-        assert rb._writer._cursor == 50
+        assert rb.writer._cursor == 50
         rb[1, 5:6] = TensorDict(
             {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
         )
         assert (rb[1, 5:6] == 0).all()
-        assert rb._writer._cursor == 50
+        assert rb.writer._cursor == 50
         rb[:, 7:8] = TensorDict(
             {"a": torch.tensor([0]), ("b", "c"): torch.tensor([0])}, [1]
         ).expand(2, 1)
         assert (rb[:, 7:8] == 0).all()
-        assert rb._writer._cursor == 50
+        assert rb.writer._cursor == 50
         # test broadcasting
         rb[:, 10:20] = TensorDict(
             {"a": torch.tensor([0] * 10), ("b", "c"): torch.tensor([0] * 10)}, [10]
@@ -1408,7 +1416,10 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
 class TestRNG:
     def test_rb_rng(self):
         state = torch.random.get_rng_state()
-        rb = ReplayBufferRNG(sampler=RandomSampler(), storage=LazyTensorStorage(100))
+        rb = ReplayBufferRNG(
+            sampler=RandomSampler(), storage=LazyTensorStorage(100), delayed_init=False
+        )
+        assert rb.initialized
         rb.extend(torch.arange(100))
         rb._rng.set_state(state)
         a = rb.sample(32)
@@ -1587,7 +1598,7 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         batch1 = self._get_data(rbtype, size=5)
         cond = (
-            OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
+            OLD_TORCH and size < len(batch1) and isinstance(rb.storage, TensorStorage)
         )
         with (
             pytest.warns(
@@ -1601,16 +1612,16 @@ class TestBuffers:
 
         # Added fewer data than storage max size
         if size > 5 or storage is None:
-            assert rb._writer._cursor == 5
+            assert rb.writer._cursor == 5
         # Added more data than storage max size
         elif size < 5:
-            assert rb._writer._cursor == 5 - size
+            assert rb.writer._cursor == 5 - size
         # Added as data as storage max size
         else:
-            assert rb._writer._cursor == 0
+            assert rb.writer._cursor == 0
             batch2 = self._get_data(rbtype, size=size - 1)
             rb.extend(batch2)
-            assert rb._writer._cursor == size - 1
+            assert rb.writer._cursor == size - 1
 
     def test_add(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
@@ -1650,7 +1661,7 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb.storage, TensorStorage)
         with (
             pytest.warns(
                 UserWarning,
@@ -1662,7 +1673,7 @@ class TestBuffers:
             rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
-            for b in rb._storage:
+            for b in rb.storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
                     b = b.exclude("index").select(*keys, strict=False)
@@ -1681,7 +1692,7 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb.storage, TensorStorage)
         with (
             pytest.warns(
                 UserWarning,
@@ -1715,7 +1726,7 @@ class TestBuffers:
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
-        cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
+        cond = OLD_TORCH and size < len(data) and isinstance(rb.storage, TensorStorage)
         with (
             pytest.warns(
                 UserWarning,
@@ -1726,7 +1737,7 @@ class TestBuffers:
         ):
             rb.extend(data)
         d1 = rb[2]
-        d2 = rb._storage[2]
+        d2 = rb.storage[2]
         if type(d1) is not type(d2):
             d1 = d1[0]
         b = d1 == d2
@@ -2258,14 +2269,14 @@ class TestMaxValueWriter:
             device=device,
         )
         rb.extend(td)
-        rb._writer.dumps(tmpdir)
+        rb.writer.dumps(tmpdir)
         # check we can dump twice
-        rb._writer.dumps(tmpdir)
+        rb.writer.dumps(tmpdir)
         other = TensorDictMaxValueWriter(rank_key="key")
         other.loads(tmpdir)
-        assert len(rb._writer._current_top_values) == len(other._current_top_values)
+        assert len(rb.writer._current_top_values) == len(other._current_top_values)
         torch.testing.assert_close(
-            torch.tensor(rb._writer._current_top_values),
+            torch.tensor(rb.writer._current_top_values),
             torch.tensor(other._current_top_values),
         )
 
@@ -2930,9 +2941,9 @@ class TestSamplers:
             sc = samples[samples["traj"] == 0]["step_count"]
             assert (sc == 1).sum() == (sc == 2).sum()
             assert (sc == 1).sum() == (sc == 4).sum()
-        assert rb._sampler._cache
+        assert rb.sampler._cache
         rb.extend(data, update_priority=False)
-        assert not rb._sampler._cache
+        assert not rb.sampler._cache
 
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
@@ -2999,14 +3010,14 @@ class TestSamplers:
                     pass
             if i == 1000:
                 break
-        assert not rb._sampler.span[0]
-        # if rb._sampler.span[0]:
+        assert not rb.sampler.span[0]
+        # if rb.sampler.span[0]:
         #     assert found_traj_4_truncated_left
-        if rb._sampler.span[1]:
+        if rb.sampler.span[1]:
             assert found_traj_4_truncated_right
         else:
             assert not found_traj_4_truncated_right
-        if strict_length and not rb._sampler.span[1]:
+        if strict_length and not rb.sampler.span[1]:
             assert not found_traj_0
         else:
             assert found_traj_0
@@ -3027,27 +3038,27 @@ class TestSamplers:
             rb.update_priority(idx, 21 - data)
             if data <= 10:
                 # The max is always going to be the first value
-                assert rb._sampler._max_priority[0] == 21
-                assert rb._sampler._max_priority[1] == 0
+                assert rb.sampler._max_priority[0] == 21
+                assert rb.sampler._max_priority[1] == 0
             elif not max_priority_within_buffer:
                 # The max is the historical max, which was at idx 0
-                assert rb._sampler._max_priority[0] == 21
-                assert rb._sampler._max_priority[1] == 0
+                assert rb.sampler._max_priority[0] == 21
+                assert rb.sampler._max_priority[1] == 0
             else:
                 # the max is the current max. Find it and compare
                 sumtree = torch.as_tensor(
-                    [rb._sampler._sum_tree[i] for i in range(rb._sampler._max_capacity)]
+                    [rb.sampler._sum_tree[i] for i in range(rb.sampler._max_capacity)]
                 )
-                assert rb._sampler._max_priority[0] == sumtree.max()
-                assert rb._sampler._max_priority[1] == sumtree.argmax()
+                assert rb.sampler._max_priority[0] == sumtree.max()
+                assert rb.sampler._max_priority[1] == sumtree.argmax()
         idx = rb.extend(torch.arange(10))
         rb.update_priority(idx, 12)
         if max_priority_within_buffer:
-            assert rb._sampler._max_priority[0] == 12
-            assert rb._sampler._max_priority[1] == 0
+            assert rb.sampler._max_priority[0] == 12
+            assert rb.sampler._max_priority[1] == 0
         else:
-            assert rb._sampler._max_priority[0] == 21
-            assert rb._sampler._max_priority[1] == 0
+            assert rb.sampler._max_priority[0] == 21
+            assert rb.sampler._max_priority[1] == 0
 
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
@@ -3214,13 +3225,13 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s, info = rb.sample(return_info=True)
         rb.update_priority(info["index"], 3)
         assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)])[info["index"]]
+            torch.tensor([rb.sampler._sum_tree[i] for i in range(10)])[info["index"]]
             == 3
         ).all()
 
@@ -3232,13 +3243,13 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
         rb.update_priority(s["index"], 3)
         assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)])[s["index"]] == 3
+            torch.tensor([rb.sampler._sum_tree[i] for i in range(10)])[s["index"]] == 3
         ).all()
 
         # third case: 1d TPRB
@@ -3251,17 +3262,15 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
-        ).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 0.5).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
 
         s["p"] = torch.ones(4) * 10_000
         rb.update_tensordict_priority(s)
         assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)])[s["index"]]
+            torch.tensor([rb.sampler._sum_tree[i] for i in range(10)])[s["index"]]
             == 10_000
         ).all()
 
@@ -3279,15 +3288,15 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
 
         s, info = rb.sample(return_info=True)
         rb.update_priority(info["index"], 3)
-        priorities = torch.tensor(
-            [rb._sampler._sum_tree[i] for i in range(10)]
-        ).reshape((5, 2))
+        priorities = torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]).reshape(
+            (5, 2)
+        )
         assert (priorities[info["index"]] == 3).all()
 
         # fifth case: 2d TRB
@@ -3301,15 +3310,15 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
 
         s = rb.sample()
         rb.update_priority(s["index"], 10_000)
-        priorities = torch.tensor(
-            [rb._sampler._sum_tree[i] for i in range(10)]
-        ).reshape((5, 2))
+        priorities = torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]).reshape(
+            (5, 2)
+        )
         assert (priorities[s["index"].unbind(-1)] == 10_000).all()
 
         s2 = rb.sample()
@@ -3329,18 +3338,16 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (
-            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
-        ).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 0.5).all()
         rb.update_priority(idx, torch.ones(()) * 2)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
+        assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
         # setting the priorities to a value that is so big that the buffer will resample them
         s["p"] = torch.ones(4) * 10_000
         rb.update_tensordict_priority(s)
-        priorities = torch.tensor(
-            [rb._sampler._sum_tree[i] for i in range(10)]
-        ).reshape((5, 2))
+        priorities = torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]).reshape(
+            (5, 2)
+        )
         assert (priorities[s["index"].unbind(-1)] == 10_000).all()
 
         s2 = rb.sample()
@@ -3777,32 +3784,32 @@ class TestEnsemble:
         assert_allclose_td(sample0, sample1)
 
         # check indexing of components
-        assert isinstance(rb._storage[:], StorageEnsemble)
-        assert isinstance(rb._storage[:2], StorageEnsemble)
-        assert isinstance(rb._storage[torch.tensor([0, 1])], StorageEnsemble)
-        assert isinstance(rb._storage[np.array([0, 1])], StorageEnsemble)
-        assert isinstance(rb._storage[[0, 1]], StorageEnsemble)
-        assert isinstance(rb._storage[1], LazyMemmapStorage)
+        assert isinstance(rb.storage[:], StorageEnsemble)
+        assert isinstance(rb.storage[:2], StorageEnsemble)
+        assert isinstance(rb.storage[torch.tensor([0, 1])], StorageEnsemble)
+        assert isinstance(rb.storage[np.array([0, 1])], StorageEnsemble)
+        assert isinstance(rb.storage[[0, 1]], StorageEnsemble)
+        assert isinstance(rb.storage[1], LazyMemmapStorage)
 
-        rb._storage[:, :3]
-        rb._storage[:2, :3]
-        rb._storage[torch.tensor([0, 1]), :3]
-        rb._storage[np.array([0, 1]), :3]
-        rb._storage[[0, 1], :3]
+        rb.storage[:, :3]
+        rb.storage[:2, :3]
+        rb.storage[torch.tensor([0, 1]), :3]
+        rb.storage[np.array([0, 1]), :3]
+        rb.storage[[0, 1], :3]
 
-        assert isinstance(rb._sampler[:], SamplerEnsemble)
-        assert isinstance(rb._sampler[:2], SamplerEnsemble)
-        assert isinstance(rb._sampler[torch.tensor([0, 1])], SamplerEnsemble)
-        assert isinstance(rb._sampler[np.array([0, 1])], SamplerEnsemble)
-        assert isinstance(rb._sampler[[0, 1]], SamplerEnsemble)
-        assert isinstance(rb._sampler[1], RandomSampler)
+        assert isinstance(rb.sampler[:], SamplerEnsemble)
+        assert isinstance(rb.sampler[:2], SamplerEnsemble)
+        assert isinstance(rb.sampler[torch.tensor([0, 1])], SamplerEnsemble)
+        assert isinstance(rb.sampler[np.array([0, 1])], SamplerEnsemble)
+        assert isinstance(rb.sampler[[0, 1]], SamplerEnsemble)
+        assert isinstance(rb.sampler[1], RandomSampler)
 
-        assert isinstance(rb._writer[:], WriterEnsemble)
-        assert isinstance(rb._writer[:2], WriterEnsemble)
-        assert isinstance(rb._writer[torch.tensor([0, 1])], WriterEnsemble)
-        assert isinstance(rb._writer[np.array([0, 1])], WriterEnsemble)
-        assert isinstance(rb._writer[[0, 1]], WriterEnsemble)
-        assert isinstance(rb._writer[0], RoundRobinWriter)
+        assert isinstance(rb.writer[:], WriterEnsemble)
+        assert isinstance(rb.writer[:2], WriterEnsemble)
+        assert isinstance(rb.writer[torch.tensor([0, 1])], WriterEnsemble)
+        assert isinstance(rb.writer[np.array([0, 1])], WriterEnsemble)
+        assert isinstance(rb.writer[[0, 1]], WriterEnsemble)
+        assert isinstance(rb.writer[0], RoundRobinWriter)
 
 
 def _rbtype(datatype):
@@ -3965,6 +3972,7 @@ class TestRBMultidim:
                     storage=storage_cls(max_size=10, ndim=2),
                     sampler=sampler_cls(),
                     writer=writer_cls(),
+                    delayed_init=False,
                 )
             return
         rb = rbtype(
@@ -3972,7 +3980,7 @@ class TestRBMultidim:
             sampler=sampler_cls(),
             writer=writer_cls(),
         )
-        if not isinstance(rb._sampler, SliceSampler) and transform is not None:
+        if not isinstance(rb.sampler, SliceSampler) and transform is not None:
             pytest.skip("no need to test this combination")
         if transform:
             for t in transform:
@@ -4073,7 +4081,7 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
-            assert rb._writer._cursor == rb_test._writer._cursor
+            assert rb.writer._cursor == rb_test._writer._cursor
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize("frames_per_batch", [22, 122])
@@ -4109,9 +4117,9 @@ class TestCheckpointers:
         rb_test.storage.checkpointer = checkpointer()
         for data in collector:
             rb.extend(data)
-            assert rb._storage.max_size == 102
+            assert rb.storage.max_size == 102
             if frames_per_batch > 100:
-                assert rb._storage._is_full
+                assert rb.storage._is_full
                 assert len(rb) == 102
                 # Checks that when writing to the buffer with a batch greater than the total
                 # size, we get the last step written properly.
@@ -4120,7 +4128,7 @@ class TestCheckpointers:
             rb.dumps(tmpdir)
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
-            assert rb._writer._cursor == rb_test._writer._cursor
+            assert rb.writer._cursor == rb_test._writer._cursor
 
 
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
@@ -4179,6 +4187,67 @@ class TestRayRB:
                     assert d.shape == (25,)
         finally:
             rb.close()
+
+    def test_ray_rb_serialization(self):
+        import ray
+
+        class Worker:
+            def __init__(self, rb):
+                self.rb = rb
+
+            def run(self):
+                self.rb.extend(TensorDict({"x": torch.ones(100)}, batch_size=100))
+
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            remote_worker = ray.remote(Worker).remote(rb)
+            ray.get(remote_worker.run.remote())
+        finally:
+            rb.close()
+
+
+class TestSharedStorageInit:
+    def worker(self, rb, worker_id, queue):
+        length = len(rb)
+        data = TensorDict({"x": torch.full((2,), worker_id)}, batch_size=(2,))
+        worker_id * 2
+        index = rb.extend(data)
+        assert len(rb) >= length + 2
+        assert (rb[index] == data).all()
+        queue.put("done")
+
+    @pytest.mark.parametrize(
+        "storage_cls, use_tmpdir",
+        [
+            (LazyTensorStorage, False),
+            (LazyMemmapStorage, False),
+            (LazyMemmapStorage, True),
+        ],
+    )
+    def test_shared_storage_multiprocess(self, storage_cls, use_tmpdir, tmpdir):
+        if use_tmpdir:
+            storage_cls = functools.partial(storage_cls, scratch_dir=tmpdir)
+        storage = storage_cls(max_size=100, shared_init=True)
+        rb = ReplayBuffer(storage=storage, batch_size=2).share(True)
+        queue = mp.Queue()
+
+        processes = []
+        for i in range(4):
+            p = mp.Process(target=self.worker, args=(rb, i, queue))
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+            queue.get()
+
+        all_data = storage.get(slice(0, 8))
+        values = set(all_data["x"].tolist())
+        expected = {0.0, 1.0, 2.0, 3.0}
+        assert expected.issubset(values)
+        assert len(storage) >= 8
 
 
 @pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")
@@ -4462,6 +4531,61 @@ class TestCompressedListStorage:
         assert (
             compression_ratio > 1.5
         ), f"Compression ratio {compression_ratio} is too low"
+
+
+class TestRBLazyInit:
+    def test_lazy_init(self):
+        def transform(td):
+            return td
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+            transform_factory=lambda: transform,
+        )
+        assert not rb.initialized
+        assert not hasattr(rb, "_storage")
+        assert rb._init_storage is not None
+        assert not hasattr(rb, "_sampler")
+        assert rb._init_sampler is not None
+        assert not hasattr(rb, "_writer")
+        assert rb._init_writer is not None
+        rb.extend(TensorDict(batch_size=[2]))
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+        )
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
+
+        rb = ReplayBuffer(
+            storage=partial(ListStorage),
+            writer=partial(RoundRobinWriter),
+            sampler=partial(RandomSampler),
+            delayed_init=False,
+        )
+        assert rb.initialized
+        assert rb._storage is not None
+        assert rb._init_storage is None
+        assert rb._sampler is not None
+        assert rb._init_sampler is None
+        assert rb._writer is not None
+        assert rb._init_writer is None
 
 
 if __name__ == "__main__":

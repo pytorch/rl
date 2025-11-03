@@ -79,6 +79,7 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from torchrl.weight_update import SharedMemWeightSyncScheme
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -162,7 +163,7 @@ class WrappablePolicy(nn.Module):
         output = self.linear(observation)
         if self.multiple_outputs:
             return output, output.sum(), output.min(), output.max()
-        return self.linear(observation)
+        return output
 
 
 class UnwrappablePolicy(nn.Module):
@@ -1486,6 +1487,10 @@ if __name__ == "__main__":
     @pytest.mark.parametrize("cudagraph", [False, True])
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
     def test_update_weights(self, use_async, cudagraph):
+        from torchrl.weight_update.weight_sync_schemes import (
+            MultiProcessWeightSyncScheme,
+        )
+
         def create_env():
             return ContinuousActionVecMockEnv()
 
@@ -1506,7 +1511,9 @@ if __name__ == "__main__":
             frames_per_batch=20,
             cat_results="stack",
             cudagraph_policy=cudagraph,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
         )
+        assert "policy" in collector._weight_senders, collector._weight_senders.keys()
         try:
             # collect state_dict
             state_dict = collector.state_dict()
@@ -1549,6 +1556,69 @@ if __name__ == "__main__":
                         state_dict[f"worker{worker}"]["policy_state_dict"][k],
                         policy_state_dict[k].cpu(),
                     )
+        finally:
+            collector.shutdown()
+            del collector
+
+    @pytest.mark.parametrize(
+        "use_async", [True]
+    )  # MultiSync has known indexing issues with SharedMem
+    def test_update_weights_shared_mem(self, use_async):
+        """Test shared memory weight synchronization scheme."""
+        from tensordict import TensorDict
+        from torchrl.weight_update.weight_sync_schemes import SharedMemWeightSyncScheme
+
+        def create_env():
+            return ContinuousActionVecMockEnv()
+
+        n_actions = ContinuousActionVecMockEnv().action_spec.shape[-1]
+        policy = SafeModule(
+            torch.nn.LazyLinear(n_actions), in_keys=["observation"], out_keys=["action"]
+        )
+        policy(create_env().reset())
+
+        # Get policy weights and put them in shared memory
+        policy_weights = TensorDict.from_module(policy)
+        policy_weights.share_memory_()
+
+        # Create shared memory weight sync scheme
+        weight_sync_scheme = SharedMemWeightSyncScheme()
+        weight_sync_scheme.register_shared_weights("policy", policy_weights)
+
+        collector_class = (
+            MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
+        )
+        collector = collector_class(
+            [create_env] * 3,
+            policy=policy,
+            frames_per_batch=20,
+            cat_results="stack",
+            weight_sync_schemes={"policy": weight_sync_scheme},
+        )
+        try:
+            # Collect first batch
+            for _ in collector:
+                break
+
+            # Change policy weights
+            old_weight = policy.module.weight.data.clone()
+            for p in policy.parameters():
+                p.data += torch.randn_like(p)
+            new_weight = policy.module.weight.data.clone()
+
+            # Verify weights changed
+            assert not torch.allclose(old_weight, new_weight)
+
+            # Update weights using shared memory
+            collector.update_policy_weights_()
+
+            # Collect another batch - should use new weights
+            for _ in collector:
+                break
+
+            # Verify shared memory was updated
+            assert torch.allclose(policy_weights["module", "weight"], new_weight)
+
         finally:
             collector.shutdown()
             del collector
@@ -2209,23 +2279,23 @@ class TestCollectorDevices:
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
-    "collector_class",
+    "collector_class,num_envs",
     [
-        SyncDataCollector,
-        MultiaSyncDataCollector,
-        functools.partial(MultiSyncDataCollector, cat_results="stack"),
+        (SyncDataCollector, 1),
+        (MultiaSyncDataCollector, 1),
+        (functools.partial(MultiSyncDataCollector, cat_results="stack"), 1),
+        (MultiaSyncDataCollector, 2),
+        (functools.partial(MultiSyncDataCollector, cat_results="stack"), 2),
     ],
 )
 class TestAutoWrap:
-    num_envs = 1
-
     @pytest.fixture
     def env_maker(self):
         from torchrl.envs.libs.gym import GymEnv
 
         return lambda: GymEnv(PENDULUM_VERSIONED())
 
-    def _create_collector_kwargs(self, env_maker, collector_class, policy):
+    def _create_collector_kwargs(self, env_maker, collector_class, policy, num_envs):
         collector_kwargs = {
             "create_env_fn": env_maker,
             "policy": policy,
@@ -2235,7 +2305,7 @@ class TestAutoWrap:
 
         if collector_class is not SyncDataCollector:
             collector_kwargs["create_env_fn"] = [
-                collector_kwargs["create_env_fn"] for _ in range(self.num_envs)
+                collector_kwargs["create_env_fn"] for _ in range(num_envs)
             ]
 
         return collector_kwargs
@@ -2243,7 +2313,7 @@ class TestAutoWrap:
     @pytest.mark.parametrize("multiple_outputs", [True, False])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_auto_wrap_modules(
-        self, collector_class, multiple_outputs, env_maker, device
+        self, collector_class, multiple_outputs, env_maker, device, num_envs
     ):
         policy = WrappablePolicy(
             out_features=env_maker().action_spec.shape[-1],
@@ -2253,33 +2323,40 @@ class TestAutoWrap:
         policy(env_maker().reset().get("observation"))
 
         collector = collector_class(
-            **self._create_collector_kwargs(env_maker, collector_class, policy),
+            **self._create_collector_kwargs(
+                env_maker, collector_class, policy, num_envs
+            ),
             device=device,
         )
 
-        out_keys = ["action"]
-        if multiple_outputs:
-            out_keys.extend(f"output{i}" for i in range(1, 4))
+        try:
+            out_keys = ["action"]
+            if multiple_outputs:
+                out_keys.extend(f"output{i}" for i in range(1, 4))
 
-        if collector_class is SyncDataCollector:
-            assert isinstance(collector.policy, TensorDictModule)
-            assert collector.policy.out_keys == out_keys
-            # this does not work now that we force the device of the policy
-            # assert collector.policy.module is policy
+            if collector_class is SyncDataCollector:
+                assert isinstance(collector._wrapped_policy, TensorDictModule)
+                assert collector._wrapped_policy.out_keys == out_keys
+                # this does not work now that we force the device of the policy
+                # assert collector.policy.module is policy
 
-        for i, data in enumerate(collector):
-            if i == 0:
-                assert (data["action"] != 0).any()
-                for p in policy.parameters():
-                    p.data.zero_()
-                    assert p.device == torch.device("cpu")
-                collector.update_policy_weights_()
-            elif i == 4:
-                assert (data["action"] == 0).all()
-                break
-
-        collector.shutdown()
-        del collector
+            for i, data in enumerate(collector):
+                # Debug: iteration {i}
+                if i == 0:
+                    assert (data["action"] != 0).any()
+                    for p in policy.parameters():
+                        p.data.zero_()
+                        assert p.device == torch.device("cpu")
+                    # Debug: updating policy weights
+                    collector.update_policy_weights_()
+                    # Debug: updated policy weights
+                elif i == 4:
+                    assert (data["action"] == 0).all()
+                    break
+        finally:
+            # Debug: shutting down collector
+            collector.shutdown()
+            del collector
 
     # Deprecated as from v0.3
     # def test_no_wrap_compatible_module(self, collector_class, env_maker):
@@ -2314,14 +2391,16 @@ class TestAutoWrap:
     #     collector.shutdown()
     #     del collector
 
-    def test_auto_wrap_error(self, collector_class, env_maker):
+    def test_auto_wrap_error(self, collector_class, env_maker, num_envs):
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
         with pytest.raises(
             TypeError,
             match=("Arguments to policy.forward are incompatible with entries in"),
         ):
             collector_class(
-                **self._create_collector_kwargs(env_maker, collector_class, policy)
+                **self._create_collector_kwargs(
+                    env_maker, collector_class, policy, num_envs
+                )
             )
 
 
@@ -2779,13 +2858,22 @@ class TestUpdateParams:
         ],
     )
     def test_param_sync(self, give_weights, collector, policy_device, env_device):
+        from torchrl.weight_update.weight_sync_schemes import (
+            MultiProcessWeightSyncScheme,
+        )
+
         policy = TestUpdateParams.Policy().to(policy_device)
 
         env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
         device = env().device
         env = [env]
         col = collector(
-            env, policy, device=device, total_frames=200, frames_per_batch=10
+            env,
+            policy,
+            device=device,
+            total_frames=200,
+            frames_per_batch=10,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
         )
         try:
             for i, data in enumerate(col):
@@ -2833,6 +2921,10 @@ class TestUpdateParams:
     def test_param_sync_mixed_device(
         self, give_weights, collector, policy_device, env_device
     ):
+        from torchrl.weight_update.weight_sync_schemes import (
+            MultiProcessWeightSyncScheme,
+        )
+
         with torch.device("cpu"):
             policy = TestUpdateParams.Policy()
         policy.param = nn.Parameter(policy.param.data.to(policy_device))
@@ -2842,7 +2934,12 @@ class TestUpdateParams:
         device = env().device
         env = [env]
         col = collector(
-            env, policy, device=device, total_frames=200, frames_per_batch=10
+            env,
+            policy,
+            device=device,
+            total_frames=200,
+            frames_per_batch=10,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
         )
         try:
             for i, data in enumerate(col):
@@ -3739,14 +3836,26 @@ class TestPolicyFactory:
 
     @pytest.mark.skipif(not _has_cuda, reason="requires cuda another device than CPU.")
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
-    def test_weight_update(self):
+    @pytest.mark.parametrize(
+        "weight_updater", ["scheme_shared", "scheme_pipe", "weight_updater"]
+    )
+    def test_weight_update(self, weight_updater):
         device = "cuda:0"
         env_maker = lambda: GymEnv(PENDULUM_VERSIONED(), device="cpu")
         policy_factory = lambda: TensorDictModule(
-            nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
-        ).to(device)
+            nn.Linear(3, 1, device=device), in_keys=["observation"], out_keys=["action"]
+        )
         policy = policy_factory()
         policy_weights = TensorDict.from_module(policy)
+        kwargs = {}
+        if weight_updater == "scheme_shared":
+            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
+        elif weight_updater == "scheme_pipe":
+            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
+        elif weight_updater == "weight_updater":
+            kwargs = {"weight_updater": self.MPSWeightUpdaterBase(policy_weights, 2)}
+        else:
+            raise NotImplementedError
 
         collector = MultiSyncDataCollector(
             create_env_fn=[env_maker, env_maker],
@@ -3758,7 +3867,7 @@ class TestPolicyFactory:
             reset_at_each_iter=False,
             device=device,
             storing_device="cpu",
-            weight_updater=self.MPSWeightUpdaterBase(policy_weights, 2),
+            **kwargs,
         )
 
         collector.update_policy_weights_()
@@ -3865,6 +3974,10 @@ class TestAsyncCollection:
         "cls", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
     )
     def test_start_update_policy(self, total_frames, cls):
+        from torchrl.weight_update.weight_sync_schemes import (
+            MultiProcessWeightSyncScheme,
+        )
+
         rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
         env = CountingEnv()
         m = nn.Linear(env.observation_spec["observation"].shape[-1], 1)
@@ -3882,12 +3995,19 @@ class TestAsyncCollection:
         td = TensorDict.from_module(policy).data.clone()
         if cls != SyncDataCollector:
             env = [CountingEnv] * 2
+
+        # Add weight sync schemes for multi-process collectors
+        kwargs = {}
+        if cls != SyncDataCollector:
+            kwargs["weight_sync_schemes"] = {"policy": MultiProcessWeightSyncScheme()}
+
         collector = cls(
             env,
             policy,
             replay_buffer=rb,
             total_frames=total_frames,
             frames_per_batch=16,
+            **kwargs,
         )
         try:
             collector.start()
@@ -3913,4 +4033,6 @@ class TestAsyncCollection:
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    pytest.main(
+        [__file__, "--capture", "no", "--exitfirst", "--timeout", "180"] + unknown
+    )

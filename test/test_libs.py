@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import collections
+import copy
 import functools
 import gc
 import importlib.util
 import os
 import urllib.error
 
+import torchrl.testing.env_helper
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -49,11 +51,13 @@ from torch import nn
 
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
+from torchrl.collectors.distributed import RayCollector
 from torchrl.data import (
     Binary,
     Bounded,
     Categorical,
     Composite,
+    LazyMemmapStorage,
     MultiCategorical,
     MultiOneHot,
     NonTensor,
@@ -73,6 +77,8 @@ from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import SliceSampler
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     CatTensors,
@@ -82,6 +88,7 @@ from torchrl.envs import (
     EnvCreator,
     RemoveEmptySpecs,
     RenameTransform,
+    StepCounter,
 )
 from torchrl.envs.batched_envs import SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
@@ -130,6 +137,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 
+_has_ray = importlib.util.find_spec("ray") is not None
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         _make_multithreaded_env,
@@ -2790,12 +2798,6 @@ class TestVmas:
     @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
-        # Skip football scenario due to VMAS bug: IndexError in get_wall_separations
-        if scenario_name == "football":
-            pytest.skip(
-                "Football scenario has a shape mismatch bug in VMAS get_wall_separations method"
-            )
-
         env = VmasEnv(
             scenario=scenario_name,
             continuous_actions=continuous_actions,
@@ -2814,14 +2816,27 @@ class TestVmas:
         final_seed = []
         tdreset = []
         tdrollout = []
-        for _ in range(2):
-            env = VmasEnv(
+        rollout_length = 10
+
+        def create_env():
+            return VmasEnv(
                 scenario=scenario_name,
                 num_envs=4,
             )
+
+        env = create_env()
+        td_actions = [env.action_spec.rand() for _ in range(rollout_length)]
+
+        for _ in range(2):
+            env = create_env()
+            td_actions_buffer = copy.deepcopy(td_actions)
+
+            def policy(td, actions=td_actions_buffer):
+                return actions.pop(0)
+
             final_seed.append(env.set_seed(0))
             tdreset.append(env.reset())
-            tdrollout.append(env.rollout(max_steps=10))
+            tdrollout.append(env.rollout(max_steps=rollout_length, policy=policy))
             env.close()
             del env
         assert final_seed[0] == final_seed[1]
@@ -3454,18 +3469,22 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
+        import d4rl  # noqa: F401
+
         t0 = time.time()
         data = D4RLExperienceReplay(
             task, split_trajs=split_trajs, from_env=from_env, batch_size=2
         )
         sample = data.sample()
-        env = GymWrapper(gym.make(task))
+        # D4RL environments are registered with gym, not gymnasium
+        with set_gym_backend("gym"):
+            env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
             if "truncated" in key:
@@ -3475,7 +3494,7 @@ class TestD4RL:
             offline = sample.get(key)
             # assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -3494,7 +3513,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        torchrl_logger.info(f"terminated test after {time.time()-t0}s")
+        torchrl_logger.info(f"terminated test after {time.time() - t0}s")
 
 
 _MINARI_DATASETS = []
@@ -3754,7 +3773,7 @@ class TestMinari:
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             assert data.metadata["action_space"].is_in(sample["action"])
             assert data.metadata["observation_space"].is_in(sample["observation"])
             t0 = time.time()
@@ -3900,7 +3919,7 @@ class TestRoboset:
         t0 = time.time()
         for i, _ in enumerate(data):
             t1 = time.time()
-            torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+            torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
             t0 = time.time()
             if i == 10:
                 break
@@ -3954,7 +3973,7 @@ class TestVD4RL:
                 assert (batch.get("pixels") != 0).any()
                 assert (batch.get(("next", "pixels")) != 0).any()
                 t1 = time.time()
-                torchrl_logger.info(f"sampling time {1000 * (t1-t0): 4.4f}ms")
+                torchrl_logger.info(f"sampling time {1000 * (t1 - t0): 4.4f}ms")
                 t0 = time.time()
                 if i == 10:
                     break
@@ -5122,28 +5141,8 @@ class TestMeltingpot:
 class TestIsaacLab:
     @pytest.fixture(scope="class")
     def env(self):
-        torch.manual_seed(0)
-        import argparse
-
-        # This code block ensures that the Isaac app is started in headless mode
-        from isaaclab.app import AppLauncher
-
-        parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
-        AppLauncher.add_app_launcher_args(parser)
-        args_cli, hydra_args = parser.parse_known_args(["--headless"])
-        AppLauncher(args_cli)
-
-        # Imports and env
-        import gymnasium as gym
-        import isaaclab_tasks  # noqa: F401
-        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
-
-        torchrl_logger.info("Making IsaacLab env...")
-        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
-        torchrl_logger.info("Wrapping IsaacLab env...")
+        env = torchrl.testing.env_helper.make_isaac_env()
         try:
-            env = IsaacLabWrapper(env)
             yield env
         finally:
             torchrl_logger.info("Closing IsaacLab env...")
@@ -5157,6 +5156,23 @@ class TestIsaacLab:
         env.check_env_specs(break_when_any_done="both")
         torchrl_logger.info("Check succeeded!")
 
+    def test_isaaclab_rb(self, env):
+        env = env.append_transform(StepCounter())
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100_000, ndim=2),
+            sampler=SliceSampler(num_slices=5),
+            batch_size=20,
+        )
+        r = env.rollout(20, break_when_any_done=False)
+        rb.extend(r)
+        # check that rb["step_count"].flatten() is made of sequences of 4 consecutive numbers
+        flat_ranges = rb.sample()["step_count"]
+        flat_ranges = flat_ranges.view(-1, 4)
+        flat_ranges = flat_ranges - flat_ranges[:, :1]  # substract baseline
+        flat_ranges = flat_ranges.flatten()
+        arange = torch.arange(flat_ranges.numel(), device=flat_ranges.device) % 4
+        assert (flat_ranges == arange).all()
+
     def test_isaac_collector(self, env):
         col = SyncDataCollector(
             env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
@@ -5168,6 +5184,138 @@ class TestIsaacLab:
         finally:
             # We must do that, otherwise `__del__` calls `shutdown` and the next test will fail
             col.shutdown(close_env=False)
+
+    @pytest.fixture(scope="function")
+    def clean_ray(self):
+        import ray
+
+        ray.shutdown()
+        ray.init(ignore_reinit_error=True)
+        yield
+        ray.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    @pytest.mark.parametrize("use_rb", [False, True], ids=["rb_false", "rb_true"])
+    @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
+    def test_isaaclab_ray_collector(self, env, use_rb, clean_ray, num_collectors):
+        from torchrl.data import RayReplayBuffer
+
+        # Create replay buffer if requested
+        replay_buffer = None
+        if use_rb:
+            replay_buffer = RayReplayBuffer(
+                # We place the storage on memmap to make it shareable
+                storage=partial(LazyMemmapStorage, 10_000, ndim=2),
+                ray_init_config={"num_cpus": 4},
+            )
+
+        col = RayCollector(
+            [torchrl.testing.env_helper.make_isaac_env] * num_collectors,
+            env.full_action_spec.rand_update,
+            frames_per_batch=8192,
+            total_frames=65536,
+            replay_buffer=replay_buffer,
+            num_collectors=num_collectors,
+            collector_kwargs={
+                "trust_policy": True,
+                "no_cuda_sync": True,
+                "extend_buffer": True,
+            },
+        )
+
+        try:
+            if use_rb:
+                # When replay buffer is provided, collector yields None and populates buffer
+                for i, data in enumerate(col):
+                    # Data is None when using replay buffer
+                    assert data is None, "Expected None when using replay buffer"
+
+                    # Check replay buffer is being populated
+                    if i >= 0:
+                        # Wait for buffer to have enough data to sample
+                        if len(replay_buffer) >= 32:
+                            sample = replay_buffer.sample(32)
+                            assert sample.batch_size == (32,)
+                            # Check that we have meaningful data (not all zeros/nans)
+                            assert sample["policy"].isfinite().any()
+                            assert sample["action"].isfinite().any()
+                            # Check shape is correct for Isaac Lab env (should have batch dim from env)
+                            assert len(sample.shape) == 1
+
+                    # Only collect a few batches for the test
+                    if i >= 2:
+                        break
+
+                # Verify replay buffer has data
+                assert len(replay_buffer) > 0, "Replay buffer should not be empty"
+                # Test that we can sample multiple times
+                for _ in range(5):
+                    sample = replay_buffer.sample(16)
+                    assert sample.batch_size == (16,)
+                    assert sample["policy"].isfinite().any()
+
+            else:
+                # Without replay buffer, collector yields data normally
+                collected_frames = 0
+                for i, data in enumerate(col):
+                    assert (
+                        data is not None
+                    ), "Expected data when not using replay buffer"
+                    # Check the data shape matches the batch size
+                    assert (
+                        data.numel() >= 1000
+                    ), f"Expected at least 1000 frames, got {data.numel()}"
+                    collected_frames += data.numel()
+
+                    # Only collect a few batches for the test
+                    if i >= 2:
+                        break
+
+                # Verify we collected some data
+                assert collected_frames > 0, "No frames were collected"
+
+        finally:
+            # Clean shutdown
+            col.shutdown()
+            if use_rb:
+                replay_buffer.close()
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not found")
+    @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
+    def test_isaaclab_ray_collector_start(self, env, clean_ray, num_collectors):
+
+        from torchrl.data import LazyTensorStorage, RayReplayBuffer
+
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100_000, ndim=2),
+            ray_init_config={"num_cpus": 4},
+        )
+        col = RayCollector(
+            [torchrl.testing.env_helper.make_isaac_env] * num_collectors,
+            env.full_action_spec.rand_update,
+            frames_per_batch=8192,
+            total_frames=65536,
+            trust_policy=True,
+            replay_buffer=rb,
+            num_collectors=num_collectors,
+        )
+        col.start()
+        try:
+            time_waiting = 0
+            while time_waiting < 30:
+                if len(rb) >= 4096:
+                    break
+                time.sleep(0.1)
+                time_waiting += 0.1
+            else:
+                raise RuntimeError("Timeout waiting for data")
+            sample = rb.sample(4096)
+            assert sample.batch_size == (4096,)
+            assert sample["policy"].isfinite().any()
+            assert sample["action"].isfinite().any()
+        finally:
+            col.shutdown()
+            rb.close()
 
     def test_isaaclab_reset(self, env):
         # Make a rollout that will stop as soon as a trajectory reaches a done state

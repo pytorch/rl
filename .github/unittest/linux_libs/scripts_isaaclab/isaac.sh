@@ -20,6 +20,8 @@ export TF_CPP_MIN_LOG_LEVEL=0
 export BATCHED_PIPE_TIMEOUT=60
 export TD_GET_DEFAULTS_TO_NONE=1
 export OMNI_KIT_ACCEPT_EULA=yes
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+export PYTHONNOUSERSITE=1
 
 nvidia-smi
 
@@ -46,36 +48,49 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 conda create --prefix ${env_dir} python=3.10 -y
 conda activate ${env_dir}
 
+# Set LD_LIBRARY_PATH to prioritize conda environment libraries
+export LD_LIBRARY_PATH=${lib_dir}:${LD_LIBRARY_PATH:-}
+
+# Install a compatible version of expat (< 2.6.0 to avoid XML_SetReparseDeferralEnabled symbol issues)
+conda install -c conda-forge "expat<2.6" -y
+
+# Reinstall Python to ensure it's properly linked against the conda expat
+conda install --force-reinstall python=3.10 -y
+
+# Verify the expat linkage
+echo "* Checking pyexpat linkage:"
+python -c "import pyexpat; print('pyexpat imported successfully')" || echo "WARNING: pyexpat import failed"
+
 # Pin pytorch to 2.5.1 for IsaacLab
 conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
-conda run -p ${env_dir} pip install --upgrade pip
-conda run -p ${env_dir} pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
+python -m pip install --upgrade pip --disable-pip-version-check
+python -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com --disable-pip-version-check
 conda install conda-forge::"cmake>3.22" -y
 
 git clone https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
-conda run -p ${env_dir} ./isaaclab.sh --install sb3
+./isaaclab.sh --install sb3
 cd ../
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   conda install "anaconda::cmake>=3.22" -y
-  conda run -p ${env_dir} python3 -m pip install "pybind11[global]"
-  conda run -p ${env_dir} python3 -m pip install git+https://github.com/pytorch/tensordict.git
+  python -m pip install "pybind11[global]" --disable-pip-version-check
+  python -m pip install git+https://github.com/pytorch/tensordict.git --disable-pip-version-check
 else
-  conda run -p ${env_dir} python3 -m pip install tensordict
+  python -m pip install tensordict --disable-pip-version-check
 fi
 
 # smoke test
-conda run -p ${env_dir} python -c "import tensordict"
+python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-conda run -p ${env_dir} python setup.py develop
-conda run -p ${env_dir} python -c "import torchrl"
+python -m pip install -e . --no-build-isolation --disable-pip-version-check
+python -c "import torchrl"
 
 # Install pytest
-conda run -p ${env_dir} python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
+python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio --disable-pip-version-check
 
 # Run tests
-conda run -p ${env_dir} python -m pytest test/test_libs.py -k isaac -s
+python -m pytest test/test_libs.py -k isaac -s

@@ -51,11 +51,7 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.collectors.weight_update import (
-    MultiProcessedWeightUpdater,
-    VanillaWeightUpdater,
-    WeightUpdaterBase,
-)
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
@@ -69,6 +65,13 @@ from torchrl.envs.utils import (
     ExplorationType,
     RandomPolicy,
     set_exploration_type,
+)
+from torchrl.weight_update.weight_sync_schemes import (
+    _resolve_model,
+    MultiProcessWeightSyncScheme,
+    WeightReceiver,
+    WeightSender,
+    WeightSyncScheme,
 )
 
 try:
@@ -157,6 +160,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     compiled_policy: bool
     cudagraphed_policy: bool
     _weight_updater: WeightUpdaterBase | None = None
+    _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
+    _weight_senders: dict[str, WeightSender] | None = None
+    _weight_receivers: dict[str, WeightReceiver] | None = None
     verbose: bool = False
 
     @property
@@ -197,15 +203,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         if policy_device is NO_DEFAULT:
             policy_device = self.policy_device
 
-        if not self.trust_policy:
-            env = getattr(self, "env", None)
-            policy = _make_compatible_policy(
-                policy,
-                getattr(env, "observation_spec", None),
-                env=env,
-                env_maker=env_maker,
-                env_maker_kwargs=env_maker_kwargs,
-            )
         if not policy_device:
             return policy, None
 
@@ -285,20 +282,82 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     ) -> None:
         """Shuts down the collector when started asynchronously with the `start` method.
 
-        Arg:
+        Args:
             timeout (float, optional): The maximum time to wait for the collector to shutdown.
             close_env (bool, optional): If True, the collector will close the contained environment.
                 Defaults to `True`.
 
         .. seealso:: :meth:`~.start`
+
         """
         return self.shutdown(timeout=timeout, close_env=close_env)
+
+    def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
+        """Extract weights from a model if needed.
+
+        Args:
+            weights: Either already-extracted weights or a model to extract from.
+            model_id: The model identifier for resolving string paths.
+
+        Returns:
+            Extracted weights in the appropriate format.
+        """
+        scheme = (
+            self._weight_sync_schemes.get(model_id)
+            if self._weight_sync_schemes
+            else None
+        )
+
+        # If no weights were provided and a sync scheme exists, extract the latest
+        # weights from the current model using the scheme strategy (state_dict or tensordict).
+        # This ensures we don't return stale cached weights.
+        if weights is None and scheme is not None:
+            from torchrl.weight_update.weight_sync_schemes import (
+                _resolve_model,
+                WeightStrategy,
+            )
+
+            strategy = WeightStrategy(extract_as=scheme.strategy)
+            model = _resolve_model(self, model_id)
+            return strategy.extract_weights(model)
+
+        if weights is None:
+            if model_id == "policy" and hasattr(self, "policy_weights"):
+                return self.policy_weights
+            elif model_id == "policy" and hasattr(self, "_policy_weights_dict"):
+                policy_device = (
+                    self.policy_device
+                    if not isinstance(self.policy_device, (list, tuple))
+                    else self.policy_device[0]
+                )
+                return self._policy_weights_dict.get(policy_device)
+            return None
+
+        if scheme is None:
+            return weights
+
+        from torchrl.weight_update.weight_sync_schemes import (
+            _resolve_model,
+            WeightStrategy,
+        )
+
+        strategy = WeightStrategy(extract_as=scheme.strategy)
+
+        if isinstance(weights, nn.Module):
+            return strategy.extract_weights(weights)
+        elif isinstance(weights, str):
+            model = _resolve_model(self, weights)
+            return strategy.extract_weights(model)
+        else:
+            return weights
 
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         """Updates the policy weights for the data collector, accommodating both local and remote execution contexts.
@@ -317,9 +376,15 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
                 workers that need to be updated. This is relevant when the collector has more than one worker associated
                 with it.
+            model_id (str | None, optional): The model identifier to update. If provided, only updates this specific
+                model. Cannot be used together with weights_dict.
+            weights_dict (dict[str, Any] | None, optional): Dictionary mapping model_id to weights for updating
+                multiple models atomically. Keys should match the model_ids registered in weight_sync_schemes.
+                Cannot be used together with model_id or policy_or_weights.
 
         Raises:
             TypeError: If `worker_ids` is provided but no `weight_updater` is configured.
+            ValueError: If conflicting parameters are provided (e.g., both model_id and weights_dict).
 
         .. note:: Users should extend the `WeightUpdaterBase` classes to customize
             the weight update logic for specific use cases. This method should not be overwritten.
@@ -335,9 +400,98 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             )
             policy_or_weights = kwargs.pop("policy_weights")
 
-        self.weight_updater(
-            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
-        )
+        if weights_dict is not None and model_id is not None:
+            raise ValueError("Cannot specify both 'weights_dict' and 'model_id'")
+
+        if weights_dict is not None and policy_or_weights is not None:
+            raise ValueError(
+                "Cannot specify both 'weights_dict' and 'policy_or_weights'"
+            )
+
+        # Priority: new weight sync schemes > old weight updater system
+        if self._weight_senders:
+            if weights_dict is not None:
+                for target_model_id, weights in weights_dict.items():
+                    if target_model_id not in self._weight_senders:
+                        raise KeyError(
+                            f"Model '{target_model_id}' not found in registered weight senders. "
+                            f"Available models: {list(self._weight_senders.keys())}"
+                        )
+                    processed_weights = self._extract_weights_if_needed(
+                        weights, target_model_id
+                    )
+                    self._weight_senders[target_model_id].update_weights(
+                        processed_weights
+                    )
+            elif model_id is not None:
+                if model_id not in self._weight_senders:
+                    raise KeyError(
+                        f"Model '{model_id}' not found in registered weight senders. "
+                        f"Available models: {list(self._weight_senders.keys())}"
+                    )
+                processed_weights = self._extract_weights_if_needed(
+                    policy_or_weights, model_id
+                )
+                self._weight_senders[model_id].update_weights(processed_weights)
+            else:
+                if "policy" in self._weight_senders:
+                    processed_weights = self._extract_weights_if_needed(
+                        policy_or_weights, "policy"
+                    )
+                    self._weight_senders["policy"].update_weights(processed_weights)
+                elif len(self._weight_senders) == 1:
+                    single_model_id = next(iter(self._weight_senders.keys()))
+                    single_sender = self._weight_senders[single_model_id]
+                    processed_weights = self._extract_weights_if_needed(
+                        policy_or_weights, single_model_id
+                    )
+                    single_sender.update_weights(processed_weights)
+                else:
+                    for target_model_id, sender in self._weight_senders.items():
+                        processed_weights = self._extract_weights_if_needed(
+                            policy_or_weights, target_model_id
+                        )
+                        sender.update_weights(processed_weights)
+
+        elif self._weight_updater is not None:
+            # Fall back to old weight updater system
+            self.weight_updater(
+                policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+            )
+        else:
+            # No weight updater configured
+            # For single-process collectors, apply weights locally if explicitly provided
+            if policy_or_weights is not None:
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                # Use WeightStrategy to apply weights properly
+                strategy = WeightStrategy(extract_as="tensordict")
+
+                # Extract weights if needed
+                if isinstance(policy_or_weights, nn.Module):
+                    weights = strategy.extract_weights(policy_or_weights)
+                else:
+                    weights = policy_or_weights
+
+                # Apply to local policy
+                if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
+                    strategy.apply_weights(self.policy, weights)
+            elif (
+                hasattr(self, "_original_policy")
+                and isinstance(self._original_policy, nn.Module)
+                and hasattr(self, "policy")
+                and isinstance(self.policy, nn.Module)
+            ):
+                # If no weights were provided, mirror weights from the original (trainer) policy
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                strategy = WeightStrategy(extract_as="tensordict")
+                weights = strategy.extract_weights(self._original_policy)
+                # Cast weights to the policy device before applying
+                if self.policy_device is not None:
+                    weights = weights.to(self.policy_device)
+                strategy.apply_weights(self.policy, weights)
+            # Otherwise, no action needed - policy is local and changes are immediately visible
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -442,7 +596,7 @@ class SyncDataCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], optional): a callable that returns
@@ -547,14 +701,19 @@ class SyncDataCollector(DataCollectorBase):
             but populate the buffer instead.
             Defaults to ``None``.
 
-            .. seealso:: By default, the buffer is populated every time a (batch of) frames is collected.
-                If the buffer needs to be extended with entire rollouts, set `extend_buffer` to `True`.
+            .. seealso:: By default (``extend_buffer=True``), the buffer is extended with entire rollouts.
+                If the buffer needs to be populated with individual frames as they are collected,
+                set ``extend_buffer=False`` (deprecated).
 
-            .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` is prohibited unless
+            .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` requires
                 `extend_buffer=True`, as the whole batch needs to be observed to apply these transforms.
 
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
-            with single steps. Defaults to `False`.
+            with single steps. Defaults to `True`.
+
+            .. note:: Setting this to `False` is deprecated and will be removed in a future version.
+                Extending the buffer with entire rollouts is the recommended approach for better
+                compatibility with postprocessing and trajectory splitting.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -636,6 +795,8 @@ class SyncDataCollector(DataCollectorBase):
 
     """
 
+    _ignore_rb: bool = False
+
     def __init__(
         self,
         create_env_fn: (
@@ -664,7 +825,8 @@ class SyncDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
-        extend_buffer: bool = False,
+        extend_buffer: bool = True,
+        local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -672,6 +834,7 @@ class SyncDataCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
         **kwargs,
     ):
@@ -794,33 +957,38 @@ class SyncDataCollector(DataCollectorBase):
 
         # Policy version tracking setup
         self.policy_version_tracker = track_policy_version
-        if PolicyVersion is not None:
-            if isinstance(track_policy_version, bool) and track_policy_version:
-                from torchrl.envs.batched_envs import BatchedEnvBase
+        if isinstance(track_policy_version, bool) and track_policy_version:
+            from torchrl.envs.batched_envs import BatchedEnvBase
 
-                if isinstance(self.env, BatchedEnvBase):
-                    raise RuntimeError(
-                        "BatchedEnvBase is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, "
-                        "and pass that transform to the collector."
-                    )
-                self.policy_version_tracker = PolicyVersion()
-                self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
-            elif hasattr(
-                track_policy_version, "increment_version"
-            ):  # Check if it's a PolicyVersion instance
-                self.policy_version_tracker = track_policy_version
-                self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
-            else:
-                self.policy_version_tracker = None
-        else:
-            if track_policy_version:
-                raise ImportError(
-                    "PolicyVersion is not available. Please install the LLM dependencies or set track_policy_version=False."
+            if isinstance(self.env, BatchedEnvBase):
+                raise RuntimeError(
+                    "BatchedEnvBase is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, "
+                    "and pass that transform to the collector."
                 )
+            self.policy_version_tracker = PolicyVersion()
+            self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
+        elif hasattr(
+            track_policy_version, "increment_version"
+        ):  # Check if it's a PolicyVersion instance
+            self.policy_version_tracker = track_policy_version
+            self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
+        else:
             self.policy_version_tracker = None
         self.replay_buffer = replay_buffer
         self.extend_buffer = extend_buffer
-        if self.replay_buffer is not None:
+
+        # Handle local_init_rb deprecation for SyncDataCollector
+        if local_init_rb is None:
+            local_init_rb = False  # Default for SyncDataCollector
+            if replay_buffer is not None and not local_init_rb:
+                warnings.warn(
+                    "local_init_rb=False is deprecated and will be removed in v0.12. "
+                    "The new storage-level initialization provides better performance.",
+                    FutureWarning,
+                )
+        self.local_init_rb = local_init_rb
+
+        if self.replay_buffer is not None and not self._ignore_rb:
             if postproc is not None and not self.extend_buffer:
                 raise TypeError(
                     "postproc must be None when a replay buffer is passed, or extend_buffer must be set to True."
@@ -852,23 +1020,42 @@ class SyncDataCollector(DataCollectorBase):
         if hasattr(self.env, "register_collector"):
             self.env.register_collector(self)
 
-        (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
+        self._original_policy = policy
+        (policy, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
         )
-        if isinstance(self.policy, nn.Module):
+
+        if not self.trust_policy:
+            self.policy = policy
+            env = getattr(self, "env", None)
+            try:
+                wrapped_policy = _make_compatible_policy(
+                    policy=policy,
+                    observation_spec=getattr(env, "observation_spec", None),
+                    env=self.env,
+                )
+            except (TypeError, AttributeError, ValueError) as err:
+                raise TypeError(
+                    "Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True."
+                ) from err
+            self._wrapped_policy = wrapped_policy
+        else:
+            self.policy = self._wrapped_policy = policy
+
+        if isinstance(self._wrapped_policy, nn.Module):
             self.policy_weights = TensorDict.from_module(
-                self.policy, as_module=True
+                self._wrapped_policy, as_module=True
             ).data
         else:
             self.policy_weights = TensorDict()
 
         if self.compiled_policy:
-            self.policy = compile_with_warmup(
-                self.policy, **self.compiled_policy_kwargs
+            self._wrapped_policy = compile_with_warmup(
+                self._wrapped_policy, **self.compiled_policy_kwargs
             )
         if self.cudagraphed_policy:
-            self.policy = CudaGraphModule(
-                self.policy,
+            self._wrapped_policy = CudaGraphModule(
+                self._wrapped_policy,
                 in_keys=[],
                 out_keys=[],
                 device=self.policy_device,
@@ -975,16 +1162,44 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
-        if weight_updater is None:
-            weight_updater = VanillaWeightUpdater(
-                weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
-            )
-        elif not isinstance(weight_updater, WeightUpdaterBase):
-            raise TypeError(
-                f"weight_updater must be a subclass of WeightUpdaterBase. Got {type(weight_updater)} instead."
-            )
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        # For single-process SyncDataCollector, no weight sync is needed (policy is local)
+        # Weight sync schemes are only needed for multi-process/distributed collectors
+        if weight_sync_schemes is not None:
+            # Use new simplified weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self._weight_senders = {}
 
-        self.weight_updater = weight_updater
+            # For single-process collectors, we don't need senders/receivers
+            # The policy is local and changes are immediately visible
+            # Senders will be set up in multiprocess collectors during _run_processes
+
+            self.weight_updater = None  # Don't use legacy system
+        elif weight_updater is not None:
+            # Use legacy weight updater system if explicitly provided
+            if not isinstance(weight_updater, WeightUpdaterBase):
+                if callable(weight_updater):
+                    weight_updater = weight_updater()
+                else:
+                    raise TypeError(
+                        f"weight_updater must be a subclass of WeightUpdaterBase. Got {type(weight_updater)} instead."
+                    )
+
+            warnings.warn(
+                "Using WeightUpdaterBase is deprecated. Please use weight_sync_schemes instead. "
+                "This will be removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
+        else:
+            # No weight sync needed for single-process collectors
+            # The policy is local and changes are immediately visible
+            self.weight_updater = None
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
 
     @property
     def _traj_pool(self):
@@ -1034,18 +1249,18 @@ class SyncDataCollector(DataCollectorBase):
         self._policy_output_keys = set()
         if (
             make_rollout
-            and hasattr(self.policy, "spec")
-            and self.policy.spec is not None
-            and all(v is not None for v in self.policy.spec.values(True, True))
+            and hasattr(self._wrapped_policy, "spec")
+            and self._wrapped_policy.spec is not None
+            and all(v is not None for v in self._wrapped_policy.spec.values(True, True))
         ):
             if any(
                 key not in self._final_rollout.keys(isinstance(key, tuple))
-                for key in self.policy.spec.keys(True, True)
+                for key in self._wrapped_policy.spec.keys(True, True)
             ):
                 # if policy spec is non-empty, all the values are not None and the keys
                 # match the out_keys we assume the user has given all relevant information
                 # the policy could have more keys than the env:
-                policy_spec = self.policy.spec
+                policy_spec = self._wrapped_policy.spec
                 if policy_spec.ndim < self._final_rollout.ndim:
                     policy_spec = policy_spec.expand(self._final_rollout.shape)
                 for key, spec in policy_spec.items(True, True):
@@ -1055,10 +1270,10 @@ class SyncDataCollector(DataCollectorBase):
                     self._final_rollout.set(key, spec.zero())
         elif (
             not make_rollout
-            and hasattr(self.policy, "out_keys")
-            and self.policy.out_keys
+            and hasattr(self._wrapped_policy, "out_keys")
+            and self._wrapped_policy.out_keys
         ):
-            self._policy_output_keys = list(self.policy.out_keys)
+            self._policy_output_keys = list(self._wrapped_policy.out_keys)
         else:
             if make_rollout:
                 # otherwise, we perform a small number of steps with the policy to
@@ -1078,7 +1293,7 @@ class SyncDataCollector(DataCollectorBase):
                 )  # to test if values have changed in-place
                 if self.compiled_policy:
                     cudagraph_mark_step_begin()
-                policy_output = self.policy(policy_input)
+                policy_output = self._wrapped_policy(policy_input)
 
                 # check that we don't have exclusive keys, because they don't appear in keys
                 def check_exclusive(val):
@@ -1319,7 +1534,7 @@ class SyncDataCollector(DataCollectorBase):
                             event.record()
                             event.synchronize()
                     yield tensordict_out
-                elif self.replay_buffer is not None:
+                elif self.replay_buffer is not None and not self._ignore_rb:
                     self.replay_buffer.extend(tensordict_out)
                     if self.verbose:
                         torchrl_logger.info(
@@ -1539,7 +1754,7 @@ class SyncDataCollector(DataCollectorBase):
                     # we still do the assignment for security
                     if self.compiled_policy:
                         cudagraph_mark_step_begin()
-                    policy_output = self.policy(policy_input)
+                    policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
                         policy_output = policy_output.clone()
                     if self._shuttle is not policy_output:
@@ -1575,12 +1790,28 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.replay_buffer is not None and not self.extend_buffer:
+                if self.verbose:
+                    torchrl_logger.info(
+                        f"Collector: Rollout step completed {self._iter=}."
+                    )
+                if (
+                    self.replay_buffer is not None
+                    and not self._ignore_rb
+                    and not self.extend_buffer
+                ):
+                    if self.verbose:
+                        torchrl_logger.info(
+                            f"Collector: Adding {env_output.numel()} frames to replay buffer using add()."
+                        )
                     self.replay_buffer.add(self._shuttle)
                     if self._increment_frames(self._shuttle.numel()):
                         return
                 else:
                     if self.storing_device is not None:
+                        if self.verbose:
+                            torchrl_logger.info(
+                                f"Collector: Moving to {self.storing_device} and adding to queue."
+                            )
                         non_blocking = (
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
@@ -1592,6 +1823,10 @@ class SyncDataCollector(DataCollectorBase):
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
+                        if self.verbose:
+                            torchrl_logger.info(
+                                "Collector: Adding to queue (no device)."
+                            )
                         tensordicts.append(self._shuttle)
 
                 # carry over collector data without messing up devices
@@ -1606,7 +1841,13 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
-                    if self.replay_buffer is not None and not self.extend_buffer:
+                    if self.verbose:
+                        torchrl_logger.info("Collector: Interruptor stopped.")
+                    if (
+                        self.replay_buffer is not None
+                        and not self._ignore_rb
+                        and not self.extend_buffer
+                    ):
                         return
                     result = self._final_rollout
                     if self._use_buffers:
@@ -1628,6 +1869,7 @@ class SyncDataCollector(DataCollectorBase):
                     break
             else:
                 if self._use_buffers:
+                    torchrl_logger.info("Returning final rollout within buffer.")
                     result = self._final_rollout
                     try:
                         result = torch.stack(
@@ -1643,9 +1885,16 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
-                elif self.replay_buffer is not None and not self.extend_buffer:
+                elif (
+                    self.replay_buffer is not None
+                    and not self._ignore_rb
+                    and not self.extend_buffer
+                ):
                     return
                 else:
+                    torchrl_logger.info(
+                        "Returning final rollout with NO buffer (maybe_dense_stack)."
+                    )
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 
@@ -1775,7 +2024,7 @@ class SyncDataCollector(DataCollectorBase):
     def __repr__(self) -> str:
         try:
             env_str = indent(f"env={self.env}", 4 * " ")
-            policy_str = indent(f"policy={self.policy}", 4 * " ")
+            policy_str = indent(f"policy={self._wrapped_policy}", 4 * " ")
             td_out_str = indent(
                 f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
             )
@@ -1820,7 +2069,7 @@ class SyncDataCollector(DataCollectorBase):
     def getattr_policy(self, attr):
         """Get an attribute from the policy."""
         # send command to policy to return the attr
-        return getattr(self.policy, attr)
+        return getattr(self._wrapped_policy, attr)
 
     def getattr_env(self, attr):
         """Get an attribute from the environment."""
@@ -1861,7 +2110,7 @@ class _MultiDataCollector(DataCollectorBase):
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
@@ -2002,6 +2251,11 @@ class _MultiDataCollector(DataCollectorBase):
             but populate the buffer instead. Defaults to ``None``.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True` for multiprocessed data collectors.
+        local_init_rb (bool, optional): if ``False``, the collector will use fake data to initialize
+            the replay buffer in the main process (legacy behavior). If ``True``, the storage-level
+            coordination will handle initialization with real data from worker processes.
+            Defaults to ``None``, which maintains backward compatibility but shows a deprecation warning.
+            This parameter is deprecated and will be removed in v0.12.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -2021,6 +2275,8 @@ class _MultiDataCollector(DataCollectorBase):
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
             which handles weight synchronization across multiple processes.
             Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): A dictionary of weight sync schemes for the different models.
+            If not provided, a :class:`~torchrl.collectors.MultiProcessWeightSyncScheme` will be used by default.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
@@ -2064,6 +2320,7 @@ class _MultiDataCollector(DataCollectorBase):
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
         replay_buffer_chunk: bool | None = None,
+        local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -2071,6 +2328,7 @@ class _MultiDataCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
     ):
         self.closed = True
@@ -2142,6 +2400,21 @@ class _MultiDataCollector(DataCollectorBase):
 
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
+
+        # Handle local_init_rb deprecation
+        if local_init_rb is None:
+            # v0.11: Default to False (current behavior), show deprecation warning
+            # v0.12: Default to True (new behavior)
+            local_init_rb = False  # Will become True in 0.12
+            if replay_buffer is not None and not local_init_rb:
+                warnings.warn(
+                    "local_init_rb=False is deprecated and will be removed in v0.12. "
+                    "The new storage-level initialization provides better performance.",
+                    FutureWarning,
+                )
+
+        self.local_init_rb = local_init_rb
+
         self._check_replay_buffer_init()
         if replay_buffer_chunk is not None:
             if extend_buffer is None:
@@ -2186,17 +2459,20 @@ class _MultiDataCollector(DataCollectorBase):
                 if type(policy_new_device) is not type(policy):
                     policy = policy_new_device
                 weights = (
-                    TensorDict.from_module(policy_new_device).data
+                    TensorDict.from_module(policy_new_device)
                     if isinstance(policy_new_device, nn.Module)
                     else TensorDict()
                 )
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
             if weight_updater is None:
-                weight_updater = MultiProcessedWeightUpdater(
-                    get_server_weights=self._get_weights_fn,
-                    policy_weights=self._policy_weights_dict,
-                )
+                # For multiprocessed collectors, use MultiProcessWeightSyncScheme by default
+                if weight_sync_schemes is None:
+                    weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
+                # Don't create legacy weight updater if we have schemes
+            else:
+                # Legacy weight updater was explicitly provided
+                pass
         elif weight_updater is None:
             warnings.warn(
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
@@ -2207,7 +2483,18 @@ class _MultiDataCollector(DataCollectorBase):
                 "This will work whenever your inference and training policies are nn.Module instances with similar structures."
             )
 
-        self.weight_updater = weight_updater
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_sync_schemes is not None:
+            # Use new simplified weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self._weight_senders = {}
+            # Senders will be created in _run_processes when pipes are available
+            self.weight_updater = None  # Don't use legacy system
+        else:
+            # Fall back to legacy weight updater system
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
 
         # Policy version tracking setup
         self.policy_version_tracker = track_policy_version
@@ -2301,8 +2588,17 @@ class _MultiDataCollector(DataCollectorBase):
     def _check_replay_buffer_init(self):
         if self.replay_buffer is None:
             return
-        is_init = getattr(self.replay_buffer._storage, "initialized", True)
+        is_init = hasattr(self.replay_buffer, "_storage") and getattr(
+            self.replay_buffer._storage, "initialized", True
+        )
         if not is_init:
+            if self.local_init_rb:
+                # New behavior: storage handles all coordination itself
+                # Nothing to do here - the storage will coordinate during first write
+                self.replay_buffer.share()
+                return
+
+            # Legacy behavior: fake tensordict initialization
             if isinstance(self.create_env_fn[0], EnvCreator):
                 fake_td = self.create_env_fn[0].meta_data.tensordict
             elif isinstance(self.create_env_fn[0], EnvBase):
@@ -2394,6 +2690,15 @@ class _MultiDataCollector(DataCollectorBase):
                 1, torch.get_num_threads() - total_workers
             )  # 1 more thread for this proc
 
+        # Initialize weight senders for multiprocess collectors
+        if self._weight_sync_schemes:
+            # Create one sender per model using scheme's factory method
+            for model_id, scheme in self._weight_sync_schemes.items():
+                sender = scheme.create_sender()
+                sender._model_id = model_id
+                if hasattr(sender, "set_context"):
+                    sender.set_context(self, model_id)
+                self._weight_senders[model_id] = sender
         torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
@@ -2465,6 +2770,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "postproc": self.postprocs
                     if self.replay_buffer is not None
                     else None,
+                    "weight_sync_schemes": self._weight_sync_schemes,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2474,6 +2780,21 @@ class _MultiDataCollector(DataCollectorBase):
                 # proc.daemon can't be set as daemonic processes may be launched by the process itself
                 try:
                     proc.start()
+                except TypeError as err:
+                    if "cannot pickle" in str(err):
+                        raise RuntimeError(
+                            "A non-serializable object was passed to the collector workers."
+                        ) from err
+                except RuntimeError as err:
+                    if "Cowardly refusing to serialize non-leaf tensor" in str(err):
+                        raise RuntimeError(
+                            "At least one of the tensors in the policy, replay buffer, environment constructor or postprocessor requires gradients. "
+                            "This is not supported in multiprocessed data collectors.\n- For ReplayBuffer transforms, use a `transform_factory` instead with `delayed_init=True`.\n"
+                            "- Make sure your environment constructor does not reference tensors already instantiated on the main process.\n"
+                            "- Since no gradient can be propagated through the Collector pipes, the backward graph is never needed. Consider using detached tensors instead."
+                        ) from err
+                    else:
+                        raise err
                 except _pickle.PicklingError as err:
                     if "<lambda>" in str(err):
                         raise RuntimeError(
@@ -2488,11 +2809,62 @@ also that the state dict is synchronised across processes if needed."""
                 pipe_child.close()
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
-        for pipe_parent in self.pipes:
+
+                # Register worker with senders
+                if self._weight_senders:
+                    for _, sender in self._weight_senders.items():
+                        sender.register_worker(i, pipe_parent)
+
+        for i, pipe_parent in enumerate(self.pipes):
             pipe_parent.poll(timeout=INSTANTIATE_TIMEOUT)
-            msg = pipe_parent.recv()
+            try:
+                msg = pipe_parent.recv()
+            except EOFError as e:
+                raise RuntimeError(
+                    f"Worker {i} failed to initialize and closed the connection before sending status. "
+                    f"This typically indicates that the worker process crashed during initialization. "
+                    f"Check the worker process logs for the actual error."
+                ) from e
             if msg != "instantiated":
-                raise RuntimeError(msg)
+                # Check if it's an error dict from worker
+                if isinstance(msg, dict) and msg.get("error"):
+                    # Reconstruct the exception from the worker
+                    exc_type_name = msg["exception_type"]
+                    exc_msg = msg["exception_msg"]
+                    traceback_str = msg["traceback"]
+
+                    # Try to get the actual exception class
+                    exc_class = None
+                    exc_module = msg["exception_module"]
+
+                    if exc_module == "builtins":
+                        # Get from builtins
+                        import builtins
+
+                        exc_class = getattr(builtins, exc_type_name, None)
+                    else:
+                        # Try to import from the module
+                        try:
+                            import importlib
+
+                            mod = importlib.import_module(exc_module)
+                            exc_class = getattr(mod, exc_type_name, None)
+                        except Exception:
+                            pass
+
+                    # Re-raise with original exception type if possible
+                    if exc_class is not None:
+                        raise exc_class(
+                            f"{exc_msg}\n\nWorker traceback:\n{traceback_str}"
+                        )
+                    else:
+                        # Fall back to RuntimeError if we can't get the original type
+                        raise RuntimeError(
+                            f"Worker {i} raised {exc_type_name}: {exc_msg}\n\nWorker traceback:\n{traceback_str}"
+                        )
+                else:
+                    # Legacy string error message
+                    raise RuntimeError(msg)
         self.queue_out = queue_out
         self.closed = False
 
@@ -2934,8 +3306,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        >>> collector.shutdown()
-        >>> del collector
+        ...     collector.shutdown()
+        ...     del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -3057,6 +3429,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     msg = "continue_random"
                 else:
                     msg = "continue"
+                # Debug: sending 'continue'
                 self.pipes[idx].send((None, msg))
 
             self._iter += 1
@@ -3120,13 +3493,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     # mask buffers if cat, and create a mask if stack
                     if cat_results != "stack":
                         buffers = {}
-                        for idx, buffer in self.buffers.items():
+                        for worker_idx, buffer in self.buffers.items():
                             valid = buffer.get(("collector", "traj_ids")) != -1
                             if valid.ndim > 2:
                                 valid = valid.flatten(0, -2)
                             if valid.ndim == 2:
                                 valid = valid.any(0)
-                            buffers[idx] = buffer[..., valid]
+                            buffers[worker_idx] = buffer[..., valid]
                     else:
                         for buffer in self.buffers.values():
                             with buffer.unlock_():
@@ -3137,6 +3510,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         buffers = self.buffers
                 else:
                     buffers = self.buffers
+
+                # Skip frame counting if this worker didn't send data this iteration
+                # (happens when reusing buffers or on first iteration with some workers)
+                if idx not in buffers:
+                    continue
 
                 workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
 
@@ -3156,7 +3534,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
-            for idx in range(self.num_workers):
+            for idx in buffers.keys():
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
                 if preempt:
@@ -3315,8 +3693,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        ... collector.shutdown()
-        ... del collector
+        ...     collector.shutdown()
+        ...     del collector
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -3551,7 +3929,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], optional): a callable that returns
@@ -3565,8 +3943,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             total number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
-             Endless collectors can be created by passing ``total_frames=-1``.
-             Defaults to ``-1`` (never ending collector).
+            Endless collectors can be created by passing ``total_frames=-1``.
+            Defaults to ``-1`` (never ending collector).
         device (int, str or torch.device, optional): The generic device of the
             collector. The ``device`` args fills any non-specified device: if
             ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
@@ -3775,6 +4153,7 @@ def _main_async_collector(
     policy_factory: Callable | None = None,
     collector_class: type | Callable[[], DataCollectorBase] | None = None,
     postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+    weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
 ) -> None:
     if collector_class is None:
         collector_class = SyncDataCollector
@@ -3782,40 +4161,77 @@ def _main_async_collector(
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
 
-    inner_collector = collector_class(
-        create_env_fn,
-        create_env_kwargs=create_env_kwargs,
-        policy=policy,
-        policy_factory=policy_factory,
-        total_frames=-1,
-        max_frames_per_traj=max_frames_per_traj,
-        frames_per_batch=frames_per_batch,
-        reset_at_each_iter=reset_at_each_iter,
-        postproc=postproc,
-        split_trajs=False,
-        storing_device=storing_device,
-        policy_device=policy_device,
-        env_device=env_device,
-        exploration_type=exploration_type,
-        reset_when_done=reset_when_done,
-        return_same_td=replay_buffer is None,
-        interruptor=interruptor,
-        set_truncated=set_truncated,
-        use_buffers=use_buffers,
-        replay_buffer=replay_buffer if not extend_buffer else None,
-        extend_buffer=False,
-        traj_pool=traj_pool,
-        trust_policy=trust_policy,
-        compile_policy=compile_policy,
-        cudagraph_policy=cudagraph_policy,
-        no_cuda_sync=no_cuda_sync,
-    )
-    use_buffers = inner_collector._use_buffers
-    if verbose:
-        torchrl_logger.info("Sync data collector created")
-    dc_iter = iter(inner_collector)
-    j = 0
-    pipe_child.send("instantiated")
+    try:
+        collector_class._ignore_rb = extend_buffer
+        inner_collector = collector_class(
+            create_env_fn,
+            create_env_kwargs=create_env_kwargs,
+            policy=policy,
+            policy_factory=policy_factory,
+            total_frames=-1,
+            max_frames_per_traj=max_frames_per_traj,
+            frames_per_batch=frames_per_batch,
+            reset_at_each_iter=reset_at_each_iter,
+            postproc=postproc,
+            split_trajs=False,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            exploration_type=exploration_type,
+            reset_when_done=reset_when_done,
+            return_same_td=replay_buffer is None,
+            interruptor=interruptor,
+            set_truncated=set_truncated,
+            use_buffers=use_buffers,
+            replay_buffer=replay_buffer,
+            extend_buffer=False,
+            traj_pool=traj_pool,
+            trust_policy=trust_policy,
+            compile_policy=compile_policy,
+            cudagraph_policy=cudagraph_policy,
+            no_cuda_sync=no_cuda_sync,
+            weight_sync_schemes=weight_sync_schemes,
+        )
+
+        # Set up weight receivers for worker process
+        if weight_sync_schemes:
+            inner_collector._weight_receivers = {}
+            for model_id, scheme in weight_sync_schemes.items():
+                receiver = scheme.create_receiver()
+                receiver.set_context(inner_collector)
+                receiver.register_worker_transport(pipe_child)
+
+                model = _resolve_model(inner_collector, model_id)
+                receiver.register_model(model)
+
+                inner_collector._weight_receivers[model_id] = receiver
+        else:
+            inner_collector._weight_receivers = {}
+
+        use_buffers = inner_collector._use_buffers
+        if verbose:
+            torchrl_logger.info("Sync data collector created")
+        dc_iter = iter(inner_collector)
+        j = 0
+        pipe_child.send("instantiated")
+    except Exception as e:
+        # Send error information to main process
+        # We send a dict with the exception info so we can recreate it in the main process
+        import traceback
+
+        error_info = {
+            "error": True,
+            "exception_type": type(e).__name__,
+            "exception_module": type(e).__module__,
+            "exception_msg": str(e),
+            "traceback": traceback.format_exc(),
+        }
+        try:
+            pipe_child.send(error_info)
+        except Exception:
+            # If pipe is broken, nothing we can do
+            pass
+        return
 
     has_timed_out = False
     counter = 0
@@ -3888,7 +4304,81 @@ def _main_async_collector(
                 data_in = None
                 # TODO: this does not work with random frames
                 msg = "continue"
+        # Note: The "continue" message handling has been moved below after update_weights handling
+        # to allow falling through from update_weights to continue
+
+        if msg == "update":
+            torchrl_logger.info(f"worker {idx} updating the params...")
+            inner_collector.update_policy_weights_(policy_weights=data_in)
+            pipe_child.send((j, "updated"))
+            has_timed_out = False
+            continue
+
+        if msg == "register_shared_weights":
+            # Shared memory lazy registration: main process sends buffer reference
+            if verbose:
+                torchrl_logger.info(
+                    f"worker {idx} received shared memory buffer registration"
+                )
+            model_id, shared_buffer = data_in
+
+            # Store the shared buffer reference for this model
+            # The receiver will use this buffer for all future weight accesses
+            if (
+                inner_collector._weight_receivers
+                and model_id in inner_collector._weight_receivers
+            ):
+                # Update receiver's buffer reference
+                receiver = inner_collector._weight_receivers[model_id]
+                # Store the shared buffer - the model's parameters should point to this
+                if hasattr(receiver, "_shared_weights"):
+                    receiver._shared_weights[model_id] = shared_buffer
+
+                # Apply the buffer to the model immediately
+                receiver.apply_weights(shared_buffer)
+
+                if verbose:
+                    torchrl_logger.info(
+                        f"worker {idx} registered shared buffer for model '{model_id}'"
+                    )
+            else:
+                torchrl_logger.warning(
+                    f"worker {idx} received shared buffer for unknown model '{model_id}'"
+                )
+
+            # Send acknowledgment back to main process
+            pipe_child.send((None, "registered"))
+            has_timed_out = False
+            continue
+
+        if msg == "update_weights":
+            # New weight update protocol for simplified weight sync system
+            if verbose:
+                torchrl_logger.info(
+                    f"worker {idx} received weight update via new protocol"
+                )
+            model_id, weights = data_in
+
+            # Apply weights using the appropriate receiver for this model
+            if (
+                inner_collector._weight_receivers
+                and model_id in inner_collector._weight_receivers
+            ):
+                inner_collector._weight_receivers[model_id].apply_weights(weights)
+            else:
+                torchrl_logger.warning(
+                    f"worker {idx} received weights for unknown model '{model_id}'"
+                )
+
+            # After applying weights, we continue collecting immediately as if we received
+            # a "continue" message. This ensures the worker keeps collecting data without
+            # waiting for an explicit continue from the main process.
+            has_timed_out = False
+            msg = "continue"
+            # Now check if we should continue collecting
+
         if msg in ("continue", "continue_random"):
+            # This block handles both explicit continue messages and implicit ones after weight updates
             if msg == "continue_random":
                 inner_collector.init_random_frames = float("inf")
             else:
@@ -3980,14 +4470,7 @@ def _main_async_collector(
                 has_timed_out = True
                 continue
 
-        elif msg == "update":
-            torchrl_logger.info(f"worker {idx} updating the params...")
-            inner_collector.update_policy_weights_(policy_weights=data_in)
-            pipe_child.send((j, "updated"))
-            has_timed_out = False
-            continue
-
-        elif msg == "seed":
+        if msg == "seed":
             data_in, static_seed = data_in
             new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)

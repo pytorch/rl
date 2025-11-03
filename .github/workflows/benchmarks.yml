@@ -82,13 +82,13 @@ jobs:
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
           python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers
-          python3 -m pip install "pybind11[global]"
+          python -m pip install "pybind11[global]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          python3.10 -m pip install safetensors tqdm pandas numpy matplotlib
+          python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
           python3.10 setup.py develop
 
           # test import
-          python3 -c """import torch
+          python -c """import torch
           assert torch.cuda.device_count()
           """
 
@@ -96,7 +96,7 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python3 -m pytest -vvv --rank 0 --benchmark-json output.json --ignore test_collectors_benchmark.py
+          python -m pytest -vvv --rank 0 --benchmark-json output.json --ignore test_collectors_benchmark.py
 
       # Upload benchmark results for main branch, manual dispatch, or PRs with 'benchmarks/upload' label
       - name: Upload benchmark results

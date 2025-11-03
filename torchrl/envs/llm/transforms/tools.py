@@ -17,7 +17,7 @@ from typing import TextIO
 import torch
 
 from tensordict import lazy_stack, TensorDictBase
-from torchrl import torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 
 from torchrl.envs import Transform
@@ -501,10 +501,10 @@ class PythonInterpreter(Transform):
 
             if result["success"]:
                 results.append(
-                    f"Code block {i+1} executed successfully:\n{result['stdout']}"
+                    f"Code block {i + 1} executed successfully:\n{result['stdout']}"
                 )
             else:
-                results.append(f"Code block {i+1} failed:\n{result['stderr']}")
+                results.append(f"Code block {i + 1} failed:\n{result['stderr']}")
 
         return results
 
@@ -530,7 +530,10 @@ class PythonInterpreter(Transform):
 
         procs = []
         # Iterate over env batch-size
-        for i, t in enumerate(local_history.content):
+        content = local_history.content
+        if isinstance(content, str):
+            content = [content]
+        for i, t in enumerate(content):
             results = self._process_llm_response(t, i)
             if len(results) == 0:
                 procs.append(None)

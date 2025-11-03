@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import threading
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
@@ -28,6 +28,7 @@ from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 RAY_ERR = None
 try:
@@ -131,7 +132,7 @@ class RayCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :arg:`policy_factory` should be used instead.
+                pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
@@ -139,6 +140,9 @@ class RayCollector(DataCollectorBase):
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
+        trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
+            assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
+            and ``False`` otherwise.
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
@@ -258,11 +262,19 @@ class RayCollector(DataCollectorBase):
 
             .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
                 :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
-        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
+        weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
             Ray's distributed capabilities.
             Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary mapping model identifiers to
+            :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme` instances.
+            This is the recommended way to configure weight synchronization. If not provided,
+            defaults to ``{"policy": RayWeightSyncScheme()}``.
+        use_env_creator (bool, optional): if ``True``, the environment constructor functions will be wrapped
+            in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory
+            needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.
+            Defaults to ``False``.
 
     Examples:
         >>> from torch import nn
@@ -301,6 +313,7 @@ class RayCollector(DataCollectorBase):
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
+        trust_policy: bool | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] | None = None,
@@ -326,6 +339,9 @@ class RayCollector(DataCollectorBase):
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        use_env_creator: bool = False,
+        no_cuda_sync: bool | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -400,9 +416,10 @@ class RayCollector(DataCollectorBase):
         create_env_fn, collector_kwargs, remote_configs = out_lists
         num_collectors = len(create_env_fn)
 
-        for i in range(len(create_env_fn)):
-            if not isinstance(create_env_fn[i], (EnvBase, EnvCreator)):
-                create_env_fn[i] = EnvCreator(create_env_fn[i])
+        if use_env_creator:
+            for i in range(len(create_env_fn)):
+                if not isinstance(create_env_fn[i], (EnvBase, EnvCreator)):
+                    create_env_fn[i] = EnvCreator(create_env_fn[i])
 
         # If ray available, try to connect to an existing Ray cluster or start one and connect to it.
         if not _has_ray:
@@ -432,13 +449,15 @@ class RayCollector(DataCollectorBase):
         if not hasattr(collector_class, "print_remote_collector_info"):
             collector_class.print_remote_collector_info = print_remote_collector_info
 
+        self.no_cuda_sync = no_cuda_sync
         self.replay_buffer = replay_buffer
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory
-        self._local_policy = policy
-        if isinstance(self._local_policy, nn.Module):
-            policy_weights = TensorDict.from_module(self._local_policy)
+        self.policy = policy  # Store policy for weight extraction
+        self.trust_policy = trust_policy
+        if isinstance(policy, nn.Module):
+            policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
             policy_weights = TensorDict(lock=True)
@@ -463,6 +482,8 @@ class RayCollector(DataCollectorBase):
         self.policy_device = policy_device
         self._batches_since_weight_update = [0 for _ in range(self.num_collectors)]
         self._sync = sync
+        self._collection_thread = None
+        self._stop_event = threading.Event()
 
         if self._sync:
             if frames_per_batch % self.num_collectors != 0:
@@ -476,7 +497,10 @@ class RayCollector(DataCollectorBase):
 
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
-            collector_kwarg["policy_factory"] = policy_factory[i]
+            # Don't pass policy_factory if we have a policy - remote collectors need the policy object
+            # to be able to apply weight updates
+            if policy is None:
+                collector_kwarg["policy_factory"] = policy_factory[i]
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -497,6 +521,10 @@ class RayCollector(DataCollectorBase):
             collector_kwarg["storing_device"] = self.storing_device[i]
             collector_kwarg["env_device"] = self.env_device[i]
             collector_kwarg["policy_device"] = self.policy_device[i]
+            if "trust_policy" not in collector_kwarg:
+                collector_kwarg["trust_policy"] = self.trust_policy
+            if "no_cuda_sync" not in collector_kwarg and self.no_cuda_sync is not None:
+                collector_kwarg["no_cuda_sync"] = no_cuda_sync
 
         self.postproc = postproc
 
@@ -510,19 +538,84 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
-        if weight_updater is None:
-            weight_updater = RayWeightUpdater(
-                policy_weights=policy_weights,
-                remote_collectors=self.remote_collectors,
-                max_interval=self.max_weight_update_interval,
-            )
-        self.weight_updater = weight_updater
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_updater is None and weight_sync_schemes is None:
+            # Default to Ray weight sync scheme for Ray collectors
+            from torchrl.weight_update.weight_sync_schemes import RayWeightSyncScheme
 
-        # Print info of all remote workers
-        pending_samples = [
-            e.print_remote_collector_info.remote() for e in self.remote_collectors
-        ]
-        ray.wait(pending_samples)
+            weight_sync_schemes = {"policy": RayWeightSyncScheme()}
+
+        if weight_sync_schemes is not None:
+            # Use new weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self._weight_senders = {}
+
+            # Set up weight senders now that remote collectors exist
+            for model_id, scheme in self._weight_sync_schemes.items():
+                sender = scheme.create_sender()
+                sender._model_id = model_id
+
+                # Register each remote collector as a separate worker
+                # This follows the same pattern as multiprocess collectors
+                for worker_idx, remote_collector in enumerate(self.remote_collectors):
+                    # Create a transport for this specific collector
+                    # Pass the collector as context so the transport knows which one to talk to
+                    sender.register_worker(worker_idx, remote_collector)
+
+                # Set context and register model
+                if hasattr(sender, "set_context"):
+                    sender.set_context(self, model_id)
+
+                # Store reference to source model for automatic extraction
+                if model_id == "policy":
+                    sender._source_model = self.policy
+
+                self._weight_senders[model_id] = sender
+
+            self.weight_updater = None  # Don't use legacy system
+        else:
+            # Fall back to legacy weight updater system
+            if weight_updater is None:
+                weight_updater = RayWeightUpdater(
+                    policy_weights=policy_weights,
+                    remote_collectors=self.remote_collectors,
+                    max_interval=self.max_weight_update_interval,
+                )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+            self._weight_senders = {}
+
+        # Print info of all remote workers (fire and forget - no need to wait)
+        for e in self.remote_collectors:
+            e.print_remote_collector_info.remote()
+
+    def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
+        """Extract weights from a model if needed.
+
+        For Ray collectors, when weights is None and we have a weight sync scheme,
+        extract fresh weights from the tracked policy model.
+        """
+        scheme = (
+            self._weight_sync_schemes.get(model_id)
+            if self._weight_sync_schemes
+            else None
+        )
+
+        if weights is None and scheme is not None:
+            # Extract fresh weights from the source model
+            sender = self._weight_senders.get(model_id)
+            if (
+                sender
+                and hasattr(sender, "_source_model")
+                and sender._source_model is not None
+            ):
+                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+                strategy = WeightStrategy(extract_as=scheme.strategy)
+                return strategy.extract_weights(sender._source_model)
+
+        # Fall back to base class behavior
+        return super()._extract_weights_if_needed(weights, model_id)
 
     @property
     def num_workers(self):
@@ -631,6 +724,10 @@ class RayCollector(DataCollectorBase):
 
     def iterator(self):
         def proc(data):
+            # When using RayReplayBuffer, sub-collectors write directly to buffer
+            # and return None, so skip processing
+            if data is None:
+                return None
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
@@ -645,6 +742,10 @@ class RayCollector(DataCollectorBase):
 
     async def _asyncio_iterator(self):
         def proc(data):
+            # When using RayReplayBuffer, sub-collectors write directly to buffer
+            # and return None, so skip processing
+            if data is None:
+                return None
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
@@ -660,7 +761,9 @@ class RayCollector(DataCollectorBase):
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
-        while self.collected_frames < self.total_frames:
+        while (
+            self.collected_frames < self.total_frames and not self._stop_event.is_set()
+        ):
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
                 torchrl_logger.info("Updating weights on all workers")
                 self.update_policy_weights_()
@@ -683,39 +786,69 @@ class RayCollector(DataCollectorBase):
                     r
                 )  # should not be necessary, deleted automatically when ref count is down to 0
                 out_td.append(rollouts)
-            if len(rollouts.batch_size):
-                out_td = torch.stack(out_td)
+
+            # Handle case where replay_buffer is used and rollouts are None
+            if out_td[0] is None:
+                # Sub-collectors are writing directly to RayReplayBuffer
+                # Track frames and yield None to signal completion
+                self.collected_frames += self.frames_per_batch
+                yield None
             else:
-                out_td = torch.cat(out_td)
+                # Normal case: concatenate and yield rollouts
+                if len(rollouts.batch_size):
+                    out_td = torch.stack(out_td)
+                else:
+                    out_td = torch.cat(out_td)
 
-            self.collected_frames += out_td.numel()
+                self.collected_frames += out_td.numel()
+                yield out_td
 
-            yield out_td
+        # Only auto-shutdown if not running in a background thread.
+        # When using replay buffer, users should explicitly manage shutdown order.
+        if self._collection_thread is None:
+            self.shutdown(shutdown_ray=False)
 
-        if self._task is None:
-            self.shutdown()
-
-    _task = None
+    def _run_collection_loop(self):
+        """Runs the collection loop in a background thread."""
+        try:
+            for _ in self.iterator():
+                if self._stop_event.is_set():
+                    break
+                # When RayReplayBuffer is configured, sub-collectors write directly
+                # to the buffer and data will be None. Otherwise, data contains rollouts.
+        except Exception as e:
+            torchrl_logger.error(f"Error in collection thread: {e}")
+            raise
 
     def start(self):
-        """Starts the RayCollector."""
+        """Starts the RayCollector in a background thread."""
         if self.replay_buffer is None:
-            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
-        if self._task is None or self._task.done():
-            loop = asyncio.get_event_loop()
-            self._task = loop.create_task(self._run_iterator_silently())
+            raise RuntimeError(
+                "Replay buffer must be defined for background execution."
+            )
+        if self._collection_thread is None or not self._collection_thread.is_alive():
+            self._stop_event.clear()
+            self._collection_thread = threading.Thread(
+                target=self._run_collection_loop, daemon=True
+            )
+            self._collection_thread.start()
 
-    async def _run_iterator_silently(self):
-        async for _ in self._asyncio_iterator():
-            # Process each item silently
-            continue
+    async def async_shutdown(self, shutdown_ray: bool = False):
+        """Finishes processes started by the collector during async execution.
 
-    async def async_shutdown(self):
-        """Finishes processes started by ray.init() during async execution."""
-        if self._task is not None:
-            await self._task
+        Args:
+            shutdown_ray (bool): If True, also shutdown the Ray cluster. Defaults to False.
+                Note: Setting this to True will kill all Ray actors in the cluster, including
+                any replay buffers or other services. Only set to True if you're sure you want
+                to shut down the entire Ray cluster.
+
+        """
+        self._stop_event.set()
+        if self._collection_thread is not None and self._collection_thread.is_alive():
+            self._collection_thread.join(timeout=5.0)
         self.stop_remote_collectors()
-        ray.shutdown()
+        if shutdown_ray:
+            ray.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
         """Collects a data batch from a single remote collector in each iteration."""
@@ -724,7 +857,9 @@ class RayCollector(DataCollectorBase):
             future = collector.next.remote()
             pending_tasks[future] = index
 
-        while self.collected_frames < self.total_frames:
+        while (
+            self.collected_frames < self.total_frames and not self._stop_event.is_set()
+        ):
             if not len(list(pending_tasks.keys())) == len(self.remote_collectors):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
@@ -739,6 +874,9 @@ class RayCollector(DataCollectorBase):
             ray.internal.free(
                 [future]
             )  # should not be necessary, deleted automatically when ref count is down to 0
+
+            # Track collected frames - use frames_per_batch since out_td might be None
+            # when using RayReplayBuffer (sub-collectors write directly to buffer)
             self.collected_frames += self.frames_per_batch
 
             yield out_td
@@ -761,7 +899,7 @@ class RayCollector(DataCollectorBase):
         #         object_ref=ref,
         #         force=False,
         #     )
-        if self._task is None:
+        if self._collection_thread is None:
             self.shutdown()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> list[int]:
@@ -787,10 +925,27 @@ class RayCollector(DataCollectorBase):
         for collector, state_dict in zip(self.remote_collectors, state_dicts):
             collector.load_state_dict.remote(state_dict)
 
-    def shutdown(self, timeout: float | None = None) -> None:
-        """Finishes processes started by ray.init()."""
+    def shutdown(
+        self, timeout: float | None = None, shutdown_ray: bool = False
+    ) -> None:
+        """Finishes processes started by the collector.
+
+        Args:
+            timeout (float, optional): Timeout for stopping the collection thread.
+            shutdown_ray (bool): If True, also shutdown the Ray cluster. Defaults to False.
+                Note: Setting this to True will kill all Ray actors in the cluster, including
+                any replay buffers or other services. Only set to True if you're sure you want
+                to shut down the entire Ray cluster.
+
+        """
+        self._stop_event.set()
+        if self._collection_thread is not None and self._collection_thread.is_alive():
+            self._collection_thread.join(
+                timeout=timeout if timeout is not None else 5.0
+            )
         self.stop_remote_collectors()
-        ray.shutdown()
+        if shutdown_ray:
+            ray.shutdown()
 
     def __repr__(self) -> str:
         string = f"{self.__class__.__name__}()"

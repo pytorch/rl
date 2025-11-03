@@ -256,6 +256,10 @@ class Transform(nn.Module):
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
+    def _ready(self):
+        # Used to block ray until the actor is ready, see RayTransform
+        return True
+
     def close(self):
         """Close the transform."""
 
@@ -347,6 +351,10 @@ class Transform(nn.Module):
 
     def init(self, tensordict) -> None:
         """Runs init steps for the transform."""
+
+    def _set_attr(self, name, value):
+        """Set attribute on the remote actor or locally."""
+        setattr(self, name, value)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         """Applies the transform to a tensor or a leaf.
@@ -5423,8 +5431,8 @@ class Hash(UnaryTransform):
         """Look up the input that was given for a particular hash output.
 
         This feature is only available if, during initialization, either the
-        :arg:`repertoire` argument was given or both the :arg:`in_keys_inv` and
-        :arg:`out_keys_inv` arguments were given.
+        ``repertoire`` argument was given or both the ``in_keys_inv`` and
+        ``out_keys_inv`` arguments were given.
 
         Args:
             hash_tensor (Tensor): The hash output.
@@ -11678,16 +11686,21 @@ class FlattenTensorDict(Transform):
         "use BatchSizeTransform instead."
     )
 
-    def __init__(self):
+    def __init__(self, inverse: bool = True):
         super().__init__(in_keys=[], out_keys=[])
+        self.inverse = inverse
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Forward pass - identity operation."""
+        if not self.inverse:
+            return tensordict.reshape(-1)
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverse pass - flatten the tensordict."""
-        return tensordict.reshape(-1)
+        if self.inverse:
+            return tensordict.reshape(-1)
+        return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Forward pass - identity operation."""
