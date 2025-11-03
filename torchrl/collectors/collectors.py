@@ -66,6 +66,7 @@ from torchrl.envs.utils import (
     RandomPolicy,
     set_exploration_type,
 )
+from torchrl.weight_update import SharedMemWeightSyncScheme
 from torchrl.weight_update.weight_sync_schemes import (
     _resolve_model,
     MultiProcessWeightSyncScheme,
@@ -503,39 +504,42 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             # unreachable
             raise RuntimeError
         else:
-            # No weight updater configured
-            # For single-process collectors, apply weights locally if explicitly provided
-            if policy_or_weights is not None:
-                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+            return self.receive_weights(policy_or_weights)
 
-                # Use WeightStrategy to apply weights properly
-                strategy = WeightStrategy(extract_as="tensordict")
+    def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        # No weight updater configured
+        # For single-process collectors, apply weights locally if explicitly provided
+        if policy_or_weights is not None:
+            from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
-                # Extract weights if needed
-                if isinstance(policy_or_weights, nn.Module):
-                    weights = strategy.extract_weights(policy_or_weights)
-                else:
-                    weights = policy_or_weights
+            # Use WeightStrategy to apply weights properly
+            strategy = WeightStrategy(extract_as="tensordict")
 
-                # Apply to local policy
-                if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
-                    strategy.apply_weights(self.policy, weights)
-            elif (
-                hasattr(self, "_original_policy")
-                and isinstance(self._original_policy, nn.Module)
-                and hasattr(self, "policy")
-                and isinstance(self.policy, nn.Module)
-            ):
-                # If no weights were provided, mirror weights from the original (trainer) policy
-                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+            # Extract weights if needed
+            if isinstance(policy_or_weights, nn.Module):
+                weights = strategy.extract_weights(policy_or_weights)
+            else:
+                weights = policy_or_weights
 
-                strategy = WeightStrategy(extract_as="tensordict")
-                weights = strategy.extract_weights(self._original_policy)
-                # Cast weights to the policy device before applying
-                if self.policy_device is not None:
-                    weights = weights.to(self.policy_device)
+            # Apply to local policy
+            if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
                 strategy.apply_weights(self.policy, weights)
-            # Otherwise, no action needed - policy is local and changes are immediately visible
+        elif (
+            hasattr(self, "_original_policy")
+            and isinstance(self._original_policy, nn.Module)
+            and hasattr(self, "policy")
+            and isinstance(self.policy, nn.Module)
+        ):
+            # If no weights were provided, mirror weights from the original (trainer) policy
+            from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+            strategy = WeightStrategy(extract_as="tensordict")
+            weights = strategy.extract_weights(self._original_policy)
+            # Cast weights to the policy device before applying
+            if self.policy_device is not None:
+                weights = weights.to(self.policy_device)
+            strategy.apply_weights(self.policy, weights)
+        # Otherwise, no action needed - policy is local and changes are immediately visible
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -2472,11 +2476,19 @@ class _MultiDataCollector(DataCollectorBase):
         self.trust_policy = trust_policy
 
         policy_factory = self._setup_policy_factory(policy_factory)
+
+        # Set up weight synchronization
+        if (
+            policy_factory is None
+            and not weight_sync_schemes
+            and weight_updater is None
+        ):
+            weight_sync_schemes = {"policy": SharedMemWeightSyncScheme()}
+
         self._setup_multi_policy_and_weights(
             policy, policy_factory, weight_updater, weight_sync_schemes
         )
 
-        # Set up weight synchronization
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
         # Set up policy version tracking
@@ -3078,6 +3090,20 @@ also that the state dict is synchronised across processes if needed."""
                 else:
                     # Legacy string error message
                     raise RuntimeError(msg)
+
+        # For SharedMemWeightSyncScheme, pre-register shared weights now that workers are ready
+        # This avoids deadlock when workers are busy collecting and can't respond to registration messages
+        if self._weight_sync_schemes:
+            for model_id, scheme in self._weight_sync_schemes.items():
+                if isinstance(scheme, SharedMemWeightSyncScheme):
+                    sender = self._weight_senders[model_id]
+                    # Extract weights from the policy (which should now be linked to shared memory)
+                    weights = self._extract_weights_if_needed(None, model_id)
+                    if weights is not None:
+                        # Register the shared weights - this sends the buffer to workers
+                        # Workers are ready and waiting for messages, so they can receive this
+                        sender.update_weights(weights)
+
         self.queue_out = queue_out
         self.closed = False
 
