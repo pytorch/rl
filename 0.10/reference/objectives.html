@@ -436,7 +436,7 @@ a simple signature.</p>
 <li><p>they are stateful objects: they contain a copy of the trainable parameters
 such that <code class="docutils literal notranslate"><span class="pre">loss_module.parameters()</span></code> gives whatever is needed to train the
 algorithm.</p></li>
-<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> convention: the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.8)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
+<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> convention: the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.9)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
 method will receive a tensordict as input that contains all the necessary
 information to return a loss value.</p></li>
 <li><p>They output a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code> instance with the loss values
@@ -465,7 +465,7 @@ used to reset the parameters in the loss to the new value.</p>
 </div>
 <section id="torch-vmap-and-randomness">
 <h2>torch.vmap and randomness<a class="headerlink" href="#torch-vmap-and-randomness" title="Permalink to this heading">¶</a></h2>
-<p>TorchRL loss modules have plenty of calls to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.8)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to amortize the cost of calling multiple similar models
+<p>TorchRL loss modules have plenty of calls to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.9)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to amortize the cost of calling multiple similar models
 in a loop, and instead vectorize these operations. <cite>vmap</cite> needs to be told explicitly what to do when random numbers
 need to be generated within the call. To do this, a randomness mode need to be set and must be one of <cite>“error”</cite> (default,
 errors when dealing with pseudo-random functions), <cite>“same”</cite> (replicates the results across the batch) or <cite>“different”</cite>
@@ -889,7 +889,7 @@ The dimension of the tensordict, on the contrary, still matches the env’s / re
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate" title="torchrl.objectives.SoftUpdate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SoftUpdate</span></code></a>(loss_module, *[, eps, tau])</p></td>
 <td><p>A soft-update class for target network update in Double DQN/DDPG.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a>(value)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a>(value[, names, module, ...])</p></td>
 <td><p>Value function enumerator for custom-built estimators.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.default_value_kwargs.html#torchrl.objectives.default_value_kwargs" title="torchrl.objectives.default_value_kwargs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_value_kwargs</span></code></a>(value_type)</p></td>

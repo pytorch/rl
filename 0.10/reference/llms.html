@@ -533,13 +533,101 @@ LLAMA, Mistral, OPT, GPT, MPT, BLOOM, Pythia, Phi, etc. will use the default <ci
 </section>
 <section id="adding-custom-templates">
 <h4>Adding Custom Templates<a class="headerlink" href="#adding-custom-templates" title="Permalink to this heading">¶</a></h4>
-<p>You can add custom chat templates for new model families using the <code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.data.llm.chat.add_chat_template()</span></code> function.</p>
+<p>You can add custom chat templates for new model families using the <a class="reference internal" href="#torchrl.data.llm.add_chat_template" title="torchrl.data.llm.add_chat_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.data.llm.add_chat_template()</span></code></a> function.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrl.data.llm.add_chat_template">
+<span class="sig-prename descclassname"><span class="pre">torchrl.data.llm.</span></span><span class="sig-name descname"><span class="pre">add_chat_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">template_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">template</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse_parser</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">callable</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_family_keywords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../_modules/torchrl/data/llm/history.html#add_chat_template"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.llm.add_chat_template" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a custom chat template to the global template dictionary.</p>
+<p>This function allows you to add custom chat templates for new model families
+that support assistant token masking via the <cite>{% generation %}</cite> keyword.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>template_name</strong> (<em>str</em>) – The name of the template (e.g., “llama”, “mistral”).
+This name will be used in the <cite>chat_template_name</cite> parameter of
+<cite>History.apply_chat_template()</cite> and <cite>History.from_text()</cite>.</p></li>
+<li><p><strong>template</strong> (<em>str</em>) – The Jinja2 template string. Must include <cite>{% generation %}</cite>
+blocks around assistant message content to enable token masking.</p></li>
+<li><p><strong>inverse_parser</strong> (<em>callable</em><em>, </em><em>optional</em>) – A function that parses formatted text back
+into a History object. Should have signature <cite>(text: str) -&gt; History</cite>.
+If None, a basic parser will be used.</p></li>
+<li><p><strong>model_family_keywords</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Keywords to detect this model family
+in the auto-detection logic. For example, [“llama”, “meta-llama”] for Llama models.
+If provided, the template will be automatically selected for models containing
+these keywords in their name.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_chat_template</span><span class="p">,</span> <span class="n">History</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add a custom template for Llama models</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">llama_template</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">% f</span><span class="s1">or message in messages %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">%- i</span><span class="s1">f message[&#39;role&#39;] == &#39;user&#39; %}</span>
+<span class="gp">... </span><span class="s1">{{ &#39;&lt;s&gt;[INST] &#39; + message[&#39;content&#39;] + &#39; [/INST]&#39; }}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">lif message[&#39;role&#39;] == &#39;assistant&#39; %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">% g</span><span class="s1">eneration %}{{ message[&#39;content&#39;] + &#39;&lt;/s&gt;&#39; }}{</span><span class="si">% e</span><span class="s1">ndgeneration %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">ndif %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">% e</span><span class="s1">ndfor %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">%- i</span><span class="s1">f add_generation_prompt %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">% g</span><span class="s1">eneration %}{{ &#39; &#39; }}{</span><span class="si">% e</span><span class="s1">ndgeneration %}</span>
+<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">ndif %}</span>
+<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">parse_llama_text</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="c1"># Custom parser for Llama format</span>
+<span class="gp">... </span>    <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="gp">... </span>    <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s1">&#39;&lt;s&gt;\[INST\]\s*(.*?)\s*\[/INST\]\s*(.*?)&lt;/s&gt;&#39;</span>
+<span class="gp">... </span>    <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">messages</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">user_content</span><span class="p">,</span> <span class="n">assistant_content</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">user_content</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
+<span class="gp">... </span>        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">assistant_content</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add the template with auto-detection</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">add_chat_template</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">template</span><span class="o">=</span><span class="n">llama_template</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">inverse_parser</span><span class="o">=</span><span class="n">parse_llama_text</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">model_family_keywords</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span> <span class="s2">&quot;meta-llama&quot;</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Now you can use it with auto-detection</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;meta-llama/Llama-2-7b-chat-hf&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello&quot;</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hi there!&quot;</span><span class="p">}</span>
+<span class="gp">... </span><span class="p">]])</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Auto-detection will use the llama template</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Or use it explicitly</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
 </section>
 <section id="usage-examples">
 <h4>Usage Examples<a class="headerlink" href="#usage-examples" title="Permalink to this heading">¶</a></h4>
 <section id="adding-a-llama-template">
 <h5>Adding a Llama Template<a class="headerlink" href="#adding-a-llama-template" title="Permalink to this heading">¶</a></h5>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_chat_template</span><span class="p">,</span> <span class="n">History</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_chat_template</span><span class="p">,</span> <span class="n">History</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define the Llama chat template</span>
@@ -1397,7 +1485,7 @@ For example, in the GSM8K reward parser:</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(tools, tool_schemas[, ...])</p></td>
 <td><p>A transform that executes MCP-style tools in response to LLM actions.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ...)</p></td>
 <td><p>A transform that keeps track of the version of the policy.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>

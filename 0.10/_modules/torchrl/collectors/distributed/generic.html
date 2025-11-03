@@ -704,7 +704,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
@@ -718,8 +718,8 @@
 <span class="sd">            number of frames returned by the collector</span>
 <span class="sd">            during its lifespan. If the ``total_frames`` is not divisible by</span>
 <span class="sd">            ``frames_per_batch``, an exception is raised.</span>
-<span class="sd">             Endless collectors can be created by passing ``total_frames=-1``.</span>
-<span class="sd">             Defaults to ``-1`` (endless collector).</span>
+<span class="sd">            Endless collectors can be created by passing ``total_frames=-1``.</span>
+<span class="sd">            Defaults to ``-1`` (endless collector).</span>
 <span class="sd">        device (int, str or torch.device, optional): The generic device of the</span>
 <span class="sd">            collector. The ``device`` args fills any non-specified device: if</span>
 <span class="sd">            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or</span>

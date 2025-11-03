@@ -558,8 +558,8 @@ is_shared=False)</p>
 <span class="sig-name descname"><span class="pre">get_input_from_hash</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hash_tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#Hash.get_input_from_hash"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.Hash.get_input_from_hash" title="Permalink to this definition">¶</a></dt>
 <dd><p>Look up the input that was given for a particular hash output.</p>
 <p>This feature is only available if, during initialization, either the
-<a href="#id1"><span class="problematic" id="id2">:arg:`repertoire`</span></a> argument was given or both the <a href="#id3"><span class="problematic" id="id4">:arg:`in_keys_inv`</span></a> and
-<a href="#id5"><span class="problematic" id="id6">:arg:`out_keys_inv`</span></a> arguments were given.</p>
+<code class="docutils literal notranslate"><span class="pre">repertoire</span></code> argument was given or both the <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code> and
+<code class="docutils literal notranslate"><span class="pre">out_keys_inv</span></code> arguments were given.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>hash_tensor</strong> (<em>Tensor</em>) – The hash output.</p>
@@ -626,7 +626,7 @@ Otherwise, an <code class="docutils literal notranslate"><span class="pre">Order
 Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>prefix</strong> (<em>str</em><em>, </em><em>optional</em>) – a prefix added to parameter and buffer
 names to compose the keys in state_dict. Default: <code class="docutils literal notranslate"><span class="pre">''</span></code>.</p></li>
-<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> s
+<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> s
 returned in the state dict are detached from autograd. If it’s
 set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, detaching will not be performed.
 Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>

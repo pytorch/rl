@@ -705,12 +705,13 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Shuts down the collector when started asynchronously with the `start` method.</span>
 
-<span class="sd">        Arg:</span>
+<span class="sd">        Args:</span>
 <span class="sd">            timeout (float, optional): The maximum time to wait for the collector to shutdown.</span>
 <span class="sd">            close_env (bool, optional): If True, the collector will close the contained environment.</span>
 <span class="sd">                Defaults to `True`.</span>
 
 <span class="sd">        .. seealso:: :meth:`~.start`</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">close_env</span><span class="o">=</span><span class="n">close_env</span><span class="p">)</span></div>
 
@@ -862,7 +863,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
@@ -2206,7 +2207,7 @@
 <span class="sd">              ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
@@ -3171,8 +3172,8 @@
 <span class="sd">        ...         if i == 2:</span>
 <span class="sd">        ...             print(data)</span>
 <span class="sd">        ...             break</span>
-<span class="sd">        &gt;&gt;&gt; collector.shutdown()</span>
-<span class="sd">        &gt;&gt;&gt; del collector</span>
+<span class="sd">        ...     collector.shutdown()</span>
+<span class="sd">        ...     del collector</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
 <span class="sd">                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -3552,8 +3553,8 @@
 <span class="sd">        ...         if i == 2:</span>
 <span class="sd">        ...             print(data)</span>
 <span class="sd">        ...             break</span>
-<span class="sd">        ... collector.shutdown()</span>
-<span class="sd">        ... del collector</span>
+<span class="sd">        ...     collector.shutdown()</span>
+<span class="sd">        ...     del collector</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
 <span class="sd">                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -3788,7 +3789,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
@@ -3802,8 +3803,8 @@
 <span class="sd">            total number of frames returned by the collector</span>
 <span class="sd">            during its lifespan. If the ``total_frames`` is not divisible by</span>
 <span class="sd">            ``frames_per_batch``, an exception is raised.</span>
-<span class="sd">             Endless collectors can be created by passing ``total_frames=-1``.</span>
-<span class="sd">             Defaults to ``-1`` (never ending collector).</span>
+<span class="sd">            Endless collectors can be created by passing ``total_frames=-1``.</span>
+<span class="sd">            Defaults to ``-1`` (never ending collector).</span>
 <span class="sd">        device (int, str or torch.device, optional): The generic device of the</span>
 <span class="sd">            collector. The ``device`` args fills any non-specified device: if</span>
 <span class="sd">            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or</span>

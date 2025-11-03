@@ -553,7 +553,7 @@
 <span class="sd">            - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.</span>
 
 <span class="sd">            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn&#39;t be serialized /</span>
-<span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
+<span class="sd">                pickled directly), the ``policy_factory`` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
@@ -685,6 +685,10 @@
 <span class="sd">            If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging</span>
 <span class="sd">            Ray&#39;s distributed capabilities.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        use_env_creator (bool, optional): if ``True``, the environment constructor functions will be wrapped</span>
+<span class="sd">            in :class:`~torchrl.envs.EnvCreator`. This is useful for multiprocessed settings where shared memory</span>
+<span class="sd">            needs to be managed, but Ray has its own object storage mechanism, so this is typically not needed.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
@@ -748,6 +752,7 @@
         <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span>
         <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_env_creator</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
         <span class="k">if</span> <span class="n">remote_configs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -822,9 +827,10 @@
         <span class="n">create_env_fn</span><span class="p">,</span> <span class="n">collector_kwargs</span><span class="p">,</span> <span class="n">remote_configs</span> <span class="o">=</span> <span class="n">out_lists</span>
         <span class="n">num_collectors</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">)):</span>
-                <span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">use_env_creator</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">(</span><span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">)):</span>
+                    <span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
 
         <span class="c1"># If ray available, try to connect to an existing Ray cluster or start one and connect to it.</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>

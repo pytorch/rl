@@ -832,7 +832,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Class decorator that applies `accept_remote_rref_invocation` to all public methods.&quot;&quot;&quot;</span>
     <span class="c1"># ignores private methods</span>
     <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">decorated_class</span><span class="p">):</span>
-        <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">decorated_class</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">decorated_class</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
         <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">method</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">):</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="n">decorated_class</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">accept_remote_rref_invocation</span><span class="p">(</span><span class="n">method</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">decorated_class</span>

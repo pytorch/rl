@@ -448,7 +448,7 @@ If <code class="docutils literal notranslate"><span class="pre">None</span></cod
 Accepted policies are usually subclasses of <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>.
 This is the recommended usage of the collector.
 Other callables are accepted too:
-If the policy is not a <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code> (e.g., a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
+If the policy is not a <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code> (e.g., a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
 instances) it will be wrapped in a <cite>nn.Module</cite> first.
 Then, the collector will try to assess if these
 modules require wrapping in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> or not.</p>
@@ -462,7 +462,7 @@ then the policy won’t be wrapped in a <code class="xref py py-class docutils l
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>If the policy needs to be passed as a policy factory (e.g., in case it mustn’t be serialized /
-pickled directly), the <a href="#id1"><span class="problematic" id="id2">:arg:`policy_factory`</span></a> should be used instead.</p>
+pickled directly), the <code class="docutils literal notranslate"><span class="pre">policy_factory</span></code> should be used instead.</p>
 </div>
 </p></li>
 </ul>
@@ -478,22 +478,19 @@ pickled directly), the <a href="#id1"><span class="problematic" id="id2">:arg:`p
 </p></li>
 <li><p><strong>frames_per_batch</strong> (<em>int</em>) – A keyword-only argument representing the total
 number of elements in a batch.</p></li>
-<li><p><strong>total_frames</strong> (<em>int</em>) – <p>A keyword-only argument representing the total
+<li><p><strong>total_frames</strong> (<em>int</em>) – A keyword-only argument representing the total
 number of frames returned by the collector
 during its lifespan. If the <code class="docutils literal notranslate"><span class="pre">total_frames</span></code> is not divisible by
-<code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code>, an exception is raised.</p>
-<blockquote>
-<div><p>Endless collectors can be created by passing <code class="docutils literal notranslate"><span class="pre">total_frames=-1</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">-1</span></code> (endless collector).</p>
-</div></blockquote>
-</p></li>
-<li><p><strong>device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The generic device of the
+<code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code>, an exception is raised.
+Endless collectors can be created by passing <code class="docutils literal notranslate"><span class="pre">total_frames=-1</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">-1</span></code> (endless collector).</p></li>
+<li><p><strong>device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The generic device of the
 collector. The <code class="docutils literal notranslate"><span class="pre">device</span></code> args fills any non-specified device: if
 <code class="docutils literal notranslate"><span class="pre">device</span></code> is not <code class="docutils literal notranslate"><span class="pre">None</span></code> and any of <code class="docutils literal notranslate"><span class="pre">storing_device</span></code>, <code class="docutils literal notranslate"><span class="pre">policy_device</span></code> or
 <code class="docutils literal notranslate"><span class="pre">env_device</span></code> is not specified, its value will be set to <code class="docutils literal notranslate"><span class="pre">device</span></code>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (No default device).
 Lists of devices are supported.</p></li>
-<li><p><strong>storing_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+<li><p><strong>storing_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
 the output <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> will be stored.
 If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed and <code class="docutils literal notranslate"><span class="pre">storing_device</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, it will
 default to the value indicated by <code class="docutils literal notranslate"><span class="pre">device</span></code>.
@@ -502,7 +499,7 @@ device than the one where the policy and env are executed.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (the output tensordict isn’t on a specific device,
 leaf tensors sit on the device where they were created).
 Lists of devices are supported.</p></li>
-<li><p><strong>env_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+<li><p><strong>env_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
 the environment should be cast (or executed if that functionality is
 supported). If not specified and the env has a non-<code class="docutils literal notranslate"><span class="pre">None</span></code> device,
 <code class="docutils literal notranslate"><span class="pre">env_device</span></code> will default to that value. If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed
@@ -512,7 +509,7 @@ and one of them is not <code class="docutils literal notranslate"><span class="p
 before being passed to the env (i.e., passing different devices to
 policy and env is supported). Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
 Lists of devices are supported.</p></li>
-<li><p><strong>policy_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+<li><p><strong>policy_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
 the policy should be cast.
 If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed and <code class="docutils literal notranslate"><span class="pre">policy_device=None</span></code>, it will default
 to <code class="docutils literal notranslate"><span class="pre">device</span></code>. If the value as such specified of <code class="docutils literal notranslate"><span class="pre">policy_device</span></code>
@@ -610,7 +607,7 @@ To find more about submitit, visit
 <a class="reference external" href="https://github.com/facebookincubator/submitit">https://github.com/facebookincubator/submitit</a>
 Defaults to “submitit”.</p></li>
 <li><p><strong>tcp_port</strong> (<em>int</em><em>, </em><em>optional</em>) – the TCP port to be used. Defaults to 10003.</p></li>
-<li><p><strong>visible_devices</strong> (<em>list of Union</em><em>[</em><em>int</em><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>, </em><em>str</em><em>]</em><em>, </em><em>optional</em>) – a
+<li><p><strong>visible_devices</strong> (<em>list of Union</em><em>[</em><em>int</em><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>str</em><em>]</em><em>, </em><em>optional</em>) – a
 list of the same length as the number of nodes containing the
 device used to pass data to main.</p></li>
 <li><p><strong>tensorpipe_options</strong> (<em>dict</em><em>, </em><em>optional</em>) – a dictionary of keyword argument
@@ -627,12 +624,13 @@ Consider using a constructor if the updater needs to be serialized.</p></li>
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RPCDataCollector.async_shutdown">
 <span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.distributed.RPCDataCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuts down the collector when started asynchronously with the <cite>start</cite> method.</p>
-<dl>
-<dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.
-close_env (bool, optional): If True, the collector will close the contained environment.</p>
-<blockquote>
-<div><p>Defaults to <cite>True</cite>.</p>
-</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>timeout</strong> (<em>float</em><em>, </em><em>optional</em>) – The maximum time to wait for the collector to shutdown.</p></li>
+<li><p><strong>close_env</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, the collector will close the contained environment.
+Defaults to <cite>True</cite>.</p></li>
+</ul>
 </dd>
 </dl>
 <div class="admonition seealso">
@@ -688,7 +686,7 @@ Ensure you understand the implications for your specific algorithm before using 
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RPCDataCollector.update_policy_weights_">
-<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_or_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.distributed.RPCDataCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_or_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensordict.base.TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.nn.common.TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.distributed.RPCDataCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</p>
 <p>This method ensures that the policy weights used by the data collector are synchronized with the latest
 trained weights. It supports both local and remote weight updates, depending on the configuration of the
@@ -702,7 +700,7 @@ can be transferred to the children workers from a server.</p>
 - TensorDictBase: A TensorDict containing weights
 - dict: A regular dict containing weights
 - None: Will try to get weights from server using _get_server_weights()</p></li>
-<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
+<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
 workers that need to be updated. This is relevant when the collector has more than one worker associated
 with it.</p></li>
 </ul>
