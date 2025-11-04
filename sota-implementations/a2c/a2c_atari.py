@@ -35,7 +35,12 @@ def main(cfg: DictConfig):  # noqa: F821
 
     device = cfg.loss.device
     if not device:
-        device = torch.device("cpu" if not torch.cuda.is_available() else "cuda:0")
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        elif torch.npu.is_available():
+            device = torch.device("npu:0")
+        else:
+            device = torch.device("cpu")
     else:
         device = torch.device(device)
 

@@ -38,7 +38,12 @@ torch.set_float32_matmul_precision("high")
 def main(cfg):  # noqa: F821
     device = cfg.optim.device
     if device in ("", None):
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        elif torch.npu.is_available():
+            device = "npu:0"
+        else:
+            device = "cpu"
     device = torch.device(device)
 
     # Create logger
