@@ -2187,10 +2187,11 @@ class SyncDataCollector(DataCollectorBase):
             ValueError: If model_id is not recognized
         """
         if model_id == "policy":
-            # Return the wrapped policy instance
-            if hasattr(self, "_wrapped_policy") and self._wrapped_policy is not None:
-                return self._wrapped_policy
-            elif hasattr(self, "policy") and self.policy is not None:
+            # Return the unwrapped policy instance for weight synchronization
+            # The unwrapped policy has the same parameter structure as what's
+            # extracted in the main process, avoiding key mismatches when
+            # the policy is auto-wrapped (e.g., WrappablePolicy -> TensorDictModule)
+            if hasattr(self, "policy") and self.policy is not None:
                 return self.policy
             else:
                 raise ValueError(f"No policy found for model_id '{model_id}'")
@@ -4680,12 +4681,21 @@ def _main_async_collector(
                 # Only apply if the model is an nn.Module (has learnable parameters)
                 try:
                     model = receiver._resolve_model_ref()
-                    if isinstance(model, nn.Module):
-                        receiver.apply_weights(shared_buffer)
-                except (ValueError, AttributeError):
-                    # Model not registered or not an nn.Module (e.g., RandomPolicy)
-                    # Skip weight application - this is expected for policies without parameters
-                    pass
+                except (ValueError, AttributeError) as e:
+                    # Model not registered or reference is invalid
+                    if verbose:
+                        torchrl_logger.warning(
+                            f"worker {idx} could not resolve model '{model_id}': {e}"
+                        )
+                    continue
+
+                if isinstance(model, nn.Module):
+                    receiver.apply_weights(shared_buffer)
+                else:
+                    if verbose:
+                        torchrl_logger.info(
+                            f"worker {idx} skipping weight application for non-nn.Module model '{model_id}'"
+                        )
 
                 if verbose:
                     torchrl_logger.info(

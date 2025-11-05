@@ -777,7 +777,12 @@ class WeightStrategy:
         if isinstance(weights, TensorDictBase):
             # Apply TensorDict format
             if isinstance(destination, TensorDictBase):
-                destination.data.update_(weights.data)
+                try:
+                    destination.data.update_(weights.data)
+                except Exception as e:
+                    raise KeyError(
+                        f"Error updating destination: {e}. Destination keys: {destination.keys(True, True)}, weights keys: {weights.keys(True, True)}"
+                    )
             else:
                 raise ValueError(
                     f"Unsupported destination type for TensorDict: {type(destination)}"
