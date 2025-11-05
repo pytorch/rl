@@ -196,6 +196,9 @@ class BatchedEnvBase(EnvBase):
             one of the environment has dynamic specs.
 
               .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
+        daemon (bool, optional): whether the processes should be daemonized.
+            This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
+            Defaults to ``False``.
 
     .. note::
         One can pass keyword arguments to each sub-environments using the following
@@ -311,6 +314,7 @@ class BatchedEnvBase(EnvBase):
         mp_start_method: str | None = None,
         use_buffers: bool | None = None,
         consolidate: bool = True,
+        daemon: bool = False,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -320,6 +324,7 @@ class BatchedEnvBase(EnvBase):
         self._cache_in_keys = None
         self._use_buffers = use_buffers
         self.consolidate = consolidate
+        self.daemon = daemon
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -1503,7 +1508,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         }
                     )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
-                process.daemon = True
+                process.daemon = self.daemon
                 process.start()
                 child_pipe.close()
                 self.parent_channels.append(parent_pipe)
