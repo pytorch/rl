@@ -536,7 +536,12 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return None
 
     @abc.abstractmethod
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -2017,23 +2022,35 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._shuttle["collector"] = collector_metadata
 
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         """Shuts down all workers and/or closes the local environment.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
                 No effect for this class.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+            raise_on_error (bool, optional): Whether to raise an error if the shutdown fails. Defaults to `True`.
         """
-        if not self.closed:
-            self.closed = True
-            del self._shuttle
-            if self._use_buffers:
-                del self._final_rollout
-            if close_env and not self.env.is_closed:
-                self.env.close()
-            del self.env
-        return
+        try:
+            if not self.closed:
+                self.closed = True
+                del self._shuttle
+                if self._use_buffers:
+                    del self._final_rollout
+                if close_env and not self.env.is_closed:
+                    self.env.close(raise_if_closed=raise_on_error)
+                del self.env
+            return
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     def __del__(self):
         try:
@@ -2530,7 +2547,11 @@ class _MultiDataCollector(DataCollectorBase):
         self._setup_preemptive_threshold(preemptive_threshold)
 
         # Run worker processes
-        self._run_processes()
+        try:
+            self._run_processes()
+        except Exception as e:
+            self.shutdown(raise_on_error=False)
+            raise e
 
         # Set up frame tracking and other options
         self._exclude_private_keys = True
@@ -3093,7 +3114,6 @@ also that the state dict is synchronised across processes if needed."""
             for model_id, scheme in self._weight_sync_schemes.items():
                 # Check if scheme has new API or legacy API
                 if hasattr(scheme, "init_on_sender"):
-                    # Use new API
                     scheme.init_on_sender(model_id=model_id, context=self)
                     # Get the initialized sender
                     self._weight_senders[model_id] = scheme.get_sender()
@@ -3212,18 +3232,30 @@ also that the state dict is synchronised across processes if needed."""
             # __del__ will not affect the program.
             pass
 
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         """Shuts down all processes. This operation is irreversible.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+            raise_on_error (bool, optional): Whether to raise an error if the shutdown fails. Defaults to `True`.
         """
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
             )
-        self._shutdown_main(timeout)
+        try:
+            self._shutdown_main(timeout)
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     def _shutdown_main(self, timeout: float | None = None) -> None:
         if timeout is None:
@@ -3624,7 +3656,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
@@ -3633,7 +3670,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             del self.out_buffer
         if hasattr(self, "buffers"):
             del self.buffers
-        return super().shutdown(timeout=timeout)
+        try:
+            return super().shutdown(timeout=timeout)
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4025,14 +4068,19 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
             )
-        return super().shutdown(timeout=timeout)
+        return super().shutdown(timeout=timeout, raise_on_error=raise_on_error)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4387,8 +4435,15 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
-        return super().shutdown(timeout=timeout, close_env=close_env)
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
+        return super().shutdown(
+            timeout=timeout, close_env=close_env, raise_on_error=raise_on_error
+        )
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4480,7 +4535,6 @@ def _main_async_collector(
             for model_id, scheme in weight_sync_schemes.items():
                 # Check if scheme has new API or legacy API
                 if hasattr(scheme, "init_on_worker"):
-                    # Use new API
                     scheme.init_on_worker(model_id=model_id, context=inner_collector)
                     receiver = scheme.get_receiver()
                 else:
@@ -4680,11 +4734,11 @@ def _main_async_collector(
             else:
                 inner_collector.init_random_frames = -1
 
-            # Check for and apply weight updates before collecting next batch
-            if inner_collector._weight_receivers:
-                for receiver in inner_collector._weight_receivers.values():
-                    # Non-blocking check for new weights
-                    receiver.receive(timeout=0.0001)
+            # Note: For MultiProcessWeightSyncScheme, weight updates are handled by the
+            # main message loop above (msg == "update_weights" case). The receiver.receive()
+            # pattern is only used for schemes with separate communication channels like
+            # SharedMemWeightSyncScheme (shared memory) or DistributedWeightSyncScheme (TCPStore).
+            # Calling receiver.receive() here would interfere with the pipe-based message protocol.
 
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):

@@ -32,7 +32,6 @@ def worker_update_policy(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-    # Use new API
     scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
     receiver = scheme.get_receiver()
 
@@ -52,7 +51,6 @@ def worker_update_policy_tensordict(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-    # Use new API
     scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
     receiver = scheme.get_receiver()
 
@@ -201,7 +199,6 @@ class TestWeightSyncSchemes:
         parent_pipe, child_pipe = mp.Pipe()
 
         scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-        # Use new API
         scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
         sender = scheme.get_sender()
 
@@ -218,7 +215,6 @@ class TestWeightSyncSchemes:
         parent_pipe, child_pipe = mp.Pipe()
 
         scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-        # Use new API
         scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
         sender = scheme.get_sender()
 

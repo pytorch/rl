@@ -74,9 +74,8 @@ class MPTransport:
 
         Sends weights and waits for acknowledgment to ensure delivery.
         """
-        self.pipe.send(((model_id, weights), "update_weights"))
-        # Wait for acknowledgment
-        self.check_ack("updated")
+        self.send_weights_async(model_id, weights)
+        self.wait_ack()
 
     def send_weights_async(self, model_id: str, weights: Any) -> None:
         """Send weights through the pipe without waiting for acknowledgment.
@@ -90,12 +89,30 @@ class MPTransport:
         self.check_ack("updated")
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
-        """Receive weights from the pipe (used in worker process)."""
+        """Receive weights from the pipe (used in worker process).
+
+        This method only handles weight update messages. Other messages
+        (like "close", "continue", etc.) are ignored and should be handled
+        by the main worker loop.
+
+        Returns:
+            Tuple of (model_id, weights) if weights were received, None if no data available
+            or if a non-weight message was received.
+        """
         if self.pipe.poll(timeout):
             data_in, msg = self.pipe.recv()
             if msg == "update_weights":
                 model_id, weights = data_in
                 return model_id, weights
+            else:
+                # Not a weight update message - put it back and return None
+                # This allows the main worker loop to handle other messages
+                # Note: We can't actually "put it back", so we'll just return None
+                # and the message is lost. This is why receive() should only be called
+                # when we're expecting weight updates, not in the main message loop.
+                return None
+        # No data available - return None instead of raising TimeoutError
+        # This allows non-blocking checks in the worker loop
         return None
 
     def send_ack(self, message: str = "updated") -> None:
@@ -130,7 +147,7 @@ class SharedMemTransport:
         policy_weights: Dictionary mapping model_id to shared TensorDict weights.
             Can be empty if using lazy registration.
         auto_register: Whether to automatically register models on first weight send.
-            Default is True. Set to False to require explicit registration via
+            Default is True. Set to `False` to require explicit registration via
             register_weights().
     """
 
@@ -142,9 +159,8 @@ class SharedMemTransport:
         self._policy_weights = policy_weights if policy_weights is not None else {}
         self._auto_register = auto_register
         self._pipes = []  # List of pipes to send initial buffer references
-        self._registered_with_workers = (
-            set()
-        )  # Track which model_ids have been sent to workers
+        # Track which model_ids have been sent to workers
+        self._registered_with_workers = set()
 
     def register_pipe(self, pipe: Any) -> None:
         """Register a pipe for sending buffer references on first weight send.
@@ -168,15 +184,21 @@ class SharedMemTransport:
             raise ValueError(f"Weights must be a TensorDictBase, got {type(weights)}")
 
         is_new_registration = model_id not in self._policy_weights
-        self._policy_weights[model_id] = weights
+        if is_new_registration:
+            self._policy_weights[model_id] = weights
+        else:
+            raise RuntimeError("Re-registering weights is not supported.")
 
         # If this is a new registration and we have pipes, send buffer to workers
-        if (
-            is_new_registration
-            and self._pipes
-            and model_id not in self._registered_with_workers
-        ):
-            self._send_buffer_to_workers(model_id, weights)
+        if not self._pipes:
+            raise RuntimeError(
+                "Cannot send the buffer reference to the workers, the pipes are empty."
+            )
+        if model_id in self._registered_with_workers:
+            raise RuntimeError(
+                "Cannot send the buffer reference to the workers, the model_id is already in the registry."
+            )
+        self._send_buffer_to_workers(model_id, weights)
 
     def _send_buffer_to_workers(self, model_id: str, buffer: TensorDictBase) -> None:
         """Send shared memory buffer reference to all workers via pipes.
@@ -226,28 +248,21 @@ class SharedMemTransport:
                 )
 
             # Auto-register on first send
-            if isinstance(weights, TensorDictBase):
-                # Create shared memory copy
-                # Unflatten keys if they're flat (e.g., 'module.0.weight' -> nested structure)
-                # This is necessary for to_module() to work properly
-                weights_to_share = weights.clone()
-                # Check if keys are flattened by looking for dots in key names
-                if any("." in key for key in weights_to_share.keys()):
-                    weights_to_share = weights_to_share.unflatten_keys(".")
-                shared_buffer = weights_to_share.share_memory_()
-            elif isinstance(weights, dict):
-                # Convert dict to TensorDict and share
-                # Unflatten if keys are flat
-                weights_td = TensorDict(weights, batch_size=[])
-                if any("." in key for key in weights_td.keys()):
-                    weights_td = weights_td.unflatten_keys(".")
-                shared_buffer = weights_td.share_memory_()
-            else:
+            if isinstance(weights, dict):
+                weights = TensorDict(weights)
+            if not isinstance(weights, TensorDictBase):
                 raise ValueError(
                     f"Cannot auto-register model '{model_id}' with weights type: {type(weights)}. "
                     f"Supported types for auto-registration: TensorDictBase, dict. "
                     f"Please manually register shared weights using register_weights()."
                 )
+            # Unflatten keys if they're flat (e.g., 'module.0.weight' -> nested structure)
+            # This is necessary for to_module() to work properly
+            weights_to_share = weights
+            # Check if keys are flattened by looking for dots in key names
+            if any("." in key for key in weights_to_share.keys()):
+                weights_to_share = weights_to_share.unflatten_keys(".")
+            shared_buffer = weights_to_share.share_memory_()
 
             self._policy_weights[model_id] = shared_buffer
 
@@ -258,30 +273,15 @@ class SharedMemTransport:
         shared_weights = self._policy_weights[model_id]
 
         # Update shared memory in-place (workers see this automatically)
-        if isinstance(weights, TensorDictBase):
-            # Unflatten if needed to match shared buffer structure
-            weights_to_update = weights
-            if any("." in key for key in weights.keys()):
-                weights_to_update = weights.unflatten_keys(".")
-            shared_weights.data.update_(
-                weights_to_update.data
-                if hasattr(weights_to_update, "data")
-                else weights_to_update
-            )
-        elif isinstance(weights, dict):
-            # For dict updates, check if we need to unflatten keys
-            if any("." in key for key in weights.keys()):
-                # Convert to TensorDict, unflatten, then update
-                weights_td = TensorDict(weights, batch_size=[])
-                weights_td = weights_td.unflatten_keys(".")
-                shared_weights.data.update_(weights_td.data)
-            else:
-                # Direct key-by-key update for non-flattened dict
-                for key, value in weights.items():
-                    if key in shared_weights.keys(True, True):
-                        shared_weights.set(key, value)
-        else:
+        if isinstance(weights, dict):
+            weights = TensorDict(weights)
+        if not isinstance(weights, TensorDictBase):
             raise ValueError(f"Unsupported weights type: {type(weights)}")
+        # Unflatten if needed to match shared buffer structure
+        weights_to_update = weights
+        if any("." in key for key in weights.keys()):
+            weights_to_update = weights.unflatten_keys(".")
+        shared_weights.data.update_(weights_to_update.data)
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
         """No-op for shared memory - weights are already visible."""
@@ -306,7 +306,11 @@ class RayTransport:
     same pattern as multiprocess collectors.
     """
 
-    def __init__(self, remote_collector=None):
+    def __init__(
+        self,
+        remote_collector=None,
+        tensor_transport: Literal["object_store", "nixl"] = "object_store",
+    ):
         try:
             import ray
 
@@ -314,6 +318,7 @@ class RayTransport:
         except ImportError:
             raise ImportError("Ray is required for RayTransport")
         self._remote_collector = remote_collector
+        self._tensor_transport = tensor_transport
 
     def send_weights(self, model_id: str, weights: Any) -> None:
         """Send weights to the remote collector via Ray.
@@ -327,7 +332,7 @@ class RayTransport:
 
         # Put weights in Ray's object store for efficient distribution
         # Ray will automatically deduplicate if the same weights are sent to multiple actors
-        weights_ref = self.ray.put(weights)
+        weights_ref = self.ray.put(weights, _tensor_transport=self._tensor_transport)
 
         # Send to the remote collector and wait for completion
         # This ensures weights are applied before we continue
@@ -344,7 +349,7 @@ class RayTransport:
         if self._remote_collector is None:
             return
 
-        weights_ref = self.ray.put(weights)
+        weights_ref = self.ray.put(weights, _tensor_transport=self._tensor_transport)
         self._pending_future = self._remote_collector.update_policy_weights_.remote(
             policy_or_weights=weights_ref
         )
@@ -354,6 +359,8 @@ class RayTransport:
         if hasattr(self, "_pending_future"):
             self.ray.wait([self._pending_future], num_returns=1)
             del self._pending_future
+        else:
+            raise RuntimeError("No pending future. Did you call send_weights_async?")
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
         """Ray workers typically don't receive weights through this transport."""
@@ -372,7 +379,12 @@ class RayActorTransport:
     update_weights method rather than going through collector update methods.
     """
 
-    def __init__(self, actor_ref=None, update_method: str = "tensordict"):
+    def __init__(
+        self,
+        actor_ref=None,
+        update_method: str = "tensordict",
+        tensor_transport: Literal["object_store", "nixl"] = "object_store",
+    ):
         try:
             import ray
 
@@ -382,6 +394,7 @@ class RayActorTransport:
 
         self._actor_ref = actor_ref
         self._update_method = update_method
+        self._tensor_transport = tensor_transport
 
     def set_actor(self, actor_ref):
         """Set the Ray actor reference to communicate with."""
@@ -392,7 +405,7 @@ class RayActorTransport:
         if self._actor_ref is None:
             return
 
-        weights_ref = self.ray.put(weights)
+        weights_ref = self.ray.put(weights, _tensor_transport=self._tensor_transport)
 
         if self._update_method == "tensordict":
             self.ray.get(
@@ -415,7 +428,7 @@ class RayActorTransport:
         if self._actor_ref is None:
             return
 
-        weights_ref = self.ray.put(weights)
+        weights_ref = self.ray.put(weights, _tensor_transport=self._tensor_transport)
 
         if self._update_method == "tensordict":
             self._pending_future = self._actor_ref._update_weights_tensordict.remote(
@@ -433,6 +446,8 @@ class RayActorTransport:
         if hasattr(self, "_pending_future"):
             self.ray.get(self._pending_future)
             del self._pending_future
+        else:
+            raise RuntimeError("No pending future. Did you call send_weights_async?")
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
         """Ray actor workers receive weights through direct method calls."""
@@ -538,6 +553,7 @@ class DistributedTransport:
         self._store = store
         self._rank = rank
         self._sync = sync
+        self._weights_buffer = None  # TensorDict buffer for receiving weights
 
     def send_weights(self, model_id: str, weights: Any) -> None:
         """Send weights to the distributed worker.
@@ -592,12 +608,73 @@ class DistributedTransport:
         self._store.delete_key(f"NODE_{self._rank}_out")
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
-        """Distributed workers receive weights through torch.distributed primitives."""
+        """Receive weights via torch.distributed, using TCPStore for signaling.
+
+        This implements the RPC-like pattern:
+        1. Check TCPStore for signal (non-blocking)
+        2. If signal present, receive weights via torch.distributed
+        3. Clean up signal and send acknowledgment
+
+        Args:
+            timeout: Timeout for receiving (currently not used for TCPStore check)
+
+        Returns:
+            Tuple of (model_id, weights) if weights were received, None otherwise.
+        """
+        if self._store is None or self._rank is None:
+            return None
+
+        try:
+            # Non-blocking check of TCPStore "mailbox" for signal
+            msg = self._store.get(f"NODE_{self._rank}_in")
+
+            if msg == b"update_weights":
+                # Import here to avoid circular imports
+                from tensordict import TensorDict
+
+                # Initialize weights buffer on first use
+                if self._weights_buffer is None:
+                    self._weights_buffer = TensorDict()
+
+                # Receive weights via torch.distributed
+                # recv() and irecv() update the TensorDict in place
+                if self._sync:
+                    self._weights_buffer.recv(src=0)
+                else:
+                    # irecv() blocks until weights are received
+                    self._weights_buffer.irecv(src=0)
+
+                # Clean up the signal
+                self._store.delete_key(f"NODE_{self._rank}_in")
+
+                # Note: Acknowledgment is sent separately via send_ack() if transport supports it
+                # This matches the pattern in WeightReceiver.receive()
+
+                # Return model_id and received weights
+                # For distributed transport, we use "policy" as default model_id
+                return ("policy", self._weights_buffer)
+            else:
+                raise ValueError(f"Expected 'update_weights' but got {msg}")
+        except KeyError:
+            # No message in store - no weights available
+            return None
+
         return None
+
+    def send_ack(self, message: str = "updated") -> None:
+        """Send acknowledgment back to sender via TCPStore.
+
+        Args:
+            message: Acknowledgment message to send (default: "updated")
+        """
+        if self._store is None or self._rank is None:
+            return
+
+        self._store.set(f"NODE_{self._rank}_out", message.encode())
 
     def check_connection(self) -> bool:
         """Check if torch.distributed is initialized."""
-        import torch
+        import torch.distributed
 
         return torch.distributed.is_initialized()
 
@@ -687,33 +764,24 @@ class WeightStrategy:
 
         # Auto-detect format from weights type
         if isinstance(weights, dict):
-            weights = TensorDict(weights).unflatten_keys(".")
+            weights = TensorDict(weights)
+            if any("." in key for key in weights.keys()):
+                weights = weights.unflatten_keys(".")
+        if isinstance(destination, nn.Module):
+            destination = TensorDict.from_module(destination)
+        elif isinstance(destination, dict):
+            destination = TensorDict(destination)
+            if any(isinstance(key, str) and "." in key for key in destination.keys()):
+                destination = destination.unflatten_keys(".")
 
         if isinstance(weights, TensorDictBase):
             # Apply TensorDict format
-            if isinstance(destination, nn.Module):
-                destination = TensorDict.from_module(destination)
-
-            if isinstance(destination, dict):
-                destination_td = TensorDict(destination)
-                if (dest_keys := sorted(destination_td.keys(True, True))) != sorted(
-                    weights.keys(True, True)
-                ):
-                    weights = weights.unflatten_keys(".")
-                    weights_keys = sorted(weights.keys(True, True))
-                    if dest_keys != weights_keys:
-                        raise ValueError(
-                            f"The keys of the weights and destination do not match: {dest_keys} != {weights_keys}"
-                        )
-                destination = destination_td
-
             if isinstance(destination, TensorDictBase):
                 destination.data.update_(weights.data)
             else:
                 raise ValueError(
                     f"Unsupported destination type for TensorDict: {type(destination)}"
                 )
-
         else:
             raise ValueError(
                 f"Unsupported weights type: {type(weights)}. Expected dict or TensorDictBase."
@@ -754,7 +822,7 @@ class WeightSender:
     def __init__(self, scheme: WeightSyncScheme):
         self._scheme = scheme
         self._transports: dict[int, TransportBackend] = {}  # worker_idx -> transport
-        self._transport: TransportBackend = None
+        self._transport: TransportBackend | None = None
         self._model_id = "policy"  # Default model ID
         self._strategy = _get_strategy(scheme.strategy)
         self._context_ref = None  # weakref to collector for model resolution
@@ -907,8 +975,9 @@ class WeightSender:
             if hasattr(transport, "send_weights_async"):
                 transport.send_weights_async(model_id, prepared_weights)
             else:
-                # Fallback for transports that don't support async send
-                transport.send_weights(model_id, prepared_weights)
+                raise RuntimeError(
+                    f"transport of type {type(transport)} does not support async send."
+                )
 
         self._pending_async = True
 
@@ -1510,7 +1579,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             model_id: Identifier for the model.
             weights: Shared memory TensorDict containing the model's weights.
         """
-        self.policy_weights[model_id] = weights
+        # Don't set self.policy_weights[model_id] here - register_weights does that
+        # (self.policy_weights and transport._policy_weights are the same dict)
         self._shared_transport.register_weights(model_id, weights)
 
     def init_on_sender(
@@ -1558,9 +1628,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
         # If we have cached shared memory weights, pre-register them
         if cached_weights is not None:
-            self.register_shared_weights(model_id, cached_weights)
-            # Immediately distribute buffer references to avoid deadlock
-            self._shared_transport._send_buffer_to_workers(model_id, cached_weights)
+            # Check if already registered to avoid re-registration error
+            if model_id not in self.policy_weights:
+                self.register_shared_weights(model_id, cached_weights)
+            # Immediately distribute buffer references to avoid deadlock (if not already sent)
+            if model_id not in self._shared_transport._registered_with_workers:
+                self._shared_transport._send_buffer_to_workers(model_id, cached_weights)
 
         # Create sender with the shared transport
         sender = WeightSender(self)
