@@ -471,7 +471,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 processed_weights = self._extract_weights_if_needed(
                     weights, target_model_id
                 )
-                self._weight_senders[target_model_id].update_weights(processed_weights)
+                # Use new send() API with worker_ids support
+                self._weight_senders[target_model_id].send(
+                    weights=processed_weights, worker_ids=worker_ids
+                )
         elif self._weight_updater is not None:
             # unreachable
             raise RuntimeError
@@ -2154,6 +2157,33 @@ class SyncDataCollector(DataCollectorBase):
         # send command to rb to return the attr
         return getattr(self.replay_buffer, attr)
 
+    def get_model(self, model_id: str):
+        """Get model instance by ID (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier (e.g., "policy", "value_net")
+
+        Returns:
+            The model instance
+
+        Raises:
+            ValueError: If model_id is not recognized
+        """
+        if model_id == "policy":
+            # Return the wrapped policy instance
+            if hasattr(self, "_wrapped_policy") and self._wrapped_policy is not None:
+                return self._wrapped_policy
+            elif hasattr(self, "policy") and self.policy is not None:
+                return self.policy
+            else:
+                raise ValueError(f"No policy found for model_id '{model_id}'")
+        else:
+            # Try to resolve via attribute access
+            if hasattr(self, model_id):
+                return getattr(self, model_id)
+            else:
+                raise ValueError(f"Unknown model_id: {model_id}")
+
 
 class _MultiDataCollector(DataCollectorBase):
     """Runs a given number of DataCollectors on separate processes.
@@ -2890,15 +2920,7 @@ class _MultiDataCollector(DataCollectorBase):
                 1, torch.get_num_threads() - total_workers
             )  # 1 more thread for this proc
 
-        # Initialize weight senders for multiprocess collectors
-        if self._weight_sync_schemes:
-            # Create one sender per model using scheme's factory method
-            for model_id, scheme in self._weight_sync_schemes.items():
-                sender = scheme.create_sender()
-                sender._model_id = model_id
-                if hasattr(sender, "set_context"):
-                    sender.set_context(self, model_id)
-                self._weight_senders[model_id] = sender
+        # Weight senders will be initialized after workers are ready (via init_on_sender)
         torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
@@ -3010,11 +3032,7 @@ also that the state dict is synchronised across processes if needed."""
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
 
-                # Register worker with senders
-                if self._weight_senders:
-                    for _, sender in self._weight_senders.items():
-                        sender.register_worker(i, pipe_parent)
-
+        # Worker registration now handled by init_on_sender() after workers are ready
         for i, pipe_parent in enumerate(self.pipes):
             pipe_parent.poll(timeout=INSTANTIATE_TIMEOUT)
             try:
@@ -3066,30 +3084,20 @@ also that the state dict is synchronised across processes if needed."""
                     # Legacy string error message
                     raise RuntimeError(msg)
 
-        # For SharedMemWeightSyncScheme, pre-register shared weights now that workers are ready
-        # This avoids deadlock when workers are busy collecting and can't respond to registration messages
+        # Initialize all weight sync schemes now that workers are ready
+        # This calls init_on_sender() for each scheme which:
+        # 1. Creates transports for all workers
+        # 2. Creates and configures the sender
+        # 3. For SharedMemWeightSyncScheme, distributes buffer references to avoid deadlock
         if self._weight_sync_schemes:
             for model_id, scheme in self._weight_sync_schemes.items():
-                if isinstance(scheme, SharedMemWeightSyncScheme):
-                    sender = self._weight_senders[model_id]
-                    # Get the shared memory weights from _policy_weights_dict
-                    # Use prepare_weights with None to trigger cache lookup
-                    from torchrl.weight_update.weight_sync_schemes import _get_strategy
-
-                    strategy = _get_strategy(scheme.strategy)
-                    weights = scheme.prepare_weights(
-                        weights=None,
-                        model_id=model_id,
-                        strategy=strategy,
-                        context=self,
-                    )
-                    if weights is not None:
-                        # Register the shared weights directly with each transport
-                        # This ensures the transports use the same shared memory buffer
-                        # that we'll update later, rather than creating a clone
-                        for transport in sender._iterate_transports():
-                            if hasattr(transport, "register_weights"):
-                                transport.register_weights(model_id, weights)
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_sender"):
+                    # Use new API
+                    scheme.init_on_sender(model_id=model_id, context=self)
+                    # Get the initialized sender
+                    self._weight_senders[model_id] = scheme.get_sender()
+                # else: keep using legacy _weight_senders initialization from before
 
         self.queue_out = queue_out
         self.closed = False
@@ -3450,6 +3458,52 @@ also that the state dict is synchronised across processes if needed."""
     def getattr_rb(self, attr):
         """Get an attribute from the replay buffer."""
         return getattr(self.replay_buffer, attr)
+
+    def get_model(self, model_id: str):
+        """Get model instance by ID (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier (e.g., "policy", "value_net")
+
+        Returns:
+            The model instance
+
+        Raises:
+            ValueError: If model_id is not recognized
+        """
+        if model_id == "policy":
+            # Return the fallback policy instance
+            if hasattr(self, "_fallback_policy") and self._fallback_policy is not None:
+                return self._fallback_policy
+            elif hasattr(self, "policy") and self.policy is not None:
+                return self.policy
+            else:
+                raise ValueError(f"No policy found for model_id '{model_id}'")
+        else:
+            # Try to resolve via attribute access
+            if hasattr(self, model_id):
+                return getattr(self, model_id)
+            else:
+                raise ValueError(f"Unknown model_id: {model_id}")
+
+    def get_cached_weights(self, model_id: str):
+        """Get cached shared memory weights if available (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            Cached TensorDict weights or None if not available
+        """
+        if model_id == "policy" and hasattr(self, "_policy_weights_dict"):
+            # Get the policy device (first device if list)
+            policy_device = self.policy_device
+            if isinstance(policy_device, (list, tuple)):
+                policy_device = policy_device[0] if len(policy_device) > 0 else None
+
+            # Return cached weights for this device
+            return self._policy_weights_dict.get(policy_device)
+        return None
 
 
 @accept_remote_rref_udf_invocation
@@ -4422,13 +4476,21 @@ def _main_async_collector(
         # Set up weight receivers for worker process
         if weight_sync_schemes:
             inner_collector._weight_receivers = {}
+            inner_collector.pipe = pipe_child  # Add pipe attribute for context
             for model_id, scheme in weight_sync_schemes.items():
-                receiver = scheme.create_receiver()
-                receiver.set_context(inner_collector)
-                receiver.register_worker_transport(pipe_child)
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_worker"):
+                    # Use new API
+                    scheme.init_on_worker(model_id=model_id, context=inner_collector)
+                    receiver = scheme.get_receiver()
+                else:
+                    # Legacy API
+                    receiver = scheme.create_receiver()
+                    receiver.set_context(inner_collector)
+                    receiver.register_worker_transport(pipe_child)
 
-                model = _resolve_model(inner_collector, model_id)
-                receiver.register_model(model)
+                    model = _resolve_model(inner_collector, model_id)
+                    receiver.register_model(model)
 
                 inner_collector._weight_receivers[model_id] = receiver
         else:
@@ -4617,6 +4679,13 @@ def _main_async_collector(
                 inner_collector.init_random_frames = float("inf")
             else:
                 inner_collector.init_random_frames = -1
+
+            # Check for and apply weight updates before collecting next batch
+            if inner_collector._weight_receivers:
+                for receiver in inner_collector._weight_receivers.values():
+                    # Non-blocking check for new weights
+                    receiver.receive(timeout=0.0001)
+
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.

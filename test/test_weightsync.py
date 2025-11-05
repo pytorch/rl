@@ -32,9 +32,9 @@ def worker_update_policy(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-    receiver = scheme.create_receiver()
-    receiver.register_model(policy)
-    receiver.register_worker_transport(pipe)
+    # Use new API
+    scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+    receiver = scheme.get_receiver()
 
     if receiver._transport.pipe.poll(timeout):
         data, msg = receiver._transport.pipe.recv()
@@ -52,9 +52,9 @@ def worker_update_policy_tensordict(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-    receiver = scheme.create_receiver()
-    receiver.register_model(policy)
-    receiver.register_worker_transport(pipe)
+    # Use new API
+    scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+    receiver = scheme.get_receiver()
 
     if receiver._transport.pipe.poll(timeout):
         data, msg = receiver._transport.pipe.recv()
@@ -192,18 +192,24 @@ class TestWeightStrategies:
 
 
 class TestWeightSyncSchemes:
+    """Tests for weight sync schemes using the new simplified API.
+
+    Lower-level transport and legacy API tests are in TestTransportBackends.
+    """
+
     def test_multiprocess_scheme_state_dict(self):
         parent_pipe, child_pipe = mp.Pipe()
 
         scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-        sender = scheme.create_sender()
-        sender.register_worker(0, parent_pipe)
+        # Use new API
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+        sender = scheme.get_sender()
 
         proc = mp.Process(target=worker_update_policy, args=(child_pipe,))
         proc.start()
 
         weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
-        sender.update_weights(weights)
+        sender.send(weights)
 
         proc.join(timeout=10.0)
         assert not proc.is_alive()
@@ -212,8 +218,9 @@ class TestWeightSyncSchemes:
         parent_pipe, child_pipe = mp.Pipe()
 
         scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-        sender = scheme.create_sender()
-        sender.register_worker(0, parent_pipe)
+        # Use new API
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+        sender = scheme.get_sender()
 
         proc = mp.Process(target=worker_update_policy_tensordict, args=(child_pipe,))
         proc.start()
@@ -221,7 +228,7 @@ class TestWeightSyncSchemes:
         weights = TensorDict(
             {"weight": torch.ones(2, 4), "bias": torch.ones(2)}, batch_size=[]
         )
-        sender.update_weights(weights)
+        sender.send(weights)
 
         proc.join(timeout=10.0)
         assert not proc.is_alive()
@@ -269,6 +276,50 @@ class TestWeightSyncSchemes:
 
         weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
         transport.send_weights("policy", weights)
+
+    def test_receiver_receive_method(self):
+        """Test the new non-blocking receive() method."""
+
+        def worker_with_receive(pipe):
+            policy = nn.Linear(4, 2)
+            with torch.no_grad():
+                policy.weight.fill_(0.0)
+                policy.bias.fill_(0.0)
+
+            scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+            scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+            receiver = scheme.get_receiver()
+
+            # Non-blocking receive should return False when no data
+            result = receiver.receive(timeout=0.001)
+            assert result is False
+
+            # Now actually receive the weights
+            result = receiver.receive(timeout=5.0)
+            assert result is True
+
+            # Check weights were applied
+            return policy.weight.sum().item(), policy.bias.sum().item()
+
+        parent_pipe, child_pipe = mp.Pipe()
+
+        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+        sender = scheme.get_sender()
+
+        proc = mp.Process(target=worker_with_receive, args=(child_pipe,))
+        proc.start()
+
+        # Give worker time to call receive with no data
+        import time
+
+        time.sleep(0.1)
+
+        weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
+        sender.send(weights)
+
+        proc.join(timeout=10.0)
+        assert not proc.is_alive()
 
 
 class TestCollectorIntegration:
