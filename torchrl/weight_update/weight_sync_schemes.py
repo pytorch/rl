@@ -1873,10 +1873,9 @@ class RayWeightSyncScheme(WeightSyncScheme):
         sender = WeightSender(self)
         sender._model_id = model_id
 
-        # Create transports for each Ray actor and register them
+        # Register each Ray actor - _register_worker will create the transport
         for worker_idx, remote_collector in enumerate(remote_collectors):
-            transport = self.create_transport(remote_collector)
-            sender._register_worker(worker_idx, transport)
+            sender._register_worker(worker_idx, remote_collector)
 
         # Set context with weak reference to avoid circular refs
         if context is not None:
@@ -2012,10 +2011,9 @@ class RayModuleTransformScheme(WeightSyncScheme):
         sender = self.create_sender()
         sender._model_id = model_id
 
-        # Register all actors as workers
+        # Register all actors - _register_worker will create the transport
         for worker_idx, actor_ref in enumerate(actor_refs):
-            transport = self.create_transport(actor_ref)
-            sender._register_worker(worker_idx, transport)
+            sender._register_worker(worker_idx, actor_ref)
 
         # Set context with weak reference
         if context is not None:

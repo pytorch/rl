@@ -2118,9 +2118,10 @@ class SyncDataCollector(DataCollectorBase):
         try:
             env_str = indent(f"env={self.env}", 4 * " ")
             policy_str = indent(f"policy={self._wrapped_policy}", 4 * " ")
-            td_out_str = indent(
-                f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
-            )
+            td_out_str = repr(getattr(self, "_final_rollout", None))
+            if len(td_out_str) > 50:
+                td_out_str = td_out_str[:50] + "..."
+            td_out_str = indent(f"td_out={td_out_str}", 4 * " ")
             string = (
                 f"{self.__class__.__name__}("
                 f"\n{env_str},"
