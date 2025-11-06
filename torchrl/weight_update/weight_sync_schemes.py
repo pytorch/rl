@@ -222,7 +222,7 @@ class SharedMemTransport:
         # Wait for acknowledgments from all workers
         for pipe in self._pipes:
             if not pipe.poll(timeout):
-                raise TimeoutError(f"Timeout waiting for acknowledgment from worker")
+                raise TimeoutError("Timeout waiting for acknowledgment from worker")
             _, msg = pipe.recv()
             if msg != "registered":
                 raise RuntimeError(f"Expected 'registered' acknowledgment, got '{msg}'")

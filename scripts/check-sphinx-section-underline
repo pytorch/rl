@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that Sphinx/ReST section underlines match title lengths."""
-import sys
 import re
+import sys
 from pathlib import Path
 
 # Pattern to match Sphinx section titles followed by underlines
@@ -16,35 +16,35 @@ def fix_file(path):
     except Exception as e:
         print(f"Warning: Could not read {path}: {e}")
         return False
-    
+
     original_text = text
     fixed_count = 0
-    
+
     def replace_underline(match):
         nonlocal fixed_count
         title, underline = match.groups()
         title_stripped = title.strip()
         underline_stripped = underline.strip()
-        
+
         # Skip if title is empty or looks like it might be a code block or other content
-        if not title_stripped or title_stripped.startswith('..'):
+        if not title_stripped or title_stripped.startswith(".."):
             return match.group(0)
-        
+
         if len(title_stripped) != len(underline_stripped):
             # Get the underline character and create correct length underline
             underline_char = underline_stripped[0]
             correct_underline = underline_char * len(title_stripped)
             fixed_count += 1
             return f"{title}\n{correct_underline}\n"
-        
+
         return match.group(0)
-    
+
     text = SECTION_PATTERN.sub(replace_underline, text)
-    
+
     if text != original_text:
         Path(path).write_text(text, encoding="utf-8")
         return fixed_count
-    
+
     return 0
 
 
@@ -55,27 +55,27 @@ def check_file(path):
     except Exception as e:
         print(f"Warning: Could not read {path}: {e}")
         return []
-    
+
     errors = []
-    
+
     for match in SECTION_PATTERN.finditer(text):
         title, underline = match.groups()
         title_stripped = title.strip()
         underline_stripped = underline.strip()
-        
+
         # Skip if title is empty or looks like it might be a code block or other content
-        if not title_stripped or title_stripped.startswith('..'):
+        if not title_stripped or title_stripped.startswith(".."):
             continue
-            
+
         if len(title_stripped) != len(underline_stripped):
             # Calculate line number
-            line_num = text.count('\n', 0, match.start()) + 1
+            line_num = text.count("\n", 0, match.start()) + 1
             errors.append(
                 f"{path}:{line_num}: "
                 f"title '{title_stripped}' length {len(title_stripped)}, "
                 f"underline length {len(underline_stripped)}"
             )
-    
+
     return errors
 
 
@@ -85,11 +85,11 @@ def main(argv):
     fix_mode = "--fix" in argv
     if fix_mode:
         argv = [arg for arg in argv if arg != "--fix"]
-    
+
     if len(argv) < 2:
         print("✅ Sphinx section underline check: no files to check.")
         sys.exit(0)
-    
+
     if fix_mode:
         total_fixed = 0
         for path in argv[1:]:
@@ -97,7 +97,7 @@ def main(argv):
             if fixed_count:
                 print(f"✏️  Fixed {fixed_count} section(s) in {path}")
                 total_fixed += fixed_count
-        
+
         if total_fixed:
             print(f"\n✅ Fixed {total_fixed} section underline(s) total.")
             sys.exit(0)
@@ -108,14 +108,16 @@ def main(argv):
         all_errors = []
         for path in argv[1:]:
             all_errors.extend(check_file(path))
-        
+
         if all_errors:
             print("❌ Sphinx section underline length errors:\n")
             for e in all_errors:
                 print("  ", e)
             print("\nFix underline lengths to match title text.")
             print("Or run with --fix flag to automatically fix them:")
-            print(f"  python3 scripts/check-sphinx-section-underline --fix {' '.join(argv[1:])}")
+            print(
+                f"  python3 scripts/check-sphinx-section-underline --fix {' '.join(argv[1:])}"
+            )
             sys.exit(1)
         else:
             print("✅ Sphinx section underline check passed.")
@@ -124,4 +126,3 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv)
-
