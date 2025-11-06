@@ -9,6 +9,11 @@ This module provides helper classes and utilities for testing TorchRL functional
 particularly for distributed and Ray-based tests that require importable classes.
 """
 
+from torchrl.testing.llm_mocks import (
+    MockTransformerConfig,
+    MockTransformerModel,
+    MockTransformerOutput,
+)
 from torchrl.testing.ray_helpers import (
     WorkerTransformerDoubleBuffer,
     WorkerTransformerNCCL,
@@ -21,4 +26,7 @@ __all__ = [
     "WorkerTransformerNCCL",
     "WorkerVLLMDoubleBuffer",
     "WorkerTransformerDoubleBuffer",
+    "MockTransformerConfig",
+    "MockTransformerModel",
+    "MockTransformerOutput",
 ]
