@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
+import os
 import random
 import re
 import time
@@ -33,6 +35,7 @@ _has_ray = importlib.util.find_spec("ray") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
+_has_mcp = importlib.util.find_spec("mcp") is not None
 _has_ifeval = (
     _has_datasets
     and (importlib.util.find_spec("langdetect") is not None)
@@ -629,9 +632,9 @@ class TestTools:
 
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
     def test_mcp_tool_transform(self):
-        """Test the MCPToolTransform with a simple calculator tool."""
+        """Test the SimpleToolTransform with a simple calculator tool."""
         from torchrl.envs.llm import ChatEnv
-        from torchrl.envs.llm.transforms.tools import MCPToolTransform
+        from torchrl.envs.llm.transforms.tools import SimpleToolTransform
         from transformers import AutoTokenizer
 
         # Define a simple calculator tool
@@ -669,7 +672,7 @@ class TestTools:
             system_prompt="You are a helpful assistant that uses a calculator.",
             tokenizer=tokenizer,
         )
-        transform = MCPToolTransform(tools, schemas)
+        transform = SimpleToolTransform(tools, schemas)
         env = base_env.append_transform(transform)
 
         # Test single tool call
@@ -785,7 +788,7 @@ class TestTools:
     # Create environment factory
     @classmethod
     def make_env(cls):
-        from torchrl.envs.llm.transforms.tools import MCPToolTransform
+        from torchrl.envs.llm.transforms.tools import SimpleToolTransform
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
         env = ChatEnv(
@@ -795,7 +798,7 @@ class TestTools:
         )
         tools = {"calculator": cls.delayed_calculator}
         schemas = {"calculator": cls.calculator_schema}
-        return env.append_transform(MCPToolTransform(tools, schemas))
+        return env.append_transform(SimpleToolTransform(tools, schemas))
 
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
     def test_async_mcp_tools(self):
@@ -862,6 +865,71 @@ class TestTools:
 
         finally:
             env_pool.close()
+
+    @pytest.mark.skipif(not _has_mcp, reason="requires mcp library")
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    def test_mcp_python_execution(self):
+        """Test actual MCP Python execution with mcp-run-python server."""
+        from torchrl.envs.llm.transforms import MCPToolTransform
+
+        # Setup environment for MCP (Deno needs to be in PATH)
+        environ = os.environ.copy()
+        deno_path = os.path.expanduser("~/.deno/bin")
+        if deno_path not in os.environ.get("PATH", ""):
+            environ["PATH"] = f"{deno_path}:{os.environ['PATH']}"
+
+        # Configure MCP server
+        servers = {
+            "python": {
+                "command": "uvx",
+                "args": ["mcp-run-python", "stdio"],
+                "env": environ,
+            }
+        }
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="You are a helpful assistant",
+            tokenizer=tokenizer,
+        )
+        env = env.append_transform(MCPToolTransform(servers=servers))
+
+        # Reset environment
+        reset_data = TensorDict(query=["You are a useful assistant"], batch_size=(1,))
+        td = env.reset(reset_data)
+        history = td.get("history")
+
+        # Execute Python code via MCP
+        code = """
+import math
+result = math.sqrt(144) + math.pi
+print(f"Result: {result}")
+result
+"""
+        response = (
+            History(
+                role="assistant",
+                content=f'Let me calculate that.\n<tool>python.run_python_code\n{json.dumps({"python_code": code})}</tool>',
+            )
+            .unsqueeze(0)
+            .unsqueeze(0)
+        )
+
+        history.full = history.prompt.extend(response, inplace=True, dim=-1)
+        history.response = response
+
+        result = env.step(td.set("history", history))
+
+        # Check that tool was executed
+        final_history = result["next", "history"].prompt
+        assert len(final_history[0]) == 4  # system, user, assistant, tool response
+        assert final_history[0, -1].role == "tool"
+
+        # Check that result contains expected output
+        tool_content = final_history[0, -1].content
+        assert "python.run_python_code executed successfully" in tool_content
+        assert "15.141592653589793" in tool_content or "Result: 15.14" in tool_content
 
 
 class TestThinkingPrompt:

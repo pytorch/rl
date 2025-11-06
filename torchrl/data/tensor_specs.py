@@ -5733,9 +5733,32 @@ class Composite(TensorSpec):
                 val.set(key, self._specs[key].project(_val))
         return val
 
+    def rand_update(self, val: TensorDictBase) -> TensorDictBase:
+        """Updates a TensorDict with random values according to the specs.
+
+        Shapes are expected to be compatible with the specs.
+        """
+        return val.update(self.rand())
+
+    def zeros_update(self, val: TensorDictBase) -> TensorDictBase:
+        """Updates a TensorDict with zeroed values according to the specs.
+
+        Shapes are expected to be compatible with the specs.
+        """
+        return val.update(self.zeros())
+
+    def ones_update(self, val: TensorDictBase) -> TensorDictBase:
+        """Updates a TensorDict with 1-values according to the specs.
+
+        Shapes are expected to be compatible with the specs.
+        """
+        return val.update(self.ones())
+
     def rand(self, shape: torch.Size = None) -> TensorDictBase:
         if shape is None:
             shape = _size([])
+        if isinstance(shape, list):
+            shape = _size(shape)
         _dict = {}
         for key, item in self.items():
             if item is not None:
