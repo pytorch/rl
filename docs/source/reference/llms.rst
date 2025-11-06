@@ -930,7 +930,9 @@ Tools are usually implemented as transforms, and appended to a base environment
 such as :class:`~torchrl.envs.llm.ChatEnv`.
 
 An example of a tool transform is the :class:`~torchrl.envs.llm.transforms.PythonInterpreter` transform, which is used
-to execute Python code in the context of the LLM.
+to execute Python code in the context of the LLM. The PythonInterpreter can optionally use a shared 
+:class:`~torchrl.envs.llm.transforms.PythonExecutorService` for efficient resource usage across multiple environments.
+See :ref:`ref_services` for more details on the service registry system.
 
     >>> from torchrl.envs.llm.transforms import PythonInterpreter
     >>> from torchrl.envs.llm import ChatEnv
@@ -1141,6 +1143,7 @@ By following these design principles, reward transforms can be effectively integ
     KLRewardTransform
     MCPToolTransform
     PolicyVersion
+    PythonExecutorService
     PythonInterpreter
     RayDataLoadingPrimer
     RetrieveKL
@@ -1155,11 +1158,8 @@ Objectives
 
 LLM post-training requires specialized loss functions that are adapted to the unique characteristics of language models.
 
-GRPO
-~~~~
-
-The :class:`~torchrl.objectives.llm.GRPOLoss` class is a thin wrapper around the :class:`~torchrl.objectives.PPOLoss` class
-that codes the LLM-specific functionalities.
+GRPO, DAPO, CISPO
+^^^^^^^^^^^^^^^^^
 
 .. currentmodule:: torchrl.objectives.llm
 
@@ -1167,8 +1167,13 @@ that codes the LLM-specific functionalities.
     :toctree: generated/
     :template: rl_template.rst
 
+    LLMLossOutput
     GRPOLoss
     GRPOLossOutput
+    CISPOLoss
+    CISPOLossOutput
+    DAPO
+    DAPOLossOutput
     MCAdvantage
 
 SFT

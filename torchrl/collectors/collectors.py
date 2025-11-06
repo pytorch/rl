@@ -1141,11 +1141,16 @@ class SyncDataCollector(DataCollectorBase):
         if not self.trust_policy:
             self.policy = policy
             env = getattr(self, "env", None)
-            wrapped_policy = _make_compatible_policy(
-                policy=policy,
-                observation_spec=getattr(env, "observation_spec", None),
-                env=self.env,
-            )
+            try:
+                wrapped_policy = _make_compatible_policy(
+                    policy=policy,
+                    observation_spec=getattr(env, "observation_spec", None),
+                    env=self.env,
+                )
+            except (TypeError, AttributeError, ValueError) as err:
+                raise TypeError(
+                    "Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True."
+                ) from err
             self._wrapped_policy = wrapped_policy
         else:
             self.policy = self._wrapped_policy = policy
@@ -1893,16 +1898,28 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
+                if self.verbose:
+                    torchrl_logger.info(
+                        f"Collector: Rollout step completed {self._iter=}."
+                    )
                 if (
                     self.replay_buffer is not None
                     and not self._ignore_rb
                     and not self.extend_buffer
                 ):
+                    if self.verbose:
+                        torchrl_logger.info(
+                            f"Collector: Adding {env_output.numel()} frames to replay buffer using add()."
+                        )
                     self.replay_buffer.add(self._shuttle)
                     if self._increment_frames(self._shuttle.numel()):
                         return
                 else:
                     if self.storing_device is not None:
+                        if self.verbose:
+                            torchrl_logger.info(
+                                f"Collector: Moving to {self.storing_device} and adding to queue."
+                            )
                         non_blocking = (
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
@@ -1914,6 +1931,10 @@ class SyncDataCollector(DataCollectorBase):
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
+                        if self.verbose:
+                            torchrl_logger.info(
+                                "Collector: Adding to queue (no device)."
+                            )
                         tensordicts.append(self._shuttle)
 
                 # carry over collector data without messing up devices
@@ -1928,6 +1949,8 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
+                    if self.verbose:
+                        torchrl_logger.info("Collector: Interruptor stopped.")
                     if (
                         self.replay_buffer is not None
                         and not self._ignore_rb
@@ -1954,6 +1977,7 @@ class SyncDataCollector(DataCollectorBase):
                     break
             else:
                 if self._use_buffers:
+                    torchrl_logger.info("Returning final rollout within buffer.")
                     result = self._final_rollout
                     try:
                         result = torch.stack(
@@ -1976,6 +2000,9 @@ class SyncDataCollector(DataCollectorBase):
                 ):
                     return
                 else:
+                    torchrl_logger.info(
+                        "Returning final rollout with NO buffer (maybe_dense_stack)."
+                    )
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 
