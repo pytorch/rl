@@ -702,7 +702,29 @@ class TestSerializeScheme:
             strategy="tensordict",
             auto_register=False,
         )
-        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+
+        def init_on_sender(scheme, child_pipe):
+            (model_id, data), msg = child_pipe.recv()
+            if msg == "register_shared_weights":
+                child_pipe.send((None, "registered"))
+            else:
+                raise ValueError(f"Expected 'register_shared_weights' but got {msg}")
+
+        # Initialize the scheme with the pipes, in 2 separate threads because init requires acknowledgement from the worker
+        import threading
+
+        future_sender = threading.Thread(
+            target=scheme.init_on_sender,
+            kwargs={"model_id": "policy", "pipes": [parent_pipe]},
+        )
+        future_receiver = threading.Thread(
+            target=init_on_sender,
+            kwargs={"scheme": scheme, "child_pipe": child_pipe},
+        )
+        future_receiver.start()
+        future_sender.start()
+        future_receiver.join()
+        future_sender.join()
 
         # Scheme now has _sender with non-serializable state
         assert scheme._sender is not None

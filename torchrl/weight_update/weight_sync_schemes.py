@@ -202,7 +202,9 @@ class SharedMemTransport:
                     f"Model '{model_id}' has already been registered with workers."
                 )
 
-    def _send_buffer_to_workers(self, model_id: str, buffer: TensorDictBase) -> None:
+    def _send_buffer_to_workers(
+        self, model_id: str, buffer: TensorDictBase, timeout: float = 10.0
+    ) -> None:
         """Send shared memory buffer reference to all workers via pipes.
 
         This is called once per model_id when lazy registration occurs.
@@ -219,6 +221,8 @@ class SharedMemTransport:
 
         # Wait for acknowledgments from all workers
         for pipe in self._pipes:
+            if not pipe.poll(timeout):
+                raise TimeoutError(f"Timeout waiting for acknowledgment from worker")
             _, msg = pipe.recv()
             if msg != "registered":
                 raise RuntimeError(f"Expected 'registered' acknowledgment, got '{msg}'")
