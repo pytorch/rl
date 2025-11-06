@@ -13,6 +13,7 @@ Samplers control how data is retrieved from the replay buffer storage.
     PrioritizedSliceSampler
     RandomSampler
     Sampler
+    SamplerEnsemble
     SamplerWithoutReplacement
     SliceSampler
     SliceSamplerWithoutReplacement
@@ -30,3 +31,4 @@ Writers control how data is written to the storage.
     TensorDictMaxValueWriter
     TensorDictRoundRobinWriter
     Writer
+    WriterEnsemble

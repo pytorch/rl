@@ -12,15 +12,23 @@ Transforms for LLM environments, including tools and utilities.
     AddThinkingPrompt
     BrowserTransform
     DataLoadingPrimer
+    ExecuteToolsInOrder
+    JSONCallParser
     KLComputation
     KLRewardTransform
     MCPToolTransform
     PolicyVersion
+    PythonExecutorService
     PythonInterpreter
     RayDataLoadingPrimer
     RetrieveKL
     RetrieveLogProb
+    SimpleToolTransform
     TemplateTransform
     Tokenizer
+    ToolCall
+    ToolRegistry
+    ToolService
+    XMLBlockParser
     as_nested_tensor
     as_padded_tensor

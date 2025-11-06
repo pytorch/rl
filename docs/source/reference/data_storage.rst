@@ -22,6 +22,7 @@ TorchRL provides various storage backends for replay buffers, each optimized for
     NestedStorageCheckpointer
     Storage
     StorageCheckpointerBase
+    StorageEnsemble
     StorageEnsembleCheckpointer
     TensorStorage
     TensorStorageCheckpointer

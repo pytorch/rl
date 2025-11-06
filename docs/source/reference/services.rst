@@ -509,7 +509,6 @@ Service Registry
     :template: rl_template.rst
 
     get_services
-    reset_services
     ServiceBase
     RayService
 

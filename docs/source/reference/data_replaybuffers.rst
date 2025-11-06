@@ -14,6 +14,7 @@ Core Replay Buffer Classes
     :template: rl_template.rst
 
     ReplayBuffer
+    ReplayBufferEnsemble
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
