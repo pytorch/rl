@@ -12,6 +12,7 @@ import pytest
 import torch
 
 from tensordict import lazy_stack, TensorDict
+from torchrl._utils import logger
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
@@ -23,7 +24,6 @@ from torchrl.objectives.llm.grpo import (
     GRPOLossOutput,
     MCAdvantage,
 )
-from torchrl._utils import logger
 from torchrl.objectives.llm.sft import SFTLoss
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
