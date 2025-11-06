@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.objectives.value.functional
-
-
-td0_advantage_estimate
-======================
-
-.. autoclass:: td0_advantage_estimate
-    :members:

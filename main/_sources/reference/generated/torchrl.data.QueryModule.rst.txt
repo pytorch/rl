@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-QueryModule
-===========
-
-.. autoclass:: QueryModule
-    :members:
-    :inherited-members:

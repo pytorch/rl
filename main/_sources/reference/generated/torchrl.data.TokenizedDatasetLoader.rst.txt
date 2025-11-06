@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-TokenizedDatasetLoader
-======================
-
-.. autoclass:: TokenizedDatasetLoader
-    :members:
-    :inherited-members:

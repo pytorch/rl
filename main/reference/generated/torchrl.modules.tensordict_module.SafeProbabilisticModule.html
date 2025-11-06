@@ -390,6 +390,8 @@
         
           <li><a href="../modules.html">torchrl.modules package</a> &gt;</li>
         
+          <li><a href="../modules_actors.html">Actor Modules</a> &gt;</li>
+        
       <li>SafeProbabilisticModule</li>
     
     
@@ -449,7 +451,7 @@ argument and the <code class="docutils literal notranslate"><span class="pre">in
 <li><p>It uses a real mapping R^n -&gt; R^m to create a distribution in R^d from
 which values can be sampled or computed.</p></li>
 </ul>
-<p>When the <code class="xref py py-meth docutils literal notranslate"><span class="pre">__call__()</span></code> and <a class="reference internal" href="torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.forward" title="torchrl.data.BinaryToDecimal.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method are called, a distribution is
+<p>When the <code class="xref py py-meth docutils literal notranslate"><span class="pre">__call__()</span></code> and <a class="reference internal" href="torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.forward" title="torchrl.data.llm.TopKRewardSelector.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> method are called, a distribution is
 created, and a value computed (depending on the <code class="docutils literal notranslate"><span class="pre">interaction_type</span></code> value, ‘dist.mean’,
 ‘dist.mode’, ‘dist.median’ attributes could be used, as well as
 the ‘dist.rsample’, ‘dist.sample’ method). The sampling step is skipped if the supplied

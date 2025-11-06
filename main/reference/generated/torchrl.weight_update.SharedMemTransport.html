@@ -390,6 +390,8 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
+          <li><a href="../collectors_weightsync.html">Weight Synchronization</a> &gt;</li>
+        
       <li>SharedMemTransport</li>
     
     
@@ -448,7 +450,7 @@ weights are available, and they’ll receive the shared buffer references when r
 <li><p><strong>policy_weights</strong> – Dictionary mapping model_id to shared TensorDict weights.
 Can be empty if using lazy registration.</p></li>
 <li><p><strong>auto_register</strong> – Whether to automatically register models on first weight send.
-Default is True. Set to False to require explicit registration via
+Default is True. Set to <cite>False</cite> to require explicit registration via
 register_weights().</p></li>
 </ul>
 </dd>
@@ -489,7 +491,9 @@ register_weights().</p></li>
 <p>This method allows explicit registration of shared weights. It’s optional
 when auto_register=True (the default), but required when auto_register=False.</p>
 <p>If pipes are registered and this model hasn’t been sent to workers yet,
-this will trigger sending the buffer reference to all workers.</p>
+this will trigger sending the buffer reference to all workers. If pipes
+aren’t registered yet, weights are stored and will be sent when pipes
+become available (during init_on_sender).</p>
 </dd></dl>
 
 <dl class="py method">

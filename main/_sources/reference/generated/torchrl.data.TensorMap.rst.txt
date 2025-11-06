@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-TensorMap
-=========
-
-.. autoclass:: TensorMap
-    :members:
-    :inherited-members:

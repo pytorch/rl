@@ -435,7 +435,7 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">LLMHashingEnv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/envs.html#LLMHashingEnv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.LLMHashingEnv" title="Permalink to this definition">¶</a></dt>
 <dd><p>A text generation environment that uses a hashing module to identify unique observations.</p>
 <p>The primary goal of this environment is to identify token chains using a hashing function.
-This allows the data to be stored in a <a class="reference internal" href="torchrl.data.MCTSForest.html#torchrl.data.MCTSForest" title="torchrl.data.MCTSForest"><code class="xref py py-class docutils literal notranslate"><span class="pre">MCTSForest</span></code></a> using nothing but hashes as node
+This allows the data to be stored in a <code class="xref py py-class docutils literal notranslate"><span class="pre">MCTSForest</span></code> using nothing but hashes as node
 identifiers, or easily prune repeated token chains in a data structure.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -444,7 +444,7 @@ identifiers, or easily prune repeated token chains in a data structure.</p>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>hashing_module</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><em>torch.Tensor</em></a><em>]</em><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><em>torch.Tensor</em></a><em>]</em><em>, </em><em>optional</em>) – A hashing function that takes a tensor as input and returns a hashed tensor.
-Defaults to <a class="reference internal" href="torchrl.data.SipHash.html#torchrl.data.SipHash" title="torchrl.data.SipHash"><code class="xref py py-class docutils literal notranslate"><span class="pre">SipHash</span></code></a> if not provided.</p></li>
+Defaults to <code class="xref py py-class docutils literal notranslate"><span class="pre">SipHash</span></code> if not provided.</p></li>
 <li><p><strong>observation_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – The key for the observation in the TensorDict.
 Defaults to “observation”.</p></li>
 <li><p><strong>text_output</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to include the text output in the observation.
@@ -1475,7 +1475,7 @@ copied to that device</p>
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="../envs.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
+<p><a class="reference internal" href="../envs_api.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
 </div>
 </dd></dl>
 
@@ -2572,7 +2572,7 @@ policy device before the policy is used. Default is <code class="docutils litera
 done states. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, then the done environments are reset automatically. Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p>The <a class="reference internal" href="../envs.html#ref-partial-resets"><span class="std std-ref">Partial resets</span></a> of the documentation gives more
+<p>The <a class="reference internal" href="../envs_vectorized.html#ref-partial-resets"><span class="std std-ref">Partial resets</span></a> of the documentation gives more
 information about partial resets.</p>
 </div>
 </p></li>
@@ -2581,7 +2581,7 @@ of the done states. If <code class="docutils literal notranslate"><span class="p
 Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p>The <a class="reference internal" href="../envs.html#ref-partial-steps"><span class="std std-ref">Partial steps</span></a> of the documentation gives more
+<p>The <a class="reference internal" href="../envs_vectorized.html#ref-partial-steps"><span class="std std-ref">Partial steps</span></a> of the documentation gives more
 information about partial resets.</p>
 </div>
 </p></li>
@@ -2847,7 +2847,7 @@ used for another environment if created concomitantly to this environment.</p>
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="../envs.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
+<p><a class="reference internal" href="../envs_api.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
 </div>
 </dd></dl>
 

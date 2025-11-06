@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-contains_lazy_spec
-==================
-
-.. autoclass:: contains_lazy_spec
-    :members:
-    :inherited-members:

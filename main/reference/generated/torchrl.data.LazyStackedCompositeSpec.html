@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="LazyStackedTensorSpec" href="torchrl.data.LazyStackedTensorSpec.html" />
+    <link rel="next" title="MultiCategorical" href="torchrl.data.MultiCategorical.html" />
     <link rel="prev" title="DiscreteTensorSpec" href="torchrl.data.DiscreteTensorSpec.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -390,6 +390,8 @@
         
           <li><a href="../data.html">torchrl.data package</a> &gt;</li>
         
+          <li><a href="../data_specs.html">TensorSpec System</a> &gt;</li>
+        
       <li>LazyStackedCompositeSpec</li>
     
     
@@ -433,7 +435,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.</span></span><span class="sig-name descname"><span class="pre">LazyStackedCompositeSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/tensor_specs.html#LazyStackedCompositeSpec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec" title="Permalink to this definition">¶</a></dt>
-<dd><p>Deprecated version of <a class="reference internal" href="torchrl.data.StackedComposite.html#torchrl.data.StackedComposite" title="torchrl.data.StackedComposite"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.StackedComposite</span></code></a>.</p>
+<dd><p>Deprecated version of <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.StackedComposite</span></code>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.assert_is_in">
 <span class="sig-name descname"><span class="pre">assert_is_in</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.assert_is_in" title="Permalink to this definition">¶</a></dt>
@@ -953,7 +955,7 @@ composite spec. If a key is not found, the specified default value is used. The 
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.LazyStackedCompositeSpec.set">
-<span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.StackedComposite.html#torchrl.data.StackedComposite" title="torchrl.data.tensor_specs.StackedComposite"><span class="pre">StackedComposite</span></a></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.set" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">StackedComposite</span></span></span><a class="headerlink" href="#torchrl.data.LazyStackedCompositeSpec.set" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets a spec in the Composite spec.</p>
 </dd></dl>
 
@@ -1120,7 +1122,7 @@ The primary use case of <code class="docutils literal notranslate"><span class="
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.data.LazyStackedTensorSpec.html" class="btn btn-neutral float-right" title="LazyStackedTensorSpec" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.data.MultiCategorical.html" class="btn btn-neutral float-right" title="MultiCategorical" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="torchrl.data.DiscreteTensorSpec.html" class="btn btn-neutral" title="DiscreteTensorSpec" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>

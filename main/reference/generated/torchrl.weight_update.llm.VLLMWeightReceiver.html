@@ -496,36 +496,24 @@ broadcast operation. This method is a no-op but kept for API consistency.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightReceiver.register_model">
-<span class="sig-name descname"><span class="pre">register_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_ref</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.register_model" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register the model to apply weights to.</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightReceiver.receive">
+<span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.receive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check for and apply new weights (non-blocking).</p>
+<p>This method is called in the worker’s main loop to check if
+new weights have been sent. If weights are available, they
+are applied to the registered model immediately.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model_ref</strong> – Either a direct object reference or a string path like ‘policy’ or ‘env.value_net’.</p>
+<dd class="field-odd"><p><strong>timeout</strong> – Maximum time to wait for weights (seconds).
+Use 0 for immediate return.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if weights were received and applied
+False if no weights were available</p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightReceiver.register_worker_transport">
-<span class="sig-name descname"><span class="pre">register_worker_transport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.register_worker_transport" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register this worker’s communication pipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>pipe</strong> – The pipe connection for this worker.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightReceiver.set_context">
-<span class="sig-name descname"><span class="pre">set_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.set_context" title="Permalink to this definition">¶</a></dt>
-<dd><p>Set the context object (inner_collector) for resolving references.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>context</strong> – The inner collector instance in the worker process.</p>
-</dd>
-</dl>
+<p>Note: For SharedMemWeightSyncScheme, this always returns False
+since workers automatically see updates via shared memory.</p>
 </dd></dl>
 
 </dd></dl>

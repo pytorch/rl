@@ -588,8 +588,8 @@ parameters. Generally, managing target parameters is handled by the loss
 module, relieving users of direct concern. However, it remains the user’s
 responsibility to update these values as necessary based on specific
 requirements. TorchRL offers a couple of updaters, namely
-<a class="reference internal" href="../reference/generated/torchrl.objectives.HardUpdate.html#torchrl.objectives.HardUpdate" title="torchrl.objectives.HardUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">HardUpdate</span></code></a> and
-<a class="reference internal" href="../reference/generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate" title="torchrl.objectives.SoftUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code></a>,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">HardUpdate</span></code> and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code>,
 which can be easily instantiated without requiring in-depth
 knowledge of the underlying mechanisms of the loss module.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives</span><span class="w"> </span><span class="kn">import</span> <span class="n">SoftUpdate</span>

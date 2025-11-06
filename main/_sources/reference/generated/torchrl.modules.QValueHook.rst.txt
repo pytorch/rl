@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-QValueHook
-==========
-
-.. autoclass:: QValueHook
-    :members:

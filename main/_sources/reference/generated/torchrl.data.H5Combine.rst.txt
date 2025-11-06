@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-H5Combine
-=========
-
-.. autoclass:: H5Combine
-    :members:
-    :inherited-members:

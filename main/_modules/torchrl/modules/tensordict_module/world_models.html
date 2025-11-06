@@ -429,7 +429,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
 
 
-<div class="viewcode-block" id="WorldModelWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.WorldModelWrapper.html#torchrl.modules.tensordict_module.WorldModelWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">WorldModelWrapper</span><span class="p">(</span><span class="n">TensorDictSequential</span><span class="p">):</span>
+<div class="viewcode-block" id="WorldModelWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">WorldModelWrapper</span><span class="p">(</span><span class="n">TensorDictSequential</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;World model wrapper.</span>
 
 <span class="sd">    This module wraps together a transition model and a reward model.</span>
@@ -447,11 +447,11 @@
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">transition_model</span><span class="p">,</span> <span class="n">reward_model</span><span class="p">)</span>
 
-<div class="viewcode-block" id="WorldModelWrapper.get_transition_model_operator"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.WorldModelWrapper.html#torchrl.modules.tensordict_module.WorldModelWrapper.get_transition_model_operator">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_transition_model_operator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictModule</span><span class="p">:</span>
+<div class="viewcode-block" id="WorldModelWrapper.get_transition_model_operator"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper.get_transition_model_operator">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_transition_model_operator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictModule</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a transition operator that maps either an observation to a world state or a world state to the next world state.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
 
-<div class="viewcode-block" id="WorldModelWrapper.get_reward_operator"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.tensordict_module.WorldModelWrapper.html#torchrl.modules.tensordict_module.WorldModelWrapper.get_reward_operator">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_reward_operator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictModule</span><span class="p">:</span>
+<div class="viewcode-block" id="WorldModelWrapper.get_reward_operator"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper.get_reward_operator">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_reward_operator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictModule</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a reward operator that maps a world state to a reward.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span></div></div>
 </pre></div>

@@ -688,7 +688,7 @@
 <span class="c1"># --- Tool Service Library: Pluggable Services &amp; Parsers ---</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ToolService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="ToolService"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.ToolService.html#torchrl.envs.llm.transforms.ToolService">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ToolService</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Protocol for side-effecting service callable with structured IO.</span>
 
 <span class="sd">    A tool service is a callable that can be invoked with keyword arguments</span>
@@ -713,10 +713,10 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            dict[str, Any]: Results matching the output schema.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span>
+        <span class="o">...</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ToolRegistry</span><span class="p">:</span>
+<div class="viewcode-block" id="ToolRegistry"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ToolRegistry</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Registry for managing available tool services.</span>
 
 <span class="sd">    This class maintains a collection of tool services that can be looked up</span>
@@ -743,15 +743,15 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">services</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ToolService</span><span class="p">]</span> <span class="o">=</span> <span class="p">()):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ToolService</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">services</span><span class="p">}</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="p">:</span> <span class="n">ToolService</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="ToolRegistry.register"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry.register">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="p">:</span> <span class="n">ToolService</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a new service.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            service (ToolService): The service to register.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span><span class="p">[</span><span class="n">service</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">service</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span><span class="p">[</span><span class="n">service</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">service</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolService</span><span class="p">:</span>
+<div class="viewcode-block" id="ToolRegistry.get"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry.get">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolService</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve a service by name.</span>
 
 <span class="sd">        Args:</span>
@@ -765,7 +765,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown tool: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span><span class="p">[</span><span class="n">name</span><span class="p">]</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a service is registered.</span>
@@ -776,10 +776,10 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            bool: True if the service exists, False otherwise.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span>
+        <span class="k">return</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_svc</span></div>
 
 
-<span class="nd">@dataclass</span>
+<div class="viewcode-block" id="ToolCall"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.ToolCall.html#torchrl.envs.llm.transforms.ToolCall">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ToolCall</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Representation of a parsed tool call from LLM output.</span>
 
@@ -791,7 +791,7 @@
 
     <span class="n">tool</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">args</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="n">tag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">tag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ParseResult</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
@@ -827,7 +827,7 @@
         <span class="o">...</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">XMLBlockParser</span><span class="p">:</span>
+<div class="viewcode-block" id="XMLBlockParser"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.XMLBlockParser.html#torchrl.envs.llm.transforms.XMLBlockParser">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">XMLBlockParser</span><span class="p">:</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Parser for XML-style tool blocks in LLM responses.</span>
 
 <span class="sd">    Parses tool calls in the format:</span>
@@ -879,10 +879,10 @@
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cleaned</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">calls</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">calls</span><span class="p">)}</span>
-        <span class="k">return</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">JSONCallParser</span><span class="p">:</span>
+<div class="viewcode-block" id="JSONCallParser"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.JSONCallParser.html#torchrl.envs.llm.transforms.JSONCallParser">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">JSONCallParser</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Parser for JSON-style function-calling responses.</span>
 
 <span class="sd">    Expects responses in the format:</span>
@@ -934,10 +934,10 @@
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">calls</span>
         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">calls</span><span class="p">)}</span>
-        <span class="k">return</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ExecuteToolsInOrder</span><span class="p">(</span><span class="n">ToolTransformBase</span><span class="p">):</span>
+<div class="viewcode-block" id="ExecuteToolsInOrder"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.ExecuteToolsInOrder.html#torchrl.envs.llm.transforms.ExecuteToolsInOrder">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ExecuteToolsInOrder</span><span class="p">(</span><span class="n">ToolTransformBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A Transform that executes tools in the order they appear in LLM output.</span>
 
 <span class="sd">    This transform reads the LLM response, parses ordered tool blocks using a</span>
@@ -1081,7 +1081,7 @@
                 <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Result: </span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">output</span><span class="p">,</span><span class="w"> </span><span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;&lt;/tool_results&gt;&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span></div>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">PersistentPythonProcess</span><span class="p">:</span>
@@ -1801,7 +1801,7 @@
         <span class="k">return</span> <span class="n">tensordict_reset</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">SimpleToolTransform</span><span class="p">(</span><span class="n">ToolTransformBase</span><span class="p">):</span>
+<div class="viewcode-block" id="SimpleToolTransform"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.SimpleToolTransform.html#torchrl.envs.llm.transforms.SimpleToolTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">SimpleToolTransform</span><span class="p">(</span><span class="n">ToolTransformBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A simple transform that executes tools from a dictionary of callables.</span>
 
 <span class="sd">    This is a lightweight alternative to MCPToolTransform for simple use cases</span>
@@ -1932,7 +1932,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tool </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2"> failed:</span><span class="se">\n</span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">results</span> <span class="k">if</span> <span class="n">results</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">results</span> <span class="k">if</span> <span class="n">results</span> <span class="k">else</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="MCPToolTransform"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MCPToolTransform</span><span class="p">(</span><span class="n">ToolTransformBase</span><span class="p">):</span>

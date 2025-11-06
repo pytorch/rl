@@ -578,7 +578,7 @@ or with keyword arguments:</p>
 </section>
 <section id="replay-buffers">
 <h2>Replay buffers<a class="headerlink" href="#replay-buffers" title="Permalink to this heading">¶</a></h2>
-<p><a class="reference internal" href="../reference/data.html#ref-buffers"><span class="std std-ref">Replay buffers</span></a> are a crucial component in many RL algorithms. TorchRL provides a range of replay buffer implementations.
+<p><a class="reference internal" href="../reference/data_replaybuffers.html#ref-buffers"><span class="std std-ref">Replay buffers</span></a> are a crucial component in many RL algorithms. TorchRL provides a range of replay buffer implementations.
 Most basic features will work with any data scturcture (list, tuples, dict) but to use the replay buffers to their
 full extend and with fast read and write access, TensorDict APIs should be preferred.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrioritizedReplayBuffer</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
@@ -635,7 +635,7 @@ Using them makes it easy to abstract away the behaviour of the replay buffer for
 </section>
 <section id="envs">
 <h2>Envs<a class="headerlink" href="#envs" title="Permalink to this heading">¶</a></h2>
-<p>TorchRL provides a range of <a class="reference internal" href="../reference/envs.html#environment-api"><span class="std std-ref">environment</span></a> wrappers and utilities.</p>
+<p>TorchRL provides a range of <a class="reference internal" href="../reference/envs_api.html#environment-api"><span class="std std-ref">environment</span></a> wrappers and utilities.</p>
 <section id="gym-environment">
 <h3>Gym Environment<a class="headerlink" href="#gym-environment" title="Permalink to this heading">¶</a></h3>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
@@ -679,7 +679,7 @@ Using them makes it easy to abstract away the behaviour of the replay buffer for
 <section id="environment-transforms">
 <h3>Environment Transforms<a class="headerlink" href="#environment-transforms" title="Permalink to this heading">¶</a></h3>
 <p>Transforms act like Gym wrappers but with an API closer to torchvision’s <code class="docutils literal notranslate"><span class="pre">torch.distributions</span></code>’ transforms.
-There is a wide range of <a class="reference internal" href="../reference/envs.html#id2"><span class="std std-ref">transforms</span></a> to choose from.</p>
+There is a wide range of <a class="reference internal" href="../reference/envs_transforms.html#transforms"><span class="std std-ref">transforms</span></a> to choose from.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Compose</span><span class="p">,</span>
     <span class="n">NoopResetEnv</span><span class="p">,</span>
@@ -760,7 +760,7 @@ There is a wide range of <a class="reference internal" href="../reference/envs.h
 </section>
 <section id="tensordictmodules">
 <h3>TensorDictModules<a class="headerlink" href="#tensordictmodules" title="Permalink to this heading">¶</a></h3>
-<p><a class="reference internal" href="../reference/modules.html#tdmodules"><span class="std std-ref">Some modules</span></a> are specifically designed to work with tensordict inputs.</p>
+<p><span class="xref std std-ref">Some modules</span> are specifically designed to work with tensordict inputs.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
 
 <span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;key1&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
@@ -995,7 +995,7 @@ replace them with <code class="xref py py-meth docutils literal notranslate"><sp
 </section>
 <section id="collectors">
 <h2>Collectors<a class="headerlink" href="#collectors" title="Permalink to this heading">¶</a></h2>
-<p>We also provide a set of <a class="reference internal" href="../reference/collectors.html#ref-collectors"><span class="std std-ref">data collectors</span></a>, that automaticall gather as many frames per batch as required.
+<p>We also provide a set of <a class="reference internal" href="../reference/collectors_basics.html#ref-collectors"><span class="std std-ref">data collectors</span></a>, that automaticall gather as many frames per batch as required.
 They work from single-node, single worker to multi-nodes, multi-workers settings.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span><span class="p">,</span> <span class="n">MultiSyncDataCollector</span>
 

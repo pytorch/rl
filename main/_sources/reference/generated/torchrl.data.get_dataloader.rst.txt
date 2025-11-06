@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-get_dataloader
-==============
-
-.. autoclass:: get_dataloader
-    :members:
-    :inherited-members:

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-Nested2TED
-==========
-
-.. autoclass:: Nested2TED
-    :members:
-    :inherited-members:

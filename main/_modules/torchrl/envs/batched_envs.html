@@ -618,6 +618,9 @@
 <span class="sd">            one of the environment has dynamic specs.</span>
 
 <span class="sd">              .. note:: Learn more about dynamic specs and environments :ref:`here &lt;dynamic_envs&gt;`.</span>
+<span class="sd">        daemon (bool, optional): whether the processes should be daemonized.</span>
+<span class="sd">            This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    .. note::</span>
 <span class="sd">        One can pass keyword arguments to each sub-environments using the following</span>
@@ -733,6 +736,7 @@
         <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">use_buffers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">consolidate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">daemon</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">serial_for_single</span> <span class="o">=</span> <span class="n">serial_for_single</span>
@@ -742,6 +746,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache_in_keys</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span> <span class="o">=</span> <span class="n">consolidate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="n">daemon</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_single_task</span> <span class="o">=</span> <span class="nb">callable</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">):</span>
@@ -1925,7 +1930,7 @@
                         <span class="p">}</span>
                     <span class="p">)</span>
                 <span class="n">process</span> <span class="o">=</span> <span class="n">proc_fun</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">func</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
-                <span class="n">process</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">process</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">daemon</span>
                 <span class="n">process</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parent_pipe</span><span class="p">)</span>

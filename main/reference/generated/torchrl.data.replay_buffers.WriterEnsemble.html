@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="TensorSpec" href="torchrl.data.TensorSpec.html" />
-    <link rel="prev" title="StorageEnsemble" href="torchrl.data.replay_buffers.StorageEnsemble.html" />
+    <link rel="next" title="Datasets" href="../data_datasets.html" />
+    <link rel="prev" title="Writer" href="torchrl.data.replay_buffers.Writer.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../data.html">torchrl.data package</a> &gt;</li>
         
+          <li><a href="../data_samplers.html">Sampling Strategies</a> &gt;</li>
+        
       <li>WriterEnsemble</li>
     
     
@@ -434,7 +436,7 @@
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">WriterEnsemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">writers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#WriterEnsemble"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble" title="Permalink to this definition">¶</a></dt>
 <dd><p>An ensemble of writers.</p>
-<p>This class is designed to work with <a class="reference internal" href="torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.
+<p>This class is designed to work with <a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.
 It contains the writers but blocks writing with any of them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -445,7 +447,7 @@ It contains the writers but blocks writing with any of them.</p>
 <p class="admonition-title">Warning</p>
 <p>This class does not support writing.
 To extend one of the replay buffers, simply index the parent
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code> object.</p>
+<a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a> object.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.add">
@@ -471,10 +473,10 @@ To extend one of the replay buffers, simply index the parent
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.data.TensorSpec.html" class="btn btn-neutral float-right" title="TensorSpec" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="../data_datasets.html" class="btn btn-neutral float-right" title="Datasets" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.data.replay_buffers.StorageEnsemble.html" class="btn btn-neutral" title="StorageEnsemble" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.data.replay_buffers.Writer.html" class="btn btn-neutral" title="Writer" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

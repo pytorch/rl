@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="History" href="generated/torchrl.data.llm.History.html" />
-    <link rel="prev" title="register_gym_spec_conversion" href="generated/torchrl.envs.register_gym_spec_conversion.html" />
+    <link rel="next" title="VLLMWeightSyncScheme" href="generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html" />
+    <link rel="prev" title="PixelRenderTransform" href="generated/torchrl.record.PixelRenderTransform.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -429,841 +429,47 @@
   <section id="llm-interface">
 <h1>LLM Interface<a class="headerlink" href="#llm-interface" title="Permalink to this heading">¶</a></h1>
 <p id="ref-llms">TorchRL provides a comprehensive framework for LLM post-training and fine-tuning. The LLM API is built around five core concepts that work
-together to create a complete reinforcement learning pipeline for language models:</p>
+together to create a complete reinforcement learning pipeline for language models.</p>
+<section id="key-components">
+<h2>Key Components<a class="headerlink" href="#key-components" title="Permalink to this heading">¶</a></h2>
 <ol class="arabic simple">
-<li><p><strong>Data Representation</strong> (<a class="reference internal" href="#data-structures">Data Structures</a>): The foundation for handling conversations, text parsing, and LLM
-output classes. This includes the <a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> class for managing conversation context and structured output classes for
-tokens, log-probabilities, and text.</p></li>
-<li><p><strong>LLM Wrapper API</strong> (<a class="reference internal" href="#modules">Modules</a>): Unified interfaces for different LLM backends, including <a class="reference internal" href="generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a> for
-Hugging Face models, <a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a> for vLLM inference, and <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> for high-performance
-distributed vLLM inference (recommended). These wrappers provide consistent input/output formats across different backends and an integrated
-interface for loss computation, data storage, grading, weight synchronization, etc.</p></li>
-<li><p><strong>Environments</strong> (<a class="reference internal" href="#environments">Environments</a>): The orchestration layer that manages data loading, tool execution, reward computation, and formatting. This includes
-<a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChatEnv</span></code></a> for conversation management, dataset environments, and various transforms for tool integration.</p></li>
-<li><p><strong>Objectives</strong> (<a class="reference internal" href="#objectives">Objectives</a>): Specialized loss functions for LLM training, including <a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss" title="torchrl.objectives.llm.GRPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRPOLoss</span></code></a> for Group Relative
-Policy Optimization and <a class="reference internal" href="generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss" title="torchrl.objectives.llm.SFTLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">SFTLoss</span></code></a> for supervised fine-tuning.</p></li>
-<li><p><strong>Collectors</strong> (<a class="reference internal" href="#id1">Collectors</a>): Collectors are used to collect data from the environment and store it in a format that can be used for training. This includes
-<a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMCollector</span></code></a> for collecting data from the environment and <a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a> for collecting
-data in distributed settings using Ray.</p></li>
+<li><p><strong>Data Structures</strong>: History class for conversation management, structured output classes</p></li>
+<li><p><strong>LLM Wrappers</strong>: Unified interfaces for Transformers, vLLM, and AsyncVLLM</p></li>
+<li><p><strong>Environments</strong>: ChatEnv, task-specific environments, and transforms</p></li>
+<li><p><strong>Collectors</strong>: LLMCollector and RayLLMCollector for data collection</p></li>
+<li><p><strong>Objectives</strong>: GRPOLoss, SFTLoss for training</p></li>
 </ol>
-<p>These components work together to create a complete pipeline: environments load and format data, LLM wrappers handle inference, data structures maintain
-conversation context, and objectives compute training losses. The modular design allows you to mix and match components based on your specific use case.</p>
-<p>A complete example of how to use the LLM API can be found in the <cite>sota-implementations/grpo/</cite> directory. The training orchestration involves three main components:</p>
-<ul class="simple">
-<li><p>The Data Collector: holds a reference to the environment and the inference model or engine. It collects data, puts it in the buffer, and handles weight updates.</p></li>
-<li><p>The Replay Buffer: stores the collected data and executes any pre or post-processing steps. These may include:
-- Advantage estimation with Monte-Carlo based method (using the <a class="reference internal" href="generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage" title="torchrl.objectives.llm.MCAdvantage"><code class="xref py py-class docutils literal notranslate"><span class="pre">MCAdvantage</span></code></a> transform);
-- Grading of the outputs;
-- Logging etc.</p></li>
-<li><p>The trainer: handles the training loop, including the optimization step, serialization, logging and weight updates initialization.</p></li>
-</ul>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>The LLM API is still under development and may change in the future. Feedback, issues and PRs are welcome!</p>
-</div>
-<section id="data-structures">
-<h2>Data Structures<a class="headerlink" href="#data-structures" title="Permalink to this heading">¶</a></h2>
-<p>The data representation layer provides the foundation for handling conversations and LLM outputs in a structured way.</p>
-<section id="history-class">
-<h3>History Class<a class="headerlink" href="#history-class" title="Permalink to this heading">¶</a></h3>
-<p>The <a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> class is a TensorClass version of the chat format usually found in transformers
-(see <a class="reference external" href="https://huggingface.co/docs/transformers/conversations">Hugging Face chat documentation</a>).
-It provides a comprehensive API for managing conversation data with features including:</p>
-<ul class="simple">
-<li><p><strong>Text parsing and formatting</strong>: Convert between text and structured conversation format using <code class="xref py py-meth docutils literal notranslate"><span class="pre">from_text()</span></code>
-and <code class="xref py py-meth docutils literal notranslate"><span class="pre">apply_chat_template()</span></code></p></li>
-<li><p><strong>Dynamic conversation building</strong>: Append and extend conversations with <code class="xref py py-meth docutils literal notranslate"><span class="pre">append()</span></code> and
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code> methods</p></li>
-<li><p><strong>Multi-model support</strong>: Automatic template detection for various model families (Qwen, DialoGPT, Falcon, DeepSeek, etc.)</p></li>
-<li><p><strong>Assistant token masking</strong>: Identify which tokens were generated by the assistant for reinforcement learning applications</p></li>
-<li><p><strong>Tool calling support</strong>: Handle function calls and tool responses in conversations</p></li>
-<li><p><strong>Batch operations</strong>: Efficient tensor operations for processing multiple conversations simultaneously.</p></li>
-</ul>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-obj docutils literal notranslate"><span class="pre">History</span></code></a>(role, content[, is_complete, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase" title="torchrl.data.llm.ContentBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ContentBase</span></code></a>(type, text, url, data, ...[, ...])</p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-<section id="supported-model-families">
-<h4>Supported Model Families<a class="headerlink" href="#supported-model-families" title="Permalink to this heading">¶</a></h4>
-<p>We currently support the following model families for string to History parsing or assistant token masking:</p>
-<ul class="simple">
-<li><p><strong>Qwen family</strong> (e.g., <cite>Qwen/Qwen2.5-0.5B</cite>): Custom template with full tool calling support</p></li>
-<li><p><strong>DialoGPT family</strong> (e.g., <cite>microsoft/DialoGPT-medium</cite>): Custom template for conversation format</p></li>
-<li><p><strong>Falcon family</strong> (e.g., <cite>tiiuae/falcon-7b-instruct</cite>): Custom template for instruction format</p></li>
-<li><p><strong>DeepSeek family</strong> (e.g., <cite>deepseek-ai/deepseek-coder-6.7b-base</cite>): Custom template with native format</p></li>
-</ul>
-<p>Other models are supported, but you will need to provide a custom template for them.
-LLAMA, Mistral, OPT, GPT, MPT, BLOOM, Pythia, Phi, etc. will use the default <cite>chatml_format</cite> template.</p>
 </section>
-<section id="usage">
-<h4>Usage<a class="headerlink" href="#usage" title="Permalink to this heading">¶</a></h4>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a conversation history</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello&quot;</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hi there!&quot;</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;How are you?&quot;</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;I&#39;m doing well, thanks!&quot;</span><span class="p">}</span>
-<span class="gp">... </span><span class="p">]])</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load any supported tokenizer</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-0.5B&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Apply chat template with assistant token masking</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;qwen&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># The result contains an assistant_masks tensor</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;assistant_masks&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Assistant tokens: </span><span class="si">{</span><span class="n">assistant_masks</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="adding-custom-templates">
-<h4>Adding Custom Templates<a class="headerlink" href="#adding-custom-templates" title="Permalink to this heading">¶</a></h4>
-<p>You can add custom chat templates for new model families using the <a class="reference internal" href="#torchrl.data.llm.add_chat_template" title="torchrl.data.llm.add_chat_template"><code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.data.llm.add_chat_template()</span></code></a> function.</p>
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrl.data.llm.add_chat_template">
-<span class="sig-prename descclassname"><span class="pre">torchrl.data.llm.</span></span><span class="sig-name descname"><span class="pre">add_chat_template</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">template_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">template</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse_parser</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">callable</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_family_keywords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../_modules/torchrl/data/llm/history.html#add_chat_template"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.llm.add_chat_template" title="Permalink to this definition">¶</a></dt>
-<dd><p>Add a custom chat template to the global template dictionary.</p>
-<p>This function allows you to add custom chat templates for new model families
-that support assistant token masking via the <cite>{% generation %}</cite> keyword.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>template_name</strong> (<em>str</em>) – The name of the template (e.g., “llama”, “mistral”).
-This name will be used in the <cite>chat_template_name</cite> parameter of
-<cite>History.apply_chat_template()</cite> and <cite>History.from_text()</cite>.</p></li>
-<li><p><strong>template</strong> (<em>str</em>) – The Jinja2 template string. Must include <cite>{% generation %}</cite>
-blocks around assistant message content to enable token masking.</p></li>
-<li><p><strong>inverse_parser</strong> (<em>callable</em><em>, </em><em>optional</em>) – A function that parses formatted text back
-into a History object. Should have signature <cite>(text: str) -&gt; History</cite>.
-If None, a basic parser will be used.</p></li>
-<li><p><strong>model_family_keywords</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Keywords to detect this model family
-in the auto-detection logic. For example, [“llama”, “meta-llama”] for Llama models.
-If provided, the template will be automatically selected for models containing
-these keywords in their name.</p></li>
-</ul>
-</dd>
-</dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_chat_template</span><span class="p">,</span> <span class="n">History</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add a custom template for Llama models</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">llama_template</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% f</span><span class="s1">or message in messages %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- i</span><span class="s1">f message[&#39;role&#39;] == &#39;user&#39; %}</span>
-<span class="gp">... </span><span class="s1">{{ &#39;&lt;s&gt;[INST] &#39; + message[&#39;content&#39;] + &#39; [/INST]&#39; }}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">lif message[&#39;role&#39;] == &#39;assistant&#39; %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% g</span><span class="s1">eneration %}{{ message[&#39;content&#39;] + &#39;&lt;/s&gt;&#39; }}{</span><span class="si">% e</span><span class="s1">ndgeneration %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">ndif %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% e</span><span class="s1">ndfor %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- i</span><span class="s1">f add_generation_prompt %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% g</span><span class="s1">eneration %}{{ &#39; &#39; }}{</span><span class="si">% e</span><span class="s1">ndgeneration %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">ndif %}</span>
-<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">parse_llama_text</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
-<span class="gp">... </span>    <span class="c1"># Custom parser for Llama format</span>
-<span class="gp">... </span>    <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="gp">... </span>    <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s1">&#39;&lt;s&gt;\[INST\]\s*(.*?)\s*\[/INST\]\s*(.*?)&lt;/s&gt;&#39;</span>
-<span class="gp">... </span>    <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="n">messages</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="gp">... </span>    <span class="k">for</span> <span class="n">user_content</span><span class="p">,</span> <span class="n">assistant_content</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
-<span class="gp">... </span>        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">user_content</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
-<span class="gp">... </span>        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">assistant_content</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add the template with auto-detection</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">add_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">template</span><span class="o">=</span><span class="n">llama_template</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">inverse_parser</span><span class="o">=</span><span class="n">parse_llama_text</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">model_family_keywords</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span> <span class="s2">&quot;meta-llama&quot;</span><span class="p">]</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Now you can use it with auto-detection</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;meta-llama/Llama-2-7b-chat-hf&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello&quot;</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hi there!&quot;</span><span class="p">}</span>
-<span class="gp">... </span><span class="p">]])</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Auto-detection will use the llama template</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Or use it explicitly</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-</dd></dl>
-
-</section>
-<section id="usage-examples">
-<h4>Usage Examples<a class="headerlink" href="#usage-examples" title="Permalink to this heading">¶</a></h4>
-<section id="adding-a-llama-template">
-<h5>Adding a Llama Template<a class="headerlink" href="#adding-a-llama-template" title="Permalink to this heading">¶</a></h5>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_chat_template</span><span class="p">,</span> <span class="n">History</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define the Llama chat template</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">llama_template</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% f</span><span class="s1">or message in messages %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- i</span><span class="s1">f message[&#39;role&#39;] == &#39;user&#39; %}</span>
-<span class="gp">... </span><span class="s1">{{ &#39;&lt;s&gt;[INST] &#39; + message[&#39;content&#39;] + &#39; [/INST]&#39; }}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">lif message[&#39;role&#39;] == &#39;assistant&#39; %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% g</span><span class="s1">eneration %}{{ message[&#39;content&#39;] + &#39;&lt;/s&gt;&#39; }}{</span><span class="si">% e</span><span class="s1">ndgeneration %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">ndif %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% e</span><span class="s1">ndfor %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- i</span><span class="s1">f add_generation_prompt %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">% g</span><span class="s1">eneration %}{{ &#39; &#39; }}{</span><span class="si">% e</span><span class="s1">ndgeneration %}</span>
-<span class="gp">... </span><span class="s1">{</span><span class="si">%- e</span><span class="s1">ndif %}</span>
-<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define the inverse parser for Llama format</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">parse_llama_text</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
-<span class="gp">... </span>    <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="gp">... </span>    <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s1">&#39;&lt;s&gt;\[INST\]\s*(.*?)\s*\[/INST\]\s*(.*?)&lt;/s&gt;&#39;</span>
-<span class="gp">... </span>    <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="n">messages</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="gp">... </span>    <span class="k">for</span> <span class="n">user_content</span><span class="p">,</span> <span class="n">assistant_content</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
-<span class="gp">... </span>        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">user_content</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
-<span class="gp">... </span>        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">assistant_content</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add the template with auto-detection</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">add_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">template</span><span class="o">=</span><span class="n">llama_template</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">inverse_parser</span><span class="o">=</span><span class="n">parse_llama_text</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">model_family_keywords</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;llama&quot;</span><span class="p">,</span> <span class="s2">&quot;meta-llama&quot;</span><span class="p">]</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Now you can use it with auto-detection</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;meta-llama/Llama-2-7b-chat-hf&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello&quot;</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hi there!&quot;</span><span class="p">}</span>
-<span class="gp">... </span><span class="p">]])</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Auto-detection will use the llama template</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="testing-your-custom-templates">
-<h4>Testing Your Custom Templates<a class="headerlink" href="#testing-your-custom-templates" title="Permalink to this heading">¶</a></h4>
-<p>When adding custom templates, you should test them to ensure they work correctly. Here are the recommended tests:</p>
-<section id="assistant-token-masking-test">
-<h5>Assistant Token Masking Test<a class="headerlink" href="#assistant-token-masking-test" title="Permalink to this heading">¶</a></h5>
-<p>Test that your template supports assistant token masking:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">add_chat_template</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test_my_model_assistant_masking</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that your model supports assistant token masking.&quot;&quot;&quot;</span>
-    <span class="c1"># Add your template first</span>
-    <span class="n">add_chat_template</span><span class="p">(</span>
-        <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;my_model&quot;</span><span class="p">,</span>
-        <span class="n">template</span><span class="o">=</span><span class="s2">&quot;your_template_here&quot;</span><span class="p">,</span>
-        <span class="n">model_family_keywords</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;my_model&quot;</span><span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;your/model/name&quot;</span><span class="p">)</span>
-    <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Hello&#39;</span><span class="p">},</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Hi there!&#39;</span><span class="p">}</span>
-    <span class="p">]])</span>
-
-    <span class="n">result</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-        <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-        <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;my_model&quot;</span><span class="p">,</span>
-        <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Verify assistant mask is present</span>
-    <span class="k">assert</span> <span class="s1">&#39;assistant_masks&#39;</span> <span class="ow">in</span> <span class="n">result</span>
-    <span class="k">assert</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;assistant_masks&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Should have batch dimension of 1&quot;</span>
-    <span class="k">assert</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;assistant_masks&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Should have sequence length &gt; 0&quot;</span>
-
-    <span class="c1"># Verify some assistant tokens are masked</span>
-    <span class="n">assistant_token_count</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;assistant_masks&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-    <span class="k">assert</span> <span class="n">assistant_token_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Should have assistant tokens masked&quot;</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;✓ </span><span class="si">{</span><span class="n">assistant_token_count</span><span class="si">}</span><span class="s2"> assistant tokens masked&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="template-equivalence-test">
-<h5>Template Equivalence Test<a class="headerlink" href="#template-equivalence-test" title="Permalink to this heading">¶</a></h5>
-<p>Test that your custom template produces the same output as the model’s default template (except for masking):</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_my_model_template_equivalence</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that your template matches the model&#39;s default template.&quot;&quot;&quot;</span>
-    <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;your/model/name&quot;</span><span class="p">)</span>
-    <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Hello&#39;</span><span class="p">},</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Hi there!&#39;</span><span class="p">},</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;How are you?&#39;</span><span class="p">},</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;I</span><span class="se">\&#39;</span><span class="s1">m good, thanks!&#39;</span><span class="p">},</span>
-    <span class="p">]])</span>
-
-    <span class="c1"># Get output with model&#39;s default template</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">default_out</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-            <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">chat_template</span><span class="o">=</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span><span class="p">,</span>
-            <span class="n">tokenize</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">default_out</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[WARN] Could not get default template: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Get output with your custom template</span>
-    <span class="n">custom_out</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-        <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-        <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;my_model&quot;</span><span class="p">,</span>
-        <span class="n">tokenize</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">default_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="c1"># Normalize whitespace for comparison</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">norm</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\s+&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">s</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
-
-        <span class="k">assert</span> <span class="n">norm</span><span class="p">(</span><span class="n">default_out</span><span class="p">)</span> <span class="o">==</span> <span class="n">norm</span><span class="p">(</span><span class="n">custom_out</span><span class="p">),</span> <span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Custom template does not match default!</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;Default: </span><span class="si">{</span><span class="n">default_out</span><span class="si">}</span><span class="se">\n</span><span class="s2">Custom: </span><span class="si">{</span><span class="n">custom_out</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;✓ Template equivalence verified&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;[INFO] Skipped equivalence check (no default template available)&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="inverse-parsing-test">
-<h5>Inverse Parsing Test<a class="headerlink" href="#inverse-parsing-test" title="Permalink to this heading">¶</a></h5>
-<p>If you provided an inverse parser, test that it works correctly:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_my_model_inverse_parsing</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that your inverse parser works correctly.&quot;&quot;&quot;</span>
-    <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Hello&#39;</span><span class="p">},</span>
-        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Hi there!&#39;</span><span class="p">}</span>
-    <span class="p">]])</span>
-
-    <span class="c1"># Format using your template</span>
-    <span class="n">formatted</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-        <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-        <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;my_model&quot;</span><span class="p">,</span>
-        <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">tokenize</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Parse back using your inverse parser</span>
-    <span class="n">parsed</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">formatted</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;my_model&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Verify the parsing worked</span>
-    <span class="k">assert</span> <span class="n">parsed</span><span class="o">.</span><span class="n">role</span> <span class="o">==</span> <span class="n">history</span><span class="o">.</span><span class="n">role</span>
-    <span class="k">assert</span> <span class="n">parsed</span><span class="o">.</span><span class="n">content</span> <span class="o">==</span> <span class="n">history</span><span class="o">.</span><span class="n">content</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;✓ Inverse parsing verified&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-</section>
-</section>
-<section id="llm-wrapper-api">
-<h3>LLM Wrapper API<a class="headerlink" href="#llm-wrapper-api" title="Permalink to this heading">¶</a></h3>
-<p>The LLM wrapper API provides unified interfaces for different LLM backends, ensuring consistent input/output formats across training and inference pipelines. The main wrappers are <a class="reference internal" href="generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a> for Hugging Face models and <a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a> for vLLM inference.</p>
-<p><strong>Data Structure Classes</strong></p>
-<p>The wrappers use structured <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code> objects to represent different aspects of LLM data:</p>
-<ul class="simple">
-<li><p><strong>:class:`~torchrl.modules.llm.policies.Text`</strong>: Contains text data with <cite>prompt</cite>, <cite>response</cite>, and <cite>full</cite> fields</p></li>
-<li><p><strong>:class:`~torchrl.modules.llm.policies.ChatHistory`</strong>: Contains <a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> objects with <cite>prompt</cite>, <cite>response</cite>, and <cite>full</cite> fields</p></li>
-<li><p><strong>:class:`~torchrl.modules.llm.policies.Tokens`</strong>: Contains tokenized data with <cite>prompt</cite>, <cite>response</cite>, and <cite>full</cite> fields</p></li>
-<li><p><strong>:class:`~torchrl.modules.llm.policies.LogProbs`</strong>: Contains log probabilities with <cite>prompt</cite>, <cite>response</cite>, and <cite>full</cite> fields</p></li>
-<li><p><strong>:class:`~torchrl.modules.llm.policies.Masks`</strong>: Contains attention and assistant masks</p></li>
-</ul>
-<p><strong>API Flow</strong></p>
-<p>The wrappers operate in two distinct modes:</p>
-<p><strong>Generation Mode (`generate=True`)</strong>:
-- <strong>Input</strong>: Reads from <cite>prompt</cite> fields (e.g., <cite>history.prompt</cite>, <cite>text.prompt</cite>, <cite>tokens.prompt</cite>)
-- <strong>Output</strong>: Writes to both <cite>response</cite> and <cite>full</cite> fields</p>
-<blockquote>
-<div><ul class="simple">
-<li><p><cite>response</cite>: Contains only the newly generated content</p></li>
-<li><p><cite>full</cite>: Contains the complete sequence (prompt + response)</p></li>
-</ul>
-</div></blockquote>
-<p><strong>Log-Probability Mode (`generate=False`)</strong>:
-- <strong>Input</strong>: Reads from <cite>full</cite> fields (e.g., <cite>history.full</cite>, <cite>text.full</cite>, <cite>tokens.full</cite>)
-- <strong>Output</strong>: Writes log probabilities to the corresponding <cite>full</cite> fields</p>
-<p><strong>LLM-Environment Interaction Loop</strong></p>
-<figure class="align-center" id="id2">
-<a class="reference internal image-reference" href="../_images/llm-env.png"><img alt="LLM-Environment interaction loop" src="../_images/llm-env.png" style="width: 80%;" /></a>
-<figcaption>
-<p><span class="caption-text">LLM-Environment interaction: the LLM generates a response, the environment updates the conversation, and transforms can inject new messages or tools.</span><a class="headerlink" href="#id2" title="Permalink to this image">¶</a></p>
-</figcaption>
-</figure>
-<p>In a typical RL or tool-augmented setting, the LLM and environment interact in a loop:</p>
-<ol class="arabic simple">
-<li><p><strong>LLM Generation</strong>: The LLM wrapper receives a <cite>prompt</cite> (the current conversation history), generates a <cite>response</cite>, and outputs a <cite>full</cite> field</p></li>
-</ol>
-<blockquote>
-<div><p>containing the concatenation of the prompt and response.</p>
-</div></blockquote>
-<ol class="arabic simple" start="2">
-<li><p><strong>Environment Step</strong>: The environment takes the <cite>full</cite> field and makes it the next <cite>prompt</cite> for the LLM. This ensures that the conversation</p></li>
-</ol>
-<blockquote>
-<div><p>context grows with each turn. See <span class="xref std std-ref">ref_env_llm_step</span> for more details.</p>
-</div></blockquote>
-<ol class="arabic simple" start="3">
-<li><p><strong>Transforms</strong>: Before the next LLM step, transforms can modify the conversation—for example, by inserting a new user message, a tool call,</p></li>
-</ol>
-<blockquote>
-<div><p>or a reward annotation.</p>
-</div></blockquote>
-<ol class="arabic simple" start="4">
-<li><p><strong>Repeat</strong>: This process repeats for as many turns as needed, enabling multi-turn dialogue, tool use, and RL training.</p></li>
-</ol>
-<p>This design allows for flexible augmentation of the conversation at each step, supporting advanced RL and tool-use scenarios.</p>
-<p>A typical pseudocode loop:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get the first prompt out of an initial query</span>
-<span class="n">obs</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello!&quot;</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
-<span class="k">while</span> <span class="ow">not</span> <span class="n">done</span><span class="p">:</span>
-    <span class="c1"># LLM generates a response given the current prompt</span>
-    <span class="n">llm_output</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
-    <span class="c1"># Environment steps: creates a (&quot;next&quot;, &quot;history&quot;) field with the new prompt (from the previous `&quot;full&quot;` field)</span>
-    <span class="n">obs</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">llm_output</span><span class="p">)</span>
-</pre></div>
-</div>
-<p><strong>Integration with History</strong></p>
-<p>When using <cite>input_mode=”history”</cite>, the wrapper integrates seamlessly with the <a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> class:</p>
-<ul class="simple">
-<li><p><strong>Input</strong>: Takes a <code class="xref py py-class docutils literal notranslate"><span class="pre">ChatHistory</span></code> object containing a History in the <cite>prompt</cite> field</p></li>
-<li><p><strong>Generation</strong>: Applies chat templates to convert History to tokens, generates response, then parses the full text back into a History object</p></li>
-<li><p><strong>Output</strong>: Returns a ChatHistory with:
-- <cite>prompt</cite>: Original conversation history
-- <cite>response</cite>: New History object containing only the assistant’s response
-- <cite>full</cite>: Complete conversation history with the new response appended</p></li>
-</ul>
-<p>This design allows for natural conversation flow where each generation step extends the conversation history, making it ideal for multi-turn
-dialogue systems.</p>
-<section id="prompt-vs-response-and-padding">
-<h4>Prompt vs. Response and padding<a class="headerlink" href="#prompt-vs-response-and-padding" title="Permalink to this heading">¶</a></h4>
-<figure class="align-center" id="id3">
-<a class="reference internal image-reference" href="../_images/llm-data.svg"><img alt="LLM output data format (Tokens, Masks, Padded vs. Sparse)" src="../_images/llm-data.svg" width="80%" /></a>
-<figcaption>
-<p><span class="caption-text">Structure of LLM outputs: padded vs. sparse representations for Tokens, LogProbs, and Masks.</span><a class="headerlink" href="#id3" title="Permalink to this image">¶</a></p>
-</figcaption>
-</figure>
-<p>The diagram above illustrates the structure of the main output classes used in TorchRL’s LLM API:</p>
-<ul class="simple">
-<li><p><strong>Tokens</strong> (and by extension, <strong>LogProbs</strong>):
-- <em>Padded</em> format: All sequences in a batch are padded to the same length (with a special pad token), making them suitable for tensor operations. The prompt and response are concatenated to form <cite>tokens.full</cite>, and masks indicate valid vs. padded positions.
-- <em>Sparse</em> format: Each sequence retains its original length (no padding), represented as lists of tensors. This is more memory-efficient for variable-length data.</p></li>
-<li><p><strong>Masks</strong>: Two main masks are shown:
-- <cite>mask.attention_mask_all</cite> marks valid (non-pad) tokens.
-- <cite>mask.assistant_mask_all</cite> marks which tokens were generated by the assistant (useful for RLHF and SFT training).</p></li>
-<li><p><strong>Text</strong>: Not shown in detail, as it is simply the decoded string representation of the prompt, response, or full sequence.</p></li>
-</ul>
-<p>This format ensures that all LLM outputs (Tokens, LogProbs, Masks, Text) are consistent and easy to manipulate, regardless of whether you use padded or sparse batching.</p>
-<p>In general, we recommend working with unpadded data, as it is more memory-efficient and easier to manipulate.
-For instance, when collecting multiple padded elements from the buffer, it may be hard to clearly understand how to re-pad them
-to combine them in a cohesive batch. Working with unpadded data is more straightforward.</p>
-</section>
-</section>
-</section>
-<section id="modules">
-<h2>Modules<a class="headerlink" href="#modules" title="Permalink to this heading">¶</a></h2>
-<p>The LLM wrapper API provides unified interfaces for different LLM backends, ensuring consistent input/output formats across training and inference pipelines.</p>
-<section id="wrappers">
-<h3>Wrappers<a class="headerlink" href="#wrappers" title="Permalink to this heading">¶</a></h3>
-<p>The main goal of these primitives is to:</p>
-<ul class="simple">
-<li><p>Unify the input/output data format across training and inference pipelines</p></li>
-<li><p>Unify the input/output data format across backends (to be able to use different backends across losses and collectors)</p></li>
-<li><p>Provide appropriate tooling to construct these objects in typical RL settings (resource allocation, async execution, weight update, etc.)</p></li>
-</ul>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMWrapperBase</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A LLM wrapper base class.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper" title="torchrl.modules.llm.RemoteTransformersWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoteTransformersWrapper</span></code></a>(model[, ...])</p></td>
-<td><p>A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a>(engine_args[, num_replicas, ...])</p></td>
-<td><p>A service that manages multiple async vLLM engine actors for distributed inference.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory" title="torchrl.modules.llm.ChatHistory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChatHistory</span></code></a>([prompt, response, full, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text" title="torchrl.modules.llm.Text"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Text</span></code></a>([prompt, response, full, device, names])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs" title="torchrl.modules.llm.LogProbs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogProbs</span></code></a>([prompt, response, full, padded, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.Masks.html#torchrl.modules.llm.Masks" title="torchrl.modules.llm.Masks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Masks</span></code></a>([all_attention_mask, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens" title="torchrl.modules.llm.Tokens"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokens</span></code></a>([prompt, response, full, padded, ...])</p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-<section id="async-vllm-engine-recommended">
-<h4>Async vLLM Engine (Recommended)<a class="headerlink" href="#async-vllm-engine-recommended" title="Permalink to this heading">¶</a></h4>
-<p><a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> is the recommended approach for high-performance vLLM inference in TorchRL.
-It provides a distributed, async-capable inference service built on Ray that offers superior performance and resource utilization compared to synchronous vLLM engines.</p>
-<p><strong>Key Features:</strong></p>
-<ul class="simple">
-<li><p><strong>Distributed Architecture</strong>: Runs multiple vLLM engine replicas as Ray actors for horizontal scaling</p></li>
-<li><p><strong>Load Balancing</strong>: Automatically distributes requests across available replicas</p></li>
-<li><p><strong>Native vLLM Batching</strong>: Leverages vLLM’s optimized batching for maximum throughput.
-Every thread or actor in your code will be able to make requests to the vLLM engine(s), put the query in
-the queue and let the engine handle the batching.</p></li>
-<li><p><strong>Resource Management</strong>: Automatic GPU allocation and cleanup through Ray placement groups</p></li>
-<li><p><strong>Simple API</strong>: Single-import convenience with <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.from_pretrained" title="torchrl.modules.llm.AsyncVLLM.from_pretrained"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pretrained()</span></code></a></p></li>
-</ul>
-<p><strong>Basic Usage:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span><span class="p">,</span> <span class="n">vLLMWrapper</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamplingParams</span>
-
-<span class="c1"># Create async vLLM service (recommended)</span>
-<span class="n">async_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-    <span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span>
-    <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>       <span class="c1"># Use 2 GPUs per replica (tensor parallel)</span>
-    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>      <span class="c1"># Create 2 replicas for higher throughput</span>
-    <span class="n">max_model_len</span><span class="o">=</span><span class="mi">4096</span>
-<span class="p">)</span>
-
-<span class="c1"># Use with vLLMWrapper for TorchRL integration</span>
-<span class="n">wrapper</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-<span class="c1"># Direct generation (also supported)</span>
-<span class="n">sampling_params</span> <span class="o">=</span> <span class="n">SamplingParams</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">async_engine</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">&quot;Hello, world!&quot;</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">)</span>
-
-<span class="c1"># Cleanup when done</span>
-<span class="n">async_engine</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
-</pre></div>
-</div>
-<p>These objects (AsyncVLLM and vLLMWrapper) can be shared across multiple collectors, environments, or workers efficiently.
-They can be directly passed from one worker to another: under the hood, Ray will handle the handler sharing and remote execution.</p>
-<p><strong>Performance Benefits:</strong></p>
-<ul class="simple">
-<li><p><strong>Higher Throughput</strong>: Multiple replicas process requests concurrently</p></li>
-<li><p><strong>Better GPU Utilization</strong>: Ray ensures optimal GPU allocation and co-location</p></li>
-<li><p><strong>Reduced Latency</strong>: Native batching reduces per-request overhead</p></li>
-<li><p><strong>Fault Tolerance</strong>: Ray provides automatic error recovery and resource management</p></li>
-</ul>
-<p><strong>Resource Sharing:</strong></p>
-<p>AsyncVLLM instances can be shared across multiple collectors, environments, or workers efficiently:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span><span class="p">,</span> <span class="n">vLLMWrapper</span>
+<section id="quick-example">
+<h2>Quick Example<a class="headerlink" href="#quick-example" title="Permalink to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">vLLMWrapper</span><span class="p">,</span> <span class="n">AsyncVLLM</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatEnv</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMCollector</span>
 
-<span class="c1"># Create a shared AsyncVLLM service</span>
-<span class="n">shared_async_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-    <span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span>
-    <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>  <span class="c1"># High throughput for multiple consumers</span>
-    <span class="n">max_model_len</span><span class="o">=</span><span class="mi">4096</span>
-<span class="p">)</span>
-
-<span class="c1"># Multiple wrappers can use the same AsyncVLLM service</span>
-<span class="n">wrapper1</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">shared_async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
-<span class="n">wrapper2</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">shared_async_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
-
-<span class="c1"># Multiple collectors can share the same service</span>
-<span class="n">collector1</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env1</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">wrapper1</span><span class="p">)</span>
-<span class="n">collector2</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env2</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">wrapper2</span><span class="p">)</span>
-
-<span class="c1"># The AsyncVLLM service automatically load-balances across replicas</span>
-<span class="c1"># No additional coordination needed between consumers</span>
-</pre></div>
-</div>
-<p>This approach is more efficient than creating separate vLLM instances for each consumer, as it:</p>
-<ul class="simple">
-<li><p><strong>Reduces Memory Usage</strong>: Single model loading shared across consumers</p></li>
-<li><p><strong>Automatic Load Balancing</strong>: Requests are distributed across replicas</p></li>
-<li><p><strong>Better Resource Utilization</strong>: GPUs are used more efficiently</p></li>
-<li><p><strong>Simplified Management</strong>: Single service to monitor and manage</p></li>
-</ul>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><strong>AsyncVLLM vs. Traditional Actor Sharing</strong></p>
-<p>Unlike traditional Ray actor sharing patterns where you manually create named actors and share references,
-AsyncVLLM handles the distributed architecture internally. You simply create one AsyncVLLM service and
-pass it to multiple consumers. The service automatically:</p>
-<ul class="simple">
-<li><p>Creates and manages multiple Ray actors (replicas) internally</p></li>
-<li><p>Load-balances requests across replicas without manual coordination</p></li>
-<li><p>Handles actor lifecycle and resource cleanup</p></li>
-</ul>
-<p>This eliminates the need for manual actor name management and reference sharing that was required
-with the previous <cite>RemotevLLMWrapper</cite> approach.</p>
-</div>
-</section>
-<section id="remote-wrappers">
-<h4>Remote Wrappers<a class="headerlink" href="#remote-wrappers" title="Permalink to this heading">¶</a></h4>
-<p>TorchRL provides remote wrapper classes that enable distributed execution of LLM wrappers using Ray. These wrappers provide a simplified interface that doesn’t require explicit <cite>remote()</cite> and <cite>get()</cite> calls, making them easy to use in distributed settings.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><strong>For vLLM: Use AsyncVLLM Instead</strong></p>
-<p>For vLLM-based inference, we recommend using <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> directly rather than
-remote wrappers. AsyncVLLM provides better performance, resource utilization, and built-in load balancing.
-See the <a class="reference internal" href="#async-vllm-engine-recommended">Async vLLM Engine (Recommended)</a> section above for details.</p>
-<p>Remote wrappers are primarily intended for Transformers-based models or other use cases where AsyncVLLM
-is not applicable.</p>
-</div>
-<p><strong>Key Features:</strong></p>
-<ul class="simple">
-<li><p><strong>Simplified Interface</strong>: No need to call <cite>remote()</cite> and <cite>get()</cite> explicitly</p></li>
-<li><p><strong>Full API Compatibility</strong>: Exposes all public methods from the base <cite>LLMWrapperBase</cite> class</p></li>
-<li><p><strong>Automatic Ray Management</strong>: Handles Ray initialization and remote execution internally</p></li>
-<li><p><strong>Property Access</strong>: All properties are accessible through the remote wrapper</p></li>
-<li><p><strong>Error Handling</strong>: Proper error propagation from remote actors</p></li>
-<li><p><strong>Resource Management</strong>: Context manager support for automatic cleanup</p></li>
-</ul>
-<p><strong>Model Parameter Requirements:</strong></p>
-<ul class="simple">
-<li><p><strong>RemoteTransformersWrapper</strong>: Only accepts string model names/paths. Transformers models are not serializable.</p></li>
-</ul>
-<p><strong>Supported Backends:</strong></p>
-<p>Currently, only Transformers-based models are supported through remote wrappers. For vLLM models, use <a class="reference internal" href="generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM" title="torchrl.modules.llm.AsyncVLLM"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncVLLM</span></code></a> instead.</p>
-<p><strong>Usage Examples:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">RemoteTransformersWrapper</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span><span class="p">,</span> <span class="n">Text</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-
-<span class="c1"># Initialize Ray (if not already done)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-    <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
-
-<span class="c1"># Transformers wrapper (only string models supported)</span>
-<span class="c1"># The remote wrappers implement context managers for proper resource cleanup:</span>
-<span class="k">with</span> <span class="n">RemoteTransformersWrapper</span><span class="p">(</span>
-    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">,</span>
-    <span class="n">max_concurrency</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
-    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">}</span>
-<span class="p">)</span> <span class="k">as</span> <span class="n">remote_transformers</span><span class="p">:</span>
-
-    <span class="n">text_input</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">Text</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Hello world&quot;</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">remote_transformers</span><span class="p">(</span><span class="n">text_input</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
-</pre></div>
-</div>
-<p><strong>Performance Considerations:</strong></p>
-<ul class="simple">
-<li><p><strong>Network Overhead</strong>: Remote execution adds network communication overhead</p></li>
-<li><p><strong>Serialization</strong>: Data is serialized when sent to remote actors</p></li>
-<li><p><strong>Memory</strong>: Each remote actor maintains its own copy of the model</p></li>
-<li><p><strong>Concurrency</strong>: Multiple remote wrappers can run concurrently</p></li>
-<li><p><strong>Max Concurrency</strong>: Use the <cite>max_concurrency</cite> parameter to control the number of concurrent calls to each remote actor</p></li>
-<li><p><strong>Cleanup</strong>: Always use context managers or call <cite>cleanup_batching()</cite> to prevent hanging due to batching locks</p></li>
-</ul>
-</section>
-<section id="utils">
-<h4>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h4>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_async_vllm_engine.html#torchrl.modules.llm.make_async_vllm_engine" title="torchrl.modules.llm.make_async_vllm_engine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_async_vllm_engine</span></code></a>(*, model_name[, ...])</p></td>
-<td><p>Create an async vLLM engine service.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group_async.html#torchrl.modules.llm.stateless_init_process_group_async" title="torchrl.modules.llm.stateless_init_process_group_async"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group_async</span></code></a>(...)</p></td>
-<td><p>Initializes a stateless process group for distributed communication (async version).</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker" title="torchrl.modules.llm.make_vllm_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vllm_worker</span></code></a>(*, model_name[, devices, ...])</p></td>
-<td><p>Creates a vLLM inference engine with tensor parallelism support.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group" title="torchrl.modules.llm.stateless_init_process_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group</span></code></a>(master_address, ...)</p></td>
-<td><p>Initializes a stateless process group for distributed communication.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-</section>
-</section>
-<section id="collectors">
-<h2>Collectors<a class="headerlink" href="#collectors" title="Permalink to this heading">¶</a></h2>
-<p id="id1">TorchRL offers specialized collector classes (<a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMCollector</span></code></a> and <a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a>)
-that are tailored for LLM use cases. We also provide weight synchronization schemes for vLLM inference engines.</p>
-<p>See <span class="xref std std-ref">ref_collectors</span> for more details on the collector API. In brief, the idea of a collector is to isolate the inference part of the pipeline
-in a dedicated class.
-A collector usually takes as input a policy and an environment, and alternate between running one and the other.
-In “classical” settings, the policy is similar to the policy being trained (with some optional extra-exploration). In the context of LLM fine-tuning,
-the policy will usually be a specialized inference engine, such as a vLLM server.
-Collectors are defined by the following parameters and features:</p>
-<ul class="simple">
-<li><p><strong>Sync/Async</strong>: Whether the collector should run in sync or async mode.
-In sync mode, the collector will run the inference step in alternate with the optimization/training step.
-In async mode, the collector will run the inference step in parallel with the optimization/training step.
-A replay buffer can be passed to the collector, in such a way that the collector can directly write to it.
-In other cases, the collector can be iterated over to collect data.</p></li>
-<li><p><strong>Steps</strong>: A collector is built with a certain number of steps budget, as well as a number of steps to be
-included in each batch yield during collection.</p></li>
-<li><p><strong>Weight Synchronization Schemes</strong>: Weight sync schemes handle the synchronization of weights between the training model
-and the inference engine. The new scheme-based approach provides flexible, high-performance weight updates for vLLM and
-other inference backends.</p></li>
-</ul>
-<section id="vllm-weight-synchronization-schemes">
-<h3>vLLM Weight Synchronization Schemes<a class="headerlink" href="#vllm-weight-synchronization-schemes" title="Permalink to this heading">¶</a></h3>
-<p>TorchRL provides two weight synchronization schemes for vLLM engines, offering different trade-offs between
-performance and simplicity:</p>
-<p><strong>1. NCCL-Based Synchronization</strong> (<a class="reference internal" href="generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme" title="torchrl.weight_update.llm.VLLMWeightSyncScheme"><code class="xref py py-class docutils literal notranslate"><span class="pre">VLLMWeightSyncScheme</span></code></a>)</p>
-<p>Uses NCCL collectives for high-bandwidth GPU-to-GPU weight transfers. Best for:</p>
-<ul class="simple">
-<li><p>High-frequency weight updates</p></li>
-<li><p>Large models where transfer speed is critical</p></li>
-<li><p>Setups with GPU interconnect (NVLink, InfiniBand)</p></li>
-</ul>
-<p><strong>2. Double-Buffer Synchronization</strong> (<a class="reference internal" href="generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme" title="torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme"><code class="xref py py-class docutils literal notranslate"><span class="pre">VLLMDoubleBufferSyncScheme</span></code></a>)</p>
-<p>Uses memory-mapped file storage for asynchronous weight transfers. Best for:</p>
-<ul class="simple">
-<li><p>Simpler setup without NCCL coordination</p></li>
-<li><p>Distributed setups with shared filesystems (NFS)</p></li>
-<li><p>Cases where update frequency is lower</p></li>
-</ul>
-<p><strong>Usage Example with NCCL:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">RayLLMCollector</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">VLLMWeightSyncScheme</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span><span class="p">,</span> <span class="n">vLLMWrapper</span>
-
 <span class="c1"># Create vLLM engine</span>
-<span class="n">vllm_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-    <span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span>
-    <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">policy</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">vllm_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
+<span class="n">engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">policy</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
 
-<span class="c1"># Create NCCL weight sync scheme</span>
-<span class="n">weight_sync_scheme</span> <span class="o">=</span> <span class="n">VLLMWeightSyncScheme</span><span class="p">(</span>
-    <span class="n">master_address</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
-    <span class="n">master_port</span><span class="o">=</span><span class="mi">29500</span><span class="p">,</span>
-    <span class="n">gpus_per_replica</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># tp_size × dp_size × pp_size</span>
-    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;state_dict&quot;</span>
-<span class="p">)</span>
+<span class="c1"># Create environment</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">)</span>
 
-<span class="c1"># Create collector with weight sync scheme</span>
-<span class="n">collector</span> <span class="o">=</span> <span class="n">RayLLMCollector</span><span class="p">(</span>
-    <span class="n">env</span><span class="o">=</span><span class="n">make_env</span><span class="p">,</span>
-    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
-    <span class="n">dialog_turns_per_batch</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
-    <span class="n">total_dialog_turns</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
-    <span class="n">weight_sync_schemes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">weight_sync_scheme</span><span class="p">},</span>
-    <span class="n">track_policy_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="c1"># During training, get the sender and update weights</span>
-<span class="n">sender</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span>
-<span class="n">sender</span><span class="o">.</span><span class="n">register_model</span><span class="p">(</span><span class="n">training_model</span><span class="p">)</span>
-
-<span class="c1"># Initialize collective group (must be called before first update)</span>
-<span class="n">metadata</span> <span class="o">=</span> <span class="n">get_model_metadata</span><span class="p">(</span><span class="n">training_model</span><span class="p">)</span>
-<span class="n">sender</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="o">=</span><span class="n">vllm_engine</span><span class="p">)</span>
-
-<span class="c1"># Update weights during training</span>
-<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
-    <span class="c1"># ... training step ...</span>
-    <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">sender</span><span class="o">.</span><span class="n">update_weights</span><span class="p">()</span>  <span class="c1"># Broadcasts via NCCL</span>
+<span class="c1"># Create collector</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">dialog_turns_per_batch</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><strong>Usage Example with Double-Buffer:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">RayLLMCollector</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">VLLMDoubleBufferSyncScheme</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncVLLM</span><span class="p">,</span> <span class="n">vLLMWrapper</span>
-
-<span class="c1"># Create vLLM engine</span>
-<span class="n">vllm_engine</span> <span class="o">=</span> <span class="n">AsyncVLLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-    <span class="s2">&quot;Qwen/Qwen2.5-7B&quot;</span><span class="p">,</span>
-    <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">policy</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span><span class="n">vllm_engine</span><span class="p">,</span> <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
-
-<span class="c1"># Create double-buffer weight sync scheme</span>
-<span class="n">weight_sync_scheme</span> <span class="o">=</span> <span class="n">VLLMDoubleBufferSyncScheme</span><span class="p">(</span>
-    <span class="n">remote_addr</span><span class="o">=</span><span class="s2">&quot;/tmp/weights&quot;</span><span class="p">,</span>  <span class="c1"># Or &quot;/mnt/shared/weights&quot; for NFS</span>
-    <span class="n">num_threads</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
-    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;state_dict&quot;</span>
-<span class="p">)</span>
-
-<span class="c1"># Create collector with weight sync scheme</span>
-<span class="n">collector</span> <span class="o">=</span> <span class="n">RayLLMCollector</span><span class="p">(</span>
-    <span class="n">env</span><span class="o">=</span><span class="n">make_env</span><span class="p">,</span>
-    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
-    <span class="n">dialog_turns_per_batch</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
-    <span class="n">total_dialog_turns</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
-    <span class="n">weight_sync_schemes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">weight_sync_scheme</span><span class="p">},</span>
-    <span class="n">track_policy_version</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="c1"># During training, get the sender and receiver</span>
-<span class="n">sender</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span>
-<span class="n">sender</span><span class="o">.</span><span class="n">register_model</span><span class="p">(</span><span class="n">training_model</span><span class="p">)</span>
-
-<span class="c1"># No initialization needed for double-buffer scheme!</span>
-
-<span class="c1"># Update weights during training</span>
-<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
-    <span class="c1"># ... training step ...</span>
-    <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">sender</span><span class="o">.</span><span class="n">update_weights</span><span class="p">()</span>  <span class="c1"># Writes to shared storage</span>
-        <span class="c1"># vLLM workers can poll and apply: receiver.poll_and_apply()</span>
-</pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The LLM API is still under development and may change in the future.
+Feedback, issues and PRs are welcome!</p>
 </div>
 </section>
-<section id="policy-version-tracking">
-<h3>Policy Version Tracking<a class="headerlink" href="#policy-version-tracking" title="Permalink to this heading">¶</a></h3>
+<section id="documentation-sections">
+<h2>Documentation Sections<a class="headerlink" href="#documentation-sections" title="Permalink to this heading">¶</a></h2>
+<div class="toctree-wrapper compound">
+</div>
+<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+Policy Version Tracking
+~~~~~~~~~~~~~~~~~~~~~~~</p>
 <p>LLM Collectors also allow to track the version of the policy, which is useful for some use cases.
 This is done by adding a <a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform to the environment, which is
 then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
@@ -1320,7 +526,6 @@ transform, or a boolean to the collector constructor.</p>
 </tr>
 </tbody>
 </table>
-</section>
 <section id="legacy-weight-updaters-deprecated">
 <h3>Legacy Weight Updaters (Deprecated)<a class="headerlink" href="#legacy-weight-updaters-deprecated" title="Permalink to this heading">¶</a></h3>
 <div class="deprecated">
@@ -1725,6 +930,13 @@ For example, in the GSM8K reward parser:</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<div><p>llms_envs
+llms_transforms
+llms_collectors
+llms_objectives</p>
+</div></blockquote>
+<p>&gt;&gt;&gt;&gt;&gt;&gt;&gt; 571142f4e ([Doc] Huge doc refactoring)</p>
 </section>
 </section>
 
@@ -1736,10 +948,10 @@ For example, in the GSM8K reward parser:</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="generated/torchrl.data.llm.History.html" class="btn btn-neutral float-right" title="History" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html" class="btn btn-neutral float-right" title="VLLMWeightSyncScheme" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="generated/torchrl.envs.register_gym_spec_conversion.html" class="btn btn-neutral" title="register_gym_spec_conversion" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="generated/torchrl.record.PixelRenderTransform.html" class="btn btn-neutral" title="PixelRenderTransform" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -1774,41 +986,9 @@ For example, in the GSM8K reward parser:</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">LLM Interface</a><ul>
-<li><a class="reference internal" href="#data-structures">Data Structures</a><ul>
-<li><a class="reference internal" href="#history-class">History Class</a><ul>
-<li><a class="reference internal" href="#supported-model-families">Supported Model Families</a></li>
-<li><a class="reference internal" href="#usage">Usage</a></li>
-<li><a class="reference internal" href="#adding-custom-templates">Adding Custom Templates</a></li>
-<li><a class="reference internal" href="#usage-examples">Usage Examples</a><ul>
-<li><a class="reference internal" href="#adding-a-llama-template">Adding a Llama Template</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#testing-your-custom-templates">Testing Your Custom Templates</a><ul>
-<li><a class="reference internal" href="#assistant-token-masking-test">Assistant Token Masking Test</a></li>
-<li><a class="reference internal" href="#template-equivalence-test">Template Equivalence Test</a></li>
-<li><a class="reference internal" href="#inverse-parsing-test">Inverse Parsing Test</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#llm-wrapper-api">LLM Wrapper API</a><ul>
-<li><a class="reference internal" href="#prompt-vs-response-and-padding">Prompt vs. Response and padding</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#modules">Modules</a><ul>
-<li><a class="reference internal" href="#wrappers">Wrappers</a><ul>
-<li><a class="reference internal" href="#async-vllm-engine-recommended">Async vLLM Engine (Recommended)</a></li>
-<li><a class="reference internal" href="#remote-wrappers">Remote Wrappers</a></li>
-<li><a class="reference internal" href="#utils">Utils</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#collectors">Collectors</a><ul>
-<li><a class="reference internal" href="#vllm-weight-synchronization-schemes">vLLM Weight Synchronization Schemes</a></li>
-<li><a class="reference internal" href="#policy-version-tracking">Policy Version Tracking</a></li>
+<li><a class="reference internal" href="#key-components">Key Components</a></li>
+<li><a class="reference internal" href="#quick-example">Quick Example</a></li>
+<li><a class="reference internal" href="#documentation-sections">Documentation Sections</a><ul>
 <li><a class="reference internal" href="#legacy-weight-updaters-deprecated">Legacy Weight Updaters (Deprecated)</a></li>
 </ul>
 </li>

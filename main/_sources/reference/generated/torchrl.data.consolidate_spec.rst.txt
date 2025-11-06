@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-consolidate_spec
-================
-
-.. autoclass:: consolidate_spec
-    :members:
-    :inherited-members:

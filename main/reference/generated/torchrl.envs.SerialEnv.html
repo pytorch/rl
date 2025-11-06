@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="ParallelEnv" href="torchrl.envs.ParallelEnv.html" />
-    <link rel="prev" title="EnvMetaData" href="torchrl.envs.EnvMetaData.html" />
+    <link rel="prev" title="Vectorized and Parallel Environments" href="../envs_vectorized.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../envs.html">torchrl.envs package</a> &gt;</li>
         
+          <li><a href="../envs_vectorized.html">Vectorized and Parallel Environments</a> &gt;</li>
+        
       <li>SerialEnv</li>
     
     
@@ -496,10 +498,13 @@ one of the environment has dynamic specs.</p>
 <blockquote>
 <div><div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Learn more about dynamic specs and environments <a class="reference internal" href="../envs.html#dynamic-envs"><span class="std std-ref">here</span></a>.</p>
+<p>Learn more about dynamic specs and environments <a class="reference internal" href="../envs_libraries.html#dynamic-envs"><span class="std std-ref">here</span></a>.</p>
 </div>
 </div></blockquote>
 </p></li>
+<li><p><strong>daemon</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the processes should be daemonized.
+This is only applicable to parallel environments such as <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1582,7 +1587,7 @@ copied to that device</p>
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="../envs.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
+<p><a class="reference internal" href="../envs_api.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
 </div>
 </dd></dl>
 
@@ -2673,7 +2678,7 @@ policy device before the policy is used. Default is <code class="docutils litera
 done states. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, then the done environments are reset automatically. Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p>The <a class="reference internal" href="../envs.html#ref-partial-resets"><span class="std std-ref">Partial resets</span></a> of the documentation gives more
+<p>The <a class="reference internal" href="../envs_vectorized.html#ref-partial-resets"><span class="std std-ref">Partial resets</span></a> of the documentation gives more
 information about partial resets.</p>
 </div>
 </p></li>
@@ -2682,7 +2687,7 @@ of the done states. If <code class="docutils literal notranslate"><span class="p
 Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p>The <a class="reference internal" href="../envs.html#ref-partial-steps"><span class="std std-ref">Partial steps</span></a> of the documentation gives more
+<p>The <a class="reference internal" href="../envs_vectorized.html#ref-partial-steps"><span class="std std-ref">Partial steps</span></a> of the documentation gives more
 information about partial resets.</p>
 </div>
 </p></li>
@@ -2948,7 +2953,7 @@ used for another environment if created concomitantly to this environment.</p>
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="../envs.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
+<p><a class="reference internal" href="../envs_api.html#environment-lock"><span class="std std-ref">Locking environment specs</span></a>.</p>
 </div>
 </dd></dl>
 
@@ -3480,7 +3485,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
         <a href="torchrl.envs.ParallelEnv.html" class="btn btn-neutral float-right" title="ParallelEnv" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.EnvMetaData.html" class="btn btn-neutral" title="EnvMetaData" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../envs_vectorized.html" class="btn btn-neutral" title="Vectorized and Parallel Environments" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

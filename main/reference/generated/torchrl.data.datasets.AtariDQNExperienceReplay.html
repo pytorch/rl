@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="D4RLExperienceReplay" href="torchrl.data.datasets.D4RLExperienceReplay.html" />
-    <link rel="prev" title="BaseDatasetExperienceReplay" href="torchrl.data.datasets.BaseDatasetExperienceReplay.html" />
+    <link rel="prev" title="Datasets" href="../data_datasets.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../data.html">torchrl.data package</a> &gt;</li>
         
+          <li><a href="../data_datasets.html">Datasets</a> &gt;</li>
+        
       <li>AtariDQNExperienceReplay</li>
     
     
@@ -438,7 +440,7 @@
 iterations of DQN over each of the Arari 2600 games for a total of 200 million frames.
 The sub-sampling rate (frame-skip) is equal to 4, meaning that each game dataset
 has 50 million steps in total.</p>
-<p>The data format follows the <a class="reference internal" href="../data.html#ted-format"><span class="std std-ref">TED convention</span></a>. Since the dataset is quite heavy,
+<p>The data format follows the <span class="xref std std-ref">TED convention</span>. Since the dataset is quite heavy,
 the data formatting is done on-line, at sampling time.</p>
 <p>To make training more modular, we split the dataset in each of the Atari games
 and separate each training round. Consequently, each dataset is presented as
@@ -615,7 +617,7 @@ can also be passed.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>As always, datasets should be composed using <a class="reference internal" href="torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>:</p>
+<p>As always, datasets should be composed using <code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtariDQNExperienceReplay</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBufferEnsemble</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># we change this parameter for quick experimentation, in practice it should be left untouched</span>
@@ -1255,7 +1257,7 @@ value. Otherwise it is reset to a default value.</p></li>
         <a href="torchrl.data.datasets.D4RLExperienceReplay.html" class="btn btn-neutral float-right" title="D4RLExperienceReplay" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.data.datasets.BaseDatasetExperienceReplay.html" class="btn btn-neutral" title="BaseDatasetExperienceReplay" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../data_datasets.html" class="btn btn-neutral" title="Datasets" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

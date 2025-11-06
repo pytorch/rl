@@ -722,7 +722,7 @@ our policy.</p>
 <section id="using-the-q-values-to-select-an-action">
 <h3>Using the Q-Values to select an action<a class="headerlink" href="#using-the-q-values-to-select-an-action" title="Permalink to this heading">¶</a></h3>
 <p>The last part of our policy is the Q-Value Module.
-The Q-Value module <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.QValueModule.html#torchrl.modules.tensordict_module.QValueModule" title="torchrl.modules.tensordict_module.QValueModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code></a>
+The Q-Value module <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code>
 will read the <code class="docutils literal notranslate"><span class="pre">&quot;action_values&quot;</span></code> key that is produced by our MLP and
 from it, gather the action that has the maximum value.
 The only thing we need to do is to specify the action space, which can be done
@@ -733,8 +733,8 @@ Categorical (sometimes called “sparse”) encoding or the one-hot version of i
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>TorchRL also provides a wrapper class <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.modules.QValueActor</span></code> that
-wraps a module in a Sequential together with a <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.QValueModule.html#torchrl.modules.tensordict_module.QValueModule" title="torchrl.modules.tensordict_module.QValueModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code></a>
+<p>TorchRL also provides a wrapper class <a class="reference internal" href="../reference/generated/torchrl.modules.QValueActor.html#torchrl.modules.QValueActor" title="torchrl.modules.QValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.modules.QValueActor</span></code></a> that
+wraps a module in a Sequential together with a <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code>
 like we are doing explicitly here. There is little advantage to do this
 and the process is less transparent, but the end results will be similar to
 what we do here.</p>
@@ -767,7 +767,7 @@ such an opportunity to speed up our training loop!</p>
 <p>By default, torchrl losses will use this when executing any
 <a class="reference internal" href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a> or <a class="reference internal" href="../reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRUModule</span></code></a>
 forward call. If you need to control this manually, the RNN modules are sensitive
-to a context manager/decorator, <a class="reference internal" href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a>,
+to a context manager/decorator, <code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code>,
 that handles the behaviour of the underlying RNN module.</p>
 <p>Because we still have a couple of uninitialized parameters we should
 initialize them before creating an optimizer and such.</p>
@@ -780,7 +780,7 @@ initialize them before creating an optimizer and such.</p>
 <h2>DQN Loss<a class="headerlink" href="#dqn-loss" title="Permalink to this heading">¶</a></h2>
 <p>Out DQN loss requires us to pass the policy and, again, the action-space.
 While this may seem redundant, it is important as we want to make sure that
-the <a class="reference internal" href="../reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss" title="torchrl.objectives.DQNLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">DQNLoss</span></code></a> and the <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.QValueModule.html#torchrl.modules.tensordict_module.QValueModule" title="torchrl.modules.tensordict_module.QValueModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code></a>
+the <a class="reference internal" href="../reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss" title="torchrl.objectives.DQNLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">DQNLoss</span></code></a> and the <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code>
 classes are compatible, but aren’t strongly dependent on each other.</p>
 <p>To use the Double-DQN, we ask for a <code class="docutils literal notranslate"><span class="pre">delay_value</span></code> argument that will
 create a non-differentiable copy of the network parameters to be used
@@ -789,7 +789,7 @@ as a target network.</p>
 </pre></div>
 </div>
 <p>Since we are using a double DQN, we need to update the target parameters.
-We’ll use a  <a class="reference internal" href="../reference/generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate" title="torchrl.objectives.SoftUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code></a> instance to carry out
+We’ll use a  <code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code> instance to carry out
 this work.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">updater</span> <span class="o">=</span> <span class="n">SoftUpdate</span><span class="p">(</span><span class="n">loss_fn</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
 

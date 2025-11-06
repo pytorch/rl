@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-NonTensorSpec
-=============
-
-.. autoclass:: NonTensorSpec
-    :members:
-    :inherited-members:

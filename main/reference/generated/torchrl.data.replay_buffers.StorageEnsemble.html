@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="WriterEnsemble" href="torchrl.data.replay_buffers.WriterEnsemble.html" />
-    <link rel="prev" title="SamplerEnsemble" href="torchrl.data.replay_buffers.SamplerEnsemble.html" />
+    <link rel="next" title="StorageEnsembleCheckpointer" href="torchrl.data.replay_buffers.StorageEnsembleCheckpointer.html" />
+    <link rel="prev" title="StorageCheckpointerBase" href="torchrl.data.replay_buffers.StorageCheckpointerBase.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../data.html">torchrl.data package</a> &gt;</li>
         
+          <li><a href="../data_storage.html">Storage Backends</a> &gt;</li>
+        
       <li>StorageEnsemble</li>
     
     
@@ -434,7 +436,7 @@
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.StorageEnsemble">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">StorageEnsemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">storages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">transforms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><span class="pre">Transform</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#StorageEnsemble"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.StorageEnsemble" title="Permalink to this definition">¶</a></dt>
 <dd><p>An ensemble of storages.</p>
-<p>This class is designed to work with <a class="reference internal" href="torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.</p>
+<p>This class is designed to work with <a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>storages</strong> (<em>sequence of Storage</em>) – the storages to make the composite storage.</p>
@@ -453,7 +455,7 @@ it will return a tuple <code class="docutils literal notranslate"><span class="p
 <p class="admonition-title">Warning</p>
 <p>This class does not support writing (similarly to <a class="reference internal" href="torchrl.data.replay_buffers.WriterEnsemble.html#torchrl.data.replay_buffers.WriterEnsemble" title="torchrl.data.replay_buffers.writers.WriterEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">WriterEnsemble</span></code></a>).
 To extend one of the replay buffers, simply index the parent
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code> object.</p>
+<a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a> object.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.StorageEnsemble.attach">
@@ -500,10 +502,10 @@ is shared with other buffers (eg. Priority Samplers).</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.data.replay_buffers.WriterEnsemble.html" class="btn btn-neutral float-right" title="WriterEnsemble" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.data.replay_buffers.StorageEnsembleCheckpointer.html" class="btn btn-neutral float-right" title="StorageEnsembleCheckpointer" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.data.replay_buffers.SamplerEnsemble.html" class="btn btn-neutral" title="SamplerEnsemble" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.data.replay_buffers.StorageCheckpointerBase.html" class="btn btn-neutral" title="StorageCheckpointerBase" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

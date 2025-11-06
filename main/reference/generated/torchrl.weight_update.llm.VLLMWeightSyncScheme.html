@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="VLLMWeightSender" href="torchrl.weight_update.llm.VLLMWeightSender.html" />
-    <link rel="prev" title="stateless_init_process_group" href="torchrl.modules.llm.stateless_init_process_group.html" />
+    <link rel="prev" title="LLM Interface" href="../llms.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -539,6 +539,94 @@ is more complex and typically handled by sender/receiver initialization.</p>
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSyncScheme.get_receiver">
+<span class="sig-name descname"><span class="pre">get_receiver</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver" title="torchrl.weight_update.weight_sync_schemes.WeightReceiver"><span class="pre">WeightReceiver</span></a></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSyncScheme.get_receiver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the receiver instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Receiver instance for receiving weights in this worker</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If init_on_worker() hasn’t been called yet</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSyncScheme.get_sender">
+<span class="sig-name descname"><span class="pre">get_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.WeightSender.html#torchrl.weight_update.WeightSender" title="torchrl.weight_update.weight_sync_schemes.WeightSender"><span class="pre">WeightSender</span></a></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSyncScheme.get_sender" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the sender instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Sender instance for sending weights to workers</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If init_on_sender() hasn’t been called yet</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSyncScheme.init_on_sender">
+<span class="sig-name descname"><span class="pre">init_on_sender</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSyncScheme.init_on_sender" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize on the main process (sender side).</p>
+<p>This method is called once in the collector’s _run_processes() method,
+after workers have been started and are ready to receive messages.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_id</strong> – Identifier for the model being synchronized</p></li>
+<li><p><strong>context</strong> – Optional context object (e.g., collector) providing:
+- .pipes: list[mp.Connection]
+- .get_model(model_id: str) -&gt; nn.Module
+- .get_cached_weights(model_id: str) -&gt; TensorDict | None
+- .num_workers: int</p></li>
+<li><p><strong>**kwargs</strong> – Alternative to context (pipes, num_workers, model, cached_weights, etc.)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSyncScheme.init_on_worker">
+<span class="sig-name descname"><span class="pre">init_on_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSyncScheme.init_on_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize on worker process (receiver side).</p>
+<p>This method is called once in each worker’s initialization.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_id</strong> – Identifier for the model being synchronized</p></li>
+<li><p><strong>context</strong> – Optional context object (e.g., inner collector) providing:
+- .pipe: mp.Connection
+- .get_model(model_id: str) -&gt; nn.Module</p></li>
+<li><p><strong>**kwargs</strong> – Alternative to context (pipe, model, etc.)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightSyncScheme.prepare_weights">
+<span class="sig-name descname"><span class="pre">prepare_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">WeightStrategy</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightSyncScheme.prepare_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare weights for sending.</p>
+<p>This method handles weight extraction, conversion, and any scheme-specific
+preparation (e.g., cache lookups for SharedMemWeightSyncScheme).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>weights</strong> – Raw weights input (can be None, nn.Module, TensorDict, dict, str reference, etc.)</p></li>
+<li><p><strong>model_id</strong> – The model identifier (e.g., “policy”)</p></li>
+<li><p><strong>strategy</strong> – WeightStrategy for extracting/converting weights</p></li>
+<li><p><strong>context</strong> – Optional context (e.g., collector) for model resolution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Prepared weights ready to send via transport</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -554,7 +642,7 @@ is more complex and typically handled by sender/receiver initialization.</p>
         <a href="torchrl.weight_update.llm.VLLMWeightSender.html" class="btn btn-neutral float-right" title="VLLMWeightSender" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.llm.stateless_init_process_group.html" class="btn btn-neutral" title="stateless_init_process_group" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../llms.html" class="btn btn-neutral" title="LLM Interface" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

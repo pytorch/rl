@@ -479,9 +479,9 @@
         <span class="k">return</span> <span class="n">wrapped</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ReparamGradientStrategy</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<div class="viewcode-block" id="ReparamGradientStrategy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ReparamGradientStrategy.html#torchrl.modules.ReparamGradientStrategy">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ReparamGradientStrategy</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
     <span class="n">PassThrough</span> <span class="o">=</span> <span class="mi">1</span>
-    <span class="n">RelaxedOneHot</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">RelaxedOneHot</span> <span class="o">=</span> <span class="mi">2</span></div>
 
 
 <div class="viewcode-block" id="OneHotCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">OneHotCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
@@ -854,7 +854,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span></div>
 
 
-<div class="viewcode-block" id="MaskedOneHotCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MaskedOneHotCategorical</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MaskedOneHotCategorical</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;MaskedCategorical distribution.</span>
 
 <span class="sd">    Reference:</span>
@@ -949,11 +949,11 @@
             <span class="n">padding_value</span><span class="o">=</span><span class="n">padding_value</span><span class="p">,</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="MaskedOneHotCategorical.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.sample">[docs]</a>    <span class="nd">@_one_hot_wrapper</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">)</span>
+    <span class="nd">@_one_hot_wrapper</span><span class="p">(</span><span class="n">MaskedCategorical</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-        <span class="o">...</span></div>
+        <span class="o">...</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">deterministic_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -966,10 +966,10 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
 
-<div class="viewcode-block" id="MaskedOneHotCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
 
-<div class="viewcode-block" id="MaskedOneHotCategorical.rsample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.rsample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">sample_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([])</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;logits&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1034,10 +1034,10 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Unknown reparameterization strategy </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">reparam_strategy</span><span class="si">}</span><span class="s2">.&quot;</span>
-            <span class="p">)</span></div></div>
+            <span class="p">)</span>
 
 
-<div class="viewcode-block" id="Ordinal"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.Ordinal.html#torchrl.modules.Ordinal">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Ordinal</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Ordinal</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A discrete distribution for learning to sample from finite ordered sets.</span>
 
 <span class="sd">    It is defined in contrast with the `Categorical` distribution, which does</span>
@@ -1082,10 +1082,10 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
         <span class="n">logits</span> <span class="o">=</span> <span class="n">_generate_ordinal_logits</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="OneHotOrdinal"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotOrdinal.html#torchrl.modules.OneHotOrdinal">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">OneHotOrdinal</span><span class="p">(</span><span class="n">OneHotCategorical</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OneHotOrdinal</span><span class="p">(</span><span class="n">OneHotCategorical</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The one-hot version of the :class:`~tensordict.nn.distributions.Ordinal` distribution.</span>
 
 <span class="sd">    Args:</span>
@@ -1095,7 +1095,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
         <span class="n">logits</span> <span class="o">=</span> <span class="n">_generate_ordinal_logits</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_generate_ordinal_logits</span><span class="p">(</span><span class="n">scores</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -1116,7 +1116,7 @@
     <span class="k">return</span> <span class="n">larger_than_log_probs</span> <span class="o">+</span> <span class="n">smaller_than_log_probs</span>
 
 
-<div class="viewcode-block" id="LLMMaskedCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMMaskedCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LLMMaskedCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;LLM-optimized masked categorical distribution.</span>
 
 <span class="sd">    This class provides a more memory-efficient approach for LLM training by:</span>
@@ -1230,7 +1230,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="o">=</span> <span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampling_logits</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span>
 
-<div class="viewcode-block" id="LLMMaskedCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log probabilities using ignore_index approach.</span>
 
 <span class="sd">        This is memory-efficient as it doesn&#39;t require masking the logits.</span>
@@ -1266,23 +1266,23 @@
                 <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">ignore_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="n">log_probs</span></div>
+        <span class="k">return</span> <span class="n">log_probs</span>
 
-<div class="viewcode-block" id="LLMMaskedCategorical.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.sample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample from the distribution using masked logits.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">sample_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
 
-<div class="viewcode-block" id="LLMMaskedCategorical.rsample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.rsample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Reparameterized sampling using masked logits.&quot;&quot;&quot;</span>
         <span class="c1"># This would need to be implemented based on the specific reparameterization strategy</span>
         <span class="c1"># For now, fall back to regular sampling</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -1290,14 +1290,14 @@
         <span class="n">masked_logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_logits</span>
         <span class="k">return</span> <span class="n">masked_logits</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 
-<div class="viewcode-block" id="LLMMaskedCategorical.entropy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.entropy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute entropy using masked logits.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span><span class="o">.</span><span class="n">entropy</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span><span class="o">.</span><span class="n">entropy</span><span class="p">()</span>
 
-<div class="viewcode-block" id="LLMMaskedCategorical.clear_cache"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.clear_cache">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear cached masked tensors to free memory.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">mask</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -1327,7 +1327,7 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">position_level_masking</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the mask is position-level (True) or token-level (False).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position_level_masking</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position_level_masking</span>
 </pre></div>
 
              </article>

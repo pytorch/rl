@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="RayModuleTransformSender" href="torchrl.weight_update.RayModuleTransformSender.html" />
-    <link rel="prev" title="torchrl.collectors package" href="../collectors.html" />
+    <link rel="prev" title="Weight Synchronization" href="../collectors_weightsync.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
+          <li><a href="../collectors_weightsync.html">Weight Synchronization</a> &gt;</li>
+        
       <li>WeightSender</li>
     
     
@@ -433,19 +435,53 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.WeightSender">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">WeightSender</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scheme</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme" title="torchrl.weight_update.weight_sync_schemes.WeightSyncScheme"><span class="pre">WeightSyncScheme</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSender"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSender" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sends weights for ONE model to ALL workers.</p>
-<p>This class handles sending weights to all workers via their transports.
-Weight extraction is the responsibility of the caller.</p>
+<dd><p>Sends weights for ONE model to workers.</p>
+<p>A single sender can broadcast to all workers or send to specific workers.
+Created and managed by WeightSyncScheme. Users should not instantiate directly.</p>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.WeightSender.register_worker">
-<span class="sig-name descname"><span class="pre">register_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipe_or_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSender.register_worker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSender.register_worker" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register a worker’s communication pipe.</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.WeightSender.send">
+<span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSender.send"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSender.send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights synchronously to workers.</p>
+<p>This method:
+1. Prepares weights (extracts from model if weights=None)
+2. Sends to specified workers (or all if worker_ids=None)
+3. Waits for acknowledgments from those workers
+4. Returns when workers have applied the weights</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>worker_idx</strong> – The worker index.</p></li>
-<li><p><strong>pipe_or_context</strong> – The pipe connection for this worker.</p></li>
+<li><p><strong>weights</strong> – Weights to send. Can be:
+- None: Extract from model via context.get_model(model_id)
+- nn.Module: Extract weights from module
+- TensorDict: Use directly
+- dict: Convert to TensorDict</p></li>
+<li><p><strong>worker_ids</strong> – Which workers to send to:
+- None: Send to all workers (default)
+- int: Send to single worker
+- list[int]: Send to specific workers</p></li>
 </ul>
+</dd>
+</dl>
+<p>Note: This is a blocking call that ensures specified workers are updated
+before returning.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.WeightSender.send_async">
+<span class="sig-name descname"><span class="pre">send_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSender.send_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSender.send_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights asynchronously to workers (non-blocking).</p>
+<p>This initiates the send but returns immediately without waiting
+for workers to acknowledge. You must call wait_async() before
+the next send_async() or send() call.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>weights</strong> – Same as send()</p></li>
+<li><p><strong>worker_ids</strong> – Same as send()</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If a previous send_async() is still pending</p>
 </dd>
 </dl>
 </dd></dl>
@@ -453,18 +489,29 @@ Weight extraction is the responsibility of the caller.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.WeightSender.update_weights">
 <span class="sig-name descname"><span class="pre">update_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSender.update_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSender.update_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights to ALL workers for this model.</p>
+<dd><p>Send weights to ALL workers for this model (legacy).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>weights</strong> – Weights to send.</p>
+<dd class="field-odd"><p><strong>weights</strong> – Weights to send (can be None, nn.Module, TensorDict, etc.).</p>
 </dd>
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This method sends weights to all workers in parallel (non-blocking),
-then waits for all acknowledgments. This is much faster than sending
-sequentially when there are many workers.</p>
+<p>This is the legacy method. Use send() instead.</p>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.WeightSender.wait_async">
+<span class="sig-name descname"><span class="pre">wait_async</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSender.wait_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSender.wait_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for a pending async send to complete.</p>
+<p>Blocks until all workers have acknowledged the previous send_async().
+This must be called after send_async() before any subsequent sends.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If no async send is pending</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -482,7 +529,7 @@ sequentially when there are many workers.</p>
         <a href="torchrl.weight_update.RayModuleTransformSender.html" class="btn btn-neutral float-right" title="RayModuleTransformSender" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="../collectors.html" class="btn btn-neutral" title="torchrl.collectors package" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../collectors_weightsync.html" class="btn btn-neutral" title="Weight Synchronization" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

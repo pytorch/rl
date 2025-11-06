@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-DensifyReward
-=============
-
-.. autoclass:: DensifyReward
-    :members:
-    :inherited-members:

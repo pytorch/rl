@@ -390,6 +390,8 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
+          <li><a href="../collectors_weightsync.html">Weight Synchronization</a> &gt;</li>
+        
       <li>WeightReceiver</li>
     
     
@@ -434,50 +436,41 @@
 <dt class="sig sig-object py" id="torchrl.weight_update.WeightReceiver">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">WeightReceiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scheme</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme" title="torchrl.weight_update.weight_sync_schemes.WeightSyncScheme"><span class="pre">WeightSyncScheme</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightReceiver"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightReceiver" title="Permalink to this definition">¶</a></dt>
 <dd><p>Receives weights for ONE model in ONE worker.</p>
-<p>This class handles receiving weights via transport and applying them to
-a registered model in the worker process.</p>
+<p>Created and managed by WeightSyncScheme. Users should not instantiate directly.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.WeightReceiver.apply_weights">
 <span class="sig-name descname"><span class="pre">apply_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightReceiver.apply_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightReceiver.apply_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Apply received weights to registered model.</p>
+<dd><p>Apply received weights to registered model (legacy).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>weights</strong> – The weights to apply.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This is the legacy method. Use receive() in the worker loop instead.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.WeightReceiver.register_model">
-<span class="sig-name descname"><span class="pre">register_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_ref</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightReceiver.register_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightReceiver.register_model" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register the model to apply weights to.</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.WeightReceiver.receive">
+<span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightReceiver.receive"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightReceiver.receive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check for and apply new weights (non-blocking).</p>
+<p>This method is called in the worker’s main loop to check if
+new weights have been sent. If weights are available, they
+are applied to the registered model immediately.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model_ref</strong> – Either a direct object reference or a string path like ‘policy’ or ‘env.value_net’.</p>
+<dd class="field-odd"><p><strong>timeout</strong> – Maximum time to wait for weights (seconds).
+Use 0 for immediate return.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if weights were received and applied
+False if no weights were available</p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.WeightReceiver.register_worker_transport">
-<span class="sig-name descname"><span class="pre">register_worker_transport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightReceiver.register_worker_transport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightReceiver.register_worker_transport" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register this worker’s communication pipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>pipe</strong> – The pipe connection for this worker.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.WeightReceiver.set_context">
-<span class="sig-name descname"><span class="pre">set_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightReceiver.set_context"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightReceiver.set_context" title="Permalink to this definition">¶</a></dt>
-<dd><p>Set the context object (inner_collector) for resolving references.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>context</strong> – The inner collector instance in the worker process.</p>
-</dd>
-</dl>
+<p>Note: For SharedMemWeightSyncScheme, this always returns False
+since workers automatically see updates via shared memory.</p>
 </dd></dl>
 
 </dd></dl>

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-H5Split
-=======
-
-.. autoclass:: H5Split
-    :members:
-    :inherited-members:

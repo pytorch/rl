@@ -480,7 +480,7 @@ normalization, frame concatenation, resizing and turning to grayscale)
 and parallel execution. Unlike what we did in the
 <a class="reference internal" href="coding_ddpg.html#coding-ddpg"><span class="std std-ref">DDPG tutorial</span></a>, we
 will normalize the pixels and not the state vector.</p></li>
-<li><p>how to design a <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code> object, i.e. an actor
+<li><p>how to design a <a class="reference internal" href="../reference/generated/torchrl.modules.QValueActor.html#torchrl.modules.QValueActor" title="torchrl.modules.QValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code></a> object, i.e. an actor
 that estimates the action values and picks up the action with the highest
 estimated return;</p></li>
 <li><p>how to collect data from your environment efficiently and store them
@@ -704,7 +704,7 @@ computed using</p>
 <span class="math notranslate nohighlight">\(b\)</span> is a <span class="math notranslate nohighlight">\(\mathbb{R}^n \rightarrow 1\)</span> function and <span class="math notranslate nohighlight">\(v\)</span> is a
 <span class="math notranslate nohighlight">\(\mathbb{R}^n \rightarrow \mathbb{R}^m\)</span> function, for
 <span class="math notranslate nohighlight">\(n = \# obs\)</span> and <span class="math notranslate nohighlight">\(m = \# actions\)</span>.</p>
-<p>Our network is wrapped in a <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code>,
+<p>Our network is wrapped in a <a class="reference internal" href="../reference/generated/torchrl.modules.QValueActor.html#torchrl.modules.QValueActor" title="torchrl.modules.QValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code></a>,
 which will read the state-action
 values, pick up the one with the maximum value and write all those results
 in the input <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code>.</p>
@@ -1145,11 +1145,11 @@ up the action with the highest value with
 <li><p>A prioritized replay buffer could also be used. This will give a
 higher priority to samples that have the worst value accuracy.
 Learn more on the
-<a class="reference internal" href="../reference/data.html#ref-buffers"><span class="std std-ref">replay buffer section</span></a>
+<a class="reference internal" href="../reference/data_replaybuffers.html#ref-buffers"><span class="std std-ref">replay buffer section</span></a>
 of the documentation.</p></li>
 <li><p>A distributional loss (see <a class="reference internal" href="../reference/generated/torchrl.objectives.DistributionalDQNLoss.html#torchrl.objectives.DistributionalDQNLoss" title="torchrl.objectives.DistributionalDQNLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributionalDQNLoss</span></code></a>
 for more information).</p></li>
-<li><p>More fancy exploration techniques, such as <a class="reference internal" href="../reference/generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear" title="torchrl.modules.NoisyLinear"><code class="xref py py-class docutils literal notranslate"><span class="pre">NoisyLinear</span></code></a> layers and such.</p></li>
+<li><p>More fancy exploration techniques, such as <code class="xref py py-class docutils literal notranslate"><span class="pre">NoisyLinear</span></code> layers and such.</p></li>
 </ul>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-coding-dqn-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">

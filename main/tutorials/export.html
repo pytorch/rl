@@ -591,7 +591,7 @@ later.</p>
 <section id="exporting-a-tensordictmodule-based-policy">
 <h2>Exporting a TensorDictModule-based policy<a class="headerlink" href="#exporting-a-tensordictmodule-based-policy" title="Permalink to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> allowed us to build a policy with a great flexibility: from a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> that
-outputs action values from an observation, we added a <code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code> module that
+outputs action values from an observation, we added a <a class="reference internal" href="../reference/generated/torchrl.modules.QValueModule.html#torchrl.modules.QValueModule" title="torchrl.modules.QValueModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code></a> module that
 read these values and computed an action using some heuristic (e.g., an argmax call).</p>
 <p>However, there’s a small technical catch in our case: the environment (the actual Atari game) doesn’t return
 grayscale, 84x84 images but raw screen-size color ones. The transforms we appended to the environment make sure that

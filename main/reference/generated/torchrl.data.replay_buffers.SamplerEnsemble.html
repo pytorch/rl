@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="StorageEnsemble" href="torchrl.data.replay_buffers.StorageEnsemble.html" />
-    <link rel="prev" title="ReplayBufferEnsemble" href="torchrl.data.replay_buffers.ReplayBufferEnsemble.html" />
+    <link rel="next" title="SamplerWithoutReplacement" href="torchrl.data.replay_buffers.SamplerWithoutReplacement.html" />
+    <link rel="prev" title="Sampler" href="torchrl.data.replay_buffers.Sampler.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../data.html">torchrl.data package</a> &gt;</li>
         
+          <li><a href="../data_samplers.html">Sampling Strategies</a> &gt;</li>
+        
       <li>SamplerEnsemble</li>
     
     
@@ -434,7 +436,7 @@
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.SamplerEnsemble">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">SamplerEnsemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">samplers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_from_all</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_buffer_sampled</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers.html#SamplerEnsemble"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.SamplerEnsemble" title="Permalink to this definition">¶</a></dt>
 <dd><p>An ensemble of samplers.</p>
-<p>This class is designed to work with <a class="reference internal" href="torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.
+<p>This class is designed to work with <a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.
 It contains the samplers as well as the sampling strategy hyperparameters.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -456,7 +458,7 @@ sampled according to the probabilities <code class="docutils literal notranslate
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>The indices provided in the info dictionary are placed in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> with
-keys <code class="docutils literal notranslate"><span class="pre">index</span></code> and <code class="docutils literal notranslate"><span class="pre">buffer_ids</span></code> that allow the upper <code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code>
+keys <code class="docutils literal notranslate"><span class="pre">index</span></code> and <code class="docutils literal notranslate"><span class="pre">buffer_ids</span></code> that allow the upper <a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>
 and <code class="xref py py-class docutils literal notranslate"><span class="pre">StorageEnsemble</span></code> objects to retrieve the data.
 This format is different from with other samplers which usually return indices
 as regular tensors.</p>
@@ -473,10 +475,10 @@ as regular tensors.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.data.replay_buffers.StorageEnsemble.html" class="btn btn-neutral float-right" title="StorageEnsemble" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.data.replay_buffers.SamplerWithoutReplacement.html" class="btn btn-neutral float-right" title="SamplerWithoutReplacement" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.data.replay_buffers.ReplayBufferEnsemble.html" class="btn btn-neutral" title="ReplayBufferEnsemble" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.data.replay_buffers.Sampler.html" class="btn btn-neutral" title="Sampler" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

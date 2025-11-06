@@ -515,8 +515,8 @@ run in the environment:</p>
 <h2>Specialized wrappers<a class="headerlink" href="#specialized-wrappers" title="Permalink to this heading">¶</a></h2>
 <p>To simplify the incorporation of <code class="xref py py-class docutils literal notranslate"><span class="pre">Actor</span></code>,
 # <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor" title="torchrl.modules.tensordict_module.ProbabilisticActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticActor</span></code></a>,
-# <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.ActorValueOperator.html#torchrl.modules.tensordict_module.ActorValueOperator" title="torchrl.modules.tensordict_module.ActorValueOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActorValueOperator</span></code></a> or
-# <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.ActorCriticOperator.html#torchrl.modules.tensordict_module.ActorCriticOperator" title="torchrl.modules.tensordict_module.ActorCriticOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActorCriticOperator</span></code></a>.
+# <code class="xref py py-class docutils literal notranslate"><span class="pre">ActorValueOperator</span></code> or
+# <code class="xref py py-class docutils literal notranslate"><span class="pre">ActorCriticOperator</span></code>.
 For example, <a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.Actor.html#torchrl.modules.tensordict_module.Actor" title="torchrl.modules.tensordict_module.Actor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Actor</span></code></a> provides
 default values for the <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>, making integration
 with many common environments straightforward:</p>
@@ -528,7 +528,7 @@ with many common environments straightforward:</p>
 </pre></div>
 </div>
 <p>The list of available specialized TensorDictModules is available in the
-<a class="reference internal" href="../reference/modules.html#tdmodules"><span class="std std-ref">API reference</span></a>.</p>
+<span class="xref std std-ref">API reference</span>.</p>
 </section>
 <section id="networks">
 <h2>Networks<a class="headerlink" href="#networks" title="Permalink to this heading">¶</a></h2>
@@ -691,7 +691,7 @@ state from the environment:</p>
 </pre></div>
 </div>
 <p>We can easily build our Q-Value actor by adding a
-<a class="reference internal" href="../reference/generated/torchrl.modules.tensordict_module.QValueModule.html#torchrl.modules.tensordict_module.QValueModule" title="torchrl.modules.tensordict_module.QValueModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code></a> after our value
+<code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code> after our value
 network:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">QValueModule</span>
 

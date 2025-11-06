@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.utils
-
-
-biased_softplus
-===============
-
-.. autoclass:: biased_softplus
-    :members:

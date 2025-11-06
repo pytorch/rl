@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.envs.transforms.rb_transforms
-
-
-MultiStepTransform
-==================
-
-.. autoclass:: MultiStepTransform
-    :members:
-    :inherited-members:

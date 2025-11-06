@@ -621,7 +621,7 @@
         <span class="k">return</span> <span class="n">obs_decoded</span></div></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">RSSMRollout</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<div class="viewcode-block" id="RSSMRollout"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RSSMRollout</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Rollout the RSSM network.</span>
 
 <span class="sd">    Given a set of encoded observations and actions, this module will rollout the RSSM network to compute all the intermediate</span>
@@ -646,7 +646,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">rssm_prior</span> <span class="o">=</span> <span class="n">rssm_prior</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rssm_posterior</span> <span class="o">=</span> <span class="n">rssm_posterior</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<div class="viewcode-block" id="RSSMRollout.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.</span>
 
 <span class="sd">        The rollout requires a belief and posterior state primer.</span>
@@ -687,7 +687,7 @@
                 <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
 
         <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">out</span>
+        <span class="k">return</span> <span class="n">out</span></div></div>
 
 
 <div class="viewcode-block" id="RSSMPrior"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RSSMPrior</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>

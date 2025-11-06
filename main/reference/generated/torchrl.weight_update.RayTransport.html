@@ -390,6 +390,8 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
+          <li><a href="../collectors_weightsync.html">Weight Synchronization</a> &gt;</li>
+        
       <li>RayTransport</li>
     
     
@@ -432,7 +434,7 @@
 <h1>RayTransport<a class="headerlink" href="#raytransport" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.RayTransport">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">RayTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">remote_collector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">RayTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">remote_collector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor_transport</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'object_store'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'nixl'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'object_store'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport" title="Permalink to this definition">¶</a></dt>
 <dd><p>Ray transport for communicating with a single Ray collector actor.</p>
 <p>This transport handles weight updates for ONE specific remote collector.
 Multiple transports are created for multiple collectors, following the

@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="LSTMCell" href="torchrl.modules.LSTMCell.html" />
-    <link rel="prev" title="GRU" href="torchrl.modules.GRU.html" />
+    <link rel="next" title="OnlineDTActor" href="torchrl.modules.OnlineDTActor.html" />
+    <link rel="prev" title="LSTMModule" href="torchrl.modules.LSTMModule.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../modules.html">torchrl.modules package</a> &gt;</li>
         
+          <li><a href="../modules_critics.html">Value Networks and Critics</a> &gt;</li>
+        
       <li>GRUModule</li>
     
     
@@ -490,7 +492,7 @@ that the hidden values are passed from step to step during a rollout.
 <li><p><strong>gru</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.9)"><em>torch.nn.GRU</em></a><em>, </em><em>optional</em>) – a GRU instance to be wrapped.
 Exclusive with other nn.GRU arguments.</p></li>
 <li><p><strong>default_recurrent_mode</strong> (<em>bool</em><em>, </em><em>optional</em>) – if provided, the recurrent mode if it hasn’t been overridden
-by the <a class="reference internal" href="torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a> context manager / decorator.
+by the <code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code> context manager / decorator.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
@@ -517,7 +519,7 @@ recurrent states of the RNN.</p>
 <p>This module relies on specific <code class="docutils literal notranslate"><span class="pre">recurrent_state</span></code> keys being present in the input
 TensorDicts. To generate a <a class="reference internal" href="torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> transform that will automatically
 add hidden states to the environment TensorDicts, use the method <code class="xref py py-func docutils literal notranslate"><span class="pre">make_tensordict_primer()</span></code>.
-If this class is a submodule in a larger module, the method <a class="reference internal" href="torchrl.modules.utils.get_primers_from_module.html#torchrl.modules.utils.get_primers_from_module" title="torchrl.modules.utils.get_primers_from_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_primers_from_module()</span></code></a> can be called
+If this class is a submodule in a larger module, the method <code class="xref py py-func docutils literal notranslate"><span class="pre">get_primers_from_module()</span></code> can be called
 on the parent module to automatically generate the primer transforms required for all submodules, including this one.</p>
 </div>
 <p class="rubric">Examples</p>
@@ -634,7 +636,7 @@ are not registered within the environment specs.</p>
 <p>When using batched environments such as <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>, the transform can be used at the
 single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
 batched env instance level (i.e., a transformed batch of regular envs).</p>
-<p>See <a class="reference internal" href="torchrl.modules.utils.get_primers_from_module.html#torchrl.modules.utils.get_primers_from_module" title="torchrl.modules.utils.get_primers_from_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.modules.utils.get_primers_from_module()</span></code></a> for a method to generate all primers for a given
+<p>See <code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.modules.utils.get_primers_from_module()</span></code> for a method to generate all primers for a given
 module.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
@@ -678,10 +680,10 @@ module.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.LSTMCell.html" class="btn btn-neutral float-right" title="LSTMCell" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.modules.OnlineDTActor.html" class="btn btn-neutral float-right" title="OnlineDTActor" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.GRU.html" class="btn btn-neutral" title="GRU" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.modules.LSTMModule.html" class="btn btn-neutral" title="LSTMModule" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

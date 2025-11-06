@@ -692,7 +692,7 @@ the value associated with an action computed using the policy and optimize
 the actor weights to maximize this value.</p>
 <p>When computing this value, we must make sure to take the value parameters out
 of the graph, otherwise the actor and value loss will be mixed up.
-For this, the <a class="reference internal" href="../reference/generated/torchrl.objectives.hold_out_params.html#torchrl.objectives.hold_out_params" title="torchrl.objectives.utils.hold_out_params"><code class="xref py py-func docutils literal notranslate"><span class="pre">hold_out_params()</span></code></a> function
+For this, the <code class="xref py py-func docutils literal notranslate"><span class="pre">hold_out_params()</span></code> function
 can be used.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_loss_actor</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
@@ -1071,7 +1071,7 @@ data flow is handled by specifying the input and output keys.</p></li>
 </ul>
 <p>In more complex scenarios, <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.TensorDictSequential</span></code> can
 also be used.</p>
-<p>The Q-Value network is wrapped in a <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueOperator</span></code>
+<p>The Q-Value network is wrapped in a <a class="reference internal" href="../reference/generated/torchrl.modules.ValueOperator.html#torchrl.modules.ValueOperator" title="torchrl.modules.ValueOperator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueOperator</span></code></a>
 that automatically sets the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> to <code class="docutils literal notranslate"><span class="pre">&quot;state_action_value</span></code> for q-value
 networks and <code class="docutils literal notranslate"><span class="pre">state_value</span></code> for other value networks.</p>
 <p>TorchRL provides a built-in version of the DDPG networks as presented in the
@@ -1410,7 +1410,7 @@ estimates.</p>
 <h3>Target network updater<a class="headerlink" href="#target-network-updater" title="Permalink to this heading">¶</a></h3>
 <p>Target networks are a crucial part of off-policy RL algorithms.
 Updating the target network parameters is made easy thanks to the
-<a class="reference internal" href="../reference/generated/torchrl.objectives.HardUpdate.html#torchrl.objectives.HardUpdate" title="torchrl.objectives.HardUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">HardUpdate</span></code></a> and <a class="reference internal" href="../reference/generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate" title="torchrl.objectives.SoftUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code></a>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">HardUpdate</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code>
 classes. They’re built with the loss module as argument, and the update is
 achieved via a call to <cite>updater.step()</cite> at the appropriate location in the
 training loop.</p>

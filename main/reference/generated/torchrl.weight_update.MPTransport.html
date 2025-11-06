@@ -390,6 +390,8 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
+          <li><a href="../collectors_weightsync.html">Weight Synchronization</a> &gt;</li>
+        
       <li>MPTransport</li>
     
     
@@ -452,6 +454,15 @@
 <dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.receive_weights">
 <span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Receive weights from the pipe (used in worker process).</p>
+<p>This method only handles weight update messages. Other messages
+(like “close”, “continue”, etc.) are ignored and should be handled
+by the main worker loop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple of (model_id, weights) if weights were received, None if no data available
+or if a non-weight message was received.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

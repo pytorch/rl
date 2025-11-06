@@ -390,6 +390,8 @@
         
           <li><a href="../objectives.html">torchrl.objectives package</a> &gt;</li>
         
+          <li><a href="../objectives_policy.html">Policy Gradient Methods</a> &gt;</li>
+        
       <li>ClipPPOLoss</li>
     
     
@@ -442,7 +444,7 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>actor_network</strong> (<em>ProbabilisticTensorDictSequential</em>) – policy operator.</p></li>
-<li><p><strong>critic_network</strong> (<a class="reference internal" href="torchrl.modules.tensordict_module.ValueOperator.html#torchrl.modules.tensordict_module.ValueOperator" title="torchrl.modules.tensordict_module.ValueOperator"><em>ValueOperator</em></a>) – value operator.</p></li>
+<li><p><strong>critic_network</strong> (<a class="reference internal" href="torchrl.modules.ValueOperator.html#torchrl.modules.ValueOperator" title="torchrl.modules.ValueOperator"><em>ValueOperator</em></a>) – value operator.</p></li>
 </ul>
 </dd>
 </dl>
@@ -514,7 +516,7 @@ with a little cost. Defaults to <code class="docutils literal notranslate"><span
 <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>: no reduction will be applied,
 <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>: the sum of the output will be divided by the number of
 elements in the output, <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>: the output will be summed. Default: <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>.</p></li>
-<li><p><strong>clip_value</strong> (<em>bool</em><em> or </em><a class="reference internal" href="torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.float" title="torchrl.data.BinaryToDecimal.float"><em>float</em></a><em>, </em><em>optional</em>) – If a <code class="docutils literal notranslate"><span class="pre">float</span></code> is provided, it will be used to compute a clipped
+<li><p><strong>clip_value</strong> (<em>bool</em><em> or </em><a class="reference internal" href="torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float" title="torchrl.data.llm.TopKRewardSelector.float"><em>float</em></a><em>, </em><em>optional</em>) – If a <code class="docutils literal notranslate"><span class="pre">float</span></code> is provided, it will be used to compute a clipped
 version of the value prediction with respect to the input tensordict value estimate and use it to
 calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
 helping stabilize training and preventing large updates. However, it will have no impact if the value

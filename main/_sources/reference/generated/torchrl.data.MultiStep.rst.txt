@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-MultiStep
-=========
-
-.. autoclass:: MultiStep
-    :members:
-    :inherited-members:

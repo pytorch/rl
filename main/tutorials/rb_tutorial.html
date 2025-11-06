@@ -1143,7 +1143,7 @@ about your data structure to do its job (not that as of now it is only
 compatible with tensordict-structured data): the number of slices or their
 length and some information about where the separation between the
 episodes can be found (e.g. <a class="reference internal" href="getting-started-3.html#gs-storage-collector"><span class="std std-ref">recall that</span></a> with a
-<a class="reference internal" href="../reference/collectors.html#ref-collectors"><span class="std std-ref">DataCollector</span></a>, the trajectory id is stored in
+<a class="reference internal" href="../reference/collectors_basics.html#ref-collectors"><span class="std std-ref">DataCollector</span></a>, the trajectory id is stored in
 <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;traj_ids&quot;)</span></code>). In this simple example, we construct a data
 with 4 consecutive short trajectories and sample 4 slices out of it, each of
 length 2 (since the batch size is 8, and 8 items // 4 slices = 2 time steps).
@@ -1202,7 +1202,7 @@ which are based on our Replay Buffer API;</p></li>
 <code class="xref py py-class docutils literal notranslate"><span class="pre">PrioritizedSliceSampler</span></code> and
 <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSamplerWithoutReplacement</span></code>, or other writers
 such as <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictMaxValueWriter</span></code>.</p></li>
-<li><p>Check how to checkpoint ReplayBuffers in <a class="reference internal" href="../reference/data.html#checkpoint-rb"><span class="std std-ref">the doc</span></a>.</p></li>
+<li><p>Check how to checkpoint ReplayBuffers in <span class="xref std std-ref">the doc</span>.</p></li>
 </ul>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-rb-tutorial-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">

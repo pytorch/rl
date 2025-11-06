@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-Stacked
-=======
-
-.. autoclass:: Stacked
-    :members:
-    :inherited-members:

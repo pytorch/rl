@@ -477,12 +477,12 @@ control library</a>.</p>
 </ul>
 <p>We will cover six crucial components of TorchRL:</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="../reference/envs.html#environment-api"><span class="std std-ref">environments</span></a></p></li>
-<li><p><a class="reference internal" href="../reference/envs.html#id2"><span class="std std-ref">transforms</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/envs_api.html#environment-api"><span class="std std-ref">environments</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/envs_transforms.html#transforms"><span class="std std-ref">transforms</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/modules.html#ref-modules"><span class="std std-ref">models</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/objectives.html#ref-objectives"><span class="std std-ref">loss modules</span></a></p></li>
-<li><p><a class="reference internal" href="../reference/collectors.html#ref-collectors"><span class="std std-ref">data collectors</span></a></p></li>
-<li><p><a class="reference internal" href="../reference/data.html#ref-buffers"><span class="std std-ref">replay buffers</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/collectors_basics.html#ref-collectors"><span class="std std-ref">data collectors</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/data_replaybuffers.html#ref-buffers"><span class="std std-ref">replay buffers</span></a></p></li>
 </ul>
 <p>If you are running this in Google Colab, make sure you install the following dependencies:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>!pip3<span class="w"> </span>install<span class="w"> </span>torchrl
@@ -854,7 +854,7 @@ and where to write it:</p>
 </section>
 <section id="data-collector">
 <h2>Data collector<a class="headerlink" href="#data-collector" title="Permalink to this heading">¶</a></h2>
-<p>TorchRL provides a set of <a class="reference internal" href="../reference/collectors.html#ref-collectors"><span class="std std-ref">DataCollector classes</span></a>.
+<p>TorchRL provides a set of <a class="reference internal" href="../reference/collectors_basics.html#ref-collectors"><span class="std std-ref">DataCollector classes</span></a>.
 Briefly, these classes execute three operations: reset an environment,
 compute an action given the latest observation, execute a step in the environment,
 and repeat the last two steps until the environment signals a stop (or reaches

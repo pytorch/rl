@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-RandomProjectionHash
-====================
-
-.. autoclass:: RandomProjectionHash
-    :members:
-    :inherited-members:

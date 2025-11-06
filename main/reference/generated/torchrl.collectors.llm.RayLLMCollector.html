@@ -515,6 +515,23 @@ Defaults to <cite>False</cite>.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.RayLLMCollector.get_model">
+<span class="sig-name descname"><span class="pre">get_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.RayLLMCollector.get_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get model instance by ID (for weight sync schemes).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model_id</strong> – Model identifier (e.g., “policy”, “value_net”)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The model instance</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If model_id is not recognized</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.RayLLMCollector.get_policy_model">
 <span class="sig-name descname"><span class="pre">get_policy_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.RayLLMCollector.get_policy_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get the policy model.</p>

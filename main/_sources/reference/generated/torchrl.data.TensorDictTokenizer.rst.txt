@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-TensorDictTokenizer
-===================
-
-.. autoclass:: TensorDictTokenizer
-    :members:
-    :inherited-members:

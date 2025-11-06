@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-RewardData
-==========
-
-.. autoclass:: RewardData
-    :members:
-    :inherited-members:

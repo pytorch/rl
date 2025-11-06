@@ -437,14 +437,14 @@ instructions in the dedicated section below):</p>
 <p>TorchRL provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, modular, documented and properly tested.
 The code is aimed at supporting research in RL. Most of it is written in python in a highly modular way, such that researchers can easily swap components, transform them or write new ones with little effort.</p>
 <p>This repo attempts to align with the existing pytorch ecosystem libraries in that it has a “dataset pillar”
-<a class="reference internal" href="reference/envs.html#environment-api"><span class="std std-ref">(environments)</span></a>,
-<a class="reference internal" href="reference/envs.html#id2"><span class="std std-ref">transforms</span></a>,
+<a class="reference internal" href="reference/envs_api.html#environment-api"><span class="std std-ref">(environments)</span></a>,
+<a class="reference internal" href="reference/envs_transforms.html#transforms"><span class="std std-ref">transforms</span></a>,
 <a class="reference internal" href="reference/modules.html#ref-modules"><span class="std std-ref">models</span></a>,
 data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch).
 Common environment libraries (e.g. OpenAI gym) are only optional.</p>
 <p>On the low-level end, torchrl comes with a set of highly re-usable functionals
-for <a class="reference internal" href="reference/objectives.html#ref-objectives"><span class="std std-ref">cost functions</span></a>, <a class="reference internal" href="reference/objectives.html#ref-returns"><span class="std std-ref">returns</span></a> and data processing.</p>
+for <a class="reference internal" href="reference/objectives.html#ref-objectives"><span class="std std-ref">cost functions</span></a>, <span class="xref std std-ref">returns</span> and data processing.</p>
 <p>TorchRL aims at a high modularity and good runtime performance.</p>
 <p>To read more about TorchRL philosophy and capabilities beyond this API reference,
 check the <a class="reference external" href="https://arxiv.org/abs/2306.00577">TorchRL paper</a>.</p>
@@ -531,85 +531,41 @@ and navigate to the previous ones whenever you want to learn more!</p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="reference/index.html">API Reference</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="reference/collectors.html">torchrl.collectors package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#collectors-and-batch-size">Collectors and batch size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#collectors-and-policy-copies">Collectors and policy copies</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#weight-synchronization-using-weight-update-schemes">Weight Synchronization using Weight Update Schemes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#legacy-weight-synchronization-in-distributed-environments">Legacy: Weight Synchronization in Distributed Environments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#collectors-and-replay-buffers-interoperability">Collectors and replay buffers interoperability</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#running-the-collector-asynchronously">Running the Collector Asynchronously</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#single-node-data-collectors">Single node data collectors</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#distributed-data-collectors">Distributed data collectors</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#helper-functions">Helper functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#key-features">Key Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/collectors.html#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/data.html">torchrl.data package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#replay-buffers">Replay Buffers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#composable-replay-buffers">Composable Replay Buffers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#torchrl-episode-data-format-ted">TorchRL Episode Data Format (TED)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#datasets">Datasets</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#tensorspec">TensorSpec</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#trees-and-forests">Trees and Forests</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#large-language-models-and-reinforcement-learning-from-human-feedback-rlhf">Large language models and Reinforcement Learning From Human Feedback (RLHF)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/data.html#utils">Utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/data.html#key-features">Key Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/data.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/data.html#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/envs.html">torchrl.envs package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#env-specs-locks-and-batch-size">Env specs: locks and batch size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#env-methods">Env methods</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#partial-steps-and-partial-resets">Partial steps and partial resets</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#vectorized-envs">Vectorized envs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#async-environments">Async environments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#custom-native-torchrl-environments">Custom native TorchRL environments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#multi-agent-environments">Multi-agent environments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#auto-resetting-envs">Auto-resetting Envs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#dynamic-specs">Dynamic Specs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#transforms">Transforms</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#environments-with-masked-actions">Environments with masked actions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#recorders">Recorders</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#helpers">Helpers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#domain-specific">Domain-specific</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#libraries">Libraries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#key-features">Key Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/envs.html#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/llms.html">LLM Interface</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/llms.html#data-structures">Data Structures</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/llms.html#modules">Modules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/llms.html#collectors">Collectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/llms.html#key-components">Key Components</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/llms.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/llms.html#documentation-sections">Documentation Sections</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/llms.html#environments">Environments</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reference/llms.html#objectives">Objectives</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/modules.html">torchrl.modules package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#tensordict-modules-actors-exploration-value-models-and-generative-models">TensorDict modules: Actors, exploration, value models and generative models</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#hooks">Hooks</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#models">Models</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#exploration">Exploration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#planners">Planners</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#distributions">Distributions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#utils">Utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#key-features">Key Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/modules.html#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/objectives.html">torchrl.objectives package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#torch-vmap-and-randomness">torch.vmap and randomness</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#training-value-functions">Training value functions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#dqn">DQN</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#ddpg">DDPG</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#sac">SAC</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#redq">REDQ</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#crossq">CrossQ</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#iql">IQL</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#cql">CQL</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#gail">GAIL</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#dt">DT</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#td3">TD3</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#td3-bc">TD3+BC</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#ppo">PPO</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#a2c">A2C</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#reinforce">Reinforce</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#dreamer">Dreamer</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#multi-agent-objectives">Multi-agent objectives</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#returns">Returns</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#utils">Utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#key-features">Key Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/objectives.html#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/services.html">Service Registry</a><ul>
@@ -624,13 +580,9 @@ and navigate to the previous ones whenever you want to learn more!</p>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/trainers.html">torchrl.trainers package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#checkpointing">Checkpointing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#trainer-and-hooks">Trainer and hooks</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#algorithm-specific-trainers-experimental">Algorithm-specific trainers (Experimental)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#builders">Builders</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#utils">Utils</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#loggers">Loggers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#recording-utils">Recording utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#key-features">Key Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#quick-example">Quick Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reference/trainers.html#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="reference/utils.html">torchrl._utils package</a><ul>

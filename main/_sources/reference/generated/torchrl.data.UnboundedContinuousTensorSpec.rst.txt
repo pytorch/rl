@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-UnboundedContinuousTensorSpec
-=============================
-
-.. autoclass:: UnboundedContinuousTensorSpec
-    :members:
-    :inherited-members:

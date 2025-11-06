@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-DistributionalQValueHook
-========================
-
-.. autoclass:: DistributionalQValueHook
-    :members:

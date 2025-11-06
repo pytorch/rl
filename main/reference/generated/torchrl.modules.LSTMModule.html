@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="ObsDecoder" href="torchrl.modules.ObsDecoder.html" />
-    <link rel="prev" title="LSTM" href="torchrl.modules.LSTM.html" />
+    <link rel="next" title="GRUModule" href="torchrl.modules.GRUModule.html" />
+    <link rel="prev" title="DdpgMlpQNet" href="torchrl.modules.DdpgMlpQNet.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../modules.html">torchrl.modules package</a> &gt;</li>
         
+          <li><a href="../modules_critics.html">Value Networks and Critics</a> &gt;</li>
+        
       <li>LSTMModule</li>
     
     
@@ -499,7 +501,7 @@ that the hidden values are passed from step to step during a rollout.
 <li><p><strong>lstm</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.9)"><em>torch.nn.LSTM</em></a><em>, </em><em>optional</em>) – an LSTM instance to be wrapped.
 Exclusive with other nn.LSTM arguments.</p></li>
 <li><p><strong>default_recurrent_mode</strong> (<em>bool</em><em>, </em><em>optional</em>) – if provided, the recurrent mode if it hasn’t been overridden
-by the <a class="reference internal" href="torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a> context manager / decorator.
+by the <code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code> context manager / decorator.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
@@ -526,7 +528,7 @@ recurrent states of the RNN.</p>
 <p>This module relies on specific <code class="docutils literal notranslate"><span class="pre">recurrent_state</span></code> keys being present in the input
 TensorDicts. To generate a <a class="reference internal" href="torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> transform that will automatically
 add hidden states to the environment TensorDicts, use the method <code class="xref py py-func docutils literal notranslate"><span class="pre">make_tensordict_primer()</span></code>.
-If this class is a submodule in a larger module, the method <a class="reference internal" href="torchrl.modules.utils.get_primers_from_module.html#torchrl.modules.utils.get_primers_from_module" title="torchrl.modules.utils.get_primers_from_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_primers_from_module()</span></code></a> can be called
+If this class is a submodule in a larger module, the method <code class="xref py py-func docutils literal notranslate"><span class="pre">get_primers_from_module()</span></code> can be called
 on the parent module to automatically generate the primer transforms required for all submodules, including this one.</p>
 </div>
 <p class="rubric">Examples</p>
@@ -615,7 +617,7 @@ batched env instance level (i.e., a transformed batch of regular envs).</p>
 in parallel settings where a step involves copying the new recurrent state from <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> to the root
 tensordict, which the meth:<cite>~torchrl.EnvBase.step_mdp</cite> method will not be able to do as the recurrent states
 are not registered within the environment specs.</p>
-<p>See <a class="reference internal" href="torchrl.modules.utils.get_primers_from_module.html#torchrl.modules.utils.get_primers_from_module" title="torchrl.modules.utils.get_primers_from_module"><code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.modules.utils.get_primers_from_module()</span></code></a> for a method to generate all primers for a given
+<p>See <code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.modules.utils.get_primers_from_module()</span></code> for a method to generate all primers for a given
 module.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
@@ -659,10 +661,10 @@ module.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.ObsDecoder.html" class="btn btn-neutral float-right" title="ObsDecoder" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.modules.GRUModule.html" class="btn btn-neutral float-right" title="GRUModule" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.LSTM.html" class="btn btn-neutral" title="LSTM" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.modules.DdpgMlpQNet.html" class="btn btn-neutral" title="DdpgMlpQNet" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

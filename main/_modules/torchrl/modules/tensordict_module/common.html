@@ -834,7 +834,7 @@
     <span class="k">return</span> <span class="n">wrapper_type</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="VmapModule"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.VmapModule.html#torchrl.modules.VmapModule">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VmapModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">VmapModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A TensorDictModule wrapper to vmap over the input.</span>
 
 <span class="sd">    It is intended to be used with modules that accept data with one less batch</span>
@@ -881,7 +881,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">mock_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mock</span> <span class="o">=</span> <span class="n">value</span>
 
-<div class="viewcode-block" id="VmapModule.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.VmapModule.html#torchrl.modules.VmapModule.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="c1"># TODO: there is a risk of segfault if input is not a tensordict.</span>
         <span class="c1"># We should investigate (possibly prevent it c++ side?)</span>
         <span class="n">vmap_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vmap_dim</span>
@@ -894,7 +894,7 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="p">(</span><span class="n">vmap_dim</span><span class="p">,),</span> <span class="p">(</span><span class="n">vmap_dim</span><span class="p">,))(</span><span class="n">tensordict</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">td</span><span class="p">)</span></div></div>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="DistributionalDQNnet"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.DistributionalDQNnet.html#torchrl.modules.DistributionalDQNnet">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DistributionalDQNnet</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>

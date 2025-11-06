@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules.tensordict_module
-
-
-DistributionalQValueActor
-=========================
-
-.. autoclass:: DistributionalQValueActor
-    :members:

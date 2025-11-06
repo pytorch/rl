@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="LLMMaskedCategorical" href="torchrl.modules.LLMMaskedCategorical.html" />
-    <link rel="prev" title="TanhDelta" href="torchrl.modules.TanhDelta.html" />
+    <link rel="next" title="ReparamGradientStrategy" href="torchrl.modules.ReparamGradientStrategy.html" />
+    <link rel="prev" title="NormalParamExtractor" href="torchrl.modules.NormalParamExtractor.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -390,6 +390,8 @@
         
           <li><a href="../modules.html">torchrl.modules package</a> &gt;</li>
         
+          <li><a href="../modules_distributions.html">Distribution Classes</a> &gt;</li>
+        
       <li>OneHotCategorical</li>
     
     
@@ -432,7 +434,7 @@
 <h1>OneHotCategorical<a class="headerlink" href="#onehotcategorical" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.OneHotCategorical">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">OneHotCategorical</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">probs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ReparamGradientStrategy</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">ReparamGradientStrategy.PassThrough</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/discrete.html#OneHotCategorical"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.OneHotCategorical" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">OneHotCategorical</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">probs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.modules.ReparamGradientStrategy.html#torchrl.modules.ReparamGradientStrategy" title="torchrl.modules.distributions.discrete.ReparamGradientStrategy"><span class="pre">ReparamGradientStrategy</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">ReparamGradientStrategy.PassThrough</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/discrete.html#OneHotCategorical"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.OneHotCategorical" title="Permalink to this definition">¶</a></dt>
 <dd><p>One-hot categorical distribution.</p>
 <p>This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
 of the discrete tensors.</p>
@@ -441,7 +443,7 @@ of the discrete tensors.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>logits</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><em>torch.Tensor</em></a>) – event log probabilities (unnormalized)</p></li>
 <li><p><strong>probs</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.9)"><em>torch.Tensor</em></a>) – event probabilities</p></li>
-<li><p><strong>grad_method</strong> (<em>ReparamGradientStrategy</em><em>, </em><em>optional</em>) – <p>strategy to gather
+<li><p><strong>grad_method</strong> (<a class="reference internal" href="torchrl.modules.ReparamGradientStrategy.html#torchrl.modules.ReparamGradientStrategy" title="torchrl.modules.ReparamGradientStrategy"><em>ReparamGradientStrategy</em></a><em>, </em><em>optional</em>) – <p>strategy to gather
 reparameterized samples.
 <code class="docutils literal notranslate"><span class="pre">ReparamGradientStrategy.PassThrough</span></code> will compute the sample gradients</p>
 <blockquote>
@@ -520,10 +522,10 @@ samples if the distribution parameters are batched.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.LLMMaskedCategorical.html" class="btn btn-neutral float-right" title="LLMMaskedCategorical" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.modules.ReparamGradientStrategy.html" class="btn btn-neutral float-right" title="ReparamGradientStrategy" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.TanhDelta.html" class="btn btn-neutral" title="TanhDelta" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.modules.NormalParamExtractor.html" class="btn btn-neutral" title="NormalParamExtractor" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

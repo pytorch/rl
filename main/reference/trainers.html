@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="BatchSubSampler" href="generated/torchrl.trainers.BatchSubSampler.html" />
+    <link rel="next" title="Trainer Basics" href="trainers_basics.html" />
     <link rel="prev" title="RayService" href="generated/torchrl.services.RayService.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -430,448 +430,77 @@
 <h1>torchrl.trainers package<a class="headerlink" href="#torchrl-trainers-package" title="Permalink to this heading">¶</a></h1>
 <p id="ref-trainers">The trainer package provides utilities to write re-usable training scripts. The core idea is to use a
 trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner
-loop the optimization steps. We believe this fits multiple RL training schemes, such as
-on-policy, off-policy, model-based and model-free solutions, offline RL and others.
-More particular cases, such as meta-RL algorithms may have training schemes that differ substantially.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">trainer.train()</span></code> method can be sketched as follows:</p>
-<div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">Trainer loops</span><a class="headerlink" href="#id1" title="Permalink to this code">¶</a></div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        <span class="o">&gt;&gt;&gt;</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
-        <span class="o">...</span>     <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;batch_process&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;pre_steps_log&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_pre_optim_hook</span><span class="p">()</span>  <span class="c1"># &quot;pre_optim_steps&quot;</span>
-        <span class="o">...</span>     <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optim_steps_per_batch</span><span class="p">):</span>
-        <span class="o">...</span>         <span class="n">sub_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;process_optim_batch&quot;</span>
-        <span class="o">...</span>         <span class="n">losses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>  <span class="c1"># &quot;post_loss&quot;</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>  <span class="c1"># &quot;post_optim&quot;</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>  <span class="c1"># &quot;post_optim_log&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_hook</span><span class="p">()</span>  <span class="c1"># &quot;post_steps&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1">#  &quot;post_steps_log&quot;</span>
+loop the optimization steps.</p>
+<section id="key-features">
+<h2>Key Features<a class="headerlink" href="#key-features" title="Permalink to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Modular hook system</strong>: Customize training at 10 different points in the loop</p></li>
+<li><p><strong>Checkpointing support</strong>: Save and restore training state with torch or torchsnapshot</p></li>
+<li><p><strong>Algorithm trainers</strong>: High-level trainers for PPO, SAC with Hydra configuration</p></li>
+<li><p><strong>Builder helpers</strong>: Utilities for constructing collectors, losses, and replay buffers</p></li>
+</ul>
+</section>
+<section id="quick-example">
+<h2>Quick Example<a class="headerlink" href="#quick-example" title="Permalink to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Trainer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers</span><span class="w"> </span><span class="kn">import</span> <span class="n">UpdateWeights</span><span class="p">,</span> <span class="n">LogScalar</span>
 
-<span class="n">There</span> <span class="n">are</span> <span class="mi">10</span> <span class="n">hooks</span> <span class="n">that</span> <span class="n">can</span> <span class="n">be</span> <span class="n">used</span> <span class="ow">in</span> <span class="n">a</span> <span class="n">trainer</span> <span class="n">loop</span><span class="p">:</span>
+<span class="c1"># Create trainer</span>
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">Trainer</span><span class="p">(</span>
+    <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="mi">1000000</span><span class="p">,</span>
+    <span class="n">loss_module</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+<span class="p">)</span>
 
-        <span class="o">&gt;&gt;&gt;</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
-        <span class="o">...</span>     <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;batch_process&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;pre_steps_log&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_pre_optim_hook</span><span class="p">()</span>  <span class="c1"># &quot;pre_optim_steps&quot;</span>
-        <span class="o">...</span>     <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optim_steps_per_batch</span><span class="p">):</span>
-        <span class="o">...</span>         <span class="n">sub_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;process_optim_batch&quot;</span>
-        <span class="o">...</span>         <span class="n">losses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>  <span class="c1"># &quot;post_loss&quot;</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>  <span class="c1"># &quot;post_optim&quot;</span>
-        <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>  <span class="c1"># &quot;post_optim_log&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_hook</span><span class="p">()</span>  <span class="c1"># &quot;post_steps&quot;</span>
-        <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1">#  &quot;post_steps_log&quot;</span>
+<span class="c1"># Register hooks</span>
+<span class="n">UpdateWeights</span><span class="p">(</span><span class="n">collector</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
+<span class="n">LogScalar</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
 
-<span class="n">There</span> <span class="n">are</span> <span class="mi">10</span> <span class="n">hooks</span> <span class="n">that</span> <span class="n">can</span> <span class="n">be</span> <span class="n">used</span> <span class="ow">in</span> <span class="n">a</span> <span class="n">trainer</span> <span class="n">loop</span><span class="p">:</span>
-
-     <span class="o">&gt;&gt;&gt;</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
-     <span class="o">...</span>     <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;batch_process&quot;</span>
-     <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_pre_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;pre_steps_log&quot;</span>
-     <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_pre_optim_hook</span><span class="p">()</span>  <span class="c1"># &quot;pre_optim_steps&quot;</span>
-     <span class="o">...</span>     <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optim_steps_per_batch</span><span class="p">):</span>
-     <span class="o">...</span>         <span class="n">sub_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># &quot;process_optim_batch&quot;</span>
-     <span class="o">...</span>         <span class="n">losses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
-     <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>  <span class="c1"># &quot;post_loss&quot;</span>
-     <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-     <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
-     <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>  <span class="c1"># &quot;post_optim&quot;</span>
-     <span class="o">...</span>         <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_log</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>  <span class="c1"># &quot;post_optim_log&quot;</span>
-     <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_hook</span><span class="p">()</span>  <span class="c1"># &quot;post_steps&quot;</span>
-     <span class="o">...</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_log_hook</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1">#  &quot;post_steps_log&quot;</span>
+<span class="c1"># Train</span>
+<span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
 </pre></div>
 </div>
-</div>
-<p>There are 10 hooks that can be used in a trainer loop: <code class="docutils literal notranslate"><span class="pre">&quot;batch_process&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pre_optim_steps&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;process_optim_batch&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_loss&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_steps&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_optim&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pre_steps_log&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;post_steps_log&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_optim_log&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;optimizer&quot;</span></code>. They are indicated in the comments where they are applied.
-Hooks can be split into 3 categories: <strong>data processing</strong> (<code class="docutils literal notranslate"><span class="pre">&quot;batch_process&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;process_optim_batch&quot;</span></code>),
-<strong>logging</strong> (<code class="docutils literal notranslate"><span class="pre">&quot;pre_steps_log&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_optim_log&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;post_steps_log&quot;</span></code>) and <strong>operations</strong> hook
-(<code class="docutils literal notranslate"><span class="pre">&quot;pre_optim_steps&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_loss&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;post_optim&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;post_steps&quot;</span></code>).</p>
-<ul class="simple">
-<li><p><strong>Data processing</strong> hooks update a tensordict of data. Hooks <code class="docutils literal notranslate"><span class="pre">__call__</span></code> method should accept
-a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> object as input and update it given some strategy.
-Examples of such hooks include Replay Buffer extension (<code class="docutils literal notranslate"><span class="pre">ReplayBufferTrainer.extend</span></code>), data normalization (including normalization
-constants update), data subsampling (:class:<code class="docutils literal notranslate"><span class="pre">~torchrl.trainers.BatchSubSampler</span></code>) and such.</p></li>
-<li><p><strong>Logging</strong> hooks take a batch of data presented as a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> and write in the logger
-some information retrieved from that data. Examples include the <code class="docutils literal notranslate"><span class="pre">LogValidationReward</span></code> hook, the reward
-logger (<code class="docutils literal notranslate"><span class="pre">LogScalar</span></code>) and such. Hooks should return a dictionary (or a None value) containing the
-data to log. The key <code class="docutils literal notranslate"><span class="pre">&quot;log_pbar&quot;</span></code> is reserved to boolean values indicating if the logged value
-should be displayed on the progression bar printed on the training log.</p></li>
-<li><p><strong>Operation</strong> hooks are hooks that execute specific operations over the models, data collectors,
-target network updates and such. For instance, syncing the weights of the collectors using <code class="docutils literal notranslate"><span class="pre">UpdateWeights</span></code>
-or update the priority of the replay buffer using <code class="docutils literal notranslate"><span class="pre">ReplayBufferTrainer.update_priority</span></code> are examples
-of operation hooks. They are data-independent (they do not require a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>
-input), they are just supposed to be executed once at every iteration (or every N iterations).</p></li>
+</section>
+<section id="documentation-sections">
+<h2>Documentation Sections<a class="headerlink" href="#documentation-sections" title="Permalink to this heading">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="trainers_basics.html">Trainer Basics</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="trainers_basics.html#trainer-and-hooks">Trainer and hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="trainers_basics.html#algorithm-specific-trainers">Algorithm-specific trainers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="trainers_basics.html#builders">Builders</a></li>
+<li class="toctree-l2"><a class="reference internal" href="trainers_basics.html#utils">Utils</a></li>
 </ul>
-<p>The hooks provided by TorchRL usually inherit from a common abstract class <code class="docutils literal notranslate"><span class="pre">TrainerHookBase</span></code>,
-and all implement three base methods: a <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> and <code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code> method for
-checkpointing and a <code class="docutils literal notranslate"><span class="pre">register</span></code> method that registers the hook at the default value in the
-trainer. This method takes a trainer and a module name as input. For instance, the following logging
-hook is executed every 10 calls to <code class="docutils literal notranslate"><span class="pre">&quot;post_optim_log&quot;</span></code>:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">LoggingHook</span><span class="p">(</span><span class="n">TrainerHookBase</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="gp">...</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="n">trainer</span><span class="o">.</span><span class="n">register_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;logging_hook&quot;</span><span class="p">)</span>
-<span class="gp">... </span>        <span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
-<span class="gp">...</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">save_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;counter&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">counter</span><span class="p">}</span>
-<span class="gp">...</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">]</span>
-<span class="gp">...</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-<span class="gp">... </span>            <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
-<span class="gp">... </span>            <span class="n">out</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;some_value&quot;</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;some_value&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="s2">&quot;log_pbar&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
-<span class="gp">... </span>        <span class="k">else</span><span class="p">:</span>
-<span class="gp">... </span>            <span class="n">out</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
-<span class="gp">... </span>        <span class="k">return</span> <span class="n">out</span>
-</pre></div>
-</div>
-<section id="checkpointing">
-<h2>Checkpointing<a class="headerlink" href="#checkpointing" title="Permalink to this heading">¶</a></h2>
-<p>The trainer class and hooks support checkpointing, which can be achieved either
-using the <a class="reference external" href="https://github.com/pytorch/torchsnapshot/">torchsnapshot</a> backend or
-the regular torch backend. This can be controlled via the global variable <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND</span></code>:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ CKPT_BACKEND=torchsnapshot python script.py
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">torch</span></code>. The advantage of torchsnapshot over pytorch
-is that it is a more flexible API, which supports distributed checkpointing and
-also allows users to load tensors from a file stored on disk to a tensor with a
-physical storage (which pytorch currently does not support). This allows, for instance,
-to load tensors from and to a replay buffer that would otherwise not fit in memory.</p>
-<p>When building a trainer, one can provide a path where the checkpoints are to
-be written. With the <code class="docutils literal notranslate"><span class="pre">torchsnapshot</span></code> backend, a directory path is expected,
-whereas the <code class="docutils literal notranslate"><span class="pre">torch</span></code> backend expects a file path (typically a  <code class="docutils literal notranslate"><span class="pre">.pt</span></code> file).</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">filepath</span> <span class="o">=</span> <span class="s2">&quot;path/to/dir/or/file&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">Trainer</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">select_keys</span> <span class="o">=</span> <span class="n">SelectKeys</span><span class="p">([</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">select_keys</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># to save to a path</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">save_trainer</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># to load from a path</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">load_from_file</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>The <code class="docutils literal notranslate"><span class="pre">Trainer.train()</span></code> method can be used to execute the above loop with all of
-its hooks, although using the <a class="reference internal" href="generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Trainer</span></code></a> class for its checkpointing capability
-only is also a perfectly valid use.</p>
-</section>
-<section id="trainer-and-hooks">
-<h2>Trainer and hooks<a class="headerlink" href="#trainer-and-hooks" title="Permalink to this heading">¶</a></h2>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.BatchSubSampler.html#torchrl.trainers.BatchSubSampler" title="torchrl.trainers.BatchSubSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BatchSubSampler</span></code></a>(batch_size[, sub_traj_len, ...])</p></td>
-<td><p>Data subsampler for online RL sota-implementations.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.ClearCudaCache.html#torchrl.trainers.ClearCudaCache" title="torchrl.trainers.ClearCudaCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClearCudaCache</span></code></a>(interval)</p></td>
-<td><p>Clears cuda cache at a given interval.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.CountFramesLog.html#torchrl.trainers.CountFramesLog" title="torchrl.trainers.CountFramesLog"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CountFramesLog</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A frame counter hook.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar" title="torchrl.trainers.LogScalar"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogScalar</span></code></a>([key, logname, log_pbar, ...])</p></td>
-<td><p>Generic scalar logger hook for any tensor values in the batch.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html#torchrl.trainers.OptimizerHook" title="torchrl.trainers.OptimizerHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptimizerHook</span></code></a>(optimizer[, loss_components])</p></td>
-<td><p>Add an optimizer for one or more loss components.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.LogValidationReward.html#torchrl.trainers.LogValidationReward" title="torchrl.trainers.LogValidationReward"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogValidationReward</span></code></a>(*, record_interval, ...)</p></td>
-<td><p>Recorder hook for <a class="reference internal" href="generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html#torchrl.trainers.ReplayBufferTrainer" title="torchrl.trainers.ReplayBufferTrainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferTrainer</span></code></a>(replay_buffer[, ...])</p></td>
-<td><p>Replay buffer hook provider.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.RewardNormalizer.html#torchrl.trainers.RewardNormalizer" title="torchrl.trainers.RewardNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardNormalizer</span></code></a>([decay, scale, eps, ...])</p></td>
-<td><p>Reward normalizer hook.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.SelectKeys.html#torchrl.trainers.SelectKeys" title="torchrl.trainers.SelectKeys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelectKeys</span></code></a>(keys)</p></td>
-<td><p>Selects keys in a TensorDict batch.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Trainer</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A generic Trainer class.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.TrainerHookBase.html#torchrl.trainers.TrainerHookBase" title="torchrl.trainers.TrainerHookBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TrainerHookBase</span></code></a>()</p></td>
-<td><p>An abstract hooking class for torchrl Trainer class.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights" title="torchrl.trainers.UpdateWeights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UpdateWeights</span></code></a>(collector, update_weights_interval)</p></td>
-<td><p>A collector weights update hook class.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.TargetNetUpdaterHook.html#torchrl.trainers.TargetNetUpdaterHook" title="torchrl.trainers.TargetNetUpdaterHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TargetNetUpdaterHook</span></code></a>(target_params_updater)</p></td>
-<td><p>A hook for target parameters update.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook" title="torchrl.trainers.UTDRHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UTDRHook</span></code></a>(trainer)</p></td>
-<td><p>Hook for logging Update-to-Data (UTD) ratio during async collection.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="algorithm-specific-trainers-experimental">
-<h2>Algorithm-specific trainers (Experimental)<a class="headerlink" href="#algorithm-specific-trainers-experimental" title="Permalink to this heading">¶</a></h2>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>The following trainers are experimental/prototype features. The API may change in future versions.
-Please report any issues or feedback to help improve these implementations.</p>
-</div>
-<p>TorchRL provides high-level, algorithm-specific trainers that combine the modular components
-into complete training solutions with sensible defaults and comprehensive configuration options.</p>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer" title="torchrl.trainers.algorithms.PPOTrainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PPOTrainer</span></code></a>(*args, **kwargs)</p></td>
-<td><p>PPO (Proximal Policy Optimization) trainer implementation.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer" title="torchrl.trainers.algorithms.SACTrainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SACTrainer</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A trainer class for Soft Actor-Critic (SAC) algorithm.</p></td>
-</tr>
-</tbody>
-</table>
-<section id="algorithm-trainers">
-<h3>Algorithm Trainers<a class="headerlink" href="#algorithm-trainers" title="Permalink to this heading">¶</a></h3>
-<p>TorchRL provides high-level algorithm trainers that offer complete training solutions with minimal code.
-These trainers feature comprehensive configuration systems built on Hydra, enabling both simple usage
-and sophisticated customization.</p>
-<p><strong>Currently Available:</strong></p>
-<ul class="simple">
-<li><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer" title="torchrl.trainers.algorithms.PPOTrainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">PPOTrainer</span></code></a> - Proximal Policy Optimization</p></li>
-<li><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer" title="torchrl.trainers.algorithms.SACTrainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">SACTrainer</span></code></a> - Soft Actor-Critic</p></li>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="trainers_loggers.html">Loggers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.wandb.WandbLogger.html">WandbLogger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.get_logger.html">get_logger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.record.loggers.generate_exp_name.html">generate_exp_name</a></li>
+<li class="toctree-l2"><a class="reference internal" href="trainers_loggers.html#recording-utils">Recording utils</a></li>
 </ul>
-<p><strong>Key Features:</strong></p>
-<ul class="simple">
-<li><p><strong>Complete pipeline</strong>: Environment setup, data collection, and optimization</p></li>
-<li><p><strong>Hydra configuration</strong>: Extensive dataclass-based configuration system</p></li>
-<li><p><strong>Built-in logging</strong>: Rewards, actions, and algorithm-specific metrics</p></li>
-<li><p><strong>Modular design</strong>: Built on existing TorchRL components</p></li>
-<li><p><strong>Minimal code</strong>: Complete SOTA implementations in ~20 lines!</p></li>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="trainers_hooks.html">Training Hooks</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.BatchSubSampler.html">BatchSubSampler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.ClearCudaCache.html">ClearCudaCache</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.CountFramesLog.html">CountFramesLog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.LogScalar.html">LogScalar</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html">OptimizerHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.LogValidationReward.html">LogValidationReward</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html">ReplayBufferTrainer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.RewardNormalizer.html">RewardNormalizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.SelectKeys.html">SelectKeys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html">UpdateWeights</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.TargetNetUpdaterHook.html">TargetNetUpdaterHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.UTDRHook.html">UTDRHook</a></li>
 </ul>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Algorithm trainers are experimental features. The API may change in future versions.
-We welcome feedback and contributions to help improve these implementations!</p>
-</div>
-<section id="quick-start-examples">
-<h4>Quick Start Examples<a class="headerlink" href="#quick-start-examples" title="Permalink to this heading">¶</a></h4>
-<p><strong>PPO Training:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Train PPO on Pendulum-v1 with default settings</span>
-python<span class="w"> </span>sota-implementations/ppo_trainer/train.py
-</pre></div>
-</div>
-<p><strong>SAC Training:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Train SAC on a continuous control task</span>
-python<span class="w"> </span>sota-implementations/sac_trainer/train.py
-</pre></div>
-</div>
-<p><strong>Custom Configuration:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Override parameters for any algorithm</span>
-python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>trainer.total_frames<span class="o">=</span><span class="m">2000000</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>training_env.create_env_fn.base_env.env_name<span class="o">=</span>HalfCheetah-v4<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>networks.policy_network.num_cells<span class="o">=[</span><span class="m">256</span>,256<span class="o">]</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>optimizer.lr<span class="o">=</span><span class="m">0</span>.0003
-</pre></div>
-</div>
-<p><strong>Environment Switching:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Switch environment and logger for any trainer</span>
-python<span class="w"> </span>sota-implementations/sac_trainer/train.py<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>training_env.create_env_fn.base_env.env_name<span class="o">=</span>Walker2d-v4<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="nv">logger</span><span class="o">=</span>tensorboard<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>logger.exp_name<span class="o">=</span>sac_walker2d
-</pre></div>
-</div>
-<p><strong>View Configuration Options:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># See all available options for any trainer</span>
-python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>--help
-python<span class="w"> </span>sota-implementations/sac_trainer/train.py<span class="w"> </span>--help
-</pre></div>
-</div>
-</section>
-<section id="universal-configuration-system">
-<h4>Universal Configuration System<a class="headerlink" href="#universal-configuration-system" title="Permalink to this heading">¶</a></h4>
-<p>All algorithm trainers share a unified configuration architecture organized into logical groups:</p>
-<ul class="simple">
-<li><p><strong>Environment</strong>: <code class="docutils literal notranslate"><span class="pre">training_env.create_env_fn.base_env.env_name</span></code>, <code class="docutils literal notranslate"><span class="pre">training_env.num_workers</span></code></p></li>
-<li><p><strong>Networks</strong>: <code class="docutils literal notranslate"><span class="pre">networks.policy_network.num_cells</span></code>, <code class="docutils literal notranslate"><span class="pre">networks.value_network.num_cells</span></code></p></li>
-<li><p><strong>Training</strong>: <code class="docutils literal notranslate"><span class="pre">trainer.total_frames</span></code>, <code class="docutils literal notranslate"><span class="pre">trainer.clip_norm</span></code>, <code class="docutils literal notranslate"><span class="pre">optimizer.lr</span></code></p></li>
-<li><p><strong>Data</strong>: <code class="docutils literal notranslate"><span class="pre">collector.frames_per_batch</span></code>, <code class="docutils literal notranslate"><span class="pre">replay_buffer.batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">replay_buffer.storage.max_size</span></code></p></li>
-<li><p><strong>Logging</strong>: <code class="docutils literal notranslate"><span class="pre">logger.exp_name</span></code>, <code class="docutils literal notranslate"><span class="pre">logger.project</span></code>, <code class="docutils literal notranslate"><span class="pre">trainer.log_interval</span></code></p></li>
+</li>
 </ul>
-<p><strong>Working Example:</strong></p>
-<p>All trainer implementations follow the same simple pattern:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">hydra</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers.algorithms.configs</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
-
-<span class="nd">@hydra</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">config_path</span><span class="o">=</span><span class="s2">&quot;config&quot;</span><span class="p">,</span> <span class="n">config_name</span><span class="o">=</span><span class="s2">&quot;config&quot;</span><span class="p">,</span> <span class="n">version_base</span><span class="o">=</span><span class="s2">&quot;1.1&quot;</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
-    <span class="n">trainer</span> <span class="o">=</span> <span class="n">hydra</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">instantiate</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">trainer</span><span class="p">)</span>
-    <span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
-
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-    <span class="n">main</span><span class="p">()</span>
-</pre></div>
 </div>
-<p><em>Complete algorithm training with full configurability in ~20 lines!</em></p>
-</section>
-<section id="configuration-classes">
-<h4>Configuration Classes<a class="headerlink" href="#configuration-classes" title="Permalink to this heading">¶</a></h4>
-<p>The trainer system uses a hierarchical configuration system with shared components.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The configuration system requires Python 3.10+ due to its use of modern type annotation syntax.</p>
-</div>
-<p><strong>Algorithm-Specific Trainers:</strong></p>
-<ul class="simple">
-<li><p><strong>PPO</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">PPOTrainerConfig</span></code></a></p></li>
-<li><p><strong>SAC</strong>: <code class="xref py py-class docutils literal notranslate"><span class="pre">SACTrainerConfig</span></code></p></li>
-</ul>
-<p><strong>Shared Configuration Components:</strong></p>
-<ul class="simple">
-<li><p><strong>Environment</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnvConfig</span></code></a>, <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig.html#torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig" title="torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">BatchedEnvConfig</span></code></a></p></li>
-<li><p><strong>Networks</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig" title="torchrl.trainers.algorithms.configs.modules.MLPConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">MLPConfig</span></code></a>, <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html#torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig" title="torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">TanhNormalModelConfig</span></code></a></p></li>
-<li><p><strong>Data</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig" title="torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictReplayBufferConfig</span></code></a>, <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig" title="torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollectorConfig</span></code></a></p></li>
-<li><p><strong>Objectives</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html#torchrl.trainers.algorithms.configs.objectives.PPOLossConfig" title="torchrl.trainers.algorithms.configs.objectives.PPOLossConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">PPOLossConfig</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">SACLossConfig</span></code></p></li>
-<li><p><strong>Optimizers</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdamConfig.html#torchrl.trainers.algorithms.configs.utils.AdamConfig" title="torchrl.trainers.algorithms.configs.utils.AdamConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">AdamConfig</span></code></a>, <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdamWConfig.html#torchrl.trainers.algorithms.configs.utils.AdamWConfig" title="torchrl.trainers.algorithms.configs.utils.AdamWConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">AdamWConfig</span></code></a></p></li>
-<li><p><strong>Logging</strong>: <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig" title="torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">WandbLoggerConfig</span></code></a>, <a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig" title="torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorboardLoggerConfig</span></code></a></p></li>
-</ul>
-</section>
-<section id="algorithm-specific-features">
-<h4>Algorithm-Specific Features<a class="headerlink" href="#algorithm-specific-features" title="Permalink to this heading">¶</a></h4>
-<p><strong>PPOTrainer:</strong></p>
-<ul class="simple">
-<li><p>On-policy learning with advantage estimation</p></li>
-<li><p>Policy clipping and value function optimization</p></li>
-<li><p>Configurable number of epochs per batch</p></li>
-<li><p>Built-in GAE (Generalized Advantage Estimation)</p></li>
-</ul>
-<p><strong>SACTrainer:</strong></p>
-<ul class="simple">
-<li><p>Off-policy learning with replay buffer</p></li>
-<li><p>Entropy-regularized policy optimization</p></li>
-<li><p>Target network soft updates</p></li>
-<li><p>Continuous action space optimization</p></li>
-</ul>
-<p><strong>Future Development:</strong></p>
-<p>The trainer system is actively expanding. Upcoming features include:</p>
-<ul class="simple">
-<li><p>Additional algorithms: TD3, DQN, A2C, DDPG, and more</p></li>
-<li><p>Enhanced distributed training support</p></li>
-<li><p>Advanced configuration validation and error reporting</p></li>
-<li><p>Integration with more TorchRL ecosystem components</p></li>
-</ul>
-<p>See the complete <a class="reference external" href="https://github.com/pytorch/rl/tree/main/torchrl/trainers/algorithms/configs">configuration system documentation</a> for all available options and examples.</p>
-</section>
-</section>
-</section>
-<section id="builders">
-<h2>Builders<a class="headerlink" href="#builders" title="Permalink to this heading">¶</a></h2>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_offpolicy.html#torchrl.trainers.helpers.make_collector_offpolicy" title="torchrl.trainers.helpers.make_collector_offpolicy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_collector_offpolicy</span></code></a>(make_env, ...[, ...])</p></td>
-<td><p>Returns a data collector for off-policy sota-implementations.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_onpolicy.html#torchrl.trainers.helpers.make_collector_onpolicy" title="torchrl.trainers.helpers.make_collector_onpolicy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_collector_onpolicy</span></code></a>(make_env, ...[, ...])</p></td>
-<td><p>Makes a collector in on-policy settings.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.make_dqn_loss.html#torchrl.trainers.helpers.make_dqn_loss" title="torchrl.trainers.helpers.make_dqn_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_dqn_loss</span></code></a>(model, cfg)</p></td>
-<td><p>Builds the DQN loss module.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.make_replay_buffer.html#torchrl.trainers.helpers.make_replay_buffer" title="torchrl.trainers.helpers.make_replay_buffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_replay_buffer</span></code></a>(device, cfg)</p></td>
-<td><p>Builds a replay buffer using the config built from ReplayArgsConfig.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.make_target_updater.html#torchrl.trainers.helpers.make_target_updater" title="torchrl.trainers.helpers.make_target_updater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_target_updater</span></code></a>(cfg, loss_module)</p></td>
-<td><p>Builds a target network weight update object.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.make_trainer.html#torchrl.trainers.helpers.make_trainer" title="torchrl.trainers.helpers.make_trainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_trainer</span></code></a>(collector, loss_module[, ...])</p></td>
-<td><p>Creates a Trainer instance given its constituents.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.parallel_env_constructor.html#torchrl.trainers.helpers.parallel_env_constructor" title="torchrl.trainers.helpers.parallel_env_constructor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parallel_env_constructor</span></code></a>(cfg, **kwargs)</p></td>
-<td><p>Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.sync_async_collector.html#torchrl.trainers.helpers.sync_async_collector" title="torchrl.trainers.helpers.sync_async_collector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_async_collector</span></code></a>(env_fns, env_kwargs[, ...])</p></td>
-<td><p>Runs asynchronous collectors, each running synchronous environments.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.sync_sync_collector.html#torchrl.trainers.helpers.sync_sync_collector" title="torchrl.trainers.helpers.sync_sync_collector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_sync_collector</span></code></a>(env_fns, env_kwargs[, ...])</p></td>
-<td><p>Runs synchronous collectors, each running synchronous environments.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.transformed_env_constructor.html#torchrl.trainers.helpers.transformed_env_constructor" title="torchrl.trainers.helpers.transformed_env_constructor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transformed_env_constructor</span></code></a>(cfg[, ...])</p></td>
-<td><p>Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="utils">
-<h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.correct_for_frame_skip.html#torchrl.trainers.helpers.correct_for_frame_skip" title="torchrl.trainers.helpers.correct_for_frame_skip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">correct_for_frame_skip</span></code></a>(cfg)</p></td>
-<td><p>Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.helpers.get_stats_random_rollout.html#torchrl.trainers.helpers.get_stats_random_rollout" title="torchrl.trainers.helpers.get_stats_random_rollout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_stats_random_rollout</span></code></a>(cfg[, ...])</p></td>
-<td><p>Gathers stas (loc and scale) from an environment using random rollouts.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="loggers">
-<h2>Loggers<a class="headerlink" href="#loggers" title="Permalink to this heading">¶</a></h2>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger" title="torchrl.record.loggers.Logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Logger</span></code></a>(exp_name, log_dir)</p></td>
-<td><p>A template for loggers.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html#torchrl.record.loggers.csv.CSVLogger" title="torchrl.record.loggers.csv.CSVLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">csv.CSVLogger</span></code></a>(exp_name[, log_dir, ...])</p></td>
-<td><p>A minimal-dependency CSV logger.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html#torchrl.record.loggers.mlflow.MLFlowLogger" title="torchrl.record.loggers.mlflow.MLFlowLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mlflow.MLFlowLogger</span></code></a>(exp_name, tracking_uri)</p></td>
-<td><p>Wrapper for the mlflow logger.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html#torchrl.record.loggers.tensorboard.TensorboardLogger" title="torchrl.record.loggers.tensorboard.TensorboardLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorboard.TensorboardLogger</span></code></a>(exp_name[, ...])</p></td>
-<td><p>Wrapper for the Tensoarboard logger.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger" title="torchrl.record.loggers.wandb.WandbLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wandb.WandbLogger</span></code></a>(*args, **kwargs)</p></td>
-<td><p>Wrapper for the wandb logger.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger" title="torchrl.record.loggers.get_logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_logger</span></code></a>(logger_type, logger_name, ...)</p></td>
-<td><p>Get a logger instance of the provided <cite>logger_type</cite>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.generate_exp_name.html#torchrl.record.loggers.generate_exp_name" title="torchrl.record.loggers.generate_exp_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_exp_name</span></code></a>(model_name, experiment_name)</p></td>
-<td><p>Generates an ID (str) for the described experiment using UUID and current date.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="recording-utils">
-<h2>Recording utils<a class="headerlink" href="#recording-utils" title="Permalink to this heading">¶</a></h2>
-<p>Recording utils are detailed <a class="reference internal" href="envs.html#environment-recorders"><span class="std std-ref">here</span></a>.</p>
-<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VideoRecorder</span></code></a>(logger, tag[, in_keys, skip, ...])</p></td>
-<td><p>Video Recorder transform.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.TensorDictRecorder.html#torchrl.record.TensorDictRecorder" title="torchrl.record.TensorDictRecorder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictRecorder</span></code></a>(out_file_base[, ...])</p></td>
-<td><p>TensorDict recorder.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.PixelRenderTransform.html#torchrl.record.PixelRenderTransform" title="torchrl.record.PixelRenderTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PixelRenderTransform</span></code></a>([out_keys, preproc, ...])</p></td>
-<td><p>A transform to call render on the parent environment and register the pixel observation in the tensordict.</p></td>
-</tr>
-</tbody>
-</table>
 </section>
 </section>
 
@@ -883,7 +512,7 @@ python<span class="w"> </span>sota-implementations/sac_trainer/train.py<span cla
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="generated/torchrl.trainers.BatchSubSampler.html" class="btn btn-neutral float-right" title="BatchSubSampler" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="trainers_basics.html" class="btn btn-neutral float-right" title="Trainer Basics" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="generated/torchrl.services.RayService.html" class="btn btn-neutral" title="RayService" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
@@ -921,22 +550,9 @@ python<span class="w"> </span>sota-implementations/sac_trainer/train.py<span cla
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrl.trainers package</a><ul>
-<li><a class="reference internal" href="#checkpointing">Checkpointing</a></li>
-<li><a class="reference internal" href="#trainer-and-hooks">Trainer and hooks</a></li>
-<li><a class="reference internal" href="#algorithm-specific-trainers-experimental">Algorithm-specific trainers (Experimental)</a><ul>
-<li><a class="reference internal" href="#algorithm-trainers">Algorithm Trainers</a><ul>
-<li><a class="reference internal" href="#quick-start-examples">Quick Start Examples</a></li>
-<li><a class="reference internal" href="#universal-configuration-system">Universal Configuration System</a></li>
-<li><a class="reference internal" href="#configuration-classes">Configuration Classes</a></li>
-<li><a class="reference internal" href="#algorithm-specific-features">Algorithm-Specific Features</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#builders">Builders</a></li>
-<li><a class="reference internal" href="#utils">Utils</a></li>
-<li><a class="reference internal" href="#loggers">Loggers</a></li>
-<li><a class="reference internal" href="#recording-utils">Recording utils</a></li>
+<li><a class="reference internal" href="#key-features">Key Features</a></li>
+<li><a class="reference internal" href="#quick-example">Quick Example</a></li>
+<li><a class="reference internal" href="#documentation-sections">Documentation Sections</a></li>
 </ul>
 </li>
 </ul>

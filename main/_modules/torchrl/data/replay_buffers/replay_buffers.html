@@ -2435,7 +2435,7 @@
     <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">tensors</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">list_of_tensor_iterators</span><span class="p">))</span>
 
 
-<div class="viewcode-block" id="ReplayBufferEnsemble"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ReplayBufferEnsemble</span><span class="p">(</span><span class="n">ReplayBuffer</span><span class="p">):</span>
+<div class="viewcode-block" id="ReplayBufferEnsemble"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ReplayBufferEnsemble</span><span class="p">(</span><span class="n">ReplayBuffer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An ensemble of replay buffers.</span>
 
 <span class="sd">    This class allows to read and sample from multiple replay buffers at once.</span>

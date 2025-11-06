@@ -480,8 +480,8 @@ through the <code class="docutils literal notranslate"><span class="pre">codebas
 </li>
 </ul>
 <ul class="simple">
-<li><p><a class="reference internal" href="../reference/envs.html#environment-api"><span class="std std-ref">environments</span></a></p></li>
-<li><p><a class="reference internal" href="../reference/envs.html#id2"><span class="std std-ref">transforms</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/envs_api.html#environment-api"><span class="std std-ref">environments</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/envs_transforms.html#transforms"><span class="std std-ref">transforms</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/modules.html#ref-modules"><span class="std std-ref">models</span></a></p></li>
 </ul>
 <p>To give a sense of what can be achieved with TorchRL’s environments, we will
@@ -753,7 +753,7 @@ actually querying the environment (which can be costly with real-world
 physical systems for instance).</p>
 <p>There are four specs that we must code in our environment:</p>
 <ul class="simple">
-<li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase.observation_spec</span></code>: This will be a <a class="reference internal" href="../reference/generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec" title="torchrl.data.CompositeSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeSpec</span></code></a>
+<li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase.observation_spec</span></code>: This will be a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeSpec</span></code>
 instance where each key is an observation (a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeSpec</span></code> can be
 viewed as a dictionary of specs).</p></li>
 <li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase.action_spec</span></code>: It can be any type of spec, but it is required
@@ -776,7 +776,7 @@ within <code class="docutils literal notranslate"><span class="pre">output_spec<
 <p>In other words, the <code class="docutils literal notranslate"><span class="pre">observation_spec</span></code> and related properties are
 convenient shortcuts to the content of the output and input spec containers.</p>
 <p>TorchRL offers multiple <a class="reference internal" href="../reference/generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>
-<a class="reference internal" href="../reference/data.html#ref-specs"><span class="std std-ref">subclasses</span></a> to
+<span class="xref std std-ref">subclasses</span> to
 encode the environment’s input and output characteristics.</p>
 <section id="specs-shape">
 <h3>Specs shape<a class="headerlink" href="#specs-shape" title="Permalink to this heading">¶</a></h3>

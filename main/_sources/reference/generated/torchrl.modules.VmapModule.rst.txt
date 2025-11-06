@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.modules
-
-
-VmapModule
-==========
-
-.. autoclass:: VmapModule
-    :members:

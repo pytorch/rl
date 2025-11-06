@@ -1,8 +1,0 @@
-﻿.. currentmodule:: torchrl.objectives.value.functional
-
-
-vec_td1_advantage_estimate
-==========================
-
-.. autoclass:: vec_td1_advantage_estimate
-    :members:

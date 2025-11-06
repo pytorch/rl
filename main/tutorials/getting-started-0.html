@@ -554,7 +554,7 @@ fact that it has a <code class="docutils literal notranslate"><span class="pre">
 observation, reward and done state resulting from
 our action.</p>
 <p>We call this format TED, for
-<a class="reference internal" href="../reference/data.html#ted-format"><span class="std std-ref">TorchRL Episode Data format</span></a>. It is
+<span class="xref std std-ref">TorchRL Episode Data format</span>. It is
 the ubiquitous way of representing data in the library, both dynamically like
 here, or statically with offline datasets.</p>
 <p>The last bit of information you need to run a rollout in the environment is
@@ -612,7 +612,7 @@ consecutive observations together.</p>
 <p>In this section, we’ll examine a simple transform, the
 <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter" title="torchrl.envs.transforms.StepCounter"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepCounter</span></code></a> transform.
 The complete list of transforms can be found
-<a class="reference internal" href="../reference/envs.html#id2"><span class="std std-ref">here</span></a>.</p>
+<a class="reference internal" href="../reference/envs_transforms.html#transforms"><span class="std std-ref">here</span></a>.</p>
 <p>The transform is integrated with the environment through a
 <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a>:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">TransformedEnv</span>
@@ -654,7 +654,7 @@ stateless environments.</p></li>
 <li><p>See the more in-depth tutorial about environments
 <a class="reference internal" href="torchrl_envs.html#envs-tuto"><span class="std std-ref">in the dedicated tutorial</span></a>;</p></li>
 <li><p>Check the
-<a class="reference internal" href="../reference/envs.html#marl-environment-api"><span class="std std-ref">multi-agent  environment API</span></a>
+<a class="reference internal" href="../reference/envs_multiagent.html#marl-environment-api"><span class="std std-ref">multi-agent  environment API</span></a>
 if you’re interested in MARL;</p></li>
 <li><p>TorchRL has many tools to interact with the Gym API such as
 a way to register TorchRL envs in the Gym register through

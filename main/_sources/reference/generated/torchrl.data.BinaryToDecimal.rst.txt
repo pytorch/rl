@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-BinaryToDecimal
-===============
-
-.. autoclass:: BinaryToDecimal
-    :members:
-    :inherited-members:

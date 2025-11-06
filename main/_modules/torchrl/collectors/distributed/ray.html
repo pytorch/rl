@@ -972,26 +972,18 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="n">weight_sync_schemes</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span> <span class="o">=</span> <span class="p">{}</span>
 
-            <span class="c1"># Set up weight senders now that remote collectors exist</span>
+            <span class="c1"># Set up weight senders using the new simplified API</span>
             <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">sender</span> <span class="o">=</span> <span class="n">scheme</span><span class="o">.</span><span class="n">create_sender</span><span class="p">()</span>
-                <span class="n">sender</span><span class="o">.</span><span class="n">_model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+                <span class="c1"># Initialize the scheme on the sender (main process) side</span>
+                <span class="c1"># Pass remote collectors as the &quot;workers&quot; for Ray schemes</span>
+                <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">(</span>
+                    <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                    <span class="n">remote_collectors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span>
+                    <span class="n">source_model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="p">)</span>
 
-                <span class="c1"># Register each remote collector as a separate worker</span>
-                <span class="c1"># This follows the same pattern as multiprocess collectors</span>
-                <span class="k">for</span> <span class="n">worker_idx</span><span class="p">,</span> <span class="n">remote_collector</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">):</span>
-                    <span class="c1"># Create a transport for this specific collector</span>
-                    <span class="c1"># Pass the collector as context so the transport knows which one to talk to</span>
-                    <span class="n">sender</span><span class="o">.</span><span class="n">register_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">,</span> <span class="n">remote_collector</span><span class="p">)</span>
-
-                <span class="c1"># Set context and register model</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="s2">&quot;set_context&quot;</span><span class="p">):</span>
-                    <span class="n">sender</span><span class="o">.</span><span class="n">set_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
-
-                <span class="c1"># Store reference to source model for automatic extraction</span>
-                <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
-                    <span class="n">sender</span><span class="o">.</span><span class="n">_source_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span>
-
+                <span class="c1"># Get the configured sender from the scheme</span>
+                <span class="n">sender</span> <span class="o">=</span> <span class="n">scheme</span><span class="o">.</span><span class="n">get_sender</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_weight_senders</span><span class="p">[</span><span class="n">model_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">sender</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Don&#39;t use legacy system</span>

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-MultiOneHotDiscreteTensorSpec
-=============================
-
-.. autoclass:: MultiOneHotDiscreteTensorSpec
-    :members:
-    :inherited-members:

@@ -39,8 +39,6 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="LLMWrapperBase" href="torchrl.modules.llm.LLMWrapperBase.html" />
-    <link rel="prev" title="History" href="torchrl.data.llm.History.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -341,8 +339,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
 </ul>
-<ul class="current">
-<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../index.html">API Reference</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../knowledge_base.html">Knowledge Base</a></li>
@@ -386,10 +384,6 @@
       </li>
 
         
-          <li><a href="../index.html">API Reference</a> &gt;</li>
-        
-          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
-        
       <li>ContentBase</li>
     
     
@@ -432,7 +426,7 @@
 <h1>ContentBase<a class="headerlink" href="#contentbase" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.data.llm.ContentBase">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.llm.</span></span><span class="sig-name descname"><span class="pre">ContentBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type:</span> <span class="pre">&quot;Literal['text'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'image'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'audio'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'video'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'file'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'function_call']&quot;</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_wrap_td_method.&lt;locals&gt;.wrapped_func</span> <span class="pre">at</span> <span class="pre">0x7f011ad723e0&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mime_type:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size:</span> <span class="pre">'int</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">function_name:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">function_args:</span> <span class="pre">'dict</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names=None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/llm/history.html#ContentBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.llm.ContentBase" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.llm.</span></span><span class="sig-name descname"><span class="pre">ContentBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type:</span> <span class="pre">&quot;Literal['text'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'image'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'audio'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'video'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'file'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'function_call']&quot;</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_wrap_td_method.&lt;locals&gt;.wrapped_func</span> <span class="pre">at</span> <span class="pre">0x7f078e1ccea0&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mime_type:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size:</span> <span class="pre">'int</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">function_name:</span> <span class="pre">'str</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">function_args:</span> <span class="pre">'dict</span> <span class="pre">|</span> <span class="pre">None'</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names=None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/llm/history.html#ContentBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.llm.ContentBase" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.llm.ContentBase.cat">
 <span class="sig-name descname"><span class="pre">cat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.llm.ContentBase.cat" title="Permalink to this definition">¶</a></dt>
@@ -1342,15 +1336,6 @@ tensordict. Otherwise they will be discrarded. Default: <code class="docutils li
              
             </div>
             <footer>
-  
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="torchrl.modules.llm.LLMWrapperBase.html" class="btn btn-neutral float-right" title="LLMWrapperBase" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
-      
-      
-        <a href="torchrl.data.llm.History.html" class="btn btn-neutral" title="History" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
-      
-    </div>
   
 
   
