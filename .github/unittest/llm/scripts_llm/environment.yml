@@ -22,3 +22,4 @@ dependencies:
     - transformers
     - datasets
     - vllm
+    - mcp
