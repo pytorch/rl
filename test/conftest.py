@@ -155,3 +155,27 @@ def maybe_fork_ParallelEnv(request):
     ):
         return functools.partial(ParallelEnv, mp_start_method="fork")
     return ParallelEnv
+
+
+# LLM testing fixtures
+@pytest.fixture
+def mock_transformer_model():
+    """Fixture that provides a mock transformer model factory."""
+    from torchrl.testing import MockTransformerModel
+
+    def _make_model(
+        vocab_size: int = 1024, device: torch.device | str | int = "cpu"
+    ) -> MockTransformerModel:
+        """Make a mock transformer model."""
+        device = torch.device(device)
+        return MockTransformerModel(vocab_size, device)
+
+    return _make_model
+
+
+@pytest.fixture
+def mock_tokenizer():
+    """Fixture that provides a mock tokenizer."""
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
