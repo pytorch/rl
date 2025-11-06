@@ -20,6 +20,7 @@ Example:
     >>> tokenizer = services["tokenizer"]
     >>> result = tokenizer.encode.remote(text)
 """
+from __future__ import annotations
 
 from torchrl.services.base import ServiceBase
 from torchrl.services.ray_service import RayService
