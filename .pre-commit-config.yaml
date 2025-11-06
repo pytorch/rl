@@ -50,3 +50,10 @@ repos:
       entry: autoflake --in-place --remove-unused-variables --remove-all-unused-imports
       language: system
       types: [python]
+    - id: check-sphinx-section-underline
+      name: Check Sphinx section underline lengths
+      entry: ./check-sphinx-section-underline --fix
+      language: script
+      files: ^docs/.*\.rst$
+      pass_filenames: true
+      description: Ensure Sphinx section underline lengths match section titles.

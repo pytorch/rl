@@ -14,7 +14,7 @@ The advantages of using a configuration system are:
 - Easy to version control: you can easily version control your configuration file
 
 Quick Start with a Simple Example
-----------------------------------
+---------------------------------
 
 Let's start with a simple example that creates a Gym environment. Here's a minimal configuration file:
 
@@ -65,7 +65,7 @@ TorchRL organizes configurations into several categories using the ``@`` syntax 
 The ``@<target>`` syntax allows you to assign configurations to specific locations in your config structure.
 
 More Complex Example: Parallel Environment with Transforms
------------------------------------------------------------
+----------------------------------------------------------
 
 Here's a more complex example that creates a parallel environment with multiple transforms applied to each worker:
 
@@ -127,7 +127,7 @@ This configuration builds a **parallel environment with 4 workers**, where each 
 4. **Variable interpolation**: ``${transform0}`` and ``${transform1}`` reference the separately defined transform configurations
 
 Getting Available Options
---------------------------
+-------------------------
 
 To explore all available configurations and their parameters, one can use the ``--help`` flag with any TorchRL script:
 
@@ -141,7 +141,7 @@ This shows all configuration groups and their options, making it easy to discove
 
 
 Complete Training Example
---------------------------
+-------------------------
 
 Here's a complete configuration for PPO training:
 
@@ -219,7 +219,7 @@ Here's a complete configuration for PPO training:
       exp_name: my_experiment
 
 Running Experiments
---------------------
+-------------------
 
 Basic Usage
 ~~~~~~~~~~~
@@ -252,7 +252,7 @@ Hyperparameter Sweeps
       training_env.num_workers=2,4,8
 
 Custom Configuration Files
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
