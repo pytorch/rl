@@ -79,7 +79,10 @@ from torchrl.envs.utils import (
     RandomPolicy,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
-from torchrl.weight_update import SharedMemWeightSyncScheme
+from torchrl.weight_update import (
+    MultiProcessWeightSyncScheme,
+    SharedMemWeightSyncScheme,
+)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -1485,12 +1488,12 @@ if __name__ == "__main__":
 
     @pytest.mark.parametrize("use_async", [False, True])
     @pytest.mark.parametrize("cudagraph", [False, True])
+    @pytest.mark.parametrize(
+        "weight_sync_scheme",
+        [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+    )
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
-    def test_update_weights(self, use_async, cudagraph):
-        from torchrl.weight_update.weight_sync_schemes import (
-            MultiProcessWeightSyncScheme,
-        )
-
+    def test_update_weights(self, use_async, cudagraph, weight_sync_scheme):
         def create_env():
             return ContinuousActionVecMockEnv()
 
@@ -1503,6 +1506,9 @@ if __name__ == "__main__":
         collector_class = (
             MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
         )
+        kwargs = {}
+        if weight_sync_scheme is not None:
+            kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
         collector = collector_class(
             [create_env] * 3,
             policy=policy,
@@ -1511,7 +1517,7 @@ if __name__ == "__main__":
             frames_per_batch=20,
             cat_results="stack",
             cudagraph_policy=cudagraph,
-            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+            **kwargs,
         )
         assert "policy" in collector._weight_senders, collector._weight_senders.keys()
         try:
@@ -2857,23 +2863,28 @@ class TestUpdateParams:
             # ["cuda:0", "cuda"],
         ],
     )
-    def test_param_sync(self, give_weights, collector, policy_device, env_device):
-        from torchrl.weight_update.weight_sync_schemes import (
-            MultiProcessWeightSyncScheme,
-        )
-
+    @pytest.mark.parametrize(
+        "weight_sync_scheme",
+        [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+    )
+    def test_param_sync(
+        self, give_weights, collector, policy_device, env_device, weight_sync_scheme
+    ):
         policy = TestUpdateParams.Policy().to(policy_device)
 
         env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
         device = env().device
         env = [env]
+        kwargs = {}
+        if weight_sync_scheme is not None:
+            kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
         col = collector(
             env,
             policy,
             device=device,
             total_frames=200,
             frames_per_batch=10,
-            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+            **kwargs,
         )
         try:
             for i, data in enumerate(col):
@@ -2918,13 +2929,13 @@ class TestUpdateParams:
             # ["cuda:0", "cuda"],
         ],
     )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme",
+        [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+    )
     def test_param_sync_mixed_device(
-        self, give_weights, collector, policy_device, env_device
+        self, give_weights, collector, policy_device, env_device, weight_sync_scheme
     ):
-        from torchrl.weight_update.weight_sync_schemes import (
-            MultiProcessWeightSyncScheme,
-        )
-
         with torch.device("cpu"):
             policy = TestUpdateParams.Policy()
         policy.param = nn.Parameter(policy.param.data.to(policy_device))
@@ -2933,13 +2944,16 @@ class TestUpdateParams:
         env = EnvCreator(lambda: TestUpdateParams.DummyEnv(device=env_device))
         device = env().device
         env = [env]
+        kwargs = {}
+        if weight_sync_scheme is not None:
+            kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
         col = collector(
             env,
             policy,
             device=device,
             total_frames=200,
             frames_per_batch=10,
-            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+            **kwargs,
         )
         try:
             for i, data in enumerate(col):
@@ -3851,7 +3865,7 @@ class TestPolicyFactory:
         if weight_updater == "scheme_shared":
             kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
         elif weight_updater == "scheme_pipe":
-            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
+            kwargs = {"weight_sync_schemes": {"policy": MultiProcessWeightSyncScheme()}}
         elif weight_updater == "weight_updater":
             kwargs = {"weight_updater": self.MPSWeightUpdaterBase(policy_weights, 2)}
         else:
@@ -3870,14 +3884,16 @@ class TestPolicyFactory:
             **kwargs,
         )
 
-        collector.update_policy_weights_()
+        # When using policy_factory, must pass weights explicitly
+        collector.update_policy_weights_(policy_weights)
         try:
             for i, data in enumerate(collector):
                 if i == 2:
                     assert (data["action"] != 0).any()
                     # zero the policy
                     policy_weights.data.zero_()
-                    collector.update_policy_weights_()
+                    # When using policy_factory, must pass weights explicitly
+                    collector.update_policy_weights_(policy_weights)
                 elif i == 3:
                     assert (data["action"] == 0).all(), data["action"]
                     break
@@ -3973,11 +3989,11 @@ class TestAsyncCollection:
     @pytest.mark.parametrize(
         "cls", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
     )
-    def test_start_update_policy(self, total_frames, cls):
-        from torchrl.weight_update.weight_sync_schemes import (
-            MultiProcessWeightSyncScheme,
-        )
-
+    @pytest.mark.parametrize(
+        "weight_sync_scheme",
+        [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+    )
+    def test_start_update_policy(self, total_frames, cls, weight_sync_scheme):
         rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
         env = CountingEnv()
         m = nn.Linear(env.observation_spec["observation"].shape[-1], 1)
@@ -3998,8 +4014,8 @@ class TestAsyncCollection:
 
         # Add weight sync schemes for multi-process collectors
         kwargs = {}
-        if cls != SyncDataCollector:
-            kwargs["weight_sync_schemes"] = {"policy": MultiProcessWeightSyncScheme()}
+        if cls != SyncDataCollector and weight_sync_scheme is not None:
+            kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
 
         collector = cls(
             env,
@@ -4009,6 +4025,15 @@ class TestAsyncCollection:
             frames_per_batch=16,
             **kwargs,
         )
+        if not isinstance(collector, SyncDataCollector):
+            if weight_sync_scheme is not None:
+                assert isinstance(
+                    collector._weight_sync_schemes["policy"], weight_sync_scheme
+                )
+            else:
+                assert isinstance(
+                    collector._weight_sync_schemes["policy"], SharedMemWeightSyncScheme
+                )
         try:
             collector.start()
             for _ in range(10):

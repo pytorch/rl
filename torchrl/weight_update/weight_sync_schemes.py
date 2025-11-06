@@ -757,6 +757,18 @@ class WeightSender:
         self._transport: TransportBackend = None
         self._model_id = "policy"  # Default model ID
         self._strategy = _get_strategy(scheme.strategy)
+        self._context_ref = None  # weakref to collector for model resolution
+
+    def set_context(self, context: Any, model_id: str | None = None) -> None:
+        """Set the context object (collector) for model resolution.
+
+        Args:
+            context: The collector instance.
+            model_id: Optional model identifier (for compatibility with RayModuleTransformSender).
+        """
+        self._context_ref = weakref.ref(context)
+        if model_id is not None:
+            self._model_id = model_id
 
     def register_worker(self, worker_idx: int, pipe_or_context: Any) -> None:
         """Register a worker's communication pipe.
@@ -780,7 +792,8 @@ class WeightSender:
         """Send weights to ALL workers for this model.
 
         Args:
-            weights: Weights to send.
+            weights: Weights to send (can be None, nn.Module, TensorDict, etc.).
+                     Will be prepared by the scheme's prepare_weights method.
 
         Note:
             This method sends weights to all workers in parallel (non-blocking),
@@ -788,15 +801,27 @@ class WeightSender:
             sequentially when there are many workers.
         """
         model_id = getattr(self, "_model_id", "policy")
+
+        # Get context for model resolution if available
+        context = self._context_ref() if self._context_ref is not None else None
+
+        # Let the scheme prepare the weights (extract, convert, cache lookup, etc.)
+        prepared_weights = self._scheme.prepare_weights(
+            weights=weights,
+            model_id=model_id,
+            strategy=self._strategy,
+            context=context,
+        )
+
         transports = list(self._iterate_transports())
 
         # Send to all workers first (non-blocking if transport supports it)
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(model_id, weights)
+                transport.send_weights_async(model_id, prepared_weights)
             else:
                 # Fallback for transports that don't support async send
-                transport.send_weights(model_id, weights)
+                transport.send_weights(model_id, prepared_weights)
 
         # Wait for all acknowledgments
         for transport in transports:
@@ -1022,6 +1047,55 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         """
         return WeightReceiver(self)
 
+    def prepare_weights(
+        self,
+        weights: Any,
+        model_id: str,
+        strategy: WeightStrategy,
+        context: Any = None,
+    ) -> Any:
+        """Prepare weights for sending.
+
+        This method handles weight extraction, conversion, and any scheme-specific
+        preparation (e.g., cache lookups for SharedMemWeightSyncScheme).
+
+        Args:
+            weights: Raw weights input (can be None, nn.Module, TensorDict, dict, str reference, etc.)
+            model_id: The model identifier (e.g., "policy")
+            strategy: WeightStrategy for extracting/converting weights
+            context: Optional context (e.g., collector) for model resolution
+
+        Returns:
+            Prepared weights ready to send via transport
+        """
+        # Default implementation: extract from model or pass through
+        if weights is None and context is not None:
+            # Try to resolve and extract from model in context
+            try:
+                model = _resolve_model(context, model_id)
+                return strategy.extract_weights(model)
+            except (AttributeError, KeyError):
+                pass
+            # Try fallback policy
+            if model_id == "policy" and hasattr(context, "_fallback_policy"):
+                if context._fallback_policy is not None:
+                    return strategy.extract_weights(context._fallback_policy)
+            return None
+
+        if isinstance(weights, nn.Module):
+            return strategy.extract_weights(weights)
+        elif isinstance(weights, str):
+            # String reference to model
+            if context is not None:
+                model = _resolve_model(context, weights)
+                return strategy.extract_weights(model)
+            raise ValueError(
+                f"Cannot resolve string reference '{weights}' without context"
+            )
+        else:
+            # Already extracted weights (TensorDict, dict, etc.)
+            return weights
+
 
 class MultiProcessWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization for multiprocess operations using pipes.
@@ -1105,6 +1179,42 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         if pipe_or_context is not None:
             self._shared_transport.register_pipe(pipe_or_context)
         return self._shared_transport
+
+    def prepare_weights(
+        self,
+        weights: Any,
+        model_id: str,
+        strategy: WeightStrategy,
+        context: Any = None,
+    ) -> Any:
+        """Prepare weights for SharedMemWeightSyncScheme.
+
+        For SharedMemWeightSyncScheme, we prioritize using cached shared memory weights
+        from the context (collector) to avoid extracting fresh (non-shared) weights.
+
+        Args:
+            weights: Raw weights input
+            model_id: The model identifier
+            strategy: WeightStrategy for extracting/converting weights
+            context: Optional context (e.g., collector) for cache lookup
+
+        Returns:
+            Shared memory weights ready to send
+        """
+        # If no weights provided, check for cached shared memory weights in collector
+        if weights is None and context is not None:
+            if model_id == "policy" and hasattr(context, "_policy_weights_dict"):
+                policy_device = (
+                    context.policy_device
+                    if not isinstance(context.policy_device, (list, tuple))
+                    else context.policy_device[0]
+                )
+                cached_weights = context._policy_weights_dict.get(policy_device)
+                if cached_weights is not None:
+                    return cached_weights
+
+        # Fall back to default behavior
+        return super().prepare_weights(weights, model_id, strategy, context)
 
 
 class NoWeightSyncScheme(WeightSyncScheme):
