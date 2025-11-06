@@ -337,7 +337,7 @@ You can easily switch between using a shared service or local processes:
     )
 
 Conditional Usage Pattern
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can decide at runtime whether to use a distributed service based on your configuration:
 
@@ -509,7 +509,6 @@ Service Registry
     :template: rl_template.rst
 
     get_services
-    reset_services
     ServiceBase
     RayService
 
