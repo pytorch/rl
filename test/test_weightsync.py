@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import pickle
+import time
 
 import pytest
 import torch
@@ -16,13 +19,19 @@ from torch import multiprocessing as mp
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.weight_update.weight_sync_schemes import (
     _resolve_model,
+    DistributedWeightSyncScheme,
     MPTransport,
     MultiProcessWeightSyncScheme,
     NoWeightSyncScheme,
+    RayModuleTransformScheme,
+    RayWeightSyncScheme,
+    RPCWeightSyncScheme,
     SharedMemTransport,
     SharedMemWeightSyncScheme,
     WeightStrategy,
 )
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 
 def worker_update_policy(pipe, timeout=5.0):
@@ -32,9 +41,8 @@ def worker_update_policy(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-    receiver = scheme.create_receiver()
-    receiver.register_model(policy)
-    receiver.register_worker_transport(pipe)
+    scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+    receiver = scheme.get_receiver()
 
     if receiver._transport.pipe.poll(timeout):
         data, msg = receiver._transport.pipe.recv()
@@ -52,9 +60,8 @@ def worker_update_policy_tensordict(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-    receiver = scheme.create_receiver()
-    receiver.register_model(policy)
-    receiver.register_worker_transport(pipe)
+    scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+    receiver = scheme.get_receiver()
 
     if receiver._transport.pipe.poll(timeout):
         data, msg = receiver._transport.pipe.recv()
@@ -74,8 +81,6 @@ def worker_shared_mem(pipe, timeout=10.0):
             model_id, shared_weights = data
             shared_weights.to_module(policy)
             pipe.send((None, "registered"))
-
-    import time
 
     time.sleep(0.5)
 
@@ -192,39 +197,46 @@ class TestWeightStrategies:
 
 
 class TestWeightSyncSchemes:
+    """Tests for weight sync schemes using the new simplified API.
+
+    Lower-level transport and legacy API tests are in TestTransportBackends.
+    """
+
     def test_multiprocess_scheme_state_dict(self):
         parent_pipe, child_pipe = mp.Pipe()
 
         scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-        sender = scheme.create_sender()
-        sender.register_worker(0, parent_pipe)
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+        sender = scheme.get_sender()
 
         proc = mp.Process(target=worker_update_policy, args=(child_pipe,))
-        proc.start()
+        try:
+            proc.start()
 
-        weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
-        sender.update_weights(weights)
-
-        proc.join(timeout=10.0)
-        assert not proc.is_alive()
+            weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
+            sender.send(weights)
+        finally:
+            proc.join(timeout=10.0)
+            assert not proc.is_alive()
 
     def test_multiprocess_scheme_tensordict(self):
         parent_pipe, child_pipe = mp.Pipe()
 
         scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-        sender = scheme.create_sender()
-        sender.register_worker(0, parent_pipe)
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+        sender = scheme.get_sender()
 
         proc = mp.Process(target=worker_update_policy_tensordict, args=(child_pipe,))
-        proc.start()
+        try:
+            proc.start()
 
-        weights = TensorDict(
-            {"weight": torch.ones(2, 4), "bias": torch.ones(2)}, batch_size=[]
-        )
-        sender.update_weights(weights)
-
-        proc.join(timeout=10.0)
-        assert not proc.is_alive()
+            weights = TensorDict(
+                {"weight": torch.ones(2, 4), "bias": torch.ones(2)}, batch_size=[]
+            )
+            sender.send(weights)
+        finally:
+            proc.join(timeout=10.0)
+            assert not proc.is_alive()
 
     def test_shared_mem_scheme(self):
         shared_buffer = TensorDict(
@@ -269,6 +281,51 @@ class TestWeightSyncSchemes:
 
         weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
         transport.send_weights("policy", weights)
+
+    @classmethod
+    def _worker_with_receive(cls, pipe, scheme):
+        policy = nn.Linear(4, 2)
+        with torch.no_grad():
+            policy.weight.fill_(0.0)
+            policy.bias.fill_(0.0)
+
+        scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+        receiver = scheme.get_receiver()
+
+        # Non-blocking receive should return False when no data
+        result = receiver.receive(timeout=0.001)
+        assert result is False
+
+        # Now actually receive the weights
+        result = receiver.receive(timeout=5.0)
+        assert result is True
+
+        # Check weights were applied
+        return policy.weight.sum().item(), policy.bias.sum().item()
+
+    def test_receiver_receive_method(self):
+        """Test the new non-blocking receive() method."""
+
+        parent_pipe, child_pipe = mp.Pipe()
+
+        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+        sender = scheme.get_sender()
+
+        proc = mp.Process(target=self._worker_with_receive, args=(child_pipe, scheme))
+        try:
+            proc.start()
+
+            # Give worker time to call receive with no data
+
+            time.sleep(0.1)
+
+            weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
+            sender.send(weights)
+
+        finally:
+            proc.join(timeout=10.0)
+            assert not proc.is_alive()
 
 
 class TestCollectorIntegration:
@@ -566,6 +623,239 @@ def test_weight_strategy_parametrized(strategy):
 
     assert torch.allclose(policy.weight, target.weight)
     assert torch.allclose(policy.bias, target.bias)
+
+
+class TestSerializeScheme:
+    """Test that WeightSyncScheme instances can be serialized after initialization.
+
+    This is critical for multiprocessing and Ray, where schemes may be pickled
+    and sent across process boundaries. The _sender and _receiver attributes
+    contain non-serializable objects (pipes, weak references, etc.) and must
+    be excluded from serialization.
+    """
+
+    def test_multiprocess_scheme_serialize_before_init(self):
+        """Test that uninitialized scheme can be pickled."""
+        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved
+        assert restored.strategy == "state_dict"
+        assert restored._sender is None
+        assert restored._receiver is None
+        assert not restored._initialized_on_sender
+        assert not restored._initialized_on_worker
+
+    def test_multiprocess_scheme_serialize_after_sender_init(self):
+        """Test that initialized sender can be pickled (excluding runtime state)."""
+        parent_pipe, child_pipe = mp.Pipe()
+
+        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+
+        # Scheme now has _sender with non-serializable pipes
+        assert scheme._sender is not None
+        assert scheme._initialized_on_sender
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved but runtime state is cleared
+        assert restored.strategy == "state_dict"
+        assert restored._sender is None  # Runtime state excluded
+        assert restored._receiver is None
+        assert not restored._initialized_on_sender  # Reset
+        assert not restored._initialized_on_worker
+
+        # Clean up
+        parent_pipe.close()
+        child_pipe.close()
+
+    def test_shared_mem_scheme_serialize_before_init(self):
+        """Test that uninitialized SharedMemWeightSyncScheme can be pickled."""
+        scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved
+        assert restored.strategy == "tensordict"
+        assert restored._sender is None
+        assert restored._receiver is None
+
+    def test_shared_mem_scheme_serialize_after_init(self):
+        """Test that initialized SharedMemWeightSyncScheme can be pickled."""
+        parent_pipe, child_pipe = mp.Pipe()
+
+        # Create shared buffer
+        shared_buffer = TensorDict(
+            {"weight": torch.zeros(2, 4), "bias": torch.zeros(2)}, batch_size=[]
+        ).share_memory_()
+
+        scheme = SharedMemWeightSyncScheme(
+            policy_weights={"policy": shared_buffer},
+            strategy="tensordict",
+            auto_register=False,
+        )
+
+        def init_on_sender(scheme, child_pipe):
+            (model_id, data), msg = child_pipe.recv()
+            if msg == "register_shared_weights":
+                child_pipe.send((None, "registered"))
+            else:
+                raise ValueError(f"Expected 'register_shared_weights' but got {msg}")
+
+        # Initialize the scheme with the pipes, in 2 separate threads because init requires acknowledgement from the worker
+        import threading
+
+        future_sender = threading.Thread(
+            target=scheme.init_on_sender,
+            kwargs={"model_id": "policy", "pipes": [parent_pipe]},
+        )
+        future_receiver = threading.Thread(
+            target=init_on_sender,
+            kwargs={"scheme": scheme, "child_pipe": child_pipe},
+        )
+        future_receiver.start()
+        future_sender.start()
+        future_receiver.join()
+        future_sender.join()
+
+        # Scheme now has _sender with non-serializable state
+        assert scheme._sender is not None
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved but runtime state is cleared
+        assert restored.strategy == "tensordict"
+        assert restored._sender is None
+        assert not restored._initialized_on_sender
+
+        # Note: policy_weights dict is preserved (but may need re-sharing)
+        assert "policy" in restored.policy_weights
+
+        # Clean up
+        parent_pipe.close()
+        child_pipe.close()
+
+    def test_no_weight_sync_scheme_serialize(self):
+        """Test that NoWeightSyncScheme can be pickled."""
+        scheme = NoWeightSyncScheme()
+        scheme.init_on_sender(model_id="policy")
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that it's still a no-op scheme
+        assert restored._sender is None
+        assert restored._receiver is None
+
+    @pytest.mark.skipif(
+        not torch.distributed.is_available(), reason="torch.distributed not available"
+    )
+    def test_distributed_scheme_serialize_before_init(self):
+        """Test that uninitialized DistributedWeightSyncScheme can be pickled."""
+
+        scheme = DistributedWeightSyncScheme(backend="gloo", sync=True)
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved
+        assert restored.backend == "gloo"
+        assert restored.sync is True
+        assert restored._sender is None
+        assert restored._receiver is None
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not available")
+    def test_ray_weight_sync_scheme_serialize_before_init(self):
+        """Test that uninitialized RayWeightSyncScheme can be pickled."""
+        scheme = RayWeightSyncScheme(strategy="state_dict")
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved
+        assert restored.strategy == "state_dict"
+        assert restored._sender is None
+        assert restored._receiver is None
+
+    @pytest.mark.skipif(not _has_ray, reason="Ray not available")
+    def test_ray_module_transform_scheme_serialize_before_init(self):
+        """Test that uninitialized RayModuleTransformScheme can be pickled."""
+
+        scheme = RayModuleTransformScheme(strategy="tensordict")
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved
+        assert restored.strategy == "tensordict"
+        assert restored._sender is None
+        assert restored._receiver is None
+
+    @pytest.mark.skipif(
+        not torch.distributed.is_available(), reason="torch.distributed not available"
+    )
+    def test_rpc_weight_sync_scheme_serialize_before_init(self):
+        """Test that uninitialized RPCWeightSyncScheme can be pickled."""
+
+        scheme = RPCWeightSyncScheme(strategy="state_dict")
+
+        # Serialize and deserialize
+        pickled = pickle.dumps(scheme)
+        restored = pickle.loads(pickled)
+
+        # Check that configuration is preserved
+        assert restored.strategy == "state_dict"
+        assert restored._sender is None
+        assert restored._receiver is None
+
+    def test_scheme_reinitialization_after_unpickle(self):
+        """Test that a scheme can be re-initialized after unpickling.
+
+        This is the expected workflow: pickle a scheme, unpickle it in a worker,
+        then call init_on_worker() to establish new runtime resources.
+        """
+        # Initialize and pickle a scheme
+        parent_pipe, child_pipe = mp.Pipe()
+
+        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+        scheme.init_on_sender(model_id="policy", pipes=[parent_pipe])
+
+        pickled = pickle.dumps(scheme)
+
+        # Clean up original
+        parent_pipe.close()
+
+        # Unpickle and re-initialize
+        restored = pickle.loads(pickled)
+
+        # Should be able to initialize again with new pipes
+        new_parent, new_child = mp.Pipe()
+
+        # Re-initialize on sender
+        restored.init_on_sender(model_id="policy", pipes=[new_parent])
+        sender = restored.get_sender()
+
+        assert sender is not None
+        assert restored._initialized_on_sender
+
+        # Clean up
+        new_parent.close()
+        new_child.close()
+        child_pipe.close()
 
 
 if __name__ == "__main__":

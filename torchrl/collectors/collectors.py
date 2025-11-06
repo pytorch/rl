@@ -471,7 +471,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 processed_weights = self._extract_weights_if_needed(
                     weights, target_model_id
                 )
-                self._weight_senders[target_model_id].update_weights(processed_weights)
+                # Use new send() API with worker_ids support
+                self._weight_senders[target_model_id].send(
+                    weights=processed_weights, worker_ids=worker_ids
+                )
         elif self._weight_updater is not None:
             # unreachable
             raise RuntimeError
@@ -533,7 +536,12 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return None
 
     @abc.abstractmethod
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -2041,23 +2049,35 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._shuttle["collector"] = collector_metadata
 
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         """Shuts down all workers and/or closes the local environment.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
                 No effect for this class.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+            raise_on_error (bool, optional): Whether to raise an error if the shutdown fails. Defaults to `True`.
         """
-        if not self.closed:
-            self.closed = True
-            del self._shuttle
-            if self._use_buffers:
-                del self._final_rollout
-            if close_env and not self.env.is_closed:
-                self.env.close()
-            del self.env
-        return
+        try:
+            if not self.closed:
+                self.closed = True
+                del self._shuttle
+                if self._use_buffers:
+                    del self._final_rollout
+                if close_env and not self.env.is_closed:
+                    self.env.close(raise_if_closed=raise_on_error)
+                del self.env
+            return
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     def __del__(self):
         try:
@@ -2125,9 +2145,10 @@ class SyncDataCollector(DataCollectorBase):
         try:
             env_str = indent(f"env={self.env}", 4 * " ")
             policy_str = indent(f"policy={self._wrapped_policy}", 4 * " ")
-            td_out_str = indent(
-                f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
-            )
+            td_out_str = repr(getattr(self, "_final_rollout", None))
+            if len(td_out_str) > 50:
+                td_out_str = td_out_str[:50] + "..."
+            td_out_str = indent(f"td_out={td_out_str}", 4 * " ")
             string = (
                 f"{self.__class__.__name__}("
                 f"\n{env_str},"
@@ -2180,6 +2201,34 @@ class SyncDataCollector(DataCollectorBase):
         """Get an attribute from the replay buffer."""
         # send command to rb to return the attr
         return getattr(self.replay_buffer, attr)
+
+    def get_model(self, model_id: str):
+        """Get model instance by ID (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier (e.g., "policy", "value_net")
+
+        Returns:
+            The model instance
+
+        Raises:
+            ValueError: If model_id is not recognized
+        """
+        if model_id == "policy":
+            # Return the unwrapped policy instance for weight synchronization
+            # The unwrapped policy has the same parameter structure as what's
+            # extracted in the main process, avoiding key mismatches when
+            # the policy is auto-wrapped (e.g., WrappablePolicy -> TensorDictModule)
+            if hasattr(self, "policy") and self.policy is not None:
+                return self.policy
+            else:
+                raise ValueError(f"No policy found for model_id '{model_id}'")
+        else:
+            # Try to resolve via attribute access
+            if hasattr(self, model_id):
+                return getattr(self, model_id)
+            else:
+                raise ValueError(f"Unknown model_id: {model_id}")
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -2527,7 +2576,11 @@ class _MultiDataCollector(DataCollectorBase):
         self._setup_preemptive_threshold(preemptive_threshold)
 
         # Run worker processes
-        self._run_processes()
+        try:
+            self._run_processes()
+        except Exception as e:
+            self.shutdown(raise_on_error=False)
+            raise e
 
         # Set up frame tracking and other options
         self._exclude_private_keys = True
@@ -2917,15 +2970,7 @@ class _MultiDataCollector(DataCollectorBase):
                 1, torch.get_num_threads() - total_workers
             )  # 1 more thread for this proc
 
-        # Initialize weight senders for multiprocess collectors
-        if self._weight_sync_schemes:
-            # Create one sender per model using scheme's factory method
-            for model_id, scheme in self._weight_sync_schemes.items():
-                sender = scheme.create_sender()
-                sender._model_id = model_id
-                if hasattr(sender, "set_context"):
-                    sender.set_context(self, model_id)
-                self._weight_senders[model_id] = sender
+        # Weight senders will be initialized after workers are ready (via init_on_sender)
         torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
@@ -3037,11 +3082,7 @@ also that the state dict is synchronised across processes if needed."""
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
 
-                # Register worker with senders
-                if self._weight_senders:
-                    for _, sender in self._weight_senders.items():
-                        sender.register_worker(i, pipe_parent)
-
+        # Worker registration now handled by init_on_sender() after workers are ready
         for i, pipe_parent in enumerate(self.pipes):
             pipe_parent.poll(timeout=INSTANTIATE_TIMEOUT)
             try:
@@ -3093,30 +3134,19 @@ also that the state dict is synchronised across processes if needed."""
                     # Legacy string error message
                     raise RuntimeError(msg)
 
-        # For SharedMemWeightSyncScheme, pre-register shared weights now that workers are ready
-        # This avoids deadlock when workers are busy collecting and can't respond to registration messages
+        # Initialize all weight sync schemes now that workers are ready
+        # This calls init_on_sender() for each scheme which:
+        # 1. Creates transports for all workers
+        # 2. Creates and configures the sender
+        # 3. For SharedMemWeightSyncScheme, distributes buffer references to avoid deadlock
         if self._weight_sync_schemes:
             for model_id, scheme in self._weight_sync_schemes.items():
-                if isinstance(scheme, SharedMemWeightSyncScheme):
-                    sender = self._weight_senders[model_id]
-                    # Get the shared memory weights from _policy_weights_dict
-                    # Use prepare_weights with None to trigger cache lookup
-                    from torchrl.weight_update.weight_sync_schemes import _get_strategy
-
-                    strategy = _get_strategy(scheme.strategy)
-                    weights = scheme.prepare_weights(
-                        weights=None,
-                        model_id=model_id,
-                        strategy=strategy,
-                        context=self,
-                    )
-                    if weights is not None:
-                        # Register the shared weights directly with each transport
-                        # This ensures the transports use the same shared memory buffer
-                        # that we'll update later, rather than creating a clone
-                        for transport in sender._iterate_transports():
-                            if hasattr(transport, "register_weights"):
-                                transport.register_weights(model_id, weights)
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_sender"):
+                    scheme.init_on_sender(model_id=model_id, context=self)
+                    # Get the initialized sender
+                    self._weight_senders[model_id] = scheme.get_sender()
+                # else: keep using legacy _weight_senders initialization from before
 
         self.queue_out = queue_out
         self.closed = False
@@ -3231,18 +3261,30 @@ also that the state dict is synchronised across processes if needed."""
             # __del__ will not affect the program.
             pass
 
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         """Shuts down all processes. This operation is irreversible.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+            raise_on_error (bool, optional): Whether to raise an error if the shutdown fails. Defaults to `True`.
         """
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
             )
-        self._shutdown_main(timeout)
+        try:
+            self._shutdown_main(timeout)
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     def _shutdown_main(self, timeout: float | None = None) -> None:
         if timeout is None:
@@ -3478,6 +3520,52 @@ also that the state dict is synchronised across processes if needed."""
         """Get an attribute from the replay buffer."""
         return getattr(self.replay_buffer, attr)
 
+    def get_model(self, model_id: str):
+        """Get model instance by ID (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier (e.g., "policy", "value_net")
+
+        Returns:
+            The model instance
+
+        Raises:
+            ValueError: If model_id is not recognized
+        """
+        if model_id == "policy":
+            # Return the fallback policy instance
+            if hasattr(self, "_fallback_policy") and self._fallback_policy is not None:
+                return self._fallback_policy
+            elif hasattr(self, "policy") and self.policy is not None:
+                return self.policy
+            else:
+                raise ValueError(f"No policy found for model_id '{model_id}'")
+        else:
+            # Try to resolve via attribute access
+            if hasattr(self, model_id):
+                return getattr(self, model_id)
+            else:
+                raise ValueError(f"Unknown model_id: {model_id}")
+
+    def get_cached_weights(self, model_id: str):
+        """Get cached shared memory weights if available (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            Cached TensorDict weights or None if not available
+        """
+        if model_id == "policy" and hasattr(self, "_policy_weights_dict"):
+            # Get the policy device (first device if list)
+            policy_device = self.policy_device
+            if isinstance(policy_device, (list, tuple)):
+                policy_device = policy_device[0] if len(policy_device) > 0 else None
+
+            # Return cached weights for this device
+            return self._policy_weights_dict.get(policy_device)
+        return None
+
 
 @accept_remote_rref_udf_invocation
 class MultiSyncDataCollector(_MultiDataCollector):
@@ -3597,7 +3685,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
@@ -3606,7 +3699,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             del self.out_buffer
         if hasattr(self, "buffers"):
             del self.buffers
-        return super().shutdown(timeout=timeout)
+        try:
+            return super().shutdown(timeout=timeout)
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -3998,14 +4097,19 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
             )
-        return super().shutdown(timeout=timeout)
+        return super().shutdown(timeout=timeout, raise_on_error=raise_on_error)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4360,8 +4464,15 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
-        return super().shutdown(timeout=timeout, close_env=close_env)
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
+        return super().shutdown(
+            timeout=timeout, close_env=close_env, raise_on_error=raise_on_error
+        )
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4449,13 +4560,20 @@ def _main_async_collector(
         # Set up weight receivers for worker process
         if weight_sync_schemes:
             inner_collector._weight_receivers = {}
+            inner_collector.pipe = pipe_child  # Add pipe attribute for context
             for model_id, scheme in weight_sync_schemes.items():
-                receiver = scheme.create_receiver()
-                receiver.set_context(inner_collector)
-                receiver.register_worker_transport(pipe_child)
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_worker"):
+                    scheme.init_on_worker(model_id=model_id, context=inner_collector)
+                    receiver = scheme.get_receiver()
+                else:
+                    # Legacy API
+                    receiver = scheme.create_receiver()
+                    receiver.set_context(inner_collector)
+                    receiver.register_worker_transport(pipe_child)
 
-                model = _resolve_model(inner_collector, model_id)
-                receiver.register_model(model)
+                    model = _resolve_model(inner_collector, model_id)
+                    receiver.register_model(model)
 
                 inner_collector._weight_receivers[model_id] = receiver
         else:
@@ -4591,12 +4709,21 @@ def _main_async_collector(
                 # Only apply if the model is an nn.Module (has learnable parameters)
                 try:
                     model = receiver._resolve_model_ref()
-                    if isinstance(model, nn.Module):
-                        receiver.apply_weights(shared_buffer)
-                except (ValueError, AttributeError):
-                    # Model not registered or not an nn.Module (e.g., RandomPolicy)
-                    # Skip weight application - this is expected for policies without parameters
-                    pass
+                except (ValueError, AttributeError) as e:
+                    # Model not registered or reference is invalid
+                    if verbose:
+                        torchrl_logger.warning(
+                            f"worker {idx} could not resolve model '{model_id}': {e}"
+                        )
+                    continue
+
+                if isinstance(model, nn.Module):
+                    receiver.apply_weights(shared_buffer)
+                else:
+                    if verbose:
+                        torchrl_logger.info(
+                            f"worker {idx} skipping weight application for non-nn.Module model '{model_id}'"
+                        )
 
                 if verbose:
                     torchrl_logger.info(
@@ -4644,6 +4771,13 @@ def _main_async_collector(
                 inner_collector.init_random_frames = float("inf")
             else:
                 inner_collector.init_random_frames = -1
+
+            # Note: For MultiProcessWeightSyncScheme, weight updates are handled by the
+            # main message loop above (msg == "update_weights" case). The receiver.receive()
+            # pattern is only used for schemes with separate communication channels like
+            # SharedMemWeightSyncScheme (shared memory) or DistributedWeightSyncScheme (TCPStore).
+            # Calling receiver.receive() here would interfere with the pipe-based message protocol.
+
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
