@@ -43,6 +43,8 @@ def main(cfg: DictConfig):  # noqa: F821
     if device in ("", None):
         if torch.cuda.is_available():
             device = "cuda:0"
+        elif torch.npu.is_available():
+            device = "npu:0"
         else:
             device = "cpu"
     device = torch.device(device)
@@ -51,6 +53,8 @@ def main(cfg: DictConfig):  # noqa: F821
     if collector_device in ("", None):
         if torch.cuda.is_available():
             collector_device = "cuda:0"
+        elif torch.npu.is_available():
+            collector_device = "npu:0"
         else:
             collector_device = "cpu"
     collector_device = torch.device(collector_device)
