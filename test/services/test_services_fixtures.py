@@ -5,6 +5,8 @@
 
 """Test fixtures for service tests that need to be importable by Ray workers."""
 
+from __future__ import annotations
+
 from typing import Any
 
 
