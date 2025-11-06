@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+
 import weakref
 from collections.abc import Iterator
 from typing import Any, Literal, Protocol
@@ -178,7 +179,9 @@ class SharedMemTransport:
         when auto_register=True (the default), but required when auto_register=False.
 
         If pipes are registered and this model hasn't been sent to workers yet,
-        this will trigger sending the buffer reference to all workers.
+        this will trigger sending the buffer reference to all workers. If pipes
+        aren't registered yet, weights are stored and will be sent when pipes
+        become available (during init_on_sender).
         """
         if not isinstance(weights, TensorDictBase):
             raise ValueError(f"Weights must be a TensorDictBase, got {type(weights)}")
@@ -190,15 +193,14 @@ class SharedMemTransport:
             raise RuntimeError("Re-registering weights is not supported.")
 
         # If this is a new registration and we have pipes, send buffer to workers
-        if not self._pipes:
-            raise RuntimeError(
-                "Cannot send the buffer reference to the workers, the pipes are empty."
-            )
-        if model_id in self._registered_with_workers:
-            raise RuntimeError(
-                "Cannot send the buffer reference to the workers, the model_id is already in the registry."
-            )
-        self._send_buffer_to_workers(model_id, weights)
+        # If pipes aren't available yet, defer sending until init_on_sender is called
+        if self._pipes:
+            if model_id not in self._registered_with_workers:
+                self._send_buffer_to_workers(model_id, weights)
+            else:
+                raise RuntimeError(
+                    f"Model '{model_id}' has already been registered with workers."
+                )
 
     def _send_buffer_to_workers(self, model_id: str, buffer: TensorDictBase) -> None:
         """Send shared memory buffer reference to all workers via pipes.
@@ -629,9 +631,6 @@ class DistributedTransport:
             msg = self._store.get(f"NODE_{self._rank}_in")
 
             if msg == b"update_weights":
-                # Import here to avoid circular imports
-                from tensordict import TensorDict
-
                 # Initialize weights buffer on first use
                 if self._weights_buffer is None:
                     self._weights_buffer = TensorDict()
@@ -1356,6 +1355,25 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             )
         return self._receiver
 
+    def __getstate__(self):
+        """Prepare the scheme for pickling by excluding non-serializable runtime state.
+
+        Sender and receiver objects contain pipes, weak references, and other
+        non-serializable resources that should not be pickled. These will be
+        re-initialized when needed after unpickling.
+        """
+        state = self.__dict__.copy()
+        # Remove non-serializable runtime state
+        state["_sender"] = None
+        state["_receiver"] = None
+        state["_initialized_on_sender"] = False
+        state["_initialized_on_worker"] = False
+        return state
+
+    def __setstate__(self, state):
+        """Restore the scheme from pickling."""
+        self.__dict__.update(state)
+
     # Legacy methods - kept for backward compatibility
     @abc.abstractmethod
     def create_transport(self, pipe_or_context: Any) -> TransportBackend:
@@ -1454,8 +1472,6 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             context: Optional context object providing pipes and num_workers
             **kwargs: Alternative to context (pipes, num_workers, etc.)
         """
-        import weakref
-
         # Extract parameters from context or kwargs
         if context is not None:
             pipes = getattr(context, "pipes", None)
@@ -1494,8 +1510,6 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             context: Optional context object providing pipe and model
             **kwargs: Alternative to context (pipe, model, etc.)
         """
-        import weakref
-
         # Extract parameters from context or kwargs
         if context is not None:
             pipe = getattr(context, "pipe", None)
@@ -1606,8 +1620,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             context: Optional context object providing pipes, cached_weights
             **kwargs: Alternative to context (pipes, cached_weights, etc.)
         """
-        import weakref
-
         # Extract parameters from context or kwargs
         if context is not None:
             pipes = getattr(context, "pipes", None)
@@ -1636,9 +1648,14 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             # Check if already registered to avoid re-registration error
             if model_id not in self.policy_weights:
                 self.register_shared_weights(model_id, cached_weights)
-            # Immediately distribute buffer references to avoid deadlock (if not already sent)
+
+        # Send buffer references for any weights that were pre-registered
+        # before pipes were available (e.g., via explicit register_shared_weights call)
+        if model_id in self.policy_weights:
             if model_id not in self._shared_transport._registered_with_workers:
-                self._shared_transport._send_buffer_to_workers(model_id, cached_weights)
+                self._shared_transport._send_buffer_to_workers(
+                    model_id, self.policy_weights[model_id]
+                )
 
         # Create sender with the shared transport
         sender = WeightSender(self)
@@ -1663,8 +1680,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             context: Optional context object providing pipe and model
             **kwargs: Alternative to context (pipe, model, etc.)
         """
-        import weakref
-
         # Extract parameters from context or kwargs
         if context is not None:
             getattr(context, "pipe", None)
@@ -1826,6 +1841,89 @@ class RayWeightSyncScheme(WeightSyncScheme):
         """
         return RayTransport(remote_collector=pipe_or_context)
 
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: Any = None,
+        **kwargs,
+    ) -> None:
+        """Initialize on the main process (sender side).
+
+        Args:
+            model_id: Identifier for the model being synchronized
+            context: Optional context object providing remote_collectors
+            **kwargs: Alternative to context (remote_collectors, source_model, etc.)
+        """
+        # Extract parameters from context or kwargs
+        if context is not None:
+            remote_collectors = getattr(context, "remote_collectors", None)
+            num_workers = getattr(context, "num_workers", None) or getattr(
+                context, "num_collectors", None
+            )
+        else:
+            remote_collectors = kwargs.get("remote_collectors")
+            num_workers = kwargs.get("num_workers") or kwargs.get("num_collectors")
+
+        if remote_collectors is None:
+            raise ValueError("remote_collectors must be provided via context or kwargs")
+        if num_workers is None:
+            num_workers = len(remote_collectors) if remote_collectors else 0
+
+        # Create sender and register all workers (Ray actors)
+        sender = WeightSender(self)
+        sender._model_id = model_id
+
+        # Create transports for each Ray actor and register them
+        for worker_idx, remote_collector in enumerate(remote_collectors):
+            transport = self.create_transport(remote_collector)
+            sender._register_worker(worker_idx, transport)
+
+        # Set context with weak reference to avoid circular refs
+        if context is not None:
+            sender._set_context(weakref.ref(context), model_id)
+
+        # Store source model reference if provided for automatic weight extraction
+        source_model = kwargs.get("source_model")
+        if source_model is not None:
+            sender._source_model = source_model
+
+        self._sender = sender
+        self._initialized_on_sender = True
+
+    def init_on_worker(
+        self,
+        model_id: str,
+        context: Any = None,
+        **kwargs,
+    ) -> None:
+        """Initialize on worker process (receiver side).
+
+        For Ray workers, weight updates are handled via remote method calls,
+        so this is typically a no-op. The receiver is created but doesn't
+        need special initialization.
+
+        Args:
+            model_id: Identifier for the model being synchronized
+            context: Optional context object (typically the remote collector)
+            **kwargs: Optional parameters (pipe, model, etc.)
+        """
+        # Create receiver
+        receiver = WeightReceiver(self)
+
+        # Register model if provided
+        model = kwargs.get("model") or (
+            getattr(context, "policy", None) if context else None
+        )
+        if model is not None:
+            receiver._register_model(model)
+
+        # Set context if provided
+        if context is not None:
+            receiver._set_context(weakref.ref(context))
+
+        self._receiver = receiver
+        self._initialized_on_worker = True
+
 
 class RayModuleTransformScheme(WeightSyncScheme):
     """Weight synchronization for RayModuleTransform actors.
@@ -1876,6 +1974,99 @@ class RayModuleTransformScheme(WeightSyncScheme):
     def create_receiver(self) -> RayModuleTransformReceiver:
         """Create a specialized receiver for Ray actor communication."""
         return RayModuleTransformReceiver(self)
+
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: Any = None,
+        **kwargs,
+    ) -> None:
+        """Initialize on the main process (sender side).
+
+        Args:
+            model_id: Identifier for the model being synchronized
+            context: Optional context object providing actor references
+            **kwargs: Alternative to context (actors, actor_refs, source_model, etc.)
+        """
+        # Extract actor references from context or kwargs
+        if context is not None:
+            # Could be actor_refs, actors, or remote_collectors
+            actor_refs = (
+                getattr(context, "actor_refs", None)
+                or getattr(context, "actors", None)
+                or getattr(context, "remote_collectors", None)
+            )
+        else:
+            actor_refs = (
+                kwargs.get("actor_refs")
+                or kwargs.get("actors")
+                or kwargs.get("remote_collectors")
+            )
+
+        if actor_refs is None:
+            raise ValueError(
+                "actor_refs (or actors) must be provided via context or kwargs"
+            )
+
+        # Create specialized sender
+        sender = self.create_sender()
+        sender._model_id = model_id
+
+        # Register all actors as workers
+        for worker_idx, actor_ref in enumerate(actor_refs):
+            transport = self.create_transport(actor_ref)
+            sender._register_worker(worker_idx, transport)
+
+        # Set context with weak reference
+        if context is not None:
+            sender._set_context(weakref.ref(context), model_id)
+
+        # Store source model if provided
+        source_model = kwargs.get("source_model")
+        if source_model is not None:
+            sender._source_model = source_model
+
+        self._sender = sender
+        self._initialized_on_sender = True
+
+    def init_on_worker(
+        self,
+        model_id: str,
+        context: Any = None,
+        **kwargs,
+    ) -> None:
+        """Initialize on worker process (receiver side).
+
+        Args:
+            model_id: Identifier for the model being synchronized
+            context: Optional context object (typically the actor itself)
+            **kwargs: Optional parameters (actor_ref, model, etc.)
+        """
+        # Create specialized receiver
+        receiver = self.create_receiver()
+
+        # Extract actor reference if needed
+        actor_ref = kwargs.get("actor_ref") or context
+        if actor_ref is not None:
+            # Register the transport for this actor
+            transport = self.create_transport(actor_ref)
+            receiver._register_worker_transport(transport)
+
+        # Register model if provided
+        model = kwargs.get("model") or (
+            getattr(context, "_actor_module", None) or getattr(context, "module", None)
+            if context
+            else None
+        )
+        if model is not None:
+            receiver._register_model(model)
+
+        # Set context if provided
+        if context is not None:
+            receiver._set_context(weakref.ref(context))
+
+        self._receiver = receiver
+        self._initialized_on_worker = True
 
 
 class RPCWeightSyncScheme(WeightSyncScheme):
