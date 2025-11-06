@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="GRPOLossOutput" href="torchrl.objectives.llm.GRPOLossOutput.html" />
-    <link rel="prev" title="as_padded_tensor" href="torchrl.envs.llm.transforms.as_padded_tensor.html" />
+    <link rel="prev" title="LLMLossOutput" href="torchrl.objectives.llm.LLMLossOutput.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -475,6 +475,14 @@ in the loss computation:
 <div><p>recommended defaults from DAPO: (0.20, 0.28); see Eq. (10) in the paper.</p>
 </div></blockquote>
 </p></li>
+<li><p><strong>kl_mask_threshold</strong> (<a class="reference internal" href="#torchrl.objectives.llm.GRPOLoss.float" title="torchrl.objectives.llm.GRPOLoss.float"><em>float</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – enable token-wise trust-region filtering (KL-Mask).
+When set, tokens with 0.5 * (log(pi_theta/pi_ref))^2 &gt; kl_mask_threshold are masked out from the loss.
+This stabilizes updates by skipping tokens that drifted too far from the reference distribution
+(see table and description; enables per-token trust region).</p></li>
+<li><p><strong>aggregation</strong> (<em>str</em><em>, </em><em>optional</em>) – loss aggregation strategy for the policy objective.
+- “token_mean”: global masked token mean (weights long sequences more). Default.
+- “prompt_mean”: per-sample masked mean over tokens, then mean across samples (equal sample weight).
+- “none”: return per-token loss (mask applied, no aggregation). Useful for downstream custom reductions.</p></li>
 <li><p><strong>entropy_bonus</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an entropy bonus will be added to the
 loss to favour exploratory policies.</p></li>
 <li><p><strong>samples_mc_entropy</strong> (<em>int</em><em>, </em><em>optional</em>) – if the distribution retrieved from the policy
@@ -798,7 +806,7 @@ strings are acceptable.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.objectives.llm.GRPOLoss.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput" title="torchrl.objectives.llm.grpo.GRPOLossOutput"><span class="pre">GRPOLossOutput</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/llm/grpo.html#GRPOLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.llm.GRPOLoss.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">LLMOutputType</span></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/llm/grpo.html#GRPOLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.llm.GRPOLoss.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>It is designed to read an input TensorDict and return another tensordict with loss keys named “loss*”.</p>
 <p>Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
 training. Other scalars present in the output tensordict will be logged too.</p>
@@ -1288,6 +1296,12 @@ parameters in the result. Defaults to True.</p></li>
 <span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrl.objectives.llm.GRPOLoss.output_type">
+<span class="sig-name descname"><span class="pre">output_type</span></span><a class="headerlink" href="#torchrl.objectives.llm.GRPOLoss.output_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput" title="torchrl.objectives.llm.grpo.GRPOLossOutput"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRPOLossOutput</span></code></a></p>
 </dd></dl>
 
 <dl class="py method">
@@ -1975,6 +1989,35 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 </div>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.objectives.llm.GRPOLoss.tensor_keys">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tensor_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_AcceptedKeys</span></em><a class="headerlink" href="#torchrl.objectives.llm.GRPOLoss.tensor_keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access the tensordict key configuration for this loss.</p>
+<p>This property provides access to the configurable keys used by the loss module
+to read tensors from input TensorDicts. These keys include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">advantage</span></code>: key for the advantage values</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">action</span></code>: key for the action tokens (default: <code class="docutils literal notranslate"><span class="pre">(&quot;tokens&quot;,</span> <span class="pre">&quot;full&quot;)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sample_log_prob</span></code>: key for the log probabilities from the reference policy (default: <code class="docutils literal notranslate"><span class="pre">(&quot;log_probs&quot;,</span> <span class="pre">&quot;full&quot;)</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ref_log_probs</span></code>: key for the reference policy log probabilities (default: <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;ref_log_probs&quot;,</span> <span class="pre">&quot;full&quot;)</span></code>)</p></li>
+</ul>
+<p>To modify these keys, use the <a class="reference internal" href="#torchrl.objectives.llm.GRPOLoss.set_keys" title="torchrl.objectives.llm.GRPOLoss.set_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_keys()</span></code></a> method.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">GRPOLoss</span><span class="p">(</span><span class="n">actor_network</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Access current keys</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">loss</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">)</span>  <span class="c1"># &quot;advantage&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Modify keys</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">advantage</span><span class="o">=</span><span class="s2">&quot;my_advantage_key&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">loss</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">)</span>  <span class="c1"># &quot;my_advantage_key&quot;</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>An instance of _AcceptedKeys containing all configurable tensordict keys.</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.objectives.llm.GRPOLoss.to">
 <span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.objectives.llm.GRPOLoss.to" title="Permalink to this definition">¶</a></dt>
@@ -2216,7 +2259,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
         <a href="torchrl.objectives.llm.GRPOLossOutput.html" class="btn btn-neutral float-right" title="GRPOLossOutput" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.llm.transforms.as_padded_tensor.html" class="btn btn-neutral" title="as_padded_tensor" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.objectives.llm.LLMLossOutput.html" class="btn btn-neutral" title="LLMLossOutput" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="RayDataLoadingPrimer" href="torchrl.envs.llm.transforms.RayDataLoadingPrimer.html" />
-    <link rel="prev" title="PolicyVersion" href="torchrl.envs.llm.transforms.PolicyVersion.html" />
+    <link rel="prev" title="PythonExecutorService" href="torchrl.envs.llm.transforms.PythonExecutorService.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -432,8 +432,10 @@
 <h1>PythonInterpreter<a class="headerlink" href="#pythoninterpreter" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.PythonInterpreter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">PythonInterpreter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tool'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">persistent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/tools.html#PythonInterpreter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.PythonInterpreter" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">PythonInterpreter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tool'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">persistent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">services</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'python_executor'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">namespace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/tools.html#PythonInterpreter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.PythonInterpreter" title="Permalink to this definition">¶</a></dt>
 <dd><p>A transform that executes Python code in the LLM response.</p>
+<p>This transform inherits from <code class="xref py py-class docutils literal notranslate"><span class="pre">ToolTransformBase</span></code> and handles all the
+boilerplate for history extraction, batch processing, and result injection.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -441,6 +443,13 @@
 <li><p><strong>tool_name</strong> – The name of the tool in the chat history. Defaults to <cite>“tool”</cite>.</p></li>
 <li><p><strong>persistent</strong> – Whether to use persistent processes. Defaults to <cite>False</cite>.</p></li>
 <li><p><strong>timeout</strong> – The timeout for the persistent processes. Defaults to <cite>10.0</cite>.</p></li>
+<li><p><strong>services</strong> – Backend for shared Python executor service. If <cite>“ray”</cite>, uses
+a shared Ray actor service for execution. If <cite>None</cite>, uses local
+processes. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>service_name</strong> – Name of the service in the registry. Only used if
+<cite>services=”ray”</cite>. Defaults to <cite>“python_executor”</cite>.</p></li>
+<li><p><strong>namespace</strong> – Ray namespace for the service. Only used if <cite>services=”ray”</cite>.
+If <cite>None</cite>, uses the default namespace. Defaults to <cite>None</cite>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -481,6 +490,23 @@
 <span class="go"> &#39;&lt;|im_start|&gt;assistant\n&#39;]</span>
 </pre></div>
 </div>
+<p>Using shared Ray service:
+&gt;&gt;&gt; from torchrl.services import get_services
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Register service once (e.g., in main process)
+&gt;&gt;&gt; services = get_services(backend=”ray”)
+&gt;&gt;&gt; if “python_executor” not in services:
+…     services.register(
+…         “python_executor”,
+…         PythonExecutorService,
+…         pool_size=32,
+…         timeout=10.0,
+…         num_cpus=32,
+…         max_concurrency=32
+…     )
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Use in transform (all 128 envs share the 32 interpreters)
+&gt;&gt;&gt; env = env.append_transform(PythonInterpreter(services=”ray”))</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.PythonInterpreter.add_module">
 <span class="sig-name descname"><span class="pre">add_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><span class="pre">Module</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.envs.llm.transforms.PythonInterpreter.add_module" title="Permalink to this definition">¶</a></dt>
@@ -2069,7 +2095,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
         <a href="torchrl.envs.llm.transforms.RayDataLoadingPrimer.html" class="btn btn-neutral float-right" title="RayDataLoadingPrimer" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.llm.transforms.PolicyVersion.html" class="btn btn-neutral" title="PolicyVersion" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.llm.transforms.PythonExecutorService.html" class="btn btn-neutral" title="PythonExecutorService" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

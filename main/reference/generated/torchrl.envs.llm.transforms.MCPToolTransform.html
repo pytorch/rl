@@ -432,74 +432,94 @@
 <h1>MCPToolTransform<a class="headerlink" href="#mcptooltransform" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.MCPToolTransform">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">MCPToolTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_schemas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tool'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/tools.html#MCPToolTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.MCPToolTransform" title="Permalink to this definition">¶</a></dt>
-<dd><p>A transform that executes MCP-style tools in response to LLM actions.</p>
-<p>This transform allows execution of tools following the Mission Control Protocol pattern,
-where tools are defined with clear input/output schemas and executed in a controlled manner.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">MCPToolTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">servers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_call_pattern</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tool'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/tools.html#MCPToolTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.MCPToolTransform" title="Permalink to this definition">¶</a></dt>
+<dd><p>A transform that executes tools via the Model Context Protocol (MCP).</p>
+<p>This transform connects to MCP servers and executes tools through the official
+MCP library. It runs async operations in a background thread to work with
+TorchRL’s synchronous transform API.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tools</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>callable</em><em>]</em>) – A dictionary mapping tool names to their implementation functions.
-Each function should accept kwargs matching its schema and return a dict with results.</p></li>
-<li><p><strong>tool_schemas</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>dict</em><em>]</em>) – A dictionary mapping tool names to their JSON schemas.
-Each schema should define the tool’s parameters and return type.</p></li>
-<li><p><strong>tokenizer</strong> – The tokenizer to use. Defaults to <cite>None</cite> (no tokenizer).</p></li>
-<li><p><strong>tool_name</strong> – The name of the tool in the chat history. Defaults to <cite>“tool”</cite>.</p></li>
-<li><p><strong>timeout</strong> – The timeout for tool execution in seconds. Defaults to <cite>10.0</cite>.</p></li>
+<li><p><strong>servers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>dict</em><em>]</em>) – Dictionary mapping server names to their configurations.
+Each config should have:
+- “command” (str): Command to launch the server (e.g., “npx”, “uvx”)
+- “args” (list[str]): Arguments for the command
+Example: {“browser”: {“command”: “npx”, “args”: [“&#64;browsermcp/<a class="reference external" href="mailto:mcp&#37;&#52;&#48;latest">mcp<span>&#64;</span>latest</a>”]}}</p></li>
+<li><p><strong>tool_call_pattern</strong> (<em>str</em><em>, </em><em>optional</em>) – Regex pattern for extracting tool calls.
+Should capture (tool_name_with_server, args_json).
+Defaults to <code class="docutils literal notranslate"><span class="pre">r&quot;&lt;tool&gt;([\\w.]+)\\n(.*?)&lt;/tool&gt;&quot;</span></code>.</p></li>
+<li><p><strong>tool_name</strong> (<em>str</em><em>, </em><em>optional</em>) – Role name for tool results in history. Defaults to “tool”.</p></li>
+<li><p><strong>timeout</strong> (<em>float</em><em>, </em><em>optional</em>) – Timeout for tool execution in seconds. Defaults to 10.0.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPToolTransform</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">set_list_to_stack</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPToolTransform</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">set_list_to_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-3B&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define a simple tool</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">add_numbers</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="gp">... </span>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;result&quot;</span><span class="p">:</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define its schema</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">add_schema</span> <span class="o">=</span> <span class="p">{</span>
-<span class="gp">... </span>    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;add_numbers&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Add two numbers&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
-<span class="gp">... </span>        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
-<span class="gp">... </span>        <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
-<span class="gp">... </span>            <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">},</span>
-<span class="gp">... </span>            <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;integer&quot;</span><span class="p">}</span>
-<span class="gp">... </span>        <span class="p">},</span>
-<span class="gp">... </span>        <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add Deno to PATH (required for mcp-run-python)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">environ</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">deno_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s2">&quot;~/.deno/bin&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="n">deno_path</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PATH&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">environ</span><span class="p">[</span><span class="s1">&#39;PATH&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">deno_path</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;PATH&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define MCP servers</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">servers</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s2">&quot;browser&quot;</span><span class="p">:</span> <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;command&quot;</span><span class="p">:</span> <span class="s2">&quot;npx&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;@browsermcp/mcp@latest&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="s2">&quot;python&quot;</span><span class="p">:</span> <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;command&quot;</span><span class="p">:</span> <span class="s2">&quot;uvx&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;mcp-run-python&quot;</span><span class="p">,</span> <span class="s2">&quot;stdio&quot;</span><span class="p">],</span>
+<span class="gp">... </span>        <span class="s2">&quot;env&quot;</span><span class="p">:</span> <span class="n">environ</span>
 <span class="gp">... </span>    <span class="p">}</span>
 <span class="gp">... </span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tools</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;add_numbers&quot;</span><span class="p">:</span> <span class="n">add_numbers</span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">schemas</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;add_numbers&quot;</span><span class="p">:</span> <span class="n">add_schema</span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
-<span class="gp">... </span>    <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;I&#39;m the system, do as I say&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">apply_template</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">MCPToolTransform</span><span class="p">(</span><span class="n">tools</span><span class="p">,</span> <span class="n">schemas</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">r</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;This is the user prompt&quot;</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,)))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;text_response&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Let me add two numbers:</span><span class="se">\n</span><span class="s2">&lt;tool&gt;add_numbers</span><span class="se">\n</span><span class="s2">{</span><span class="se">\&quot;</span><span class="s2">a</span><span class="se">\&quot;</span><span class="s2">: 1, </span><span class="se">\&quot;</span><span class="s2">b</span><span class="se">\&quot;</span><span class="s2">: 2}&lt;/tool&gt;&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="s1">&#39;next&#39;</span><span class="p">,</span> <span class="s1">&#39;history&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">))</span>
-<span class="go">[&#39;&lt;|im_start|&gt;system\n&#39;</span>
-<span class="go"> &quot;I&#39;m the system, do as I say&lt;|im_end|&gt;\n&quot;</span>
-<span class="go"> &#39;&lt;|im_start|&gt;user\n&#39;</span>
-<span class="go"> &#39;This is the user prompt&lt;|im_end|&gt;\n&#39;</span>
-<span class="go"> &#39;&lt;|im_start|&gt;assistant\n&#39;</span>
-<span class="go"> &#39;Let me add two numbers:\n&#39;</span>
-<span class="go"> &#39;&lt;tool&gt;add_numbers\n&#39;</span>
-<span class="go"> &#39;{&quot;a&quot;: 1, &quot;b&quot;: 2}&lt;/tool&gt;&lt;|im_end|&gt;\n&#39;</span>
-<span class="go"> &#39;&lt;|im_start|&gt;user\n&#39;</span>
-<span class="go"> &#39;&lt;tool_response&gt;\n&#39;</span>
-<span class="go"> &#39;Tool add_numbers executed successfully:\n&#39;</span>
-<span class="go"> &#39;{&quot;result&quot;: 3}\n&#39;</span>
-<span class="go"> &#39;&lt;/tool_response&gt;&lt;|im_end|&gt;\n&#39;</span>
-<span class="go"> &#39;&lt;|im_start|&gt;assistant\n&#39;]</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create environment with MCP transform</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">MCPToolTransform</span><span class="p">(</span><span class="n">servers</span><span class="o">=</span><span class="n">servers</span><span class="p">))</span>  
+<span class="go">[torchrl][INFO] Connecting to MCP server &#39;browser&#39; (npx @browsermcp/mcp@latest)</span>
+<span class="go">[torchrl][INFO] Connected to MCP server &#39;browser&#39; with 12 tools</span>
+<span class="go">[torchrl][INFO] Connecting to MCP server &#39;python&#39; (uvx mcp-run-python stdio)</span>
+<span class="go">[torchrl][INFO] Connected to MCP server &#39;python&#39; with 1 tools</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute Python code via MCP</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reset_data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="s2">&quot;You are a useful assistant&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reset_data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">code</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">... </span><span class="s1">import math</span>
+<span class="gp">... </span><span class="s1">result = math.sqrt(144) + math.pi</span>
+<span class="gp">... </span><span class="s1">print(f&quot;Result: </span><span class="si">{result}</span><span class="s1">&quot;)</span>
+<span class="gp">... </span><span class="s1">result</span>
+<span class="gp">... </span><span class="s1">&#39;&#39;&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">response</span> <span class="o">=</span> <span class="n">History</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Let me calculate that.</span><span class="se">\n</span><span class="s1">&lt;tool&gt;python.run_python_code</span><span class="se">\n</span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;python_code&quot;</span><span class="p">:</span><span class="w"> </span><span class="n">code</span><span class="p">})</span><span class="si">}</span><span class="s1">&lt;/tool&gt;&#39;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">prompt</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">response</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="n">history</span><span class="p">))</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>  
+<span class="go">LinkedList(LinkedList([&quot;Tool python.run_python_code executed successfully:\n[TextContent(type=&#39;text&#39;, text=&#39;&lt;status&gt;success&lt;/status&gt;\\n&lt;output&gt;\\nResult: 15.141592653589793\\n&lt;/output&gt;\\n&lt;return_value&gt;\\n15.141592653589793\\n&lt;/return_value&gt;&#39;, annotations=None, meta=None)]&quot;]))</span>
 </pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This requires the <cite>mcp</cite> package to be installed: <cite>pip install mcp</cite>
+The transform manages async MCP connections in a background thread.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Some MCP servers have additional requirements:
+- <cite>mcp-run-python</cite> requires Deno: <cite>curl -fsSL https://deno.land/install.sh | sh</cite>
+- Server-specific dependencies should be installed before use</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.MCPToolTransform.add_module">
@@ -614,8 +634,8 @@ are direct members of this module.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.MCPToolTransform.close">
-<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.transforms.MCPToolTransform.close" title="Permalink to this definition">¶</a></dt>
-<dd><p>Close the transform.</p>
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/tools.html#MCPToolTransform.close"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.MCPToolTransform.close" title="Permalink to this definition">¶</a></dt>
+<dd><p>Shutdown the MCP connections and background thread.</p>
 </dd></dl>
 
 <dl class="py property">
