@@ -1,4 +1,5 @@
 """Tests for PythonExecutorService with Ray service registry."""
+from __future__ import annotations
 
 import pytest
 
