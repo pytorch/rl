@@ -5,7 +5,6 @@
 """Shared test fixtures and mock infrastructure for LLM tests."""
 from __future__ import annotations
 
-import pytest
 import torch
 
 
@@ -53,25 +52,3 @@ class MockTransformerModel(torch.nn.Module):
         from transformers import AutoTokenizer
 
         return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
-
-
-@pytest.fixture
-def mock_transformer_model():
-    """Fixture that provides a mock transformer model factory."""
-
-    def _make_model(
-        vocab_size: int = 1024, device: torch.device | str | int = "cpu"
-    ) -> MockTransformerModel:
-        """Make a mock transformer model."""
-        device = torch.device(device)
-        return MockTransformerModel(vocab_size, device)
-
-    return _make_model
-
-
-@pytest.fixture
-def mock_tokenizer():
-    """Fixture that provides a mock tokenizer."""
-    from transformers import AutoTokenizer
-
-    return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
