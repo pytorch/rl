@@ -12,5 +12,11 @@ Utility modules and helper functions for building RL networks.
     ActorValueOperator
     ActorCriticOperator
     ActorCriticWrapper
-    Shift
+
+.. currentmodule:: torchrl.modules.models.utils
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
     SquashDims

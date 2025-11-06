@@ -11,7 +11,7 @@ TorchRL provides dataset utilities for offline RL and data management.
 
     datasets.AtariDQNExperienceReplay
     datasets.D4RLExperienceReplay
-    datasets.Gen_DGRLExperienceReplay
+    datasets.GenDGRLExperienceReplay
     datasets.MinariExperienceReplay
     datasets.OpenMLExperienceReplay
     datasets.OpenXExperienceReplay

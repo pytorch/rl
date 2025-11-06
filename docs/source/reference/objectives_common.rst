@@ -15,13 +15,22 @@ Base classes and common utilities for all loss modules.
 Value Estimators
 ----------------
 
+.. currentmodule:: torchrl.objectives.value
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
     ValueEstimatorBase
-    ValueEstimators
     TD0Estimator
     TD1Estimator
     TDLambdaEstimator
     GAE
+
+.. currentmodule:: torchrl.objectives
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    ValueEstimators
