@@ -2993,16 +2993,15 @@ class TestUpdateParams:
         not torch.cuda.is_available() or torch.cuda.device_count() < 3,
         reason="requires at least 3 CUDA devices",
     )
-    @pytest.mark.parametrize(
-        "weight_sync_scheme",
-        [SharedMemWeightSyncScheme, MultiProcessWeightSyncScheme],
-    )
-    def test_shared_device_weight_update(self, weight_sync_scheme):
+    def test_shared_device_weight_update(self):
         """Test that weight updates work correctly when multiple workers share the same device.
 
         This test specifically validates the per-worker queue implementation in SharedMemWeightSyncScheme.
         When workers 0 and 2 share cuda:2, each should receive its own copy of the weights through
         dedicated queues, preventing race conditions that could occur with a single shared queue.
+
+        Note: This test only uses SharedMemWeightSyncScheme (not MultiProcessWeightSyncScheme) because
+        the latter sends tensors through pipes, which we want to avoid.
         """
         # Create policy on cuda:0
         policy = TensorDictModule(
@@ -3023,7 +3022,7 @@ class TestUpdateParams:
             total_frames=300,
             device=["cuda:2", "cuda:1", "cuda:2"],
             storing_device=["cuda:2", "cuda:1", "cuda:2"],
-            weight_sync_schemes={"policy": weight_sync_scheme()},
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme()},
         )
 
         try:
