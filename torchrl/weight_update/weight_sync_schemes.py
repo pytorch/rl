@@ -8,11 +8,15 @@ import abc
 
 import weakref
 from collections.abc import Iterator
+from queue import Empty
 from typing import Any, Literal, Protocol
+
+import torch
+import torch.distributed
 
 from tensordict import TensorDict, TensorDictBase
 
-from torch import nn
+from torch import multiprocessing as mp, nn
 
 __all__ = [
     "TransportBackend",
@@ -136,13 +140,12 @@ class SharedMemTransport:
     This transport updates shared memory tensors directly without message passing.
     Workers automatically see weight updates without explicit communication.
 
-    The transport supports lazy registration with pipe-based buffer distribution:
-    - On first weight send for a model, creates shared memory and sends buffer via pipes
+    The transport supports lazy registration with queue-based buffer distribution:
+    - On first weight send for a model, creates shared memory and sends buffer via queue
     - Workers receive the buffer reference and update their local references
     - Subsequent updates are pure in-place shared memory (zero-copy)
 
-    This hybrid approach solves the chicken-and-egg problem: workers can start before
-    weights are available, and they'll receive the shared buffer references when ready.
+    Both CPU and CUDA tensors maintain shared references when sent through mp.Queue.
 
     Args:
         policy_weights: Dictionary mapping model_id to shared TensorDict weights.
@@ -159,18 +162,21 @@ class SharedMemTransport:
     ):
         self._policy_weights = policy_weights if policy_weights is not None else {}
         self._auto_register = auto_register
-        self._pipes = []  # List of pipes to send initial buffer references
+        self._weight_queues = (
+            None  # Dict of per-worker queues for distributing shared weights
+        )
+        self._device_to_workers = {}  # Maps device -> list of worker indices
         # Track which model_ids have been sent to workers
         self._registered_with_workers = set()
 
-    def register_pipe(self, pipe: Any) -> None:
-        """Register a pipe for sending buffer references on first weight send.
+    def set_worker_info(self, device_to_workers: dict) -> None:
+        """Set worker device mapping for distributing weights.
 
         Args:
-            pipe: Pipe connection to a worker process.
+            device_to_workers: Dict mapping device -> list of worker indices on that device.
+                Example: {torch.device('cuda:1'): [0, 2], torch.device('cuda:2'): [1, 3]}
         """
-        if pipe not in self._pipes:
-            self._pipes.append(pipe)
+        self._device_to_workers = device_to_workers
 
     def register_weights(self, model_id: str, weights: TensorDictBase) -> None:
         """Register a shared memory weights TensorDict for a model.
@@ -178,10 +184,7 @@ class SharedMemTransport:
         This method allows explicit registration of shared weights. It's optional
         when auto_register=True (the default), but required when auto_register=False.
 
-        If pipes are registered and this model hasn't been sent to workers yet,
-        this will trigger sending the buffer reference to all workers. If pipes
-        aren't registered yet, weights are stored and will be sent when pipes
-        become available (during init_on_sender).
+        Weights are stored and will be sent to workers during init_on_sender.
         """
         if not isinstance(weights, TensorDictBase):
             raise ValueError(f"Weights must be a TensorDictBase, got {type(weights)}")
@@ -192,40 +195,60 @@ class SharedMemTransport:
         else:
             raise RuntimeError("Re-registering weights is not supported.")
 
-        # If this is a new registration and we have pipes, send buffer to workers
-        # If pipes aren't available yet, defer sending until init_on_sender is called
-        if self._pipes:
-            if model_id not in self._registered_with_workers:
-                self._send_buffer_to_workers(model_id, weights)
-            else:
-                raise RuntimeError(
-                    f"Model '{model_id}' has already been registered with workers."
-                )
+    def _infer_device(self, td: TensorDictBase):
+        """Infer the device from a TensorDict by checking its tensors.
 
-    def _send_buffer_to_workers(
-        self, model_id: str, buffer: TensorDictBase, timeout: float = 10.0
-    ) -> None:
-        """Send shared memory buffer reference to all workers via pipes.
+        Returns:
+            torch.device or None if no tensors found or all on different devices.
+        """
+        for value in td.values(True, True):
+            if isinstance(value, torch.Tensor):
+                return value.device
+        return None
 
-        This is called once per model_id when lazy registration occurs.
-        Workers receive the buffer and update their local references.
+    def _send_buffer_to_workers(self, model_id: str, buffer: TensorDictBase) -> None:
+        """Send shared memory buffer reference to workers via their per-worker queues.
+
+        Both CPU and CUDA tensors maintain shared references through queues.
+        Each worker reads from its own dedicated queue, eliminating race conditions.
 
         Note: We send buffer.data to avoid gradient tracking issues when crossing
         process boundaries. The .data attribute gives us the underlying tensors
         without autograd metadata.
         """
-        for pipe in self._pipes:
-            # Send special registration message with the shared buffer
-            # Use .data to strip gradient information (can't serialize non-leaf tensors with requires_grad)
-            pipe.send(((model_id, buffer.data), "register_shared_weights"))
+        if self._weight_queues is None:
+            raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
 
-        # Wait for acknowledgments from all workers
-        for pipe in self._pipes:
-            if not pipe.poll(timeout):
-                raise TimeoutError("Timeout waiting for acknowledgment from worker")
-            _, msg = pipe.recv()
-            if msg != "registered":
-                raise RuntimeError(f"Expected 'registered' acknowledgment, got '{msg}'")
+        # Validate device
+        device = buffer.device or self._infer_device(buffer)
+        if device is not None and device.type not in ("cpu", "cuda"):
+            raise NotImplementedError(
+                f"Device type '{device.type}' not supported for shared memory. "
+                f"Only 'cpu' and 'cuda' are supported."
+            )
+
+        # Send weights to each worker's dedicated queue
+        device = buffer.device or self._infer_device(buffer)
+        if device in self._device_to_workers:
+            worker_indices = self._device_to_workers[device]
+            for worker_idx in worker_indices:
+                # Each worker has its own queue - no race conditions
+                # Message format: (model_id, weights)
+                if worker_idx not in self._weight_queues:
+                    raise RuntimeError(
+                        f"Worker {worker_idx} queue not created. "
+                        f"Available queues: {list(self._weight_queues.keys())}"
+                    )
+                self._weight_queues[worker_idx].put((model_id, buffer.data))
+        else:
+            # Fallback: send to all workers (for CPU or unknown device)
+            # Calculate total workers from device_to_workers mapping
+            all_workers = set()
+            for workers in self._device_to_workers.values():
+                all_workers.update(workers)
+            for worker_idx in sorted(all_workers):
+                if worker_idx in self._weight_queues:
+                    self._weight_queues[worker_idx].put((model_id, buffer.data))
 
         self._registered_with_workers.add(model_id)
 
@@ -234,8 +257,7 @@ class SharedMemTransport:
 
         If the model is not registered and auto_register=True, it will be automatically
         registered by creating a shared memory copy of the provided weights. The shared
-        buffer reference is sent to all workers via pipes on first registration, then
-        subsequent updates are pure in-place shared memory.
+        buffer reference will be sent to workers via queue during the next init_on_sender call.
 
         Args:
             model_id: Identifier for the model whose weights to update.
@@ -272,9 +294,8 @@ class SharedMemTransport:
 
             self._policy_weights[model_id] = shared_buffer
 
-            # Send buffer reference to all workers if we have pipes
-            if self._pipes and model_id not in self._registered_with_workers:
-                self._send_buffer_to_workers(model_id, shared_buffer)
+            # Note: Buffer will be sent to workers during init_on_sender
+            # when the queue is available
 
         shared_weights = self._policy_weights[model_id]
 
@@ -677,8 +698,6 @@ class DistributedTransport:
 
     def check_connection(self) -> bool:
         """Check if torch.distributed is initialized."""
-        import torch.distributed
-
         return torch.distributed.is_initialized()
 
 
@@ -1591,6 +1610,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self._shared_transport = SharedMemTransport(
             self.policy_weights, auto_register=auto_register
         )
+        # Create per-worker queues to avoid race conditions
+        # Each worker gets its own queue for weight initialization
+        self._weight_init_queues = {}  # worker_idx -> Queue
+        # General message queue for coordination (if needed in future)
+        self._message_queue = mp.Queue()
 
     def register_shared_weights(self, model_id: str, weights: TensorDictBase) -> None:
         """Register shared memory weights for a model.
@@ -1614,38 +1638,52 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
     ) -> None:
         """Initialize on the main process (sender side).
 
-        For SharedMemWeightSyncScheme, this handles:
-        1. Getting cached shared memory weights from context
-        2. Pre-registering the weights with the transport
-        3. Distributing buffer references to all workers (avoiding later deadlock)
+        Creates per-worker queues and distributes any pre-registered weights.
 
         Args:
             model_id: Identifier for the model being synchronized
-            context: Optional context object providing pipes, cached_weights
-            **kwargs: Alternative to context (pipes, cached_weights, etc.)
+            context: Optional context object providing device_to_workers mapping, cached_weights
+            **kwargs: Alternative to context (device_to_workers, cached_weights, etc.)
         """
-        # Extract parameters from context or kwargs
+        # Extract device_to_workers mapping from context
         if context is not None:
-            pipes = getattr(context, "pipes", None)
-            num_workers = getattr(context, "num_workers", None)
+            # Build device_to_workers from policy_device list
+            if hasattr(context, "policy_device"):
+                device_to_workers = {}
+                for idx, device in enumerate(context.policy_device):
+                    if device not in device_to_workers:
+                        device_to_workers[device] = []
+                    device_to_workers[device].append(idx)
+            else:
+                device_to_workers = kwargs.get("device_to_workers", {})
+
             # Try to get cached shared memory weights
             if hasattr(context, "get_cached_weights"):
                 cached_weights = context.get_cached_weights(model_id)
             else:
                 cached_weights = None
         else:
-            pipes = kwargs.get("pipes")
-            num_workers = kwargs.get("num_workers")
+            device_to_workers = kwargs.get("device_to_workers", {})
             cached_weights = kwargs.get("cached_weights")
 
-        if pipes is None:
-            raise ValueError("pipes must be provided via context or kwargs")
-        if num_workers is None:
-            num_workers = len(pipes) if pipes else 0
+        if not device_to_workers:
+            raise ValueError(
+                "device_to_workers mapping must be provided via context or kwargs"
+            )
 
-        # Register pipes with shared transport for lazy buffer distribution
-        for pipe in pipes:
-            self._shared_transport.register_pipe(pipe)
+        # Create per-worker queues if not already created
+        # Collect all unique worker indices
+        all_workers = set()
+        for workers in device_to_workers.values():
+            all_workers.update(workers)
+
+        for worker_idx in all_workers:
+            if worker_idx not in self._weight_init_queues:
+                self._weight_init_queues[worker_idx] = mp.Queue()
+
+        # Set worker info in transport
+        self._shared_transport.set_worker_info(device_to_workers)
+        self._shared_transport._weight_queues = self._weight_init_queues
 
         # If we have cached shared memory weights, pre-register them
         if cached_weights is not None:
@@ -1653,8 +1691,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             if model_id not in self.policy_weights:
                 self.register_shared_weights(model_id, cached_weights)
 
-        # Send buffer references for any weights that were pre-registered
-        # before pipes were available (e.g., via explicit register_shared_weights call)
+        # Distribute any pre-registered weights to workers
         if model_id in self.policy_weights:
             if model_id not in self._shared_transport._registered_with_workers:
                 self._shared_transport._send_buffer_to_workers(
@@ -1675,33 +1712,72 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self,
         model_id: str,
         context: Any = None,
+        model: Any = None,
+        worker_idx: int | None = None,
         **kwargs,
     ) -> None:
         """Initialize on worker process (receiver side).
 
+        Reads from the worker's dedicated queue to receive shared weights,
+        then registers them in the transport. The receiver then applies these weights
+        to the model.
+
         Args:
             model_id: Identifier for the model being synchronized
-            context: Optional context object providing pipe and model
-            **kwargs: Alternative to context (pipe, model, etc.)
+            context: Optional context object providing model and worker_idx
+            model: Model being synchronized
+            worker_idx: Worker index
+            **kwargs: Alternative to context (model, worker_idx, timeout, etc.)
         """
         # Extract parameters from context or kwargs
         if context is not None:
-            getattr(context, "pipe", None)
             if hasattr(context, "get_model"):
                 model = context.get_model(model_id)
-            else:
+            elif model is not None:
                 model = None
-        else:
-            model = kwargs.get("model")
+            worker_idx = getattr(context, "worker_idx", worker_idx)
 
-        # For shared memory, we don't need the pipe in the receiver
-        # The transport is shared and workers see updates automatically
+        # Receive weights from this worker's dedicated queue if available
+        if self._weight_init_queues and worker_idx is not None:
+            # Each worker has its own queue - no race conditions!
+            if worker_idx in self._weight_init_queues:
+                worker_queue = self._weight_init_queues[worker_idx]
+                timeout = kwargs.get("timeout", 10.0)
+                try:
+                    # Read from our dedicated queue - only messages for this worker are here
+                    while True:
+                        msg_model_id, shared_weights = worker_queue.get(timeout=timeout)
+
+                        # Register the shared weights in the transport
+                        self._shared_transport._policy_weights[
+                            msg_model_id
+                        ] = shared_weights
+
+                        # If this is the model we're initializing, apply weights
+                        if msg_model_id == model_id and model is not None:
+                            shared_weights.to_module(model)
+                            self._shared_transport._registered_with_workers.add(
+                                msg_model_id
+                            )
+                            break
+                        elif msg_model_id == model_id:
+                            # Model will be applied later when it's available
+                            self._shared_transport._registered_with_workers.add(
+                                msg_model_id
+                            )
+                            break
+                        # If not the model we're looking for, still register it but keep looking
+                except Empty:
+                    # No weights pre-registered for this model (will use auto-register or policy_factory)
+                    pass
 
         # Create receiver with the shared transport
         receiver = WeightReceiver(self)
         if context is not None:
             receiver._context_ref = weakref.ref(context)
         receiver._transport = self._shared_transport  # Use shared transport
+
+        # Register the model - this will apply the shared weights to it
         if model is not None:
             receiver._register_model(model)
         else:
@@ -1711,18 +1787,36 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self._receiver = receiver
         self._initialized_on_worker = True
 
-    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
-        """Create shared memory transport and register pipe for lazy buffer distribution (legacy).
+    def get_weight_queues(self):
+        """Get the per-worker weight initialization queues.
 
-        For lazy registration to work, we register each worker's pipe with the transport.
-        On first weight send, the transport will send buffer references via these pipes.
+        Returns:
+            Dict mapping worker_idx to Queue for receiving shared weight references.
+
+        Raises:
+            RuntimeError: If init_on_sender() hasn't been called yet.
+        """
+        if not self._weight_init_queues:
+            raise RuntimeError("Queues not created. Call init_on_sender() first.")
+        return self._weight_init_queues
+
+    def get_message_queue(self):
+        """Get the general message queue for coordination.
+
+        Returns:
+            The message queue for general coordination messages.
+        """
+        return self._message_queue
+
+    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
+        """Create shared memory transport (legacy).
 
         Returns the shared transport instance that all workers will use.
         Since this is shared memory, there's only one transport shared by all workers.
+
+        Note: This is a legacy method. The new init_on_sender/init_on_worker API
+        is the preferred way to set up the transport.
         """
-        # Register the pipe for lazy buffer distribution
-        if pipe_or_context is not None:
-            self._shared_transport.register_pipe(pipe_or_context)
         return self._shared_transport
 
     def prepare_weights(

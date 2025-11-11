@@ -13,11 +13,14 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 import torch
+
+import torchrl.collectors._runner
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -33,7 +36,6 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -48,7 +50,7 @@ from torchrl.collectors import (
     SyncDataCollector,
     WeightUpdaterBase,
 )
-from torchrl.collectors.collectors import _Interruptor
+from torchrl.collectors._constants import _Interruptor
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -1487,12 +1489,14 @@ if __name__ == "__main__":
         assert_allclose_td(data10, data20)
 
     @pytest.mark.parametrize("use_async", [False, True])
-    @pytest.mark.parametrize("cudagraph", [False, True])
+    @pytest.mark.parametrize(
+        "cudagraph", [False, True] if torch.cuda.is_available() else [False]
+    )
     @pytest.mark.parametrize(
         "weight_sync_scheme",
         [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
     )
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
+    # @pytest.mark.skipif(not torch.cuda.is_available() and not torch.mps.is_available(), reason="no cuda/mps device found")
     def test_update_weights(self, use_async, cudagraph, weight_sync_scheme):
         def create_env():
             return ContinuousActionVecMockEnv()
@@ -1509,11 +1513,12 @@ if __name__ == "__main__":
         kwargs = {}
         if weight_sync_scheme is not None:
             kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         collector = collector_class(
             [create_env] * 3,
             policy=policy,
-            device=[torch.device("cuda:0")] * 3,
-            storing_device=[torch.device("cuda:0")] * 3,
+            device=[torch.device(device)] * 3,
+            storing_device=[torch.device(device)] * 3,
             frames_per_batch=20,
             cat_results="stack",
             cudagraph_policy=cudagraph,
@@ -1544,7 +1549,9 @@ if __name__ == "__main__":
             # check they don't match
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                    with pytest.raises(AssertionError):
+                    with pytest.raises(
+                        AssertionError
+                    ) if torch.cuda.is_available() else nullcontext():
                         torch.testing.assert_close(
                             state_dict[f"worker{worker}"]["policy_state_dict"][k],
                             policy_state_dict[k].cpu(),
@@ -2401,7 +2408,9 @@ class TestAutoWrap:
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
         with pytest.raises(
             TypeError,
-            match=("Arguments to policy.forward are incompatible with entries in"),
+            match=(
+                "Arguments to policy.forward are incompatible with entries in|Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True."
+            ),
         ):
             collector_class(
                 **self._create_collector_kwargs(
@@ -2980,6 +2989,94 @@ class TestUpdateParams:
             col.shutdown()
             del col
 
+    @pytest.mark.skipif(
+        not torch.cuda.is_available() or torch.cuda.device_count() < 3,
+        reason="requires at least 3 CUDA devices",
+    )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme",
+        [SharedMemWeightSyncScheme, MultiProcessWeightSyncScheme],
+    )
+    def test_shared_device_weight_update(self, weight_sync_scheme):
+        """Test that weight updates work correctly when multiple workers share the same device.
+
+        This test specifically validates the per-worker queue implementation in SharedMemWeightSyncScheme.
+        When workers 0 and 2 share cuda:2, each should receive its own copy of the weights through
+        dedicated queues, preventing race conditions that could occur with a single shared queue.
+        """
+        # Create policy on cuda:0
+        policy = TensorDictModule(
+            nn.Linear(7, 7, device="cuda:0"),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        def make_env():
+            return ContinuousActionVecMockEnv()
+
+        # Create collector with workers on cuda:2, cuda:1, cuda:2
+        # Workers 0 and 2 share cuda:2 - this is the key test case
+        collector = MultiaSyncDataCollector(
+            [make_env, make_env, make_env],
+            policy=policy,
+            frames_per_batch=30,
+            total_frames=300,
+            device=["cuda:2", "cuda:1", "cuda:2"],
+            storing_device=["cuda:2", "cuda:1", "cuda:2"],
+            weight_sync_schemes={"policy": weight_sync_scheme()},
+        )
+
+        try:
+            # Collect first batch to initialize workers
+            for _ in collector:
+                break
+
+            # Get initial weights
+            old_weight = policy.module.weight.data.clone()
+
+            # Modify policy weights on cuda:0
+            for p in policy.parameters():
+                p.data += torch.randn_like(p)
+
+            new_weight = policy.module.weight.data.clone()
+            assert not torch.allclose(
+                old_weight, new_weight
+            ), "Weights should have changed"
+
+            # Update weights - this should propagate to all workers via their dedicated queues
+            collector.update_policy_weights_()
+
+            # Collect more batches to ensure weights are propagated
+            for i, _ in enumerate(collector):
+                if i >= 2:
+                    break
+
+            # Get state dict from all workers
+            state_dict = collector.state_dict()
+
+            # Verify all workers have the new weights, including both workers on cuda:2
+            for worker_idx in range(3):
+                worker_key = f"worker{worker_idx}"
+                assert (
+                    "policy_state_dict" in state_dict[worker_key]
+                ), f"Worker {worker_idx} should have policy_state_dict"
+                worker_weight = state_dict[worker_key]["policy_state_dict"][
+                    "module.weight"
+                ]
+                torch.testing.assert_close(
+                    worker_weight.cpu(),
+                    new_weight.cpu(),
+                    msg=(
+                        f"Worker {worker_idx} weights don't match expected weights. "
+                        f"Workers 0 and 2 share device cuda:2, worker 1 is on cuda:1. "
+                        f"This test validates that the per-worker queue system correctly "
+                        f"distributes weights even when multiple workers share a device."
+                    ),
+                )
+        finally:
+            collector.shutdown()
+            del collector
+
 
 class TestAggregateReset:
     def test_aggregate_reset_to_root(self):
@@ -3176,11 +3273,11 @@ class TestLibThreading:
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_num_threads(self):
-        from torchrl.collectors import collectors
+        pass
 
-        _main_async_collector_saved = collectors._main_async_collector
-        collectors._main_async_collector = decorate_thread_sub_func(
-            collectors._main_async_collector, num_threads=3
+        _main_async_collector_saved = torchrl.collectors._runner._main_async_collector
+        torchrl.collectors._runner._main_async_collector = decorate_thread_sub_func(
+            torchrl.collectors._runner._main_async_collector, num_threads=3
         )
         num_threads = torch.get_num_threads()
         try:
@@ -3204,7 +3301,9 @@ class TestLibThreading:
             except Exception:
                 torchrl_logger.info("Failed to shut down collector")
             # reset vals
-            collectors._main_async_collector = _main_async_collector_saved
+            torchrl.collectors._runner._main_async_collector = (
+                _main_async_collector_saved
+            )
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(

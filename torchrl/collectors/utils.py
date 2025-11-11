@@ -4,12 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
+from copy import deepcopy
 
 import torch
+from pyvers import implement_for
 
-from tensordict import NestedKey, pad, set_lazy_legacy, TensorDictBase
-
+from tensordict import NestedKey, pad, set_lazy_legacy, TensorDict, TensorDictBase
+from tensordict.utils import Buffer
+from torch import multiprocessing as mp, nn as nn
+from torch.nn import Parameter
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
@@ -257,3 +262,118 @@ def split_trajectories(
         [pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0
     )
     return td
+
+
+@implement_for("torch", "2.5.0")
+def _make_meta_policy(policy: nn.Module) -> nn.Module:
+    """Create policy structure with parameters on meta device.
+
+    This is used with weight sync schemes to send policy structure without weights.
+    The actual weights are distributed by the schemes.
+
+    Args:
+        policy: Policy module to extract structure from.
+
+    Returns:
+        A copy of the policy with all parameters on meta device and requires_grad=False.
+    """
+
+    def _cast(p, param_maybe_buffer):
+        if isinstance(param_maybe_buffer, Parameter):
+            # Create parameter without gradients to avoid serialization issues
+            return Parameter(p, requires_grad=False)
+        if isinstance(param_maybe_buffer, Buffer):
+            return Buffer(p)
+        return p
+
+    param_and_buf = TensorDict.from_module(policy, as_module=True)
+    with param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy):
+        meta_policy = deepcopy(policy)
+    return meta_policy
+
+
+@implement_for("torch", None, "2.5.0")
+def _make_meta_policy(policy: nn.Module) -> nn.Module:  # noqa: F811
+    """Create policy structure with parameters on meta device.
+
+    This is used with weight sync schemes to send policy structure without weights.
+    The actual weights are distributed by the schemes.
+
+    Args:
+        policy: Policy module to extract structure from.
+
+    Returns:
+        A copy of the policy with all parameters on meta device and requires_grad=False.
+    """
+
+    def _cast(p, param_maybe_buffer):
+        if isinstance(param_maybe_buffer, Parameter):
+            # Create parameter without gradients to avoid serialization issues
+            return Parameter(p, requires_grad=False)
+        return p
+
+    param_and_buf = TensorDict.from_module(policy, as_module=True)
+    with param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy):
+        meta_policy = deepcopy(policy)
+    return meta_policy
+
+
+def _map_to_cpu_if_needed(x):
+    """Map tensors on exotic devices (MPS, NPU, etc.) to CPU.
+
+    CPU and CUDA tensors are kept as-is since they can be shared across processes.
+    Only exotic devices that don't support multiprocessing are mapped to CPU.
+    """
+    if isinstance(x, torch.Tensor):
+        # CPU and CUDA can be shared across processes
+        if x.device.type in ("cpu", "cuda"):
+            return x
+        # Exotic devices (MPS, NPU, etc.) need to be mapped to CPU
+        return x.cpu()
+    return x
+
+
+def _make_meta_params(param):
+    is_param = isinstance(param, Parameter)
+
+    pd = param.detach().to("meta")
+
+    if is_param:
+        pd = Parameter(pd, requires_grad=False)
+    return pd
+
+
+class _TrajectoryPool:
+    def __init__(self, ctx=None, lock: bool = False):
+        self.ctx = ctx
+        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int).share_memory_()
+        if ctx is None:
+            self.lock = contextlib.nullcontext() if not lock else mp.RLock()
+        else:
+            self.lock = contextlib.nullcontext() if not lock else ctx.RLock()
+
+    def get_traj_and_increment(self, n=1, device=None):
+        with self.lock:
+            v = self._traj_id.item()
+            out = torch.arange(v, v + n).to(device)
+            self._traj_id.copy_(1 + out[-1].item())
+        return out
+
+
+def _map_weight(
+    weight,
+    policy_device,
+):
+
+    is_param = isinstance(weight, Parameter)
+    is_buffer = isinstance(weight, Buffer)
+    weight = weight.data
+    if weight.device != policy_device:
+        weight = weight.to(policy_device)
+    elif weight.device.type in ("cpu",):
+        weight = weight.share_memory_()
+    if is_param:
+        weight = Parameter(weight, requires_grad=False)
+    elif is_buffer:
+        weight = Buffer(weight)
+    return weight
