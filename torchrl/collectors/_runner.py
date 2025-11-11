@@ -1,0 +1,504 @@
+from __future__ import annotations
+
+import queue
+from collections.abc import Callable
+from functools import partial
+from multiprocessing import connection, queues
+from typing import Any
+
+import numpy as np
+import torch
+from tensordict import TensorDictBase
+from torch import nn as nn
+
+from torchrl import logger as torchrl_logger
+from torchrl._utils import VERBOSE
+from torchrl.collectors._constants import (
+    _MAX_IDLE_COUNT,
+    _MIN_TIMEOUT,
+    _TIMEOUT,
+    DEFAULT_EXPLORATION_TYPE,
+)
+from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors.base import DataCollectorBase
+from torchrl.collectors.utils import _map_to_cpu_if_needed, _TrajectoryPool
+from torchrl.data import ReplayBuffer
+from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.utils import ExplorationType
+from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import _resolve_model
+
+
+def _make_policy_factory(
+    *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx
+):
+    if policy is not None and policy_factory is not None:
+        raise ValueError("policy cannot be used with policy_factory")
+    elif policy_factory is not None:
+        policy = policy_factory()
+
+    if weight_sync_scheme is not None:
+        weight_sync_scheme.init_on_worker(
+            model=policy, model_id="policy", worker_idx=worker_idx
+        )
+    return policy
+
+
+def _main_async_collector(
+    pipe_parent: connection.Connection,
+    pipe_child: connection.Connection,
+    queue_out: queues.Queue,
+    create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],  # noqa: F821
+    create_env_kwargs: dict[str, Any],
+    policy: Callable[[TensorDictBase], TensorDictBase],
+    max_frames_per_traj: int,
+    frames_per_batch: int,
+    reset_at_each_iter: bool,
+    storing_device: torch.device | str | int | None,
+    env_device: torch.device | str | int | None,
+    policy_device: torch.device | str | int | None,
+    idx: int = 0,
+    exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
+    reset_when_done: bool = True,
+    verbose: bool = VERBOSE,
+    interruptor=None,
+    set_truncated: bool = False,
+    use_buffers: bool | None = None,
+    replay_buffer: ReplayBuffer | None = None,
+    extend_buffer: bool = True,
+    traj_pool: _TrajectoryPool = None,
+    trust_policy: bool = False,
+    compile_policy: bool = False,
+    cudagraph_policy: bool = False,
+    no_cuda_sync: bool = False,
+    policy_factory: Callable | None = None,
+    collector_class: type | Callable[[], DataCollectorBase] | None = None,
+    postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+    weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+    worker_idx: int | None = None,
+) -> None:
+    if collector_class is None:
+        collector_class = SyncDataCollector
+    pipe_parent.close()
+    # init variables that will be cleared when closing
+    collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
+
+    # Make a policy-factory out of the policy
+    policy_factory = partial(
+        _make_policy_factory,
+        policy=policy,
+        policy_factory=policy_factory,
+        weight_sync_scheme=weight_sync_schemes.get("policy"),
+        worker_idx=worker_idx,
+    )
+    policy = None
+    try:
+        collector_class._ignore_rb = extend_buffer
+        inner_collector = collector_class(
+            create_env_fn,
+            create_env_kwargs=create_env_kwargs,
+            policy=policy,
+            policy_factory=policy_factory,
+            total_frames=-1,
+            max_frames_per_traj=max_frames_per_traj,
+            frames_per_batch=frames_per_batch,
+            reset_at_each_iter=reset_at_each_iter,
+            postproc=postproc,
+            split_trajs=False,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            exploration_type=exploration_type,
+            reset_when_done=reset_when_done,
+            return_same_td=replay_buffer is None,
+            interruptor=interruptor,
+            set_truncated=set_truncated,
+            use_buffers=use_buffers,
+            replay_buffer=replay_buffer,
+            extend_buffer=False,
+            traj_pool=traj_pool,
+            trust_policy=trust_policy,
+            compile_policy=compile_policy,
+            cudagraph_policy=cudagraph_policy,
+            no_cuda_sync=no_cuda_sync,
+            weight_sync_schemes=weight_sync_schemes,
+        )
+
+        # Set up weight receivers for worker process
+        if weight_sync_schemes:
+            inner_collector._weight_receivers = {}
+            inner_collector.pipe = pipe_child  # Add pipe attribute for context
+            inner_collector.worker_idx = (
+                worker_idx  # Add worker index for queue-based schemes
+            )
+
+            for model_id, scheme in weight_sync_schemes.items():
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_worker"):
+                    # For SharedMemWeightSyncScheme, init_on_worker reads from queue
+                    # and applies weights to model - all handled by the receiver
+                    scheme.init_on_worker(model_id=model_id, context=inner_collector)
+                    receiver = scheme.get_receiver()
+                else:
+                    # Legacy API
+                    receiver = scheme.create_receiver()
+                    receiver.set_context(inner_collector)
+                    receiver.register_worker_transport(pipe_child)
+
+                    model = _resolve_model(inner_collector, model_id)
+                    receiver.register_model(model)
+
+                inner_collector._weight_receivers[model_id] = receiver
+        else:
+            inner_collector._weight_receivers = {}
+
+        use_buffers = inner_collector._use_buffers
+        if verbose:
+            torchrl_logger.info("Sync data collector created")
+        dc_iter = iter(inner_collector)
+        j = 0
+        pipe_child.send("instantiated")
+    except Exception as e:
+        # Send error information to main process
+        # We send a dict with the exception info so we can recreate it in the main process
+        import traceback
+
+        error_info = {
+            "error": True,
+            "exception_type": type(e).__name__,
+            "exception_module": type(e).__module__,
+            "exception_msg": str(e),
+            "traceback": traceback.format_exc(),
+        }
+        try:
+            pipe_child.send(error_info)
+        except Exception:
+            # If pipe is broken, nothing we can do
+            pass
+        return
+
+    has_timed_out = False
+    counter = 0
+    run_free = False
+    while True:
+        _timeout = _TIMEOUT if not has_timed_out else 1e-3
+        if not run_free and pipe_child.poll(_timeout):
+            counter = 0
+            data_in, msg = pipe_child.recv()
+            if verbose:
+                torchrl_logger.info(f"worker {idx} received {msg}")
+        elif not run_free:
+            if verbose:
+                torchrl_logger.info(f"poll failed, j={j}, worker={idx}")
+            # default is "continue" (after first iteration)
+            # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
+            # in that case, the main process probably expects the worker to continue collect data
+            if has_timed_out:
+                counter = 0
+                # has_timed_out is True if the process failed to send data, which will
+                # typically occur if main has taken another batch (i.e. the queue is Full).
+                # In this case, msg is the previous msg sent by main, which will typically be "continue"
+                # If it's not the case, it is not expected that has_timed_out is True.
+                if msg not in ("continue", "continue_random"):
+                    raise RuntimeError(f"Unexpected message after time out: msg={msg}")
+            else:
+                # if has_timed_out is False, then the time out does not come from the fact that the queue is Full.
+                # this means that our process has been waiting for a command from main in vain, while main was not
+                # receiving data.
+                # This will occur if main is busy doing something else (e.g. computing loss etc).
+
+                counter += _timeout
+                if verbose:
+                    torchrl_logger.info(f"worker {idx} has counter {counter}")
+                if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
+                    raise RuntimeError(
+                        f"This process waited for {counter} seconds "
+                        f"without receiving a command from main. Consider increasing the maximum idle count "
+                        f"if this is expected via the environment variable MAX_IDLE_COUNT "
+                        f"(current value is {_MAX_IDLE_COUNT})."
+                        f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
+                        f"collected, consider calling `collector.shutdown()` before ending the program."
+                    )
+                continue
+        else:
+            # placeholder, will be checked after
+            if msg != "continue":
+                torchrl_logger.info(f"worker {idx} will reset {msg} to 'continue'")
+            msg = "continue"
+        if msg == "run_free":
+            run_free = True
+            msg = "continue"
+        if run_free:
+            # Capture shutdown / update / seed signal, but continue should not be expected
+            if pipe_child.poll(1e-4):
+                data_in, msg = pipe_child.recv()
+                torchrl_logger.info(f"worker {idx} received {msg} while running free")
+                if msg == "continue":
+                    # Switch back to run_free = False
+                    run_free = False
+                if msg == "pause":
+                    queue_out.put((idx, "paused"), timeout=_TIMEOUT)
+                    while not pipe_child.poll(1e-2):
+                        continue
+                    data_in, msg = pipe_child.recv()
+                    if msg != "restart":
+                        raise RuntimeError(f"Expected msg='restart', got {msg=}")
+                    msg = "continue"
+            else:
+                data_in = None
+                # TODO: this does not work with random frames
+                msg = "continue"
+        # Note: The "continue" message handling has been moved below after update_weights handling
+        # to allow falling through from update_weights to continue
+
+        if msg == "update":
+            torchrl_logger.info(f"worker {idx} updating the params...")
+            inner_collector.update_policy_weights_(policy_weights=data_in)
+            pipe_child.send((j, "updated"))
+            has_timed_out = False
+            continue
+
+        if msg == "register_shared_weights":
+            # Shared memory lazy registration: main process sends buffer reference
+            if verbose:
+                torchrl_logger.info(
+                    f"worker {idx} received shared memory buffer registration"
+                )
+            model_id, shared_buffer = data_in
+
+            # Store the shared buffer reference for this model
+            # The receiver will use this buffer for all future weight accesses
+            if (
+                inner_collector._weight_receivers
+                and model_id in inner_collector._weight_receivers
+            ):
+                # Update receiver's buffer reference
+                receiver = inner_collector._weight_receivers[model_id]
+                # Store the shared buffer - the model's parameters should point to this
+                if hasattr(receiver, "_shared_weights"):
+                    receiver._shared_weights[model_id] = shared_buffer
+
+                # Apply the buffer to the model immediately
+                # Only apply if the model is an nn.Module (has learnable parameters)
+                try:
+                    model = receiver._resolve_model_ref()
+                except (ValueError, AttributeError) as e:
+                    # Model not registered or reference is invalid
+                    if verbose:
+                        torchrl_logger.warning(
+                            f"worker {idx} could not resolve model '{model_id}': {e}"
+                        )
+                    continue
+
+                if isinstance(model, nn.Module):
+                    receiver.apply_weights(shared_buffer)
+                else:
+                    if verbose:
+                        torchrl_logger.info(
+                            f"worker {idx} skipping weight application for non-nn.Module model '{model_id}'"
+                        )
+
+                if verbose:
+                    torchrl_logger.info(
+                        f"worker {idx} registered shared buffer for model '{model_id}'"
+                    )
+            else:
+                torchrl_logger.warning(
+                    f"worker {idx} received shared buffer for unknown model '{model_id}'"
+                )
+
+            # Send acknowledgment back to main process
+            pipe_child.send((None, "registered"))
+            has_timed_out = False
+            continue
+
+        if msg == "update_weights":
+            # New weight update protocol for simplified weight sync system
+            if verbose:
+                torchrl_logger.info(
+                    f"worker {idx} received weight update via new protocol"
+                )
+            model_id, weights = data_in
+
+            # Apply weights using the appropriate receiver for this model
+            if (
+                inner_collector._weight_receivers
+                and model_id in inner_collector._weight_receivers
+            ):
+                inner_collector._weight_receivers[model_id].apply_weights(weights)
+            else:
+                torchrl_logger.warning(
+                    f"worker {idx} received weights for unknown model '{model_id}'"
+                )
+
+            # After applying weights, we continue collecting immediately as if we received
+            # a "continue" message. This ensures the worker keeps collecting data without
+            # waiting for an explicit continue from the main process.
+            has_timed_out = False
+            msg = "continue"
+            # Now check if we should continue collecting
+
+        if msg in ("continue", "continue_random"):
+            # This block handles both explicit continue messages and implicit ones after weight updates
+            if msg == "continue_random":
+                inner_collector.init_random_frames = float("inf")
+            else:
+                inner_collector.init_random_frames = -1
+
+            # Note: For MultiProcessWeightSyncScheme, weight updates are handled by the
+            # main message loop above (msg == "update_weights" case). The receiver.receive()
+            # pattern is only used for schemes with separate communication channels like
+            # SharedMemWeightSyncScheme (shared memory) or DistributedWeightSyncScheme (TCPStore).
+            # Calling receiver.receive() here would interfere with the pipe-based message protocol.
+
+            next_data = next(dc_iter)
+            if pipe_child.poll(_MIN_TIMEOUT):
+                # in this case, main send a message to the worker while it was busy collecting trajectories.
+                # In that case, we skip the collected trajectory and get the message from main. This is faster than
+                # sending the trajectory in the queue until timeout when it's never going to be received.
+                continue
+
+            if replay_buffer is not None:
+                if extend_buffer:
+                    next_data.names = None
+                    replay_buffer.extend(next_data)
+
+                if run_free:
+                    continue
+
+                try:
+                    queue_out.put((idx, j), timeout=_TIMEOUT)
+                    if verbose:
+                        torchrl_logger.info(f"worker {idx} successfully sent data")
+                    j += 1
+                    has_timed_out = False
+                    continue
+                except queue.Full:
+                    if verbose:
+                        torchrl_logger.info(f"worker {idx} has timed out")
+                    has_timed_out = True
+                    continue
+
+            if j == 0 or not use_buffers:
+                collected_tensordict = next_data
+                if (
+                    storing_device is not None
+                    and collected_tensordict.device != storing_device
+                ):
+                    raise RuntimeError(
+                        f"expected device to be {storing_device} but got {collected_tensordict.device}"
+                    )
+                if use_buffers:
+                    # If policy and env are on cpu, we put in shared mem,
+                    # if policy is on cuda and env on cuda, we are fine with this
+                    # If policy is on cuda and env on cpu (or opposite) we put tensors that
+                    # are on cpu in shared mem.
+                    MPS_ERROR = (
+                        "tensors on mps device cannot be put in shared memory. Make sure "
+                        "the shared device (aka storing_device) is set to CPU."
+                    )
+                    if collected_tensordict.device is not None:
+                        # placeholder in case we need different behaviors
+                        if collected_tensordict.device.type in ("cpu",):
+                            collected_tensordict.share_memory_()
+                        elif collected_tensordict.device.type in ("mps",):
+                            raise RuntimeError(MPS_ERROR)
+                        elif collected_tensordict.device.type == "cuda":
+                            collected_tensordict.share_memory_()
+                        else:
+                            raise NotImplementedError(
+                                f"Device {collected_tensordict.device} is not supported in multi-collectors yet."
+                            )
+                    else:
+                        # make sure each cpu tensor is shared - assuming non-cpu devices are shared
+                        def cast_tensor(x, MPS_ERROR=MPS_ERROR):
+                            if x.device.type in ("cpu",):
+                                x.share_memory_()
+                            if x.device.type in ("mps",):
+                                RuntimeError(MPS_ERROR)
+
+                        collected_tensordict.apply(cast_tensor, filter_empty=True)
+                data = (collected_tensordict, idx)
+            else:
+                if next_data is not collected_tensordict:
+                    raise RuntimeError(
+                        "SyncDataCollector should return the same tensordict modified in-place."
+                    )
+                data = idx  # flag the worker that has sent its data
+            try:
+                queue_out.put((data, j), timeout=_TIMEOUT)
+                if verbose:
+                    torchrl_logger.info(f"worker {idx} successfully sent data")
+                j += 1
+                has_timed_out = False
+                continue
+            except queue.Full:
+                if verbose:
+                    torchrl_logger.info(f"worker {idx} has timed out")
+                has_timed_out = True
+                continue
+
+        if msg == "seed":
+            data_in, static_seed = data_in
+            new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
+            torch.manual_seed(data_in)
+            np.random.seed(data_in)
+            pipe_child.send((new_seed, "seeded"))
+            has_timed_out = False
+            continue
+
+        elif msg == "reset":
+            inner_collector.reset()
+            pipe_child.send((j, "reset"))
+            continue
+
+        elif msg == "state_dict":
+            from torch.utils._pytree import tree_map
+
+            state_dict = inner_collector.state_dict()
+            # Map exotic devices (MPS, NPU, etc.) to CPU for multiprocessing compatibility
+            # CPU and CUDA tensors are already shareable and don't need conversion
+            state_dict = tree_map(_map_to_cpu_if_needed, state_dict)
+            pipe_child.send((state_dict, "state_dict"))
+            has_timed_out = False
+            continue
+
+        elif msg == "load_state_dict":
+            state_dict = data_in
+            inner_collector.load_state_dict(state_dict)
+            del state_dict
+            pipe_child.send((j, "loaded"))
+            has_timed_out = False
+            continue
+
+        elif msg == "getattr_policy":
+            attr_name = data_in
+            try:
+                result = getattr(inner_collector.policy, attr_name)
+                pipe_child.send((result, "getattr_policy"))
+            except AttributeError as e:
+                pipe_child.send((e, "getattr_policy"))
+            has_timed_out = False
+            continue
+
+        elif msg == "getattr_env":
+            attr_name = data_in
+            try:
+                result = getattr(inner_collector.env, attr_name)
+                pipe_child.send((result, "getattr_env"))
+            except AttributeError as e:
+                pipe_child.send((e, "getattr_env"))
+            has_timed_out = False
+            continue
+
+        elif msg == "close":
+            del collected_tensordict, data, next_data, data_in
+            inner_collector.shutdown()
+            del inner_collector, dc_iter
+            pipe_child.send("closed")
+            if verbose:
+                torchrl_logger.info(f"collector {idx} closed")
+            break
+
+        else:
+            raise Exception(f"Unrecognized message {msg}")

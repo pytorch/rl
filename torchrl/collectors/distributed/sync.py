@@ -19,13 +19,11 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
+from torchrl.collectors._multi_async import MultiaSyncDataCollector
+from torchrl.collectors._multi_sync import MultiSyncDataCollector
+from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
