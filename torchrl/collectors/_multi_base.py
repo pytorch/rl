@@ -334,12 +334,14 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory = self._setup_policy_factory(policy_factory)
 
         # Set up weight synchronization
+        weight_sync_schemes = {}
         if (
             not any(policy_factory)
             and not weight_sync_schemes
             and weight_updater is None
+            and isinstance(policy, nn.Module)
         ):
-            weight_sync_schemes = {"policy": SharedMemWeightSyncScheme()}
+            weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
 
         self._setup_multi_policy_and_weights(
             policy, policy_factory, weight_updater, weight_sync_schemes
@@ -511,52 +513,16 @@ class _MultiDataCollector(DataCollectorBase):
             raise TypeError("policy_factory and policy are mutually exclusive")
 
         if weight_sync_schemes is not None:
-            # Weight sync schemes handle all weight distribution
-            # Extract weights so schemes can access them, but don't do in-place replacement
-            self._policy_weights_dict = {}
-            self._fallback_policy = None
-
-            if not any(policy_factory) and policy is not None:
-                # Extract weights for the first device so schemes can access them
-                # Use first device as representative
-                first_device = self.policy_device[0] if self.policy_device else None
-
-                # Validate device types for SharedMemWeightSyncScheme
-                for scheme in weight_sync_schemes.values():
-                    if isinstance(scheme, SharedMemWeightSyncScheme):
-                        for policy_device in self.policy_device:
-                            if policy_device and policy_device.type not in (
-                                "cpu",
-                                "cuda",
-                            ):
-                                raise NotImplementedError(
-                                    f"Device type '{policy_device.type}' not supported for SharedMemWeightSyncScheme. "
-                                    f"Only 'cpu' and 'cuda' are supported."
-                                )
-
-                # Extract weights from policy
-                # Use .data to avoid gradient tracking (can't serialize tensors with requires_grad)
-                weights = (
-                    TensorDict.from_module(policy, as_module=True).data
-                    if isinstance(policy, nn.Module)
-                    else TensorDict()
+            weight_sync_policy = weight_sync_schemes.get("policy")
+            if weight_sync_policy is None:
+                return
+            if weight_sync_policy._initialized_on_sender:
+                return
+            if any(p is not None for p in policy_factory):
+                raise RuntimeError(
+                    f"the weight sync scheme must be initialized on sender ahead of time when passing a policy factory. Got {policy_factory=}"
                 )
-
-                # For SharedMemWeightSyncScheme, share the weights
-                if any(
-                    isinstance(scheme, SharedMemWeightSyncScheme)
-                    for scheme in weight_sync_schemes.values()
-                ):
-                    if first_device and first_device.type == "cpu":
-                        weights = weights.share_memory_()
-                    elif first_device and first_device.type == "cuda":
-                        # CUDA tensors maintain shared references through mp.Queue
-                        weights = weights.to(first_device).share_memory_()
-
-                self._policy_weights_dict[first_device] = weights
-                self._fallback_policy = policy
-
-            self._get_weights_fn = None
+            weight_sync_policy.init_on_sender(model=policy, devices=self.policy_device)
         else:
             # Using legacy weight updater - extract weights and create stateful policies
             self._setup_multi_policy_and_weights_legacy(
@@ -900,13 +866,16 @@ class _MultiDataCollector(DataCollectorBase):
                 # Schemes handle weight distribution on worker side
                 if any(policy_factory):
                     policy_to_send = None  # Factory will create policy in worker
+                    cm = contextlib.nullcontext()
                 elif policy is not None:
-                    # Send meta-device policy (empty structure) - schemes apply weights
-                    policy_to_send = _make_meta_policy(policy)
+                    # Send policy with meta-device parameters (empty structure) - schemes apply weights
+                    policy_to_send = policy
+                    cm = _make_meta_policy(policy)
                 else:
                     policy_to_send = None
-                cm = contextlib.nullcontext()
-            else:
+                    cm = contextlib.nullcontext()
+            elif hasattr(self, "_policy_weights_dict"):
+                # LEGACY:
                 # With weight updater, use in-place weight replacement
                 # Take the weights and locally dispatch them to the policy before sending.
                 # This ensures a given set of shared weights for a device are shared
@@ -917,6 +886,10 @@ class _MultiDataCollector(DataCollectorBase):
                     cm = policy_weights.to_module(policy)
                 else:
                     cm = contextlib.nullcontext()
+            else:
+                # Parameter-less policy
+                cm = contextlib.nullcontext()
+                policy_to_send = policy
 
             with cm:
                 kwargs = {
@@ -994,6 +967,13 @@ also that the state dict is synchronised across processes if needed."""
                 pipe_child.close()
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
+
+        # Synchronize initial weights with workers AFTER starting processes but BEFORE waiting for "instantiated"
+        # This must happen after proc.start() but before workers send "instantiated" to avoid deadlock:
+        # Workers will call receiver.synchronize_weights() during init and may block waiting for data
+        if self._weight_senders:
+            for model_id, sender in self._weight_senders.items():
+                sender.synchronize_weights()
 
         # Wait for workers to be ready
         for i, pipe_parent in enumerate(self.pipes):

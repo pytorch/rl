@@ -8,7 +8,6 @@ import abc
 
 import weakref
 from collections.abc import Iterator
-from queue import Empty
 from typing import Any, Literal, Protocol
 
 import torch
@@ -49,7 +48,7 @@ __all__ = [
 class TransportBackend(Protocol):
     """Abstract interface for different communication mechanisms."""
 
-    def send_weights(self, model_id: str, weights: Any) -> None:
+    def send_weights(self, weights: Any) -> None:
         """Send weights to the receiver."""
         ...
 
@@ -59,6 +58,30 @@ class TransportBackend(Protocol):
 
     def check_connection(self) -> bool:
         """Check if the connection is still alive."""
+        ...
+
+    def synchronize_weights_on_sender(self) -> None:
+        """Synchronize weights on sender side before collection starts.
+
+        This is called once after workers are initialized to send the initial
+        weights. This can be a no-op (weights are sent via
+        send_weights).
+        """
+        ...
+
+    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+        """Synchronize weights on worker side before collection starts.
+
+        This is called once in each worker after initialization to receive
+        the initial weights. This is a no-op (weights are received via
+        receive_weights).
+
+        Args:
+            worker_idx: The worker index.
+
+        Returns:
+            The received weights (for SharedMemTransport) or None.
+        """
         ...
 
 
@@ -74,20 +97,20 @@ class MPTransport:
         self.timeout = timeout
         self.pipe = pipe_connection
 
-    def send_weights(self, model_id: str, weights: Any) -> None:
+    def send_weights(self, weights: Any) -> None:
         """Send weights through the pipe.
 
         Sends weights and waits for acknowledgment to ensure delivery.
         """
-        self.send_weights_async(model_id, weights)
+        self.send_weights_async(weights)
         self.wait_ack()
 
-    def send_weights_async(self, model_id: str, weights: Any) -> None:
+    def send_weights_async(self, weights: Any) -> None:
         """Send weights through the pipe without waiting for acknowledgment.
 
         Use wait_ack() to wait for acknowledgment after sending to all workers.
         """
-        self.pipe.send(((model_id, weights), "update_weights"))
+        self.pipe.send((weights, "update_weights"))
 
     def wait_ack(self) -> None:
         """Wait for acknowledgment from worker."""
@@ -103,12 +126,16 @@ class MPTransport:
         Returns:
             Tuple of (model_id, weights) if weights were received, None if no data available
             or if a non-weight message was received.
+
+        Note:
+            model_id is returned as "policy" for backward compatibility, but transports
+            are now bound to a single model during initialization.
         """
         if self.pipe.poll(timeout):
             data_in, msg = self.pipe.recv()
             if msg == "update_weights":
-                model_id, weights = data_in
-                return model_id, weights
+                weights = data_in
+                return "policy", weights
             else:
                 # Not a weight update message - put it back and return None
                 # This allows the main worker loop to handle other messages
@@ -133,172 +160,97 @@ class MPTransport:
     def check_connection(self) -> bool:
         return not self.pipe.closed
 
+    def synchronize_weights_on_sender(self) -> None:
+        """No-op for MPTransport - weights are sent via send_weights()."""
+
+    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+        """No-op for MPTransport - weights are received via receive_weights()."""
+        return None
+
 
 class SharedMemTransport:
     """Shared memory transport for in-place weight updates.
 
-    This transport updates shared memory tensors directly without message passing.
+    This transport uses queue-based buffer distribution for initialization, then
+    updates shared memory tensors directly for subsequent weight updates.
     Workers automatically see weight updates without explicit communication.
 
-    The transport supports lazy registration with queue-based buffer distribution:
-    - On first weight send for a model, creates shared memory and sends buffer via queue
-    - Workers receive the buffer reference and update their local references
+    Initialization flow:
+    - Shared memory buffers are created and sent to workers via per-worker queues
+    - Workers receive the buffer reference and apply weights to their models
     - Subsequent updates are pure in-place shared memory (zero-copy)
 
     Both CPU and CUDA tensors maintain shared references when sent through mp.Queue.
 
-    Args:
-        policy_weights: Dictionary mapping model_id to shared TensorDict weights.
-            Can be empty if using lazy registration.
-        auto_register: Whether to automatically register models on first weight send.
-            Default is True. Set to `False` to require explicit registration via
-            register_weights().
     """
 
-    def __init__(
-        self,
-        policy_weights: dict[str, TensorDictBase] | None = None,
-        auto_register: bool = True,
-    ):
-        self._policy_weights = policy_weights if policy_weights is not None else {}
-        self._auto_register = auto_register
+    def __init__(self):
+        self._params_map = None  # a dict[worker_idx, TensorDictBase] map
         self._weight_queues = (
             None  # Dict of per-worker queues for distributing shared weights
         )
-        self._device_to_workers = {}  # Maps device -> list of worker indices
-        # Track which model_ids have been sent to workers
-        self._registered_with_workers = set()
 
-    def set_worker_info(self, device_to_workers: dict) -> None:
-        """Set worker device mapping for distributing weights.
+    def register_weights(
+        self, params_map: dict[int, mp.Queue], init_queues: dict[int, mp.Queue]
+    ) -> None:
+        """Initialize per-worker queues for shared memory buffer distribution."""
+        self._weight_queues = init_queues
+        self._params_map = params_map
+        # Create set of the unique weights
+        self._unique_weights = []
+        for weights in params_map.values():
+            if weights in self._unique_weights:
+                continue
+            self._unique_weights.append(weights)
 
-        Args:
-            device_to_workers: Dict mapping device -> list of worker indices on that device.
-                Example: {torch.device('cuda:1'): [0, 2], torch.device('cuda:2'): [1, 3]}
-        """
-        self._device_to_workers = device_to_workers
-
-    def register_weights(self, model_id: str, weights: TensorDictBase) -> None:
-        """Register a shared memory weights TensorDict for a model.
-
-        This method allows explicit registration of shared weights. It's optional
-        when auto_register=True (the default), but required when auto_register=False.
-
-        Weights are stored and will be sent to workers during init_on_sender.
-        """
-        if not isinstance(weights, TensorDictBase):
-            raise ValueError(f"Weights must be a TensorDictBase, got {type(weights)}")
-
-        is_new_registration = model_id not in self._policy_weights
-        if is_new_registration:
-            self._policy_weights[model_id] = weights
-        else:
-            raise RuntimeError("Re-registering weights is not supported.")
-
-    def _infer_device(self, td: TensorDictBase):
-        """Infer the device from a TensorDict by checking its tensors.
-
-        Returns:
-            torch.device or None if no tensors found or all on different devices.
-        """
-        for value in td.values(True, True):
-            if isinstance(value, torch.Tensor):
-                return value.device
-        return None
-
-    def _send_buffer_to_workers(self, model_id: str, buffer: TensorDictBase) -> None:
+    def synchronize_weights_on_sender(self) -> None:
         """Send shared memory buffer reference to workers via their per-worker queues.
 
         Both CPU and CUDA tensors maintain shared references through queues.
-        Each worker reads from its own dedicated queue, eliminating race conditions.
+        Each worker reads from its own dedicated queue, to avoid race conditions.
 
-        Note: We send buffer.data to avoid gradient tracking issues when crossing
-        process boundaries. The .data attribute gives us the underlying tensors
-        without autograd metadata.
         """
         if self._weight_queues is None:
             raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
 
-        # Validate device
-        device = buffer.device or self._infer_device(buffer)
-        if device is not None and device.type not in ("cpu", "cuda"):
-            raise NotImplementedError(
-                f"Device type '{device.type}' not supported for shared memory. "
-                f"Only 'cpu' and 'cuda' are supported."
-            )
+        for worker_idx, queue in self._weight_queues.items():
+            weights = self._params_map[worker_idx]
+            queue.put(weights)
 
-        # Send weights to each worker's dedicated queue
-        device = buffer.device or self._infer_device(buffer)
-        if device in self._device_to_workers:
-            worker_indices = self._device_to_workers[device]
-            for worker_idx in worker_indices:
-                # Each worker has its own queue - no race conditions
-                # Message format: (model_id, weights)
-                if worker_idx not in self._weight_queues:
-                    raise RuntimeError(
-                        f"Worker {worker_idx} queue not created. "
-                        f"Available queues: {list(self._weight_queues.keys())}"
-                    )
-                self._weight_queues[worker_idx].put((model_id, buffer.data))
-        else:
-            # Fallback: send to all workers (for CPU or unknown device)
-            # Calculate total workers from device_to_workers mapping
-            all_workers = set()
-            for workers in self._device_to_workers.values():
-                all_workers.update(workers)
-            for worker_idx in sorted(all_workers):
-                if worker_idx in self._weight_queues:
-                    self._weight_queues[worker_idx].put((model_id, buffer.data))
+    def synchronize_weights_on_worker(
+        self, worker_idx: int, timeout: float = 10.0
+    ) -> TensorDictBase:
+        """Receive shared memory buffer reference from sender via their per-worker queues.
 
-        self._registered_with_workers.add(model_id)
-
-    def send_weights(self, model_id: str, weights: Any) -> None:
-        """Update weights in-place in shared memory.
-
-        If the model is not registered and auto_register=True, it will be automatically
-        registered by creating a shared memory copy of the provided weights. The shared
-        buffer reference will be sent to workers via queue during the next init_on_sender call.
+        Each worker reads from its own dedicated queue, to avoid race conditions.
 
         Args:
-            model_id: Identifier for the model whose weights to update.
+            worker_idx: The worker index.
+            timeout: Timeout for reading from queue.
+
+        Returns:
+            The shared memory weights TensorDict.
+        """
+        if self._weight_queues is None:
+            raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
+
+        if worker_idx not in self._weight_queues:
+            raise RuntimeError(f"Worker {worker_idx} not registered in queues.")
+
+        # Read from dedicated queue for this worker
+        worker_queue = self._weight_queues[worker_idx]
+        weights = worker_queue.get(timeout=timeout)
+        return weights
+
+    def send_weights(self, weights: Any) -> None:
+        """Update weights in-place in shared memory.
+
+        Args:
             weights: New weights to send. Can be a TensorDictBase or dict.
 
         Raises:
-            KeyError: If model is not registered and auto_register=False.
-            ValueError: If weights type is unsupported for auto-registration.
+            ValueError: If weights type is unsupported.
         """
-        if model_id not in self._policy_weights:
-            if not self._auto_register:
-                raise KeyError(
-                    f"Model '{model_id}' not registered in SharedMemTransport. "
-                    f"Available models: {list(self._policy_weights.keys())}. "
-                    f"Either register the model using register_weights() or enable auto_register."
-                )
-
-            # Auto-register on first send
-            if isinstance(weights, dict):
-                weights = TensorDict(weights)
-            if not isinstance(weights, TensorDictBase):
-                raise ValueError(
-                    f"Cannot auto-register model '{model_id}' with weights type: {type(weights)}. "
-                    f"Supported types for auto-registration: TensorDictBase, dict. "
-                    f"Please manually register shared weights using register_weights()."
-                )
-            # Unflatten keys if they're flat (e.g., 'module.0.weight' -> nested structure)
-            # This is necessary for to_module() to work properly
-            weights_to_share = weights
-            # Check if keys are flattened by looking for dots in key names
-            if any("." in key for key in weights_to_share.keys()):
-                weights_to_share = weights_to_share.unflatten_keys(".")
-            shared_buffer = weights_to_share.share_memory_()
-
-            self._policy_weights[model_id] = shared_buffer
-
-            # Note: Buffer will be sent to workers during init_on_sender
-            # when the queue is available
-
-        shared_weights = self._policy_weights[model_id]
-
         # Update shared memory in-place (workers see this automatically)
         if isinstance(weights, dict):
             weights = TensorDict(weights)
@@ -308,7 +260,11 @@ class SharedMemTransport:
         weights_to_update = weights
         if any("." in key for key in weights.keys()):
             weights_to_update = weights.unflatten_keys(".")
-        shared_weights.data.update_(weights_to_update.data)
+
+        for buffer in self._unique_weights:
+            buffer.update_(weights_to_update, non_blocking=True)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
         """No-op for shared memory - weights are already visible."""
@@ -347,13 +303,8 @@ class RayTransport:
         self._remote_collector = remote_collector
         self._tensor_transport = tensor_transport
 
-    def send_weights(self, model_id: str, weights: Any) -> None:
-        """Send weights to the remote collector via Ray.
-
-        Note: We don't pass model_id to the remote collector because remote
-        collectors don't have weight senders - they apply weights directly to
-        their local policy.
-        """
+    def send_weights(self, weights: Any) -> None:
+        """Send weights to the remote collector via Ray."""
         if self._remote_collector is None:
             return
 
@@ -368,7 +319,7 @@ class RayTransport:
         )
         self.ray.wait([future], num_returns=1)
 
-    def send_weights_async(self, model_id: str, weights: Any) -> None:
+    def send_weights_async(self, weights: Any) -> None:
         """Send weights to remote collector without waiting for completion.
 
         Use wait_ack() to wait for completion after sending to all workers.
@@ -396,6 +347,13 @@ class RayTransport:
     def check_connection(self) -> bool:
         """Check if Ray is initialized."""
         return self.ray.is_initialized()
+
+    def synchronize_weights_on_sender(self) -> None:
+        """No-op for RayTransport - weights are sent via send_weights()."""
+
+    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+        """No-op for RayTransport - weights are received via remote method calls."""
+        return None
 
 
 class RayActorTransport:
@@ -427,7 +385,7 @@ class RayActorTransport:
         """Set the Ray actor reference to communicate with."""
         self._actor_ref = actor_ref
 
-    def send_weights(self, model_id: str, weights: Any) -> None:
+    def send_weights(self, weights: Any) -> None:
         """Send weights to the Ray actor."""
         if self._actor_ref is None:
             return
@@ -447,7 +405,7 @@ class RayActorTransport:
         else:
             raise ValueError(f"Unknown update method: {self._update_method}")
 
-    def send_weights_async(self, model_id: str, weights: Any) -> None:
+    def send_weights_async(self, weights: Any) -> None:
         """Send weights to Ray actor without waiting for completion.
 
         Use wait_ack() to wait for completion after sending to all actors.
@@ -494,6 +452,13 @@ class RayActorTransport:
             return False
         return True
 
+    def synchronize_weights_on_sender(self) -> None:
+        """No-op for RayActorTransport - weights are sent via send_weights()."""
+
+    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+        """No-op for RayActorTransport - weights are received via remote method calls."""
+        return None
+
 
 class RPCTransport:
     """RPC transport for communicating with a single RPC remote collector.
@@ -508,13 +473,8 @@ class RPCTransport:
         self._collector_rref = collector_rref
         self._collector_class = collector_class
 
-    def send_weights(self, model_id: str, weights: Any) -> None:
-        """Send weights to the remote collector via RPC.
-
-        Note: We don't pass model_id to the remote collector because remote
-        collectors don't have weight senders - they apply weights directly to
-        their local policy.
-        """
+    def send_weights(self, weights: Any) -> None:
+        """Send weights to the remote collector via RPC."""
         if self._collector_info is None or self._collector_rref is None:
             return
 
@@ -527,7 +487,7 @@ class RPCTransport:
             args=(self._collector_rref, weights),
         )
 
-    def send_weights_async(self, model_id: str, weights: Any) -> None:
+    def send_weights_async(self, weights: Any) -> None:
         """Send weights to remote collector without waiting for completion.
 
         Use wait_ack() to wait for completion after sending to all workers.
@@ -560,6 +520,13 @@ class RPCTransport:
 
         return rpc.is_initialized() if hasattr(rpc, "is_initialized") else True
 
+    def synchronize_weights_on_sender(self) -> None:
+        """No-op for RPCTransport - weights are sent via send_weights()."""
+
+    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+        """No-op for RPCTransport - weights are received via RPC calls."""
+        return None
+
 
 class DistributedTransport:
     """torch.distributed transport for communicating with a single distributed worker.
@@ -582,13 +549,8 @@ class DistributedTransport:
         self._sync = sync
         self._weights_buffer = None  # TensorDict buffer for receiving weights
 
-    def send_weights(self, model_id: str, weights: Any) -> None:
-        """Send weights to the distributed worker.
-
-        Note: We don't pass model_id to the remote collector because remote
-        collectors don't have weight senders - they apply weights directly to
-        their local policy.
-        """
+    def send_weights(self, weights: Any) -> None:
+        """Send weights to the distributed worker."""
         if self._store is None or self._rank is None:
             return
 
@@ -607,7 +569,7 @@ class DistributedTransport:
             raise RuntimeError(f"Expected 'updated' but got status {status}.")
         self._store.delete_key(f"NODE_{self._rank}_out")
 
-    def send_weights_async(self, model_id: str, weights: Any) -> None:
+    def send_weights_async(self, weights: Any) -> None:
         """Send weights to distributed worker without waiting for acknowledgment.
 
         Use wait_ack() to wait for acknowledgment after sending to all workers.
@@ -700,6 +662,13 @@ class DistributedTransport:
         """Check if torch.distributed is initialized."""
         return torch.distributed.is_initialized()
 
+    def synchronize_weights_on_sender(self) -> None:
+        """No-op for DistributedTransport - weights are sent via send_weights()."""
+
+    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+        """No-op for DistributedTransport - weights are received via receive_weights()."""
+        return None
+
 
 # ============================================================================
 # Weight Strategies
@@ -790,7 +759,9 @@ class WeightStrategy:
             if any("." in key for key in weights.keys()):
                 weights = weights.unflatten_keys(".")
         if isinstance(destination, nn.Module):
-            destination = TensorDict.from_module(destination)
+            # Do not update in-place
+            weights.to_module(destination)
+            return
         elif isinstance(destination, dict):
             destination = TensorDict(destination)
             if any(isinstance(key, str) and "." in key for key in destination.keys()):
@@ -950,10 +921,10 @@ class WeightSender:
         # Send to all workers first (non-blocking if transport supports it)
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(model_id, prepared_weights)
+                transport.send_weights_async(prepared_weights)
             else:
                 # Fallback for transports that don't support async send
-                transport.send_weights(model_id, prepared_weights)
+                transport.send_weights(prepared_weights)
 
         # Wait for all acknowledgments
         for transport in transports:
@@ -1000,7 +971,7 @@ class WeightSender:
         # Send to all workers (non-blocking)
         for transport in self._pending_transports:
             if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(model_id, prepared_weights)
+                transport.send_weights_async(prepared_weights)
             else:
                 raise RuntimeError(
                     f"transport of type {type(transport)} does not support async send."
@@ -1028,15 +999,30 @@ class WeightSender:
         self._pending_async = False
         self._pending_transports = None
 
-    # Legacy method - kept for backward compatibility
+    def synchronize_weights(self) -> None:
+        """Synchronize weights with workers before collection starts.
+
+        This method is called once after workers are initialized to send
+        the initial weights. For most transports this is a no-op (weights
+        are sent via send()). For SharedMemTransport, this sends buffer
+        references via queues.
+
+        This is different from send() which is called during training to
+        update weights.
+        """
+        # Iterate over all transports and call synchronize_weights_on_sender
+        for transport in self._iterate_transports():
+            if hasattr(transport, "synchronize_weights_on_sender"):
+                transport.synchronize_weights_on_sender()
+
     def update_weights(self, weights: Any) -> None:
-        """Send weights to ALL workers for this model (legacy).
+        """Send weights to ALL workers for this model.
 
         Args:
             weights: Weights to send (can be None, nn.Module, TensorDict, etc.).
 
         Note:
-            This is the legacy method. Use send() instead.
+            Convenience method that calls send(weights=weights).
         """
         self.send(weights=weights)
 
@@ -1070,6 +1056,7 @@ class WeightReceiver:
         self._transport = None  # lazy
         self._model_ref = None
         self._strategy = _get_strategy(scheme.strategy)
+        self._worker_idx = None  # Set by SharedMemWeightSyncScheme.init_on_worker()
 
     def _set_context(self, context: Any) -> None:
         """Set the context object (inner_collector) for resolving references (internal).
@@ -1142,14 +1129,46 @@ class WeightReceiver:
 
         return True
 
+    def synchronize_weights(self, worker_idx: int | None = None) -> None:
+        """Synchronize weights with sender before collection starts.
+
+        This method is called once after the worker is initialized to receive
+        the initial weights. For most transports this is a no-op (weights are
+        received via receive()). For SharedMemTransport, this receives the
+        buffer reference via queue and applies it to the model.
+
+        This is different from receive() which is called during collection
+        to check for weight updates.
+
+        Args:
+            worker_idx: The worker index (required for SharedMemTransport).
+                If not provided, uses the worker_idx stored during init_on_worker().
+        """
+        if self._transport is None:
+            return
+
+        # Use stored worker_idx if not provided
+        if worker_idx is None:
+            worker_idx = getattr(self, "_worker_idx", None)
+
+        # Call transport's synchronize method if available
+        weights = self._transport.synchronize_weights_on_worker(worker_idx)
+
+        # Apply weights to model if received (SharedMemTransport case)
+        if weights is not None and self._model_ref is not None:
+            model = self._resolve_model_ref()
+            self._strategy.apply_weights(model, weights)
+        else:
+            raise ValueError("Failed to synchronize weights")
+
     def apply_weights(self, weights: Any) -> None:
-        """Apply received weights to registered model (legacy).
+        """Apply received weights to registered model.
 
         Args:
             weights: The weights to apply.
 
         Note:
-            This is the legacy method. Use receive() in the worker loop instead.
+            Convenience method. Normally weights are received and applied via receive() in the worker loop.
         """
         if self._model_ref is None:
             raise ValueError("No model registered")
@@ -1230,8 +1249,7 @@ class RayModuleTransformSender(WeightSender):
             self._initialize_transport()
 
         if self._single_transport is not None:
-            model_id = getattr(self, "_model_id", "policy")
-            self._single_transport.send_weights(model_id, weights)
+            self._single_transport.send_weights(weights)
 
     def _initialize_transport(self) -> None:
         """Lazily initialize the transport by resolving the actor reference."""
@@ -1397,7 +1415,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         """Restore the scheme from pickling."""
         self.__dict__.update(state)
 
-    # Legacy methods - kept for backward compatibility
     @abc.abstractmethod
     def create_transport(self, pipe_or_context: Any) -> TransportBackend:
         """Create transport for communication.
@@ -1407,22 +1424,31 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
 
         Returns:
             A transport backend instance.
+
+        Note:
+            This is used internally by init_on_sender/init_on_worker.
         """
         ...
 
     def create_sender(self) -> WeightSender:
-        """Create a sender for this scheme (legacy).
+        """Create a sender for this scheme.
 
         Returns:
             WeightSender instance configured for this scheme.
+
+        Note:
+            Typically you should use init_on_sender() followed by get_sender() instead.
         """
         return WeightSender(self)
 
     def create_receiver(self) -> WeightReceiver:
-        """Create a receiver for this scheme (legacy).
+        """Create a receiver for this scheme.
 
         Returns:
             WeightReceiver instance configured for this scheme.
+
+        Note:
+            Typically you should use init_on_worker() followed by get_receiver() instead.
         """
         return WeightReceiver(self)
 
@@ -1562,141 +1588,148 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
         self._initialized_on_worker = True
 
     def create_transport(self, pipe: Any) -> TransportBackend:
-        """Create an MPTransport using the provided pipe (legacy)."""
+        """Create an MPTransport using the provided pipe.
+
+        Note:
+            This is used internally by init_on_sender/init_on_worker.
+        """
         return MPTransport(pipe)
 
 
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 
-    This scheme mimics the old WeightUpdater behavior by using shared memory
-    for in-place weight updates. Workers automatically see weight updates
-    without explicit message passing.
-
-    By default, this scheme uses lazy registration: models are automatically
-    registered on the first weight send. This makes it seamless to use with
-    configuration systems like Hydra where schemes are created before models
-    are available.
+    This scheme uses shared memory for in-place weight updates. Workers
+    automatically see weight updates without explicit message passing.
 
     Args:
-        policy_weights: Dictionary mapping model_id to shared TensorDict weights.
-            Can be empty if using lazy registration (auto_register=True).
         strategy: The weight transmission strategy (default: "tensordict").
-        auto_register: Whether to automatically register models on first weight send.
-            Default is True. Set to False to require explicit registration via
-            register_shared_weights().
 
     Example:
-        >>> # With auto-registration (default) - works with Hydra configs
+        >>> # Basic usage
         >>> scheme = SharedMemWeightSyncScheme()
-        >>> # Models are auto-registered on first weight send
-
-        >>> # With explicit registration
-        >>> scheme = SharedMemWeightSyncScheme(auto_register=False)
-        >>> shared_weights = TensorDict.from_module(model).share_memory_()
-        >>> scheme.register_shared_weights("policy", shared_weights)
+        >>> # Weights are initialized via init_on_sender()
     """
 
     def __init__(
         self,
-        policy_weights: dict[str, TensorDictBase] | None = None,
         strategy: str = "tensordict",
-        auto_register: bool = True,
     ):
         super().__init__(strategy)
-        self.policy_weights = policy_weights if policy_weights is not None else {}
-        self.auto_register = auto_register
         # Create a single shared transport for all workers
-        self._shared_transport = SharedMemTransport(
-            self.policy_weights, auto_register=auto_register
-        )
+        self._shared_transport = SharedMemTransport()
         # Create per-worker queues to avoid race conditions
         # Each worker gets its own queue for weight initialization
         self._weight_init_queues = {}  # worker_idx -> Queue
         # General message queue for coordination (if needed in future)
         self._message_queue = mp.Queue()
 
-    def register_shared_weights(self, model_id: str, weights: TensorDictBase) -> None:
-        """Register shared memory weights for a model.
-
-        This method allows explicit registration of shared weights. It's optional
-        when auto_register=True (the default), but required when auto_register=False.
-
-        Args:
-            model_id: Identifier for the model.
-            weights: Shared memory TensorDict containing the model's weights.
-        """
-        # Don't set self.policy_weights[model_id] here - register_weights does that
-        # (self.policy_weights and transport._policy_weights are the same dict)
-        self._shared_transport.register_weights(model_id, weights)
-
     def init_on_sender(
         self,
-        model_id: str,
+        model_id: str | None = None,
         context: Any = None,
-        **kwargs,
+        weights: TensorDictBase | None = None,
+        model: nn.Module | None = None,
+        params_map: dict[int, TensorDictBase] | None = None,
+        devices: list[torch.device] | None = None,
+        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase] | None = None,
+        num_workers: int | None = None,
     ) -> None:
         """Initialize on the main process (sender side).
 
-        Creates per-worker queues and distributes any pre-registered weights.
+        We create a map dict[worker_idx, weights_on_device]. Each model will be assigned a device. If two workers
+        share the same device, the entry in the dict will be the same.
+        To do this, we need to know the number of workers, their assigned device, and have access to the parameters.
+        If a context is provided, we read the devices from it. If not, the dict[worker_idx, device] map must be provided
+        explicitly.
+
+        In some cases, the policy on the worker side will be on multiple devices which may or may not be the same as the
+        devices on the main process. In this case, init_on_sender() needs to receive a mapping function as argument that
+        will take as input the worker_idx and the parameters and return a new set of parameters on the desired devices.
 
         Args:
             model_id: Identifier for the model being synchronized
-            context: Optional context object providing device_to_workers mapping, cached_weights
-            **kwargs: Alternative to context (device_to_workers, cached_weights, etc.)
+            context: Optional context object providing device_to_workers mapping and model access
+            weights: Pre-extracted weights as TensorDict (for policy factory usage)
+            model: Model to extract weights from
+            params_map: Direct mapping of worker_idx to weights on device (most explicit)
+            devices: List of devices for each worker
+            device_map_fn: Custom function to map worker_idx and weights to device-specific weights
+            num_workers: Number of workers (required with device_map_fn)
+
+        Examples:
+            Simple usage with collector context (stateful policy):
+
+            >>> policy = make_stateful_policy()
+            >>> scheme = SharedMemWeightSyncScheme(strategy="tensordict")
+            >>> collector = MultiSyncDataCollector(
+            ...     create_env_fn=[lambda: GymEnv("CartPole-v1")],
+            ...     policy=policy,
+            ...     frames_per_batch=100,
+            ...     total_frames=1000,
+            ...     weight_sync_schemes={"policy": scheme},
+            ... )
+            >>> # scheme.init_on_sender() is called automatically by collector
+
+            Pre-initialized usage (policy factory):
+
+            >>> policy_on_main = make_stateful_policy()
+            >>> scheme = SharedMemWeightSyncScheme(strategy="tensordict")
+            >>> # Must initialize before collector creation when using policy_factory
+            >>> scheme.init_on_sender(
+            ...     model_id="policy",
+            ...     weights=TensorDict.from_module(policy_on_main),
+            ...     devices=[torch.device("cuda:0"), torch.device("cuda:1")],
+            ...     num_workers=2,
+            ... )
+            >>> collector = MultiSyncDataCollector(
+            ...     create_env_fn=[lambda: GymEnv("CartPole-v1")],
+            ...     policy_factory=[make_stateful_policy],
+            ...     frames_per_batch=100,
+            ...     total_frames=1000,
+            ...     weight_sync_schemes={"policy": scheme},
+            ... )
+
+            Direct params_map usage (advanced):
+
+            >>> weights_cpu = TensorDict.from_module(policy).share_memory_()
+            >>> weights_cuda = weights_cpu.to("cuda").share_memory_()
+            >>> scheme = SharedMemWeightSyncScheme(strategy="tensordict")
+            >>> scheme.init_on_sender(
+            ...     model_id="policy",
+            ...     params_map={0: weights_cpu, 1: weights_cuda, 2: weights_cuda},
+            ... )
         """
-        # Extract device_to_workers mapping from context
-        if context is not None:
-            # Build device_to_workers from policy_device list
-            if hasattr(context, "policy_device"):
-                device_to_workers = {}
-                for idx, device in enumerate(context.policy_device):
-                    if device not in device_to_workers:
-                        device_to_workers[device] = []
-                    device_to_workers[device].append(idx)
-            else:
-                device_to_workers = kwargs.get("device_to_workers", {})
-
-            # Try to get cached shared memory weights
-            if hasattr(context, "get_cached_weights"):
-                cached_weights = context.get_cached_weights(model_id)
-            else:
-                cached_weights = None
-        else:
-            device_to_workers = kwargs.get("device_to_workers", {})
-            cached_weights = kwargs.get("cached_weights")
-
-        if not device_to_workers:
-            raise ValueError(
-                "device_to_workers mapping must be provided via context or kwargs"
-            )
+        # Plan: the goal of this init is to obtain a map dict[worker_idx, weights_on_device] that we can use to init
+        #       the weights on the workers.
+        #       Scenarios:
+        #           - Easiest scenario: the user provides the map directly (params_map). Nothing to do other than creating
+        #                 the transport and registering the workers etc.
+        #           - The user provides a model or its params and a device map. We need to create the map from the params
+        #                 explicitly.
+        #           - The user provides a context (e.g. a Collector) and a model_id. Same as above, except that we need
+        #                 to collect the model from the context.
+        params_map = self._get_params_map(
+            context=context,
+            model_id=model_id,
+            weights=weights,
+            model=model,
+            params_map=params_map,
+            devices=devices,
+            device_map_fn=device_map_fn,
+            num_workers=num_workers,
+        )
 
         # Create per-worker queues if not already created
         # Collect all unique worker indices
-        all_workers = set()
-        for workers in device_to_workers.values():
-            all_workers.update(workers)
+        all_workers = list(params_map.keys())
 
         for worker_idx in all_workers:
             if worker_idx not in self._weight_init_queues:
                 self._weight_init_queues[worker_idx] = mp.Queue()
 
         # Set worker info in transport
-        self._shared_transport.set_worker_info(device_to_workers)
-        self._shared_transport._weight_queues = self._weight_init_queues
-
-        # If we have cached shared memory weights, pre-register them
-        if cached_weights is not None:
-            # Check if already registered to avoid re-registration error
-            if model_id not in self.policy_weights:
-                self.register_shared_weights(model_id, cached_weights)
-
-        # Distribute any pre-registered weights to workers
-        if model_id in self.policy_weights:
-            if model_id not in self._shared_transport._registered_with_workers:
-                self._shared_transport._send_buffer_to_workers(
-                    model_id, self.policy_weights[model_id]
-                )
+        self._shared_transport.register_weights(params_map, self._weight_init_queues)
 
         # Create sender with the shared transport
         sender = WeightSender(self)
@@ -1707,6 +1740,126 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
         self._sender = sender
         self._initialized_on_sender = True
+
+    def synchronize_weights(self):
+        """Method to be called once the workers have started.
+
+        Triggers a rendez-vous for the workers to receive their copy of the weights.
+
+        This is a convenience method that delegates to the sender's synchronize_weights().
+        """
+        if not self._initialized_on_sender or self._sender is None:
+            raise RuntimeError(
+                "Must call init_on_sender() before synchronize_weights() on SharedMemWeightSyncScheme"
+            )
+        self._sender.synchronize_weights()
+
+    def _get_params_map(
+        self,
+        context: Any = None,
+        model_id: str | None = None,
+        weights: TensorDictBase | None = None,
+        model: nn.Module | None = None,
+        params_map: dict[int, TensorDictBase] | None = None,
+        devices: list[torch.device] | None = None,
+        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase] | None = None,
+        num_workers: int | None = None,
+    ):
+        """Get the params_map for init_on_sender()."""
+        if params_map is not None:
+            # Sanity check: params_map must be a dict[int, TensorDictBase]
+            # All other args must be None
+            if (
+                not isinstance(params_map, dict)
+                or not all(isinstance(v, int) for v in params_map.keys())
+                or not all(isinstance(v, TensorDictBase) for v in params_map.values())
+            ):
+                raise ValueError("params_map must be a dict[int, TensorDictBase]")
+            if model_id is not None or weights is not None or model is not None:
+                raise ValueError(
+                    "model_id, weights, and model cannot be provided if params_map is provided"
+                )
+            if context is not None:
+                raise ValueError("context cannot be provided if params_map is provided")
+            if devices is not None:
+                raise ValueError("devices cannot be provided if params_map is provided")
+            if device_map_fn is not None:
+                raise ValueError(
+                    "device_map_fn cannot be provided if params_map is provided"
+                )
+            if num_workers is not None:
+                raise ValueError(
+                    "num_workers cannot be provided if params_map is provided"
+                )
+            return params_map
+        elif context is not None:
+            if devices is not None:
+                raise ValueError("devices cannot be provided if context is provided")
+            # Sanity check: model_id must be provided if context is provided
+            # All other args must be None
+            if model_id is None:
+                raise ValueError("model_id must be provided if context is provided")
+            if model is not None:
+                raise ValueError("model cannot be provided if context is provided")
+            if weights is not None:
+                raise ValueError("weights cannot be provided if context is provided")
+            if device_map_fn is not None:
+                raise ValueError(
+                    "device_map_fn cannot be provided if context is provided"
+                )
+            # Get device map: the devices are stored as policy_device in the collector -- other contexts will be customized later
+            devices = context.policy_device
+            if num_workers is not None and num_workers != len(devices):
+                raise ValueError(
+                    "num_workers cannot be provided if context is provided"
+                )
+            # Get the weights
+            model = _resolve_model(context, model_id)
+            weights = TensorDict.from_module(model)
+        elif model is not None:
+            if weights is not None:
+                raise ValueError("weights cannot be provided if model is provided")
+            weights = TensorDict.from_module(model)
+        # To make the map, we need the list of devices, or the map fn
+        if devices is not None:
+            # Import _cast locally to avoid circular imports
+            from torchrl.collectors.utils import _cast
+
+            # Get the unique devices
+            devices_set = set(devices)
+            weights_devices = {p.device for p in weights.values(True, True)}
+            if len(weights_devices) == 1:
+                weights_device = weights_devices.pop()
+            else:
+                weights_device = None
+
+            # Create device map with proper Parameter handling using _cast
+            # _cast ensures Parameters stay as Parameters (with requires_grad=False)
+            device_map = {}
+            for d in devices_set:
+                if d != weights_device:
+                    # Move to device and apply _cast to preserve Parameter/Buffer types
+                    weights_on_device = weights.to(d)
+                    weights_on_device = weights_on_device.apply(_cast, weights)
+                    device_map[d] = weights_on_device
+                else:
+                    # Already on correct device, just apply _cast
+                    device_map[d] = weights.apply(_cast, weights)
+
+            # Create the map
+            params_map = {
+                worker_idx: device_map[device]
+                for worker_idx, device in enumerate(devices)
+            }
+            return params_map
+        if device_map_fn is not None:
+            return {
+                worker_idx: device_map_fn(worker_idx, weights)
+                for worker_idx in range(num_workers)
+            }
+        raise ValueError(
+            "Either params_map, model_id + context or model/weights + devices must be provided."
+        )
 
     def init_on_worker(
         self,
@@ -1733,43 +1886,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         if context is not None:
             if hasattr(context, "get_model"):
                 model = context.get_model(model_id)
-            elif model is not None:
-                model = None
+            elif model is None:
+                model = _resolve_model(context, model_id)
             worker_idx = getattr(context, "worker_idx", worker_idx)
-
-        # Receive weights from this worker's dedicated queue if available
-        if self._weight_init_queues and worker_idx is not None:
-            # Each worker has its own queue - no race conditions!
-            if worker_idx in self._weight_init_queues:
-                worker_queue = self._weight_init_queues[worker_idx]
-                timeout = kwargs.get("timeout", 10.0)
-                try:
-                    # Read from our dedicated queue - only messages for this worker are here
-                    while True:
-                        msg_model_id, shared_weights = worker_queue.get(timeout=timeout)
-
-                        # Register the shared weights in the transport
-                        self._shared_transport._policy_weights[
-                            msg_model_id
-                        ] = shared_weights
-
-                        # If this is the model we're initializing, apply weights
-                        if msg_model_id == model_id and model is not None:
-                            shared_weights.to_module(model)
-                            self._shared_transport._registered_with_workers.add(
-                                msg_model_id
-                            )
-                            break
-                        elif msg_model_id == model_id:
-                            # Model will be applied later when it's available
-                            self._shared_transport._registered_with_workers.add(
-                                msg_model_id
-                            )
-                            break
-                        # If not the model we're looking for, still register it but keep looking
-                except Empty:
-                    # No weights pre-registered for this model (will use auto-register or policy_factory)
-                    pass
 
         # Create receiver with the shared transport
         receiver = WeightReceiver(self)
@@ -1777,12 +1896,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             receiver._context_ref = weakref.ref(context)
         receiver._transport = self._shared_transport  # Use shared transport
 
-        # Register the model - this will apply the shared weights to it
-        if model is not None:
-            receiver._register_model(model)
-        else:
-            # Register by model_id for later resolution
-            receiver._register_model(model_id)
+        # Register the model
+        receiver._register_model(model)
+
+        # Store worker_idx for synchronize_weights
+        receiver._worker_idx = worker_idx
 
         self._receiver = receiver
         self._initialized_on_worker = True
@@ -1809,13 +1927,13 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         return self._message_queue
 
     def create_transport(self, pipe_or_context: Any) -> TransportBackend:
-        """Create shared memory transport (legacy).
+        """Create shared memory transport.
 
         Returns the shared transport instance that all workers will use.
         Since this is shared memory, there's only one transport shared by all workers.
 
-        Note: This is a legacy method. The new init_on_sender/init_on_worker API
-        is the preferred way to set up the transport.
+        Note:
+            This is used internally by init_on_sender/init_on_worker.
         """
         return self._shared_transport
 
@@ -1903,10 +2021,14 @@ class NoWeightSyncScheme(WeightSyncScheme):
         self._initialized_on_worker = True
 
     def create_transport(self, pipe_or_context: Any) -> TransportBackend:
-        """Returns None as no transport is needed (legacy)."""
+        """Create a no-op transport.
+
+        Note:
+            This is used internally by init_on_sender/init_on_worker.
+        """
         # Return a dummy transport that does nothing
         class NoOpTransport:
-            def send_weights(self, model_id: str, weights: Any) -> None:
+            def send_weights(self, weights: Any) -> None:
                 pass
 
             def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
