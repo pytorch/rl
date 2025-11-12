@@ -199,7 +199,7 @@ class SharedMemTransport:
         # Create set of the unique weights
         self._unique_weights = []
         for weights in params_map.values():
-            if weights in self._unique_weights:
+            if id(weights) in [id(w) for w in self._unique_weights]:
                 continue
             self._unique_weights.append(weights)
 
