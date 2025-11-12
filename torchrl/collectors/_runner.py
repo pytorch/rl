@@ -6,6 +6,7 @@ from functools import partial
 from multiprocessing import connection, queues
 from typing import Any
 
+from torchrl.collectors.utils import _cast
 import numpy as np
 import torch
 from tensordict import TensorDictBase
@@ -19,6 +20,7 @@ from torchrl.collectors._constants import (
     _TIMEOUT,
     DEFAULT_EXPLORATION_TYPE,
 )
+from tensordict import TensorDict
 from torchrl.collectors._single import SyncDataCollector
 from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.utils import _map_to_cpu_if_needed, _TrajectoryPool
@@ -459,6 +461,8 @@ def _main_async_collector(
             # Map exotic devices (MPS, NPU, etc.) to CPU for multiprocessing compatibility
             # CPU and CUDA tensors are already shareable and don't need conversion
             state_dict = tree_map(_map_to_cpu_if_needed, state_dict)
+            state_dict = TensorDict(state_dict)
+            state_dict = state_dict.clone().apply(_cast, state_dict)
             pipe_child.send((state_dict, "state_dict"))
             has_timed_out = False
             continue
