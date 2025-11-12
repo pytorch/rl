@@ -452,6 +452,7 @@ class SyncDataCollector(DataCollectorBase):
         if policy is None:
             if policy_factory is not None:
                 policy = policy_factory()
+                print(f"Policy factory created: {policy}")
             else:
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
@@ -594,38 +595,58 @@ class SyncDataCollector(DataCollectorBase):
                     break
 
         if has_meta_params:
-            # Skip device placement for meta policies - schemes handle weight application
-            # Policy stays as-is, weights will be applied by the receiver
-            self.get_weights_fn = lambda: TensorDict.from_module(policy).data
+            # Policy has meta params - sent from weight sync schemes
+            # Skip device placement, weights will come from receiver
+            # Keep policy on meta device until weights are loaded
+            if not self.trust_policy:
+                self.policy = policy
+                env = getattr(self, "env", None)
+                try:
+                    wrapped_policy = _make_compatible_policy(
+                        policy=policy,
+                        observation_spec=getattr(env, "observation_spec", None),
+                        env=self.env,
+                    )
+                except (TypeError, AttributeError, ValueError) as err:
+                    raise TypeError(
+                        "Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True. Scroll up for more details."
+                    ) from err
+                self._wrapped_policy = wrapped_policy
+            else:
+                self.policy = self._wrapped_policy = policy
+
+            # Don't extract weights yet - they're on meta device (empty)
+            self.policy_weights = TensorDict()
+            self.get_weights_fn = None
         else:
             # Normal path: move policy to correct device
             policy, self.get_weights_fn = self._get_policy_and_device(policy=policy)
 
-        if not self.trust_policy:
-            self.policy = policy
-            env = getattr(self, "env", None)
-            try:
-                wrapped_policy = _make_compatible_policy(
-                    policy=policy,
-                    observation_spec=getattr(env, "observation_spec", None),
-                    env=self.env,
-                )
-            except (TypeError, AttributeError, ValueError) as err:
-                raise TypeError(
-                    "Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True. Scroll up for more details."
-                ) from err
-            self._wrapped_policy = wrapped_policy
-        else:
-            self.policy = self._wrapped_policy = policy
+            if not self.trust_policy:
+                self.policy = policy
+                env = getattr(self, "env", None)
+                try:
+                    wrapped_policy = _make_compatible_policy(
+                        policy=policy,
+                        observation_spec=getattr(env, "observation_spec", None),
+                        env=self.env,
+                    )
+                except (TypeError, AttributeError, ValueError) as err:
+                    raise TypeError(
+                        "Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True. Scroll up for more details."
+                    ) from err
+                self._wrapped_policy = wrapped_policy
+            else:
+                self.policy = self._wrapped_policy = policy
 
-        # Extract policy weights from the uncompiled policy
-        # Access _wrapped_policy_uncompiled directly to avoid triggering compilation
-        if isinstance(self._wrapped_policy_uncompiled, nn.Module):
-            self.policy_weights = TensorDict.from_module(
-                self._wrapped_policy_uncompiled, as_module=True
-            ).data
-        else:
-            self.policy_weights = TensorDict()
+            # Extract policy weights from the uncompiled policy
+            # Access _wrapped_policy_uncompiled directly to avoid triggering compilation
+            if isinstance(self._wrapped_policy_uncompiled, nn.Module):
+                self.policy_weights = TensorDict.from_module(
+                    self._wrapped_policy_uncompiled, as_module=True
+                ).data
+            else:
+                self.policy_weights = TensorDict()
 
         # If policy doesn't have meta params, compile immediately
         # Otherwise, defer until first use (after weights are loaded)

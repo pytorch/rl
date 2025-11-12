@@ -93,8 +93,8 @@ Here's a basic example:
 
     # Example 2: Shared memory weight synchronization
     # ------------------------------------------------
-    # Create shared memory scheme with auto-registration
-    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    # Create shared memory scheme
+    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict")
     
     # Initialize with pipes for lazy registration
     parent_pipe2, child_pipe2 = mp.Pipe()
@@ -159,7 +159,7 @@ across multiple inference workers:
     # Example 2: Multiple collectors with shared memory
     # --------------------------------------------------
     # Shared memory is more efficient for frequent updates
-    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
     collector = MultiSyncDataCollector(
         create_env_fn=[

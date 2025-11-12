@@ -244,9 +244,7 @@ class TestWeightSyncSchemes:
         ).share_memory_()
 
         scheme = SharedMemWeightSyncScheme(
-            policy_weights={"policy": shared_buffer},
             strategy="tensordict",
-            auto_register=False,
         )
 
         transport = scheme.create_transport(None)
@@ -259,21 +257,6 @@ class TestWeightSyncSchemes:
 
         assert torch.allclose(shared_buffer["weight"], torch.ones(2, 4))
         assert torch.allclose(shared_buffer["bias"], torch.ones(2))
-
-    def test_shared_mem_scheme_auto_register(self):
-        scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
-        transport = scheme.create_transport(None)
-
-        weights = TensorDict(
-            {"weight": torch.ones(2, 4), "bias": torch.ones(2)}, batch_size=[]
-        )
-
-        transport.send_weights("policy", weights)
-
-        assert "policy" in scheme.policy_weights
-        assert torch.allclose(
-            scheme.policy_weights["policy"]["weight"], torch.ones(2, 4)
-        )
 
     def test_no_weight_sync_scheme(self):
         scheme = NoWeightSyncScheme()
@@ -396,7 +379,7 @@ class TestCollectorIntegration:
         collector.shutdown()
 
     def test_multisyncdatacollector_shared_mem_scheme(self, simple_policy):
-        scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+        scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
         collector = MultiSyncDataCollector(
             create_env_fn=[
@@ -677,7 +660,7 @@ class TestSerializeScheme:
 
     def test_shared_mem_scheme_serialize_before_init(self):
         """Test that uninitialized SharedMemWeightSyncScheme can be pickled."""
-        scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+        scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
         # Serialize and deserialize
         pickled = pickle.dumps(scheme)
@@ -698,9 +681,7 @@ class TestSerializeScheme:
         ).share_memory_()
 
         scheme = SharedMemWeightSyncScheme(
-            policy_weights={"policy": shared_buffer},
             strategy="tensordict",
-            auto_register=False,
         )
 
         def init_on_sender(scheme, child_pipe):

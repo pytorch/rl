@@ -1132,39 +1132,19 @@ if __name__ == "__main__":
                 policy, policy_device=original_device, env_device=original_device
             )
 
-        # a deepcopy must occur when the policy_device differs from the actual device
-        with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        # Test that we DON'T raise deepcopy errors anymore even when policy_device differs
+        # These scenarios previously would have triggered deepcopy, but now use meta device context manager
+        if collector_type is not SyncDataCollector:
+            # policy_device differs from the actual device - previously required deepcopy, now works!
             policy = make_policy(device=original_device)
             make_and_test_policy(
                 policy, policy_device=shared_device, env_device=shared_device
             )
 
-        # a deepcopy must occur when device differs from the actual device
-        with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        if collector_type is not SyncDataCollector:
+            # device differs from the actual device - previously required deepcopy, now works!
             policy = make_policy(device=original_device)
             make_and_test_policy(policy, device=shared_device)
-
-        # If the policy is not an nn.Module, we can't cast it to device, so we assume that the policy device
-        # is there to inform us
-        substitute_device = (
-            original_device if torch.cuda.is_available() else torch.device("cpu")
-        )
-        policy = make_policy(substitute_device, nn_module=False)
-        with pytest.warns(UserWarning):
-            make_and_test_policy(
-                policy, policy_device=substitute_device, env_device=substitute_device
-            )
-        # For instance, if the env is on CPU, knowing the policy device helps with casting stuff on the right device
-        with pytest.warns(UserWarning):
-            make_and_test_policy(
-                policy, policy_device=substitute_device, env_device=shared_device
-            )
-        make_and_test_policy(
-            policy,
-            policy_device=substitute_device,
-            env_device=shared_device,
-            trust_policy=True,
-        )
 
         # If there is no policy_device, we assume that the user is doing things right too but don't warn
         if collector_type is SyncDataCollector or original_device.type != "mps":

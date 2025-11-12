@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable
-from copy import deepcopy
 
 import torch
 from pyvers import implement_for
@@ -265,57 +264,39 @@ def split_trajectories(
 
 
 @implement_for("torch", "2.5.0")
-def _make_meta_policy(policy: nn.Module) -> nn.Module:
-    """Create policy structure with parameters on meta device.
+def _cast(p, param_maybe_buffer):
+    if isinstance(param_maybe_buffer, Parameter):
+        # Create parameter without gradients to avoid serialization issues
+        return Parameter(p, requires_grad=False)
+    if isinstance(param_maybe_buffer, Buffer):
+        return Buffer(p)
+    return p
+
+
+def _make_meta_policy(policy: nn.Module):
+    """Create context manager that temporarily puts policy parameters on meta device.
 
     This is used with weight sync schemes to send policy structure without weights.
     The actual weights are distributed by the schemes.
 
     Args:
-        policy: Policy module to extract structure from.
+        policy: Policy module to temporarily modify.
 
     Returns:
-        A copy of the policy with all parameters on meta device and requires_grad=False.
+        A context manager that temporarily replaces policy parameters with meta device versions.
+        On exit, the original parameters are restored to the policy.
     """
 
-    def _cast(p, param_maybe_buffer):
-        if isinstance(param_maybe_buffer, Parameter):
-            # Create parameter without gradients to avoid serialization issues
-            return Parameter(p, requires_grad=False)
-        if isinstance(param_maybe_buffer, Buffer):
-            return Buffer(p)
-        return p
-
     param_and_buf = TensorDict.from_module(policy, as_module=True)
-    with param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy):
-        meta_policy = deepcopy(policy)
-    return meta_policy
+    return param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy)
 
 
 @implement_for("torch", None, "2.5.0")
-def _make_meta_policy(policy: nn.Module) -> nn.Module:  # noqa: F811
-    """Create policy structure with parameters on meta device.
-
-    This is used with weight sync schemes to send policy structure without weights.
-    The actual weights are distributed by the schemes.
-
-    Args:
-        policy: Policy module to extract structure from.
-
-    Returns:
-        A copy of the policy with all parameters on meta device and requires_grad=False.
-    """
-
-    def _cast(p, param_maybe_buffer):
-        if isinstance(param_maybe_buffer, Parameter):
-            # Create parameter without gradients to avoid serialization issues
-            return Parameter(p, requires_grad=False)
-        return p
-
-    param_and_buf = TensorDict.from_module(policy, as_module=True)
-    with param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy):
-        meta_policy = deepcopy(policy)
-    return meta_policy
+def _cast(p, param_maybe_buffer):  # noqa
+    if isinstance(param_maybe_buffer, Parameter):
+        # Create parameter without gradients to avoid serialization issues
+        return Parameter(p, requires_grad=False)
+    return p
 
 
 def _map_to_cpu_if_needed(x):

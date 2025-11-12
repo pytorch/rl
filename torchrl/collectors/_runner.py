@@ -26,7 +26,6 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
-from torchrl.weight_update.weight_sync_schemes import _resolve_model
 
 
 def _make_policy_factory(
@@ -38,9 +37,13 @@ def _make_policy_factory(
         policy = policy_factory()
 
     if weight_sync_scheme is not None:
+        # Initialize the receiver on the worker side
         weight_sync_scheme.init_on_worker(
             model=policy, model_id="policy", worker_idx=worker_idx
         )
+        # Get the receiver and synchronize initial weights
+        receiver = weight_sync_scheme.get_receiver()
+        receiver.synchronize_weights(worker_idx=worker_idx)
     return policy
 
 
@@ -123,8 +126,11 @@ def _main_async_collector(
             no_cuda_sync=no_cuda_sync,
             weight_sync_schemes=weight_sync_schemes,
         )
+        print("Inner collector created")
 
         # Set up weight receivers for worker process
+        # Note: For the "policy" model, initialization is done in _make_policy_factory
+        # This section only handles additional models (not "policy")
         if weight_sync_schemes:
             inner_collector._weight_receivers = {}
             inner_collector.pipe = pipe_child  # Add pipe attribute for context
@@ -133,22 +139,16 @@ def _main_async_collector(
             )
 
             for model_id, scheme in weight_sync_schemes.items():
-                # Check if scheme has new API or legacy API
-                if hasattr(scheme, "init_on_worker"):
-                    # For SharedMemWeightSyncScheme, init_on_worker reads from queue
-                    # and applies weights to model - all handled by the receiver
+                if model_id == "policy":
+                    # Policy receiver was already initialized in _make_policy_factory
+                    receiver = scheme.get_receiver()
+                    inner_collector._weight_receivers[model_id] = receiver
+                else:
+                    # Initialize receivers for other models
                     scheme.init_on_worker(model_id=model_id, context=inner_collector)
                     receiver = scheme.get_receiver()
-                else:
-                    # Legacy API
-                    receiver = scheme.create_receiver()
-                    receiver.set_context(inner_collector)
-                    receiver.register_worker_transport(pipe_child)
-
-                    model = _resolve_model(inner_collector, model_id)
-                    receiver.register_model(model)
-
-                inner_collector._weight_receivers[model_id] = receiver
+                    receiver.synchronize_weights(worker_idx=worker_idx)
+                    inner_collector._weight_receivers[model_id] = receiver
         else:
             inner_collector._weight_receivers = {}
 
