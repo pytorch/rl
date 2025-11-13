@@ -6,10 +6,9 @@ from functools import partial
 from multiprocessing import connection, queues
 from typing import Any
 
-from torchrl.collectors.utils import _cast
 import numpy as np
 import torch
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torch import nn as nn
 
 from torchrl import logger as torchrl_logger
@@ -20,10 +19,10 @@ from torchrl.collectors._constants import (
     _TIMEOUT,
     DEFAULT_EXPLORATION_TYPE,
 )
-from tensordict import TensorDict
 from torchrl.collectors._single import SyncDataCollector
 from torchrl.collectors.base import DataCollectorBase
-from torchrl.collectors.utils import _map_to_cpu_if_needed, _TrajectoryPool
+
+from torchrl.collectors.utils import _cast, _map_to_cpu_if_needed, _TrajectoryPool
 from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
@@ -128,8 +127,6 @@ def _main_async_collector(
             no_cuda_sync=no_cuda_sync,
             weight_sync_schemes=weight_sync_schemes,
         )
-        print("Inner collector created")
-
         # Set up weight receivers for worker process
         # Note: For the "policy" model, initialization is done in _make_policy_factory
         # This section only handles additional models (not "policy")

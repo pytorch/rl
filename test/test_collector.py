@@ -1900,7 +1900,9 @@ class TestCollectorDevices:
         )
         for data in collector:  # noqa: B007
             break
-        assert data.device == main_device
+        # When storing_device is None, it falls back to device
+        expected_device = storing_device if storing_device is not None else main_device
+        assert data.device == expected_device
 
         # same but more specific
         device = None
@@ -1920,7 +1922,9 @@ class TestCollectorDevices:
         )
         for data in collector:  # noqa: B007
             break
-        assert data.device == main_device
+        # When storing_device is None, and env_device == policy_device, it falls back to env_device
+        expected_device = storing_device if storing_device is not None else main_device
+        assert data.device == expected_device
 
         # none has a device
         device = None

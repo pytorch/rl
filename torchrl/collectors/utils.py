@@ -286,7 +286,6 @@ def _make_meta_policy(policy: nn.Module):
         A context manager that temporarily replaces policy parameters with meta device versions.
         On exit, the original parameters are restored to the policy.
     """
-
     param_and_buf = TensorDict.from_module(policy, as_module=True)
     return param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy)
 

@@ -452,7 +452,6 @@ class SyncDataCollector(DataCollectorBase):
         if policy is None:
             if policy_factory is not None:
                 policy = policy_factory()
-                print(f"Policy factory created: {policy}")
             else:
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
