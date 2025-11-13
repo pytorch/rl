@@ -456,10 +456,10 @@ def _main_async_collector(
 
             state_dict = inner_collector.state_dict()
             # Map exotic devices (MPS, NPU, etc.) to CPU for multiprocessing compatibility
-            # CPU and CUDA tensors are already shareable and don't need conversion
+            # CPU and CUDA tensors are already shareable and don't need conversion BUT we need to clone the CUDA tensors in case they were sent from main (cannot send cuda tensors back and forth)
             state_dict = tree_map(_map_to_cpu_if_needed, state_dict)
             state_dict = TensorDict(state_dict)
-            state_dict = state_dict.clone().apply(_cast, state_dict)
+            state_dict = state_dict.clone().apply(_cast, state_dict).to_dict()
             pipe_child.send((state_dict, "state_dict"))
             has_timed_out = False
             continue
