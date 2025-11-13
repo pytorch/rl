@@ -1828,8 +1828,14 @@ class TestCollectorDevices:
     class PolicyWithDevice(TensorDictModuleBase):
         in_keys = ["observation"]
         out_keys = ["action"]
-        # receives and sends data on gpu
-        default_device = "cuda:0" if torch.cuda.device_count() else "cpu"
+
+        def __init__(self, default_device=None):
+            super().__init__()
+            self.default_device = (
+                default_device
+                if default_device is not None
+                else ("cuda:0" if torch.cuda.device_count() else "cpu")
+            )
 
         def forward(self, tensordict):
             assert tensordict.device == _make_ordinal_device(
@@ -1846,7 +1852,7 @@ class TestCollectorDevices:
         env_device = None
         policy_device = main_device
         env = self.DeviceLessEnv(main_device)
-        policy = self.PolicyWithDevice()
+        policy = self.PolicyWithDevice(main_device)
         collector = SyncDataCollector(
             env,
             policy,
@@ -1887,7 +1893,7 @@ class TestCollectorDevices:
         env_device = None
         policy_device = None
         env = self.EnvWithDevice(main_device)
-        policy = self.PolicyWithDevice()
+        policy = self.PolicyWithDevice(main_device)
         collector = SyncDataCollector(
             env,
             policy,
@@ -1909,7 +1915,7 @@ class TestCollectorDevices:
         env_device = main_device
         policy_device = main_device
         env = self.EnvWithDevice(main_device)
-        policy = self.PolicyWithDevice()
+        policy = self.PolicyWithDevice(main_device)
         collector = SyncDataCollector(
             env,
             policy,
