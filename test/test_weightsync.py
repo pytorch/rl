@@ -17,8 +17,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import multiprocessing as mp
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
-from torchrl.weight_update.weight_sync_schemes import (
-    _resolve_model,
+from torchrl.weight_update import (
     DistributedWeightSyncScheme,
     MPTransport,
     MultiProcessWeightSyncScheme,
@@ -27,6 +26,9 @@ from torchrl.weight_update.weight_sync_schemes import (
     RayWeightSyncScheme,
     RPCWeightSyncScheme,
     SharedMemTransport,
+)
+from torchrl.weight_update.utils import _resolve_model
+from torchrl.weight_update.weight_sync_schemes import (
     SharedMemWeightSyncScheme,
     WeightStrategy,
 )

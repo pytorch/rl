@@ -570,9 +570,7 @@ class DistributedDataCollector(DataCollectorBase):
         # Set up weight synchronization - prefer new schemes over legacy updater
         if weight_updater is None and weight_sync_schemes is None:
             # Default to Distributed weight sync scheme for distributed collectors
-            from torchrl.weight_update.weight_sync_schemes import (
-                DistributedWeightSyncScheme,
-            )
+            from torchrl.weight_update import DistributedWeightSyncScheme
 
             weight_sync_schemes = {
                 "policy": DistributedWeightSyncScheme(backend=backend, sync=self._sync)

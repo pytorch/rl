@@ -198,6 +198,9 @@ Weight Senders
     :template: rl_template.rst
 
     WeightSender
+    MPWeightSender
+    RPCWeightSender
+    DistributedWeightSender
     RayModuleTransformSender
 
 Weight Receivers
@@ -208,6 +211,9 @@ Weight Receivers
     :template: rl_template.rst
 
     WeightReceiver
+    MPWeightReceiver
+    RPCWeightReceiver
+    DistributedWeightReceiver
     RayModuleTransformReceiver
 
 Transports

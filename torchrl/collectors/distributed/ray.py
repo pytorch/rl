@@ -539,7 +539,7 @@ class RayCollector(DataCollectorBase):
         # Set up weight synchronization - prefer new schemes over legacy updater
         if weight_updater is None and weight_sync_schemes is None:
             # Default to Ray weight sync scheme for Ray collectors
-            from torchrl.weight_update.weight_sync_schemes import RayWeightSyncScheme
+            from torchrl.weight_update import RayWeightSyncScheme
 
             weight_sync_schemes = {"policy": RayWeightSyncScheme()}
 
