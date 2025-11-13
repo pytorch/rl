@@ -417,7 +417,7 @@ class RPCDataCollector(DataCollectorBase):
         # Set up weight synchronization - prefer new schemes over legacy updater
         if weight_updater is None and weight_sync_schemes is None:
             # Default to RPC weight sync scheme for RPC collectors
-            from torchrl.weight_update.weight_sync_schemes import RPCWeightSyncScheme
+            from torchrl.weight_update import RPCWeightSyncScheme
 
             weight_sync_schemes = {"policy": RPCWeightSyncScheme()}
 

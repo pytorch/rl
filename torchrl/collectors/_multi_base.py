@@ -334,7 +334,8 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory = self._setup_policy_factory(policy_factory)
 
         # Set up weight synchronization
-        weight_sync_schemes = {}
+        if weight_sync_schemes is None:
+            weight_sync_schemes = {}
         if (
             not any(policy_factory)
             and not weight_sync_schemes
@@ -516,13 +517,13 @@ class _MultiDataCollector(DataCollectorBase):
             weight_sync_policy = weight_sync_schemes.get("policy")
             if weight_sync_policy is None:
                 return
-            if weight_sync_policy._initialized_on_sender:
-                return
             if any(p is not None for p in policy_factory):
-                raise RuntimeError(
-                    f"the weight sync scheme must be initialized on sender ahead of time when passing a policy factory. Got {policy_factory=}"
-                )
-            weight_sync_policy.init_on_sender(model=policy, devices=self.policy_device)
+                if not weight_sync_policy._initialized_on_sender:
+                    raise RuntimeError(
+                        f"the weight sync scheme must be initialized on sender ahead of time when passing a policy factory. Got {policy_factory=}"
+                    )
+            # Weight sync scheme initialization happens in _run_processes
+            # where pipes and workers are available
         else:
             # Using legacy weight updater - extract weights and create stateful policies
             self._setup_multi_policy_and_weights_legacy(
@@ -821,19 +822,20 @@ class _MultiDataCollector(DataCollectorBase):
         torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
-        self.pipes = []
         self._traj_pool = _TrajectoryPool(lock=True)
 
-        # Initialize weight sync schemes early for SharedMemWeightSyncScheme
-        # (queue created in __init__ will be pickled with scheme to workers)
-        # For MultiProcessWeightSyncScheme, we'll initialize after pipes are available
+        # Create all pipes upfront (needed for weight sync scheme initialization)
+        # Store as list of (parent, child) tuples for use in worker creation
+        pipe_pairs = [mp.Pipe() for _ in range(self.num_workers)]
+        # Extract parent pipes for external use (e.g., polling, receiving messages)
+        self.pipes = [pipe_parent for pipe_parent, _ in pipe_pairs]
+
+        # Initialize all weight sync schemes now that pipes are available
+        # Both SharedMemWeightSyncScheme (uses queues) and MultiProcessWeightSyncScheme (uses pipes)
+        # can be initialized here since all required resources exist
         if self._weight_sync_schemes:
             for model_id, scheme in self._weight_sync_schemes.items():
-                # Only initialize SharedMemWeightSyncScheme now (needs queue before workers)
-                # MultiProcessWeightSyncScheme will be initialized after workers are created
-                if isinstance(scheme, SharedMemWeightSyncScheme) and hasattr(
-                    scheme, "init_on_sender"
-                ):
+                if hasattr(scheme, "init_on_sender"):
                     scheme.init_on_sender(model_id=model_id, context=self)
                     self._weight_senders[model_id] = scheme.get_sender()
 
@@ -848,7 +850,7 @@ class _MultiDataCollector(DataCollectorBase):
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
         ):
-            pipe_parent, pipe_child = mp.Pipe()  # send messages to procs
+            pipe_parent, pipe_child = pipe_pairs[i]  # use pre-created pipes
             if env_fun.__class__.__name__ != "EnvCreator" and not isinstance(
                 env_fun, EnvBase
             ):  # to avoid circular imports
@@ -966,7 +968,6 @@ also that the state dict is synchronised across processes if needed."""
                         ) from err
                 pipe_child.close()
                 self.procs.append(proc)
-                self.pipes.append(pipe_parent)
 
         # Synchronize initial weights with workers AFTER starting processes but BEFORE waiting for "instantiated"
         # This must happen after proc.start() but before workers send "instantiated" to avoid deadlock:
@@ -1026,18 +1027,6 @@ also that the state dict is synchronised across processes if needed."""
                 else:
                     # Legacy string error message
                     raise RuntimeError(msg)
-
-        # Initialize MultiProcessWeightSyncScheme now that workers are ready and pipes are available
-        # (SharedMemWeightSyncScheme was already initialized before workers)
-        if self._weight_sync_schemes:
-            for model_id, scheme in self._weight_sync_schemes.items():
-                # Only initialize non-SharedMem schemes here (need pipes)
-                if not isinstance(scheme, SharedMemWeightSyncScheme) and hasattr(
-                    scheme, "init_on_sender"
-                ):
-                    scheme.init_on_sender(model_id=model_id, context=self)
-                    # Get the initialized sender
-                    self._weight_senders[model_id] = scheme.get_sender()
 
         self.queue_out = queue_out
         self.closed = False

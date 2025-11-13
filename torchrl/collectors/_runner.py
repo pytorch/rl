@@ -30,7 +30,7 @@ from torchrl.weight_update import WeightSyncScheme
 
 
 def _make_policy_factory(
-    *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx
+    *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
 ):
     if policy is not None and policy_factory is not None:
         raise ValueError("policy cannot be used with policy_factory")
@@ -40,7 +40,7 @@ def _make_policy_factory(
     if weight_sync_scheme is not None:
         # Initialize the receiver on the worker side
         weight_sync_scheme.init_on_worker(
-            model=policy, model_id="policy", worker_idx=worker_idx
+            model=policy, model_id="policy", worker_idx=worker_idx, pipe=pipe
         )
         # Get the receiver and synchronize initial weights
         receiver = weight_sync_scheme.get_receiver()
@@ -92,8 +92,11 @@ def _main_async_collector(
         _make_policy_factory,
         policy=policy,
         policy_factory=policy_factory,
-        weight_sync_scheme=weight_sync_schemes.get("policy"),
+        weight_sync_scheme=weight_sync_schemes.get("policy")
+        if weight_sync_schemes
+        else None,
         worker_idx=worker_idx,
+        pipe=pipe_child,
     )
     policy = None
     try:

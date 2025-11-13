@@ -301,7 +301,7 @@ class VLLMDoubleBufferWeightReceiver(WeightReceiver):
             f"Initialized double-buffer receiver reading from {self._scheme.local_addr}"
         )
 
-    def apply_weights(self, weights: TensorDict) -> None:
+    def apply_weights(self, weights: TensorDict, inplace: bool = True) -> None:
         """Apply weights to vLLM engine using RPC.
 
         This method uses RPC to tell all vLLM workers to load weights from
@@ -310,7 +310,10 @@ class VLLMDoubleBufferWeightReceiver(WeightReceiver):
 
         Args:
             weights: TensorDict with flattened keys containing weights.
+            inplace: Whether to apply weights in place. Default is `True`.
         """
+        if not inplace:
+            raise ValueError("Cannot apply weights out of place for vLLM double-buffer")
         logger.info("Applying weights to vLLM engine via RPC")
 
         # Convert TensorDict to list of (name, tensor) tuples

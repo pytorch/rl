@@ -1558,8 +1558,6 @@ if __name__ == "__main__":
     )  # MultiSync has known indexing issues with SharedMem
     def test_update_weights_shared_mem(self, use_async):
         """Test shared memory weight synchronization scheme."""
-        from tensordict import TensorDict
-        from torchrl.weight_update.weight_sync_schemes import SharedMemWeightSyncScheme
 
         def create_env():
             return ContinuousActionVecMockEnv()
@@ -4117,16 +4115,17 @@ class TestAsyncCollection:
             frames_per_batch=16,
             **kwargs,
         )
-        if not isinstance(collector, SyncDataCollector):
-            if weight_sync_scheme is not None:
-                assert isinstance(
-                    collector._weight_sync_schemes["policy"], weight_sync_scheme
-                )
-            else:
-                assert isinstance(
-                    collector._weight_sync_schemes["policy"], SharedMemWeightSyncScheme
-                )
         try:
+            if not isinstance(collector, SyncDataCollector):
+                if weight_sync_scheme is not None:
+                    assert isinstance(
+                        collector._weight_sync_schemes["policy"], weight_sync_scheme
+                    )
+                else:
+                    assert isinstance(
+                        collector._weight_sync_schemes["policy"],
+                        SharedMemWeightSyncScheme,
+                    )
             collector.start()
             for _ in range(10):
                 time.sleep(0.1)
