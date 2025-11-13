@@ -1579,7 +1579,6 @@ if __name__ == "__main__":
         # Use the new init_on_sender API with params_map
         # All 3 workers share the same CPU weights in shared memory
         weight_sync_scheme.init_on_sender(
-            model_id="policy",
             params_map={0: policy_weights, 1: policy_weights, 2: policy_weights},
         )
 
