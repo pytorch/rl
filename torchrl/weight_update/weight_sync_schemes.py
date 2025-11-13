@@ -7,7 +7,7 @@ from __future__ import annotations
 import abc
 
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any, Literal, Protocol
 
 import torch

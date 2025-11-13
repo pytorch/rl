@@ -972,7 +972,7 @@ also that the state dict is synchronised across processes if needed."""
         # This must happen after proc.start() but before workers send "instantiated" to avoid deadlock:
         # Workers will call receiver.synchronize_weights() during init and may block waiting for data
         if self._weight_senders:
-            for model_id, sender in self._weight_senders.items():
+            for sender in self._weight_senders.values():
                 sender.synchronize_weights()
 
         # Wait for workers to be ready
