@@ -1515,7 +1515,7 @@ if __name__ == "__main__":
                 ].keys()
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
-                        state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                        state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                         policy_state_dict[k].cpu(),
                     )
 
@@ -1533,7 +1533,7 @@ if __name__ == "__main__":
                         AssertionError
                     ) if torch.cuda.is_available() else nullcontext():
                         torch.testing.assert_close(
-                            state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                            state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                             policy_state_dict[k].cpu(),
                         )
 
@@ -1546,7 +1546,7 @@ if __name__ == "__main__":
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
-                        state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                        state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                         policy_state_dict[k].cpu(),
                     )
         finally:
