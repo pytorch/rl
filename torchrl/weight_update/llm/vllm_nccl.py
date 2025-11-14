@@ -647,8 +647,12 @@ class VLLMWeightReceiver(WeightReceiver):
         )
         self._transport.init_all_workers_group(model_metadata)
 
-    def apply_weights(self, weights: Any) -> None:
+    def apply_weights(self, weights: Any, inplace: bool = True) -> None:
         """Apply weights to vLLM engine.
+
+        Args:
+            weights: The weights to apply.
+            inplace: Whether to apply weights in place. Default is `True`.
 
         Note: For vLLM, weights are applied automatically during the collective
         broadcast operation. This method is a no-op but kept for API consistency.

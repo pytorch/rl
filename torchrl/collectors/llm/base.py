@@ -14,7 +14,7 @@ from tensordict import lazy_stack, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors._single import SyncDataCollector
 from torchrl.collectors.llm.utils import _QueueAsRB
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer

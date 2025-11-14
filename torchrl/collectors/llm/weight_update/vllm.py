@@ -17,7 +17,7 @@ from tensordict.nn import TensorDictModuleBase
 
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors import WeightUpdaterBase
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.modules.llm.backends import stateless_init_process_group
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
