@@ -39,7 +39,7 @@ def _make_policy_factory(
 
     if weight_sync_scheme is not None:
         # Initialize the receiver on the worker side
-        weight_sync_scheme.init_on_worker(
+        weight_sync_scheme.init_on_receiver(
             model=policy, model_id="policy", worker_idx=worker_idx, pipe=pipe
         )
         # Get the receiver and synchronize initial weights
@@ -147,7 +147,7 @@ def _main_async_collector(
                     inner_collector._weight_receivers[model_id] = receiver
                 else:
                     # Initialize receivers for other models
-                    scheme.init_on_worker(model_id=model_id, context=inner_collector)
+                    scheme.init_on_receiver(model_id=model_id, context=inner_collector)
                     receiver = scheme.get_receiver()
                     receiver.synchronize_weights(worker_idx=worker_idx)
                     inner_collector._weight_receivers[model_id] = receiver
