@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import weakref
-from typing import Any
+from typing import Any, overload
 
 from torchrl.weight_update.weight_sync_schemes import (
     TransportBackend,
@@ -22,7 +22,7 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
     Synchronization flow:
     - init_on_sender() creates a MPWeightSender and registers all worker pipes
     - synchronize_weights() triggers the initial weight distribution via pipes
-    - init_on_worker() creates a MPWeightReceiver that receives from its pipe
+    - init_on_receiver() creates a MPWeightReceiver that receives from its pipe
     - Subsequent updates use send() which extracts, sends, and waits for ACKs
 
     Args:
@@ -54,6 +54,27 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
                 "Must call init_on_sender() before synchronize_weights() on MultiProcessWeightSyncScheme"
             )
         self._sender.synchronize_weights()
+
+    @overload
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        pipes: list = ...,
+        num_workers: int | None = None,
+        **kwargs,
+    ) -> None:
+        ...
 
     def init_on_sender(
         self,
@@ -93,7 +114,28 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    def init_on_worker(
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        pipe: Any = ...,
+        model: Any | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
+    def init_on_receiver(
         self,
         model_id: str,
         context: Any = None,
@@ -138,7 +180,7 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
         """Create an MPTransport using the provided pipe.
 
         Note:
-            This is used internally by init_on_sender/init_on_worker.
+            This is used internally by init_on_sender/init_on_receiver.
         """
         return MPTransport(pipe)
 

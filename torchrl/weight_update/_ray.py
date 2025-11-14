@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import weakref
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
@@ -32,6 +32,28 @@ class RayWeightSyncScheme(WeightSyncScheme):
             RayTransport configured for this specific remote collector.
         """
         return RayTransport(remote_collector=pipe_or_context)
+
+    @overload
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        remote_collectors: list = ...,
+        num_workers: int | None = None,
+        source_model: Any | None = None,
+        **kwargs,
+    ) -> None:
+        ...
 
     def init_on_sender(
         self,
@@ -81,7 +103,27 @@ class RayWeightSyncScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    def init_on_worker(
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        model: Any | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
+    def init_on_receiver(
         self,
         model_id: str,
         context: Any = None,
@@ -166,6 +208,29 @@ class RayModuleTransformScheme(WeightSyncScheme):
         """Create a specialized receiver for Ray actor communication."""
         return RayModuleTransformReceiver(self)
 
+    @overload
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        actor_refs: list | None = None,
+        actors: list | None = None,
+        remote_collectors: list | None = None,
+        source_model: Any | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
     def init_on_sender(
         self,
         model_id: str,
@@ -219,7 +284,28 @@ class RayModuleTransformScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    def init_on_worker(
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        actor_ref: Any | None = None,
+        model: Any | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
+    def init_on_receiver(
         self,
         model_id: str,
         context: Any = None,
@@ -452,7 +538,7 @@ class RayModuleTransformReceiver(WeightReceiver):
     def _register_worker_transport(self, actor_or_context: Any) -> None:
         """Register the Ray actor's transport (internal).
 
-        This is now handled by init_on_worker(). Only kept for internal use.
+        This is now handled by init_on_receiver(). Only kept for internal use.
 
         Args:
             actor_or_context: Either a Ray actor reference or a context object.

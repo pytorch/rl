@@ -470,12 +470,12 @@ class WeightReceiver:
         self._transport = None  # lazy
         self._model_ref = None
         self._strategy = _get_strategy(scheme.strategy)
-        self._worker_idx = None  # Set by SharedMemWeightSyncScheme.init_on_worker()
+        self._worker_idx = None  # Set by SharedMemWeightSyncScheme.init_on_receiver()
 
     def _set_context(self, context: Any) -> None:
         """Set the context object (inner_collector) for resolving references (internal).
 
-        This is now handled by init_on_worker(). Only kept for internal use.
+        This is now handled by init_on_receiver(). Only kept for internal use.
 
         Args:
             context: The inner collector instance in the worker process.
@@ -485,7 +485,7 @@ class WeightReceiver:
     def _register_model(self, model_ref: Any) -> None:
         """Register the model to apply weights to (internal).
 
-        This is now handled by init_on_worker(). Only kept for internal use.
+        This is now handled by init_on_receiver(). Only kept for internal use.
 
         Args:
             model_ref: Either a direct object reference or a string path like 'policy' or 'env.value_net'.
@@ -495,7 +495,7 @@ class WeightReceiver:
     def _register_worker_transport(self, pipe: Any) -> None:
         """Register this worker's communication pipe (internal).
 
-        This is now handled by init_on_worker(). Only kept for internal use.
+        This is now handled by init_on_receiver(). Only kept for internal use.
 
         Args:
             pipe: The pipe connection for this worker.
@@ -556,7 +556,7 @@ class WeightReceiver:
 
         Args:
             worker_idx: The worker index (required for SharedMemTransport).
-                If not provided, uses the worker_idx stored during init_on_worker().
+                If not provided, uses the worker_idx stored during init_on_receiver().
         """
         if self._transport is None:
             return
@@ -661,7 +661,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def init_on_worker(
+    def init_on_receiver(
         self,
         model_id: str,
         context: Any = None,
@@ -702,11 +702,11 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             Receiver instance for receiving weights in this worker
 
         Raises:
-            RuntimeError: If init_on_worker() hasn't been called yet
+            RuntimeError: If init_on_receiver() hasn't been called yet
         """
         if not self._initialized_on_worker or self._receiver is None:
             raise RuntimeError(
-                f"Must call init_on_worker() before get_receiver() on {type(self).__name__}"
+                f"Must call init_on_receiver() before get_receiver() on {type(self).__name__}"
             )
         return self._receiver
 
@@ -740,7 +740,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             A transport backend instance.
 
         Note:
-            This is used internally by init_on_sender/init_on_worker.
+            This is used internally by init_on_sender/init_on_receiver.
         """
         ...
 
@@ -762,7 +762,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             WeightReceiver instance configured for this scheme.
 
         Note:
-            Typically you should use init_on_worker() followed by get_receiver() instead.
+            Typically you should use init_on_receiver() followed by get_receiver() instead.
         """
         return WeightReceiver(self)
 

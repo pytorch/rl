@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+
 import pickle
+import threading
 import time
 
 import pytest
@@ -26,12 +28,10 @@ from torchrl.weight_update import (
     RayWeightSyncScheme,
     RPCWeightSyncScheme,
     SharedMemTransport,
-)
-from torchrl.weight_update.utils import _resolve_model
-from torchrl.weight_update.weight_sync_schemes import (
     SharedMemWeightSyncScheme,
     WeightStrategy,
 )
+from torchrl.weight_update.utils import _resolve_model
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -43,7 +43,7 @@ def worker_update_policy(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
-    scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+    scheme.init_on_receiver(model_id="policy", pipe=pipe, model=policy)
     receiver = scheme.get_receiver()
 
     if receiver._transport.pipe.poll(timeout):
@@ -62,7 +62,7 @@ def worker_update_policy_tensordict(pipe, timeout=5.0):
         policy.bias.fill_(0.0)
 
     scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
-    scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+    scheme.init_on_receiver(model_id="policy", pipe=pipe, model=policy)
     receiver = scheme.get_receiver()
 
     if receiver._transport.pipe.poll(timeout):
@@ -100,7 +100,7 @@ class TestTransportBackends:
         proc.start()
 
         test_weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
-        transport.send_weights("policy", test_weights)
+        transport.send_weights(test_weights)
 
         proc.join(timeout=10.0)
         assert not proc.is_alive()
@@ -113,7 +113,7 @@ class TestTransportBackends:
         proc.start()
 
         test_weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
-        transport.send_weights_async("policy", test_weights)
+        transport.send_weights_async(test_weights)
         transport.wait_ack()
 
         proc.join(timeout=10.0)
@@ -124,13 +124,16 @@ class TestTransportBackends:
             {"weight": torch.zeros(2, 4), "bias": torch.zeros(2)}, batch_size=[]
         ).share_memory_()
 
-        transport = SharedMemTransport({"policy": shared_buffer})
+        transport = SharedMemTransport()
+        transport.register_weights(
+            params_map={0: shared_buffer}, init_queues={0: mp.Queue()}
+        )
 
         new_weights = TensorDict(
             {"weight": torch.ones(2, 4), "bias": torch.ones(2)}, batch_size=[]
         )
 
-        transport.send_weights("policy", new_weights)
+        transport.send_weights(new_weights)
 
         assert torch.allclose(shared_buffer["weight"], torch.ones(2, 4))
         assert torch.allclose(shared_buffer["bias"], torch.ones(2))
@@ -255,7 +258,10 @@ class TestWeightSyncSchemes:
             {"weight": torch.ones(2, 4), "bias": torch.ones(2)}, batch_size=[]
         )
 
-        transport.send_weights("policy", new_weights)
+        transport.register_weights(
+            params_map={0: shared_buffer}, init_queues={0: mp.Queue()}
+        )
+        transport.send_weights(new_weights)
 
         assert torch.allclose(shared_buffer["weight"], torch.ones(2, 4))
         assert torch.allclose(shared_buffer["bias"], torch.ones(2))
@@ -265,7 +271,7 @@ class TestWeightSyncSchemes:
         transport = scheme.create_transport(None)
 
         weights = {"weight": torch.ones(2, 4), "bias": torch.ones(2)}
-        transport.send_weights("policy", weights)
+        transport.send_weights(weights)
 
     @classmethod
     def _worker_with_receive(cls, pipe, scheme):
@@ -274,7 +280,7 @@ class TestWeightSyncSchemes:
             policy.weight.fill_(0.0)
             policy.bias.fill_(0.0)
 
-        scheme.init_on_worker(model_id="policy", pipe=pipe, model=policy)
+        scheme.init_on_receiver(model_id="policy", pipe=pipe, model=policy)
         receiver = scheme.get_receiver()
 
         # Non-blocking receive should return False when no data
@@ -354,7 +360,7 @@ class TestCollectorIntegration:
         collector.shutdown()
 
     def test_multisyncdatacollector_multiprocess_scheme(self, simple_policy):
-        scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+        scheme = MultiProcessWeightSyncScheme()
 
         collector = MultiSyncDataCollector(
             create_env_fn=[
@@ -660,73 +666,76 @@ class TestSerializeScheme:
         parent_pipe.close()
         child_pipe.close()
 
-    def test_shared_mem_scheme_serialize_before_init(self):
-        """Test that uninitialized SharedMemWeightSyncScheme can be pickled."""
-        scheme = SharedMemWeightSyncScheme(strategy="tensordict")
+    # Serialize and deserialize
+    @staticmethod
+    def _get_scheme_from_queue(q, scheme):
+        try:
+            restored = scheme
+            # Check that configuration is preserved but runtime state is cleared
+            assert restored.strategy == "tensordict"
+            assert restored._sender is None
+            assert not restored._initialized_on_sender
 
-        # Serialize and deserialize
-        pickled = pickle.dumps(scheme)
-        restored = pickle.loads(pickled)
+            q.put("success")
+        except Exception as err:
+            q.put(f"failure: {err}")
+        finally:
+            q.close()
 
-        # Check that configuration is preserved
-        assert restored.strategy == "tensordict"
-        assert restored._sender is None
-        assert restored._receiver is None
-
+    @pytest.mark.timeout(10)
     def test_shared_mem_scheme_serialize_after_init(self):
         """Test that initialized SharedMemWeightSyncScheme can be pickled."""
         parent_pipe, child_pipe = mp.Pipe()
+        q = mp.Queue()
+        try:
+            # Create shared buffer
+            shared_buffer = TensorDict(
+                {"weight": torch.zeros(2, 4), "bias": torch.zeros(2)}, batch_size=[]
+            ).share_memory_()
 
-        # Create shared buffer
-        shared_buffer = TensorDict(
-            {"weight": torch.zeros(2, 4), "bias": torch.zeros(2)}, batch_size=[]
-        ).share_memory_()
+            scheme = SharedMemWeightSyncScheme()
 
-        scheme = SharedMemWeightSyncScheme(
-            strategy="tensordict",
-        )
+            def init_on_sender(scheme, pipe):
+                scheme.init_on_sender(params_map={0: shared_buffer})
+                scheme.synchronize_weights()
+                msg = pipe.recv()
+                assert msg == "registered"
 
-        def init_on_sender(scheme, child_pipe):
-            (model_id, data), msg = child_pipe.recv()
-            if msg == "register_shared_weights":
-                child_pipe.send((None, "registered"))
-            else:
-                raise ValueError(f"Expected 'register_shared_weights' but got {msg}")
+            def init_on_receiver(scheme: SharedMemWeightSyncScheme, child_pipe):
+                scheme.init_on_receiver(
+                    worker_idx=0, model=nn.Linear(4, 2, device="meta")
+                )
+                scheme.synchronize_weights()
+                child_pipe.send("registered")
 
-        # Initialize the scheme with the pipes, in 2 separate threads because init requires acknowledgement from the worker
-        import threading
+            future_sender = threading.Thread(
+                target=init_on_sender,
+                kwargs={"scheme": scheme, "pipe": parent_pipe},
+            )
+            future_receiver = threading.Thread(
+                target=init_on_receiver,
+                kwargs={"scheme": scheme, "child_pipe": child_pipe},
+            )
+            future_receiver.start()
+            future_sender.start()
+            future_receiver.join(timeout=10.0)
+            future_sender.join(timeout=10.0)
 
-        future_sender = threading.Thread(
-            target=scheme.init_on_sender,
-            kwargs={"model_id": "policy", "pipes": [parent_pipe]},
-        )
-        future_receiver = threading.Thread(
-            target=init_on_sender,
-            kwargs={"scheme": scheme, "child_pipe": child_pipe},
-        )
-        future_receiver.start()
-        future_sender.start()
-        future_receiver.join()
-        future_sender.join()
+            # Scheme now has _sender with non-serializable state
+            assert scheme._sender is not None
 
-        # Scheme now has _sender with non-serializable state
-        assert scheme._sender is not None
-
-        # Serialize and deserialize
-        pickled = pickle.dumps(scheme)
-        restored = pickle.loads(pickled)
-
-        # Check that configuration is preserved but runtime state is cleared
-        assert restored.strategy == "tensordict"
-        assert restored._sender is None
-        assert not restored._initialized_on_sender
-
-        # Note: policy_weights dict is preserved (but may need re-sharing)
-        assert "policy" in restored.policy_weights
-
-        # Clean up
-        parent_pipe.close()
-        child_pipe.close()
+            proc = mp.Process(target=self._get_scheme_from_queue, args=(q, scheme))
+            proc.start()
+            try:
+                msg = q.get(timeout=10.0)
+                assert msg == "success", msg
+            finally:
+                proc.join()
+        finally:
+            q.close()
+            # Clean up
+            parent_pipe.close()
+            child_pipe.close()
 
     def test_no_weight_sync_scheme_serialize(self):
         """Test that NoWeightSyncScheme can be pickled."""
@@ -809,7 +818,7 @@ class TestSerializeScheme:
         """Test that a scheme can be re-initialized after unpickling.
 
         This is the expected workflow: pickle a scheme, unpickle it in a worker,
-        then call init_on_worker() to establish new runtime resources.
+        then call init_on_receiver() to establish new runtime resources.
         """
         # Initialize and pickle a scheme
         parent_pipe, child_pipe = mp.Pipe()

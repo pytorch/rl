@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import abc
-
 import weakref
-from collections.abc import Callable, Iterator
-from typing import Any, Literal, Protocol
+from collections.abc import Callable
+from typing import Any, overload
 
 import torch
 import torch.distributed
@@ -18,6 +16,7 @@ from torchrl.weight_update.weight_sync_schemes import (
     TransportBackend,
     WeightReceiver,
     WeightSender,
+    WeightStrategy,
     WeightSyncScheme,
 )
 
@@ -43,6 +42,7 @@ class SharedMemTransport:
         self._weight_queues = (
             None  # Dict of per-worker queues for distributing shared weights
         )
+        self._unique_weights = None
 
     def register_weights(
         self, params_map: dict[int, mp.Queue], init_queues: dict[int, mp.Queue]
@@ -115,6 +115,8 @@ class SharedMemTransport:
         if any("." in key for key in weights.keys()):
             weights_to_update = weights.unflatten_keys(".")
 
+        if self._unique_weights is None:
+            raise RuntimeError("Unique weights not set. Call register_weights() first.")
         for buffer in self._unique_weights:
             buffer.update_(weights_to_update, non_blocking=True)
         if torch.cuda.is_available():
@@ -163,8 +165,94 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # General message queue for coordination (if needed in future)
         self._message_queue = mp.Queue()
 
+    @overload
     def init_on_sender(
         self,
+        *,
+        model_id: str,
+        context: Any,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        params_map: dict[int, TensorDictBase],
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        params_map: dict[int, TensorDictBase],
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        weights: TensorDictBase,
+        devices: list[torch.device],
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        weights: TensorDictBase,
+        devices: list[torch.device],
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        model: nn.Module,
+        devices: list[torch.device],
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        model: nn.Module,
+        devices: list[torch.device],
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        weights: TensorDictBase,
+        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase],
+        num_workers: int,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        model: nn.Module,
+        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase],
+        num_workers: int,
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    def init_on_sender(
+        self,
+        *,
         model_id: str | None = None,
         context: Any = None,
         weights: TensorDictBase | None = None,
@@ -400,9 +488,28 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             "Either params_map, model_id + context or model/weights + devices must be provided."
         )
 
-    def init_on_worker(
+    @overload
+    def init_on_receiver(
         self,
+        *,
         model_id: str,
+        context: Any,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_receiver(
+        self,
+        *,
+        model: Any,
+        worker_idx: int,
+    ) -> None:
+        ...
+
+    def init_on_receiver(
+        self,
+        *,
+        model_id: str | None = None,
         context: Any = None,
         model: Any = None,
         worker_idx: int | None = None,
@@ -423,6 +530,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """
         # Extract parameters from context or kwargs
         if context is not None:
+            if model_id is None:
+                raise ValueError("model_id is required when context is provided")
             if hasattr(context, "get_model"):
                 model = context.get_model(model_id)
             elif model is None:
@@ -472,7 +581,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         Since this is shared memory, there's only one transport shared by all workers.
 
         Note:
-            This is used internally by init_on_sender/init_on_worker.
+            This is used internally by init_on_sender/init_on_receiver.
         """
         return self._shared_transport
 
@@ -512,8 +621,26 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Fall back to default behavior
         return super().prepare_weights(weights, model_id, strategy, context)
 
+
 class SharedMemWeightReceiver(WeightReceiver):
+    """Weight receiver for shared memory systems.
+
+    Receives weight updates via shared memory buffers. Workers automatically
+    see weight updates without explicit message passing, providing zero-copy
+    weight synchronization. This is typically instantiated and managed by
+    :class:`SharedMemWeightSyncScheme`.
+    """
+
     _transport: SharedMemTransport | None
 
+
 class SharedMemWeightSender(WeightSender):
+    """Weight sender for shared memory systems.
+
+    Sends weight updates by writing directly to shared memory buffers.
+    All workers automatically see updates without explicit communication,
+    providing zero-copy weight synchronization. This is typically instantiated
+    and managed by :class:`SharedMemWeightSyncScheme`.
+    """
+
     _transport: SharedMemTransport | None
