@@ -49,7 +49,7 @@ Weight update schemes can be used outside of collectors for custom synchronizati
 The new simplified API provides four core methods for weight synchronization:
 
 - ``init_on_sender(model_id, **kwargs)`` - Initialize on the main process (trainer) side
-- ``init_on_worker(model_id, **kwargs)`` - Initialize on worker process side
+- ``init_on_receiver(model_id, **kwargs)`` - Initialize on worker process side
 - ``get_sender()`` - Get the configured sender instance
 - ``get_receiver()`` - Get the configured receiver instance
 
@@ -85,7 +85,7 @@ Here's a basic example:
     # or sender.send_async(weights); sender.wait_async()  # Asynchronous send
 
     # On the worker process side:
-    # scheme.init_on_worker(model_id="policy", pipe=child_pipe, model=policy)
+    # scheme.init_on_receiver(model_id="policy", pipe=child_pipe, model=policy)
     # receiver = scheme.get_receiver()
     # # Non-blocking check for new weights
     # if receiver.receive(timeout=0.001):
@@ -93,8 +93,8 @@ Here's a basic example:
 
     # Example 2: Shared memory weight synchronization
     # ------------------------------------------------
-    # Create shared memory scheme with auto-registration
-    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    # Create shared memory scheme
+    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict")
     
     # Initialize with pipes for lazy registration
     parent_pipe2, child_pipe2 = mp.Pipe()
@@ -159,7 +159,7 @@ across multiple inference workers:
     # Example 2: Multiple collectors with shared memory
     # --------------------------------------------------
     # Shared memory is more efficient for frequent updates
-    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    shared_scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
     collector = MultiSyncDataCollector(
         create_env_fn=[
@@ -198,6 +198,9 @@ Weight Senders
     :template: rl_template.rst
 
     WeightSender
+    MPWeightSender
+    RPCWeightSender
+    DistributedWeightSender
     RayModuleTransformSender
 
 Weight Receivers
@@ -208,6 +211,9 @@ Weight Receivers
     :template: rl_template.rst
 
     WeightReceiver
+    MPWeightReceiver
+    RPCWeightReceiver
+    DistributedWeightReceiver
     RayModuleTransformReceiver
 
 Transports

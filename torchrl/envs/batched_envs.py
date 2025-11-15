@@ -2701,7 +2701,6 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
             if consolidate:
                 try:
                     child_pipe.send(
@@ -2713,6 +2712,9 @@ def _run_worker_pipe_direct(
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
             else:
                 child_pipe.send(cur_td)
+            # Set event after successfully sending through pipe to avoid race condition
+            # where event is set but pipe send fails (BrokenPipeError)
+            mp_event.set()
 
             del cur_td
 
@@ -2726,7 +2728,6 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_event.set()
             if consolidate:
                 try:
                     next_td = next_td.consolidate(
@@ -2735,6 +2736,9 @@ def _run_worker_pipe_direct(
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
             child_pipe.send(next_td)
+            # Set event after successfully sending through pipe to avoid race condition
+            # where event is set but pipe send fails (BrokenPipeError)
+            mp_event.set()
 
             del next_td
 

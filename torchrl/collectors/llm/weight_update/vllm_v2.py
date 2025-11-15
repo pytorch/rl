@@ -12,7 +12,7 @@ from collections.abc import Iterator
 import torch
 from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import WeightUpdaterBase
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.modules.llm.backends.vllm import RLvLLMEngine
 
 try:

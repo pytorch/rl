@@ -20,13 +20,11 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
+from torchrl.collectors._multi_async import MultiaSyncDataCollector
+from torchrl.collectors._multi_sync import MultiSyncDataCollector
+from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
@@ -572,9 +570,7 @@ class DistributedDataCollector(DataCollectorBase):
         # Set up weight synchronization - prefer new schemes over legacy updater
         if weight_updater is None and weight_sync_schemes is None:
             # Default to Distributed weight sync scheme for distributed collectors
-            from torchrl.weight_update.weight_sync_schemes import (
-                DistributedWeightSyncScheme,
-            )
+            from torchrl.weight_update import DistributedWeightSyncScheme
 
             weight_sync_schemes = {
                 "policy": DistributedWeightSyncScheme(backend=backend, sync=self._sync)

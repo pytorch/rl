@@ -141,8 +141,8 @@ def example_shared_memory_sync():
     # Create a simple policy
     policy = nn.Linear(4, 2)
 
-    # Create shared memory scheme with auto-registration
-    scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    # Create shared memory scheme
+    scheme = SharedMemWeightSyncScheme(strategy="tensordict")
     sender = scheme.create_sender()
 
     # Create pipe for lazy registration

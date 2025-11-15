@@ -906,9 +906,9 @@ while True:
                     except queue.Empty:
                         pass
 
-                    if not start_found:
-                        timeout_val -= 0.1
-                        time.sleep(0.1)
+                    # Always sleep a bit to avoid busy-waiting and give subprocess time
+                    timeout_val -= 0.01
+                    time.sleep(0.01)
 
                 except Exception as e:
                     return {
@@ -1007,8 +1007,10 @@ class PythonExecutorService:
         self.processes = [
             PersistentPythonProcess(timeout=timeout) for _ in range(pool_size)
         ]
+        # Create a lock for each process to prevent concurrent access
+        self.process_locks = [threading.Lock() for _ in range(pool_size)]
         self.next_idx = 0
-        self._lock = threading.Lock()
+        self._selection_lock = threading.Lock()
 
     def execute(self, code: str) -> dict:
         """Execute Python code using next available process (round-robin).
@@ -1019,12 +1021,14 @@ class PythonExecutorService:
         Returns:
             dict: Execution result with keys 'success', 'stdout', 'stderr', 'returncode'.
         """
-        # Simple round-robin - Ray handles the queuing via max_concurrency
-        with self._lock:
-            process = self.processes[self.next_idx]
+        # Select a process using round-robin
+        with self._selection_lock:
+            process_idx = self.next_idx
             self.next_idx = (self.next_idx + 1) % self.pool_size
 
-        return process.execute(code)
+        # Lock the selected process for the duration of execution
+        with self.process_locks[process_idx]:
+            return self.processes[process_idx].execute(code)
 
     def cleanup(self):
         """Cleanup all processes in the pool."""

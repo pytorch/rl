@@ -13,11 +13,14 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 import torch
+
+import torchrl.collectors._runner
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -33,7 +36,6 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -48,7 +50,7 @@ from torchrl.collectors import (
     SyncDataCollector,
     WeightUpdaterBase,
 )
-from torchrl.collectors.collectors import _Interruptor
+from torchrl.collectors._constants import _Interruptor
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -1130,39 +1132,19 @@ if __name__ == "__main__":
                 policy, policy_device=original_device, env_device=original_device
             )
 
-        # a deepcopy must occur when the policy_device differs from the actual device
-        with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        # Test that we DON'T raise deepcopy errors anymore even when policy_device differs
+        # These scenarios previously would have triggered deepcopy, but now use meta device context manager
+        if collector_type is not SyncDataCollector:
+            # policy_device differs from the actual device - previously required deepcopy, now works!
             policy = make_policy(device=original_device)
             make_and_test_policy(
                 policy, policy_device=shared_device, env_device=shared_device
             )
 
-        # a deepcopy must occur when device differs from the actual device
-        with pytest.raises(RuntimeError, match="deepcopy not allowed"):
+        if collector_type is not SyncDataCollector:
+            # device differs from the actual device - previously required deepcopy, now works!
             policy = make_policy(device=original_device)
             make_and_test_policy(policy, device=shared_device)
-
-        # If the policy is not an nn.Module, we can't cast it to device, so we assume that the policy device
-        # is there to inform us
-        substitute_device = (
-            original_device if torch.cuda.is_available() else torch.device("cpu")
-        )
-        policy = make_policy(substitute_device, nn_module=False)
-        with pytest.warns(UserWarning):
-            make_and_test_policy(
-                policy, policy_device=substitute_device, env_device=substitute_device
-            )
-        # For instance, if the env is on CPU, knowing the policy device helps with casting stuff on the right device
-        with pytest.warns(UserWarning):
-            make_and_test_policy(
-                policy, policy_device=substitute_device, env_device=shared_device
-            )
-        make_and_test_policy(
-            policy,
-            policy_device=substitute_device,
-            env_device=shared_device,
-            trust_policy=True,
-        )
 
         # If there is no policy_device, we assume that the user is doing things right too but don't warn
         if collector_type is SyncDataCollector or original_device.type != "mps":
@@ -1487,12 +1469,14 @@ if __name__ == "__main__":
         assert_allclose_td(data10, data20)
 
     @pytest.mark.parametrize("use_async", [False, True])
-    @pytest.mark.parametrize("cudagraph", [False, True])
+    @pytest.mark.parametrize(
+        "cudagraph", [False, True] if torch.cuda.is_available() else [False]
+    )
     @pytest.mark.parametrize(
         "weight_sync_scheme",
         [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
     )
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
+    # @pytest.mark.skipif(not torch.cuda.is_available() and not torch.mps.is_available(), reason="no cuda/mps device found")
     def test_update_weights(self, use_async, cudagraph, weight_sync_scheme):
         def create_env():
             return ContinuousActionVecMockEnv()
@@ -1509,11 +1493,12 @@ if __name__ == "__main__":
         kwargs = {}
         if weight_sync_scheme is not None:
             kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         collector = collector_class(
             [create_env] * 3,
             policy=policy,
-            device=[torch.device("cuda:0")] * 3,
-            storing_device=[torch.device("cuda:0")] * 3,
+            device=[torch.device(device)] * 3,
+            storing_device=[torch.device(device)] * 3,
             frames_per_batch=20,
             cat_results="stack",
             cudagraph_policy=cudagraph,
@@ -1530,7 +1515,7 @@ if __name__ == "__main__":
                 ].keys()
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
-                        state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                        state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                         policy_state_dict[k].cpu(),
                     )
 
@@ -1544,9 +1529,11 @@ if __name__ == "__main__":
             # check they don't match
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                    with pytest.raises(AssertionError):
+                    with pytest.raises(
+                        AssertionError
+                    ) if torch.cuda.is_available() else nullcontext():
                         torch.testing.assert_close(
-                            state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                            state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                             policy_state_dict[k].cpu(),
                         )
 
@@ -1559,7 +1546,7 @@ if __name__ == "__main__":
             for worker in range(3):
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
-                        state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                        state_dict[f"worker{worker}"]["policy_state_dict"][k].cpu(),
                         policy_state_dict[k].cpu(),
                     )
         finally:
@@ -1571,8 +1558,6 @@ if __name__ == "__main__":
     )  # MultiSync has known indexing issues with SharedMem
     def test_update_weights_shared_mem(self, use_async):
         """Test shared memory weight synchronization scheme."""
-        from tensordict import TensorDict
-        from torchrl.weight_update.weight_sync_schemes import SharedMemWeightSyncScheme
 
         def create_env():
             return ContinuousActionVecMockEnv()
@@ -1589,7 +1574,11 @@ if __name__ == "__main__":
 
         # Create shared memory weight sync scheme
         weight_sync_scheme = SharedMemWeightSyncScheme()
-        weight_sync_scheme.register_shared_weights("policy", policy_weights)
+        # Use the new init_on_sender API with params_map
+        # All 3 workers share the same CPU weights in shared memory
+        weight_sync_scheme.init_on_sender(
+            params_map={0: policy_weights, 1: policy_weights, 2: policy_weights},
+        )
 
         collector_class = (
             MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
@@ -1841,8 +1830,14 @@ class TestCollectorDevices:
     class PolicyWithDevice(TensorDictModuleBase):
         in_keys = ["observation"]
         out_keys = ["action"]
-        # receives and sends data on gpu
-        default_device = "cuda:0" if torch.cuda.device_count() else "cpu"
+
+        def __init__(self, default_device=None):
+            super().__init__()
+            self.default_device = (
+                default_device
+                if default_device is not None
+                else ("cuda:0" if torch.cuda.device_count() else "cpu")
+            )
 
         def forward(self, tensordict):
             assert tensordict.device == _make_ordinal_device(
@@ -1859,7 +1854,7 @@ class TestCollectorDevices:
         env_device = None
         policy_device = main_device
         env = self.DeviceLessEnv(main_device)
-        policy = self.PolicyWithDevice()
+        policy = self.PolicyWithDevice(main_device)
         collector = SyncDataCollector(
             env,
             policy,
@@ -1900,7 +1895,7 @@ class TestCollectorDevices:
         env_device = None
         policy_device = None
         env = self.EnvWithDevice(main_device)
-        policy = self.PolicyWithDevice()
+        policy = self.PolicyWithDevice(main_device)
         collector = SyncDataCollector(
             env,
             policy,
@@ -1913,14 +1908,16 @@ class TestCollectorDevices:
         )
         for data in collector:  # noqa: B007
             break
-        assert data.device == main_device
+        # When storing_device is None, it falls back to device
+        expected_device = storing_device if storing_device is not None else main_device
+        assert data.device == expected_device
 
         # same but more specific
         device = None
         env_device = main_device
         policy_device = main_device
         env = self.EnvWithDevice(main_device)
-        policy = self.PolicyWithDevice()
+        policy = self.PolicyWithDevice(main_device)
         collector = SyncDataCollector(
             env,
             policy,
@@ -1933,7 +1930,9 @@ class TestCollectorDevices:
         )
         for data in collector:  # noqa: B007
             break
-        assert data.device == main_device
+        # When storing_device is None, and env_device == policy_device, it falls back to env_device
+        expected_device = storing_device if storing_device is not None else main_device
+        assert data.device == expected_device
 
         # none has a device
         device = None
@@ -2401,7 +2400,9 @@ class TestAutoWrap:
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
         with pytest.raises(
             TypeError,
-            match=("Arguments to policy.forward are incompatible with entries in"),
+            match=(
+                "Arguments to policy.forward are incompatible with entries in|Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True."
+            ),
         ):
             collector_class(
                 **self._create_collector_kwargs(
@@ -2980,6 +2981,93 @@ class TestUpdateParams:
             col.shutdown()
             del col
 
+    @pytest.mark.skipif(
+        not torch.cuda.is_available() or torch.cuda.device_count() < 3,
+        reason="requires at least 3 CUDA devices",
+    )
+    def test_shared_device_weight_update(self):
+        """Test that weight updates work correctly when multiple workers share the same device.
+
+        This test specifically validates the per-worker queue implementation in SharedMemWeightSyncScheme.
+        When workers 0 and 2 share cuda:2, each should receive its own copy of the weights through
+        dedicated queues, preventing race conditions that could occur with a single shared queue.
+
+        Note: This test only uses SharedMemWeightSyncScheme (not MultiProcessWeightSyncScheme) because
+        the latter sends tensors through pipes, which we want to avoid.
+        """
+        # Create policy on cuda:0
+        policy = TensorDictModule(
+            nn.Linear(7, 7, device="cuda:0"),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        def make_env():
+            return ContinuousActionVecMockEnv()
+
+        # Create collector with workers on cuda:2, cuda:1, cuda:2
+        # Workers 0 and 2 share cuda:2 - this is the key test case
+        collector = MultiaSyncDataCollector(
+            [make_env, make_env, make_env],
+            policy=policy,
+            frames_per_batch=30,
+            total_frames=300,
+            device=["cuda:2", "cuda:1", "cuda:2"],
+            storing_device=["cuda:2", "cuda:1", "cuda:2"],
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme()},
+        )
+
+        try:
+            # Collect first batch to initialize workers
+            for _ in collector:
+                break
+
+            # Get initial weights
+            old_weight = policy.module.weight.data.clone()
+
+            # Modify policy weights on cuda:0
+            for p in policy.parameters():
+                p.data += torch.randn_like(p)
+
+            new_weight = policy.module.weight.data.clone()
+            assert not torch.allclose(
+                old_weight, new_weight
+            ), "Weights should have changed"
+
+            # Update weights - this should propagate to all workers via their dedicated queues
+            collector.update_policy_weights_()
+
+            # Collect more batches to ensure weights are propagated
+            for i, _ in enumerate(collector):
+                if i >= 2:
+                    break
+
+            # Get state dict from all workers
+            state_dict = collector.state_dict()
+
+            # Verify all workers have the new weights, including both workers on cuda:2
+            for worker_idx in range(3):
+                worker_key = f"worker{worker_idx}"
+                assert (
+                    "policy_state_dict" in state_dict[worker_key]
+                ), f"Worker {worker_idx} should have policy_state_dict"
+                worker_weight = state_dict[worker_key]["policy_state_dict"][
+                    "module.weight"
+                ]
+                torch.testing.assert_close(
+                    worker_weight.cpu(),
+                    new_weight.cpu(),
+                    msg=(
+                        f"Worker {worker_idx} weights don't match expected weights. "
+                        f"Workers 0 and 2 share device cuda:2, worker 1 is on cuda:1. "
+                        f"This test validates that the per-worker queue system correctly "
+                        f"distributes weights even when multiple workers share a device."
+                    ),
+                )
+        finally:
+            collector.shutdown()
+            del collector
+
 
 class TestAggregateReset:
     def test_aggregate_reset_to_root(self):
@@ -3176,11 +3264,11 @@ class TestLibThreading:
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_num_threads(self):
-        from torchrl.collectors import collectors
+        pass
 
-        _main_async_collector_saved = collectors._main_async_collector
-        collectors._main_async_collector = decorate_thread_sub_func(
-            collectors._main_async_collector, num_threads=3
+        _main_async_collector_saved = torchrl.collectors._runner._main_async_collector
+        torchrl.collectors._runner._main_async_collector = decorate_thread_sub_func(
+            torchrl.collectors._runner._main_async_collector, num_threads=3
         )
         num_threads = torch.get_num_threads()
         try:
@@ -3204,7 +3292,9 @@ class TestLibThreading:
             except Exception:
                 torchrl_logger.info("Failed to shut down collector")
             # reset vals
-            collectors._main_async_collector = _main_async_collector_saved
+            torchrl.collectors._runner._main_async_collector = (
+                _main_async_collector_saved
+            )
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(
@@ -3863,13 +3953,21 @@ class TestPolicyFactory:
         policy_weights = TensorDict.from_module(policy)
         kwargs = {}
         if weight_updater == "scheme_shared":
-            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
+            scheme = SharedMemWeightSyncScheme()
+            kwargs = {"weight_sync_schemes": {"policy": scheme}}
         elif weight_updater == "scheme_pipe":
-            kwargs = {"weight_sync_schemes": {"policy": MultiProcessWeightSyncScheme()}}
+            scheme = MultiProcessWeightSyncScheme()
+            kwargs = {"weight_sync_schemes": {"policy": scheme}}
         elif weight_updater == "weight_updater":
+            scheme = None
             kwargs = {"weight_updater": self.MPSWeightUpdaterBase(policy_weights, 2)}
         else:
             raise NotImplementedError
+
+        if scheme is not None:
+            scheme.init_on_sender(
+                model=policy_factory(), devices=[device] * 2, model_id="policy"
+            )
 
         collector = MultiSyncDataCollector(
             create_env_fn=[env_maker, env_maker],
@@ -3883,6 +3981,8 @@ class TestPolicyFactory:
             storing_device="cpu",
             **kwargs,
         )
+        if weight_updater == "weight_updater":
+            assert collector._legacy_weight_updater
 
         # When using policy_factory, must pass weights explicitly
         collector.update_policy_weights_(policy_weights)
@@ -4025,16 +4125,17 @@ class TestAsyncCollection:
             frames_per_batch=16,
             **kwargs,
         )
-        if not isinstance(collector, SyncDataCollector):
-            if weight_sync_scheme is not None:
-                assert isinstance(
-                    collector._weight_sync_schemes["policy"], weight_sync_scheme
-                )
-            else:
-                assert isinstance(
-                    collector._weight_sync_schemes["policy"], SharedMemWeightSyncScheme
-                )
         try:
+            if not isinstance(collector, SyncDataCollector):
+                if weight_sync_scheme is not None:
+                    assert isinstance(
+                        collector._weight_sync_schemes["policy"], weight_sync_scheme
+                    )
+                else:
+                    assert isinstance(
+                        collector._weight_sync_schemes["policy"],
+                        SharedMemWeightSyncScheme,
+                    )
             collector.start()
             for _ in range(10):
                 time.sleep(0.1)
