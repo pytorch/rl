@@ -492,6 +492,25 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         # mainly used for PPO with KL target
         pass
 
+    def _maybe_get_priority_weight(
+        self, tensordict: TensorDictBase
+    ) -> torch.Tensor | None:
+        """Extract priority weights from tensordict if prioritized replay is enabled.
+
+        Args:
+            tensordict (TensorDictBase): The input tensordict that may contain priority weights.
+
+        Returns:
+            torch.Tensor | None: The priority weights if available and enabled, None otherwise.
+        """
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        return weights
+
     def _reset_module_parameters(self, module_name, module):
         params_name = f"{module_name}_params"
         target_name = f"target_{module_name}_params"

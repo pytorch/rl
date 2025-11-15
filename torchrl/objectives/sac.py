@@ -616,26 +616,15 @@ class SACLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-
         if self._version == 1:
-            loss_qvalue, value_metadata = self.qvalue_v1_loss(
-                tensordict, weights=weights
-            )
-            loss_value, _ = self.value_loss(tensordict, weights=weights)
+            loss_qvalue, value_metadata = self.qvalue_v1_loss(tensordict)
+            loss_value, _ = self.value_loss(tensordict)
         else:
-            loss_qvalue, value_metadata = self.qvalue_v2_loss(
-                tensordict, weights=weights
-            )
+            loss_qvalue, value_metadata = self.qvalue_v2_loss(tensordict)
             loss_value = None
-        loss_actor, metadata_actor = self.actor_loss(tensordict, weights=weights)
+        loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
+        weights = self._maybe_get_priority_weight(tensordict)
         loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
         tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
@@ -673,8 +662,9 @@ class SACLoss(LossModule):
         return self.qvalue_network_params.detach()
 
     def actor_loss(
-        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
+        self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
+        weights = self._maybe_get_priority_weight(tensordict)
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -736,8 +726,9 @@ class SACLoss(LossModule):
         )
 
     def qvalue_v1_loss(
-        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
+        self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
+        weights = self._maybe_get_priority_weight(tensordict)
         target_params = self._cached_target_params_actor_value
         with set_exploration_type(self.deterministic_sampling_mode):
             target_value = self.value_estimator.value_estimate(
@@ -852,8 +843,9 @@ class SACLoss(LossModule):
             return target_value
 
     def qvalue_v2_loss(
-        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
+        self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
+        weights = self._maybe_get_priority_weight(tensordict)
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._compute_target_v2(tensordict)
 
@@ -875,8 +867,9 @@ class SACLoss(LossModule):
         return loss_qval, metadata
 
     def value_loss(
-        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
+        self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
+        weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
@@ -1272,19 +1265,12 @@ class DiscreteSACLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-
-        loss_qvalue, metadata_value = self.qvalue_loss(tensordict, weights=weights)
-        loss_actor, metadata_actor = self.actor_loss(tensordict, weights=weights)
+        loss_qvalue, metadata_value = self.qvalue_loss(tensordict)
+        loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_alpha = self._alpha_loss(
             log_prob=metadata_actor["log_prob"],
         )
+        weights = self._maybe_get_priority_weight(tensordict)
         loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
 
         tensordict.set(self.tensor_keys.priority, metadata_value["td_error"])
@@ -1390,8 +1376,9 @@ class DiscreteSACLoss(LossModule):
             return target_value
 
     def qvalue_loss(
-        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
+        self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
+        weights = self._maybe_get_priority_weight(tensordict)
         target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys, strict=False),
@@ -1429,8 +1416,9 @@ class DiscreteSACLoss(LossModule):
         return loss_qval, metadata
 
     def actor_loss(
-        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
+        self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
+        weights = self._maybe_get_priority_weight(tensordict)
         # get probs and log probs for actions
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict.clone(False))

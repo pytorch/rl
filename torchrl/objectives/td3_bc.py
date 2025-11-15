@@ -395,9 +395,7 @@ class TD3BCLoss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(
-        self, tensordict, weights: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, dict]:
+    def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and is usually delayed 1-3 critic updates.
@@ -405,11 +403,11 @@ class TD3BCLoss(LossModule):
         Args:
             tensordict (TensorDictBase): the input data for the loss. Check the class's `in_keys` to see what fields
                 are required for this to be computed.
-            weights (torch.Tensor, optional): importance sampling weights for weighted reduction.
         Returns: a differentiable tensor with the actor loss along with a metadata dictionary containing the detached `"bc_loss"`
                 used in the combined actor loss as well as the detached `"state_action_value_actor"` used to calculate the lambda
                 value, and the lambda value `"lmbd"` itself.
         """
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -452,9 +450,7 @@ class TD3BCLoss(LossModule):
         )
         return loss_actor, metadata
 
-    def qvalue_loss(
-        self, tensordict, weights: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, dict]:
+    def qvalue_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.
@@ -462,10 +458,10 @@ class TD3BCLoss(LossModule):
         Args:
             tensordict (TensorDictBase): the input data for the loss. Check the class's `in_keys` to see what fields
                 are required for this to be computed.
-            weights (torch.Tensor, optional): importance sampling weights for weighted reduction.
         Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
             the detached `"td_error"` to be used for prioritized sampling, the detached `"next_state_value"`, the detached `"pred_value"`, and the detached `"target_value"`.
         """
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)
@@ -559,15 +555,8 @@ class TD3BCLoss(LossModule):
         class's `"in_keys"` and `"out_keys"` attributes.
         """
         tensordict_save = tensordict
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss_actor, metadata_actor = self.actor_loss(tensordict, weights=weights)
-        loss_qval, metadata_value = self.qvalue_loss(tensordict_save, weights=weights)
+        loss_actor, metadata_actor = self.actor_loss(tensordict)
+        loss_qval, metadata_value = self.qvalue_loss(tensordict_save)
         tensordict_save.set(
             self.tensor_keys.priority, metadata_value.pop("td_error").detach().max(0)[0]
         )

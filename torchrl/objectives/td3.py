@@ -381,9 +381,8 @@ class TD3Loss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(
-        self, tensordict, weights: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, dict]:
+    def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -416,9 +415,8 @@ class TD3Loss(LossModule):
         )
         return loss_actor, metadata
 
-    def value_loss(
-        self, tensordict, weights: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, dict]:
+    def value_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)
@@ -505,15 +503,8 @@ class TD3Loss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict_save = tensordict
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss_actor, metadata_actor = self.actor_loss(tensordict, weights=weights)
-        loss_qval, metadata_value = self.value_loss(tensordict_save, weights=weights)
+        loss_actor, metadata_actor = self.actor_loss(tensordict)
+        loss_qval, metadata_value = self.value_loss(tensordict_save)
         tensordict_save.set(
             self.tensor_keys.priority, metadata_value.pop("td_error").detach().max(0)[0]
         )

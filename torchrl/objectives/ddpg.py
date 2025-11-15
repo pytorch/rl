@@ -300,15 +300,8 @@ class DDPGLoss(LossModule):
             a tuple of 2 tensors containing the DDPG loss.
 
         """
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss_value, metadata = self.loss_value(tensordict, weights=weights)
-        loss_actor, metadata_actor = self.loss_actor(tensordict, weights=weights)
+        loss_value, metadata = self.loss_value(tensordict)
+        loss_actor, metadata_actor = self.loss_actor(tensordict)
         metadata.update(metadata_actor)
         td_out = TensorDict(
             source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
@@ -327,8 +320,8 @@ class DDPGLoss(LossModule):
     def loss_actor(
         self,
         tensordict: TensorDictBase,
-        weights: torch.Tensor | None = None,
     ) -> [torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys, strict=False
         ).detach()
@@ -352,8 +345,8 @@ class DDPGLoss(LossModule):
     def loss_value(
         self,
         tensordict: TensorDictBase,
-        weights: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
