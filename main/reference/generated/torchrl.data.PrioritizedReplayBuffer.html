@@ -540,14 +540,14 @@ process.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># get the info to find what the indices are</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">return_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
-<span class="go">tensor([2, 7, 4, 3, 5]) {&#39;_weight&#39;: array([1., 1., 1., 1., 1.], dtype=float32), &#39;index&#39;: array([2, 7, 4, 3, 5])}</span>
+<span class="go">tensor([2, 7, 4, 3, 5]) {&#39;priority_weight&#39;: array([1., 1., 1., 1., 1.], dtype=float32), &#39;index&#39;: array([2, 7, 4, 3, 5])}</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># update priority</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span> <span class="o">*</span> <span class="mi">5</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">],</span> <span class="n">priority</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># and now a new sample, the weights should be updated</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">return_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
-<span class="go">tensor([2, 5, 2, 2, 5]) {&#39;_weight&#39;: array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],</span>
+<span class="go">tensor([2, 5, 2, 2, 5]) {&#39;priority_weight&#39;: array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],</span>
 <span class="go">      dtype=float32), &#39;index&#39;: array([2, 5, 2, 2, 5])}</span>
 </pre></div>
 </div>

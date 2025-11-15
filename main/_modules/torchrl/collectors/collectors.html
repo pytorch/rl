@@ -469,7 +469,7 @@
     <span class="n">compile_with_warmup</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
     <span class="n">prod</span><span class="p">,</span>
-    <span class="n">RL_WARNINGS</span><span class="p">,</span>
+    <span class="n">rl_warnings</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
@@ -1640,7 +1640,7 @@
             <span class="n">total_frames</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">remainder</span> <span class="o">=</span> <span class="n">total_frames</span> <span class="o">%</span> <span class="n">frames_per_batch</span>
-            <span class="k">if</span> <span class="n">remainder</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">remainder</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">():</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;total_frames (</span><span class="si">{</span><span class="n">total_frames</span><span class="si">}</span><span class="s2">) is not exactly divisible by frames_per_batch (</span><span class="si">{</span><span class="n">frames_per_batch</span><span class="si">}</span><span class="s2">). &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;This means </span><span class="si">{</span><span class="n">frames_per_batch</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">remainder</span><span class="si">}</span><span class="s2"> additional frames will be collected.&quot;</span>
@@ -1660,7 +1660,7 @@
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">init_random_frames</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
             <span class="ow">and</span> <span class="n">init_random_frames</span> <span class="o">%</span> <span class="n">frames_per_batch</span> <span class="o">!=</span> <span class="mi">0</span>
-            <span class="ow">and</span> <span class="n">RL_WARNINGS</span>
+            <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">()</span>
         <span class="p">):</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;init_random_frames (</span><span class="si">{</span><span class="n">init_random_frames</span><span class="si">}</span><span class="s2">) is not exactly a multiple of frames_per_batch (</span><span class="si">{</span><span class="n">frames_per_batch</span><span class="si">}</span><span class="s2">), &quot;</span>
@@ -1683,7 +1683,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_setup_frames_per_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate and validate frames per batch.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">():</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;frames_per_batch (</span><span class="si">{</span><span class="n">frames_per_batch</span><span class="si">}</span><span class="s2">) is not exactly divisible by the number of batched environments (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_env</span><span class="si">}</span><span class="s2">), &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot; this results in more frames_per_batch per iteration that requested&quot;</span>
@@ -3231,7 +3231,7 @@
             <span class="n">total_frames</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">remainder</span> <span class="o">=</span> <span class="n">total_frames</span> <span class="o">%</span> <span class="n">total_frames_per_batch</span>
-            <span class="k">if</span> <span class="n">remainder</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">remainder</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">():</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;total_frames (</span><span class="si">{</span><span class="n">total_frames</span><span class="si">}</span><span class="s2">) is not exactly divisible by frames_per_batch (</span><span class="si">{</span><span class="n">total_frames_per_batch</span><span class="si">}</span><span class="s2">). &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;This means </span><span class="si">{</span><span class="n">total_frames_per_batch</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">remainder</span><span class="si">}</span><span class="s2"> additional frames will be collected. &quot;</span>
@@ -4163,7 +4163,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">():</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;frames_per_batch </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span><span class="si">}</span><span class="s2"> is not exactly divisible by the number of collector workers </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="si">}</span><span class="s2">,&quot;</span>
                 <span class="sa">f</span><span class="s2">&quot; this results in more frames_per_batch per iteration that requested.&quot;</span>

@@ -441,7 +441,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parameter</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RL_WARNINGS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">rl_warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.rnn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_recurrent_mode</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValueEstimators</span>
@@ -456,7 +456,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_updater_check_forward_prehook</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="k">if</span> <span class="p">(</span>
         <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">_has_update_associated</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-        <span class="ow">and</span> <span class="n">RL_WARNINGS</span>
+        <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">()</span>
         <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span>
     <span class="p">):</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -550,6 +550,7 @@
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">_vmap_randomness</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">default_value_estimator</span><span class="p">:</span> <span class="n">ValueEstimators</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">use_prioritized_weights</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
 
     <span class="n">deterministic_sampling_mode</span><span class="p">:</span> <span class="n">ExplorationType</span> <span class="o">=</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span>
 
@@ -871,7 +872,7 @@
                 <span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">data</span>
             <span class="k">elif</span> <span class="p">(</span>
                 <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_update_associated</span><span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="mi">7</span><span class="p">:</span><span class="o">-</span><span class="mi">7</span><span class="p">]]</span>
-                <span class="ow">and</span> <span class="n">RL_WARNINGS</span>
+                <span class="ow">and</span> <span class="n">rl_warnings</span><span class="p">()</span>
                 <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span>
             <span class="p">):</span>
                 <span class="c1"># no updater associated</span>
@@ -912,6 +913,25 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># mainly used for PPO with KL target</span>
         <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_get_priority_weight</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract priority weights from tensordict if prioritized replay is enabled.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): The input tensordict that may contain priority weights.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor | None: The priority weights if available and enabled, None otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_prioritized_weights</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">priority_weight</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">priority_weight</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">weights</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset_module_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
         <span class="n">params_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">_params&quot;</span>

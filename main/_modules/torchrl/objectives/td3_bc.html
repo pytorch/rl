@@ -637,6 +637,7 @@
         <span class="n">reward</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
         <span class="n">done</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
         <span class="n">terminated</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
+        <span class="n">priority_weight</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;priority_weight&quot;</span>
 
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
@@ -677,10 +678,12 @@
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_prioritized_weights</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">reduction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">reduction</span> <span class="o">=</span> <span class="s2">&quot;mean&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_prioritized_weights</span> <span class="o">=</span> <span class="n">use_prioritized_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_set_deprecated_ctor_keys</span><span class="p">(</span><span class="n">priority</span><span class="o">=</span><span class="n">priority_key</span><span class="p">)</span>
 
@@ -826,6 +829,7 @@
 <span class="sd">                used in the combined actor loss as well as the detached `&quot;state_action_value_actor&quot;` used to calculate the lambda</span>
 <span class="sd">                value, and the lambda value `&quot;lmbd&quot;` itself.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_get_priority_weight</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="n">tensordict_actor_grad</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
             <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
         <span class="p">)</span>
@@ -858,7 +862,7 @@
             <span class="s2">&quot;bc_loss&quot;</span><span class="p">:</span> <span class="n">bc_loss</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
             <span class="s2">&quot;lmbd&quot;</span><span class="p">:</span> <span class="n">lmbd</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="n">loss_actor</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">loss_actor</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">)</span>
+        <span class="n">loss_actor</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">loss_actor</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
             <span class="n">tensordict</span><span class="p">,</span>
             <span class="s2">&quot;actor_network_params&quot;</span><span class="p">,</span>
@@ -879,6 +883,7 @@
 <span class="sd">        Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing</span>
 <span class="sd">            the detached `&quot;td_error&quot;` to be used for prioritized sampling, the detached `&quot;next_state_value&quot;`, the detached `&quot;pred_value&quot;`, and the detached `&quot;target_value&quot;`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_get_priority_weight</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="n">act</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
@@ -952,7 +957,7 @@
             <span class="s2">&quot;pred_value&quot;</span><span class="p">:</span> <span class="n">current_qvalue</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
             <span class="s2">&quot;target_value&quot;</span><span class="p">:</span> <span class="n">target_value</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
         <span class="p">}</span>
-        <span class="n">loss_qval</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">loss_qval</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">)</span>
+        <span class="n">loss_qval</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">loss_qval</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
             <span class="n">tensordict</span><span class="p">,</span>
             <span class="s2">&quot;actor_network_params&quot;</span><span class="p">,</span>
