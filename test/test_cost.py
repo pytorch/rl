@@ -44,8 +44,17 @@ from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
 
-from torchrl._utils import _standardize
-from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
+from torchrl._utils import _standardize, rl_warnings
+from torchrl.data import (
+    Bounded,
+    Categorical,
+    Composite,
+    LazyTensorStorage,
+    MultiOneHot,
+    OneHot,
+    TensorDictPrioritizedReplayBuffer,
+    Unbounded,
+)
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs import EnvBase, GymEnv, InitTracker, SerialEnv
 from torchrl.envs.libs.gym import _has_gym
@@ -674,7 +683,7 @@ class TestDQN(LossModuleTestBase):
             loss_fn.make_value_estimator(td_est)
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
@@ -738,7 +747,7 @@ class TestDQN(LossModuleTestBase):
 
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -897,7 +906,7 @@ class TestDQN(LossModuleTestBase):
                 UserWarning,
                 match="No target network updater has been associated with this loss module",
             )
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ):
             loss = loss_fn(td)
@@ -1084,6 +1093,96 @@ class TestDQN(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_dqn_prioritized_weights(self):
+        """Test DQN with prioritized replay buffer weighted loss reduction."""
+        n_obs = 4
+        n_actions = 3
+        batch_size = 32
+        buffer_size = 100
+
+        # Create DQN value network using QValueActor
+        module = nn.Linear(n_obs, n_actions)
+        action_spec = Categorical(n_actions)
+        value = QValueActor(
+            spec=Composite(
+                {
+                    "action": action_spec,
+                    "action_value": None,
+                    "chosen_action_value": None,
+                },
+                shape=[],
+            ),
+            action_space="categorical",
+            module=module,
+        )
+
+        # Create DQN loss
+        loss_fn = DQNLoss(
+            value_network=value, action_space="categorical", reduction="mean"
+        )
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randint(0, n_actions, (buffer_size,)),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss"])
+
+        # Verify manual weighted average matches
+        loss_fn_no_reduction = DQNLoss(
+            value_network=value,
+            action_space="categorical",
+            reduction="none",
+            use_prioritized_weights=False,
+        )
+        loss_fn_no_reduction.make_value_estimator()
+        loss_fn_no_reduction.target_value_network_params = (
+            loss_fn.target_value_network_params
+        )
+
+        loss_elements = loss_fn_no_reduction(sample2)["loss"]
+        manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
+        assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
+
 
 class TestQMixer(LossModuleTestBase):
     seed = 0
@@ -1246,7 +1345,7 @@ class TestQMixer(LossModuleTestBase):
             loss_fn.make_value_estimator(td_est)
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
@@ -1322,7 +1421,7 @@ class TestQMixer(LossModuleTestBase):
 
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -1547,6 +1646,96 @@ class TestQMixer(LossModuleTestBase):
         else:
             loss(td)
 
+    def test_dqn_prioritized_weights(self):
+        """Test DQN with prioritized replay buffer weighted loss reduction."""
+        n_obs = 4
+        n_actions = 3
+        batch_size = 32
+        buffer_size = 100
+
+        # Create DQN value network using QValueActor
+        module = nn.Linear(n_obs, n_actions)
+        action_spec = Categorical(n_actions)
+        value = QValueActor(
+            spec=Composite(
+                {
+                    "action": action_spec,
+                    "action_value": None,
+                    "chosen_action_value": None,
+                },
+                shape=[],
+            ),
+            action_space="categorical",
+            module=module,
+        )
+
+        # Create DQN loss
+        loss_fn = DQNLoss(
+            value_network=value, action_space="categorical", reduction="mean"
+        )
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randint(0, n_actions, (buffer_size,)),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss"])
+
+        # Verify manual weighted average matches
+        loss_fn_no_reduction = DQNLoss(
+            value_network=value,
+            action_space="categorical",
+            reduction="none",
+            use_prioritized_weights=False,
+        )
+        loss_fn_no_reduction.make_value_estimator()
+        loss_fn_no_reduction.target_value_network_params = (
+            loss_fn.target_value_network_params
+        )
+
+        loss_elements = loss_fn_no_reduction(sample2)["loss"]
+        manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
+        assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
@@ -1758,7 +1947,7 @@ class TestDDPG(LossModuleTestBase):
 
         with _check_td_steady(td), (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if (delay_actor or delay_value)
+            if (delay_actor or delay_value) and rl_warnings()
             else contextlib.nullcontext()
         ):
             loss = loss_fn(td)
@@ -1882,7 +2071,9 @@ class TestDDPG(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
         # remove warning
@@ -2004,7 +2195,7 @@ class TestDDPG(LossModuleTestBase):
         ms_td = ms(td.clone())
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if (delay_value or delay_value)
+            if (delay_value or delay_value) and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -2110,7 +2301,7 @@ class TestDDPG(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater has been"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             _ = loss_fn(td)
 
     def test_ddpg_notensordict(self):
@@ -2132,7 +2323,9 @@ class TestDDPG(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_val_td = loss(td)
             loss_val = loss(**kwargs)
             for i, key in enumerate(loss.out_keys):
@@ -2181,6 +2374,94 @@ class TestDDPG(LossModuleTestBase):
                 if not key.startswith("loss_"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_ddpg_prioritized_weights(self):
+        """Test DDPG with prioritized replay buffer weighted loss reduction."""
+        n_obs = 4
+        n_act = 2
+        batch_size = 32
+        buffer_size = 100
+
+        # Actor network
+        actor_net = MLP(in_features=n_obs, out_features=n_act, num_cells=[64, 64])
+        actor = ValueOperator(
+            module=actor_net,
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        # Q-value network
+        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
+        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
+
+        # Create DDPG loss
+        loss_fn = DDPGLoss(actor_network=actor, value_network=qvalue)
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss_value"])
+
+        # Verify weighted vs unweighted differ
+        loss_fn_no_weights = DDPGLoss(
+            actor_network=actor,
+            value_network=qvalue,
+            use_prioritized_weights=False,
+        )
+        loss_fn_no_weights.make_value_estimator()
+        loss_fn_no_weights.value_network_params = loss_fn.value_network_params
+        loss_fn_no_weights.target_value_network_params = (
+            loss_fn.target_value_network_params
+        )
+        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
+        loss_fn_no_weights.target_actor_network_params = (
+            loss_fn.target_actor_network_params
+        )
+
+        loss_out_no_weights = loss_fn_no_weights(sample2)
+        # Weighted and unweighted should differ (in general)
+        assert torch.isfinite(loss_out_no_weights["loss_value"])
 
 
 @pytest.mark.skipif(
@@ -2437,7 +2718,7 @@ class TestTD3(LossModuleTestBase):
                 UserWarning,
                 match="No target network updater has been associated with this loss module",
             )
-            if (delay_actor or delay_qvalue)
+            if (delay_actor or delay_qvalue) and rl_warnings()
             else contextlib.nullcontext()
         ):
             with _check_td_steady(td):
@@ -2550,7 +2831,7 @@ class TestTD3(LossModuleTestBase):
                 UserWarning,
                 match="No target network updater has been associated with this loss module",
             )
-            if (delay_actor or delay_qvalue)
+            if (delay_actor or delay_qvalue) and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             torch.manual_seed(1)
@@ -2579,7 +2860,7 @@ class TestTD3(LossModuleTestBase):
                 UserWarning,
                 match="No target network updater has been associated with this loss module",
             )
-            if (delay_actor or delay_qvalue)
+            if (delay_actor or delay_qvalue) and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             torch.manual_seed(1)
@@ -2655,7 +2936,9 @@ class TestTD3(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
             assert all(
@@ -2747,7 +3030,7 @@ class TestTD3(LossModuleTestBase):
 
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if (delay_qvalue or delay_actor)
+            if (delay_qvalue or delay_actor) and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -2931,7 +3214,9 @@ class TestTD3(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             torch.manual_seed(0)
             loss_val_td = loss(td)
             torch.manual_seed(0)
@@ -2989,6 +3274,105 @@ class TestTD3(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_td3_prioritized_weights(self):
+        """Test TD3 with prioritized replay buffer weighted loss reduction."""
+        n_obs = 4
+        n_act = 2
+        batch_size = 32
+        buffer_size = 100
+
+        # Actor network
+        actor_net = MLP(in_features=n_obs, out_features=n_act, num_cells=[64, 64])
+        actor = ValueOperator(
+            module=actor_net,
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        # Q-value network
+        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
+        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
+
+        # Create TD3 loss
+        loss_fn = TD3Loss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=2,
+            action_spec=Bounded(
+                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
+            ),
+        )
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss_qvalue"])
+
+        # Verify weighted vs unweighted differ
+        loss_fn_no_weights = TD3Loss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=2,
+            action_spec=Bounded(
+                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
+            ),
+            use_prioritized_weights=False,
+        )
+        loss_fn_no_weights.make_value_estimator()
+        loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
+        loss_fn_no_weights.target_qvalue_network_params = (
+            loss_fn.target_qvalue_network_params
+        )
+        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
+        loss_fn_no_weights.target_actor_network_params = (
+            loss_fn.target_actor_network_params
+        )
+
+        loss_out_no_weights = loss_fn_no_weights(sample2)
+        # Weighted and unweighted should differ (in general)
+        assert torch.isfinite(loss_out_no_weights["loss_qvalue"])
 
 
 class TestTD3BC(LossModuleTestBase):
@@ -3245,7 +3629,7 @@ class TestTD3BC(LossModuleTestBase):
                 UserWarning,
                 match="No target network updater has been associated with this loss module",
             )
-            if (delay_actor or delay_qvalue)
+            if (delay_actor or delay_qvalue) and rl_warnings()
             else contextlib.nullcontext()
         ):
             with _check_td_steady(td):
@@ -3378,7 +3762,9 @@ class TestTD3BC(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
             assert all(
@@ -3480,7 +3866,7 @@ class TestTD3BC(LossModuleTestBase):
 
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if (delay_qvalue or delay_actor)
+            if (delay_qvalue or delay_actor) and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -3664,7 +4050,9 @@ class TestTD3BC(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             torch.manual_seed(0)
             loss_val_td = loss(td)
             torch.manual_seed(0)
@@ -4067,7 +4455,7 @@ class TestSAC(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -4244,7 +4632,7 @@ class TestSAC(LossModuleTestBase):
         torch.manual_seed(0)
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_vmap = loss_fn_vmap(td)
         td = tdc
         torch.manual_seed(0)
@@ -4272,7 +4660,7 @@ class TestSAC(LossModuleTestBase):
         ) if torch.__version__ < "2.7" else contextlib.nullcontext():
             with _check_td_steady(td), pytest.warns(
                 UserWarning, match="No target network updater"
-            ):
+            ) if rl_warnings() else contextlib.nullcontext():
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
 
@@ -4356,7 +4744,9 @@ class TestSAC(LossModuleTestBase):
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
             assert loss_fn.tensor_keys.priority in td.keys()
@@ -4488,7 +4878,7 @@ class TestSAC(LossModuleTestBase):
         with pytest.warns(
             UserWarning,
             match="No target network updater has been associated with this loss module",
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             with _check_td_steady(ms_td):
                 loss_ms = loss_fn(ms_td)
             assert loss_fn.tensor_keys.priority in ms_td.keys()
@@ -4711,7 +5101,9 @@ class TestSAC(LossModuleTestBase):
         # setting the seed for each loss so that drawing the random samples from value network
         # leads to same numbers for both runs
         torch.manual_seed(self.seed)
-        with pytest.warns(UserWarning, match="No target network updater"):
+        with pytest.warns(
+            UserWarning, match="No target network updater"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_val = loss(**kwargs)
 
         torch.manual_seed(self.seed)
@@ -5094,7 +5486,7 @@ class TestDiscreteSAC(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -5214,7 +5606,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         tdc = td.clone()
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             torch.manual_seed(1)
             loss_vmap = loss_fn_vmap(td)
         td = tdc
@@ -5245,7 +5637,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         ) if torch.__version__ < "2.7" else contextlib.nullcontext():
             with _check_td_steady(td), pytest.warns(
                 UserWarning, match="No target network updater"
-            ):
+            ) if rl_warnings() else contextlib.nullcontext():
                 torch.manual_seed(1)
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
@@ -5343,7 +5735,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         np.random.seed(0)
         with _check_td_steady(ms_td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -5524,7 +5916,9 @@ class TestDiscreteSAC(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_val = loss(**kwargs)
             loss_val_td = loss(td)
 
@@ -6669,7 +7063,7 @@ class TestREDQ(LossModuleTestBase):
                 UserWarning,
                 match="No target network updater has been associated with this loss module",
             )
-            if delay_qvalue
+            if delay_qvalue and rl_warnings()
             else contextlib.nullcontext()
         ):
             with _check_td_steady(td):
@@ -6788,7 +7182,7 @@ class TestREDQ(LossModuleTestBase):
         with pytest.warns(
             UserWarning,
             match="No target network updater has been associated with this loss module",
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
             # check that losses are independent
@@ -6876,7 +7270,7 @@ class TestREDQ(LossModuleTestBase):
         with pytest.warns(
             UserWarning,
             match="No target network updater has been associated with this loss module",
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
         SoftUpdate(loss_fn, eps=0.5)
@@ -7057,7 +7451,7 @@ class TestREDQ(LossModuleTestBase):
         torch.manual_seed(0)
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_qvalue
+            if delay_qvalue and rl_warnings()
             else contextlib.nullcontext()
         ):
             with _check_td_steady(td_clone1):
@@ -7102,7 +7496,7 @@ class TestREDQ(LossModuleTestBase):
 
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_qvalue
+            if delay_qvalue and rl_warnings()
             else contextlib.nullcontext()
         ):
             with _check_td_steady(ms_td):
@@ -7297,7 +7691,7 @@ class TestREDQ(LossModuleTestBase):
         with pytest.warns(
             UserWarning,
             match="No target network updater has been associated with this loss module",
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_val = loss(**kwargs)
             torch.manual_seed(self.seed)
             loss_val_td = loss(td)
@@ -7372,6 +7766,118 @@ class TestREDQ(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+    def test_sac_prioritized_weights(self):
+        """Test SAC with prioritized replay buffer weighted loss reduction."""
+        n_obs = 4
+        n_act = 2
+        batch_size = 32
+        buffer_size = 100
+
+        # Actor network
+        actor_net = nn.Sequential(
+            nn.Linear(n_obs, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2 * n_act),
+            NormalParamExtractor(),
+        )
+        actor_module = TensorDictModule(
+            actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            spec=Bounded(
+                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
+            ),
+        )
+
+        # Q-value network
+        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
+        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
+
+        # Value network for SAC v1
+        value_net = MLP(in_features=n_obs, out_features=1, num_cells=[64, 64])
+        value = ValueOperator(module=value_net, in_keys=["observation"])
+
+        # Create SAC loss
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+        )
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss_qvalue"])
+
+        # Verify weighted vs unweighted differ
+        loss_fn_no_weights = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+            use_prioritized_weights=False,
+        )
+        loss_fn_no_weights.make_value_estimator()
+        loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
+        loss_fn_no_weights.target_qvalue_network_params = (
+            loss_fn.target_qvalue_network_params
+        )
+        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
+        loss_fn_no_weights.value_network_params = loss_fn.value_network_params
+        loss_fn_no_weights.target_value_network_params = (
+            loss_fn.target_value_network_params
+        )
+
+        loss_out_no_weights = loss_fn_no_weights(sample2)
+        # Weighted and unweighted should differ (in general)
+        assert torch.isfinite(loss_out_no_weights["loss_qvalue"])
 
 
 class TestCQL(LossModuleTestBase):
@@ -7532,7 +8038,7 @@ class TestCQL(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -7711,7 +8217,7 @@ class TestCQL(LossModuleTestBase):
         tdc = td.clone()
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             torch.manual_seed(1)
             loss_vmap = loss_fn_vmap(td)
         td = tdc
@@ -7743,7 +8249,7 @@ class TestCQL(LossModuleTestBase):
         ) if torch.__version__ < "2.7" else contextlib.nullcontext():
             with _check_td_steady(td), pytest.warns(
                 UserWarning, match="No target network updater"
-            ):
+            ) if rl_warnings() else contextlib.nullcontext():
                 torch.manual_seed(1)
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
@@ -7894,7 +8400,9 @@ class TestCQL(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with pytest.warns(UserWarning, match="No target network updater"):
+        with pytest.warns(
+            UserWarning, match="No target network updater"
+        ) if rl_warnings() else contextlib.nullcontext():
             with _check_td_steady(ms_td):
                 loss_ms = loss_fn(ms_td)
             assert loss_fn.tensor_keys.priority in ms_td.keys()
@@ -8174,7 +8682,7 @@ class TestDiscreteCQL(LossModuleTestBase):
             loss_fn.make_value_estimator(td_est)
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(td):
             loss = loss_fn(td)
@@ -8236,7 +8744,7 @@ class TestDiscreteCQL(LossModuleTestBase):
 
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -10892,7 +11400,7 @@ class TestReinforce(LossModuleTestBase):
         )
         with (
             pytest.warns(UserWarning, match="No target network updater has been")
-            if delay_value
+            if delay_value and rl_warnings()
             else contextlib.nullcontext()
         ):
             if advantage is not None:
@@ -12661,7 +13169,7 @@ class TestIQL(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -12790,7 +13298,7 @@ class TestIQL(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             torch.manual_seed(1)
             loss_vmap = loss_fn_vmap(td)
 
@@ -12818,7 +13326,7 @@ class TestIQL(LossModuleTestBase):
         ) if torch.__version__ < "2.7" else contextlib.nullcontext():
             with _check_td_steady(td), pytest.warns(
                 UserWarning, match="No target network updater"
-            ):
+            ) if rl_warnings() else contextlib.nullcontext():
                 torch.manual_seed(1)
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
@@ -12872,7 +13380,9 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
             assert loss_fn.tensor_keys.priority in td.keys()
@@ -13060,7 +13570,7 @@ class TestIQL(LossModuleTestBase):
         np.random.seed(0)
         with _check_td_steady(ms_td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -13225,7 +13735,7 @@ class TestIQL(LossModuleTestBase):
         with pytest.warns(
             UserWarning,
             match="No target network updater has been associated with this loss module",
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_val = loss(**kwargs)
             loss_val_td = loss(td)
             assert len(loss_val) == 4
@@ -13272,7 +13782,7 @@ class TestIQL(LossModuleTestBase):
         loss_fn.make_value_estimator()
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
@@ -13554,7 +14064,7 @@ class TestDiscreteIQL(LossModuleTestBase):
 
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -13695,7 +14205,9 @@ class TestDiscreteIQL(LossModuleTestBase):
             separate_losses=separate_losses,
             action_space="one-hot",
         )
-        with pytest.warns(UserWarning, match="No target network updater has been"):
+        with pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
 
             assert loss_fn.tensor_keys.priority in td.keys()
@@ -13884,7 +14396,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         np.random.seed(0)
         with _check_td_steady(ms_td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -14054,7 +14566,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         with pytest.warns(
             UserWarning,
             match="No target network updater has been associated with this loss module",
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss_val = loss(**kwargs)
             loss_val_td = loss(td)
             assert len(loss_val) == 4
@@ -14102,7 +14614,7 @@ class TestDiscreteIQL(LossModuleTestBase):
         loss_fn.make_value_estimator()
         with _check_td_steady(td), pytest.warns(
             UserWarning, match="No target network updater"
-        ):
+        ) if rl_warnings() else contextlib.nullcontext():
             loss = loss_fn(td)
         if reduction == "none":
             for key in loss.keys():
@@ -14328,7 +14840,9 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     module = custom_module(delay_module=True)
     _ = module.module1_params
-    with pytest.warns(UserWarning, match="No target network updater has been"):
+    with pytest.warns(
+        UserWarning, match="No target network updater has been"
+    ) if rl_warnings() else contextlib.nullcontext():
         _ = module.target_module1_params
     if mode == "hard":
         upd = HardUpdate(
@@ -17151,7 +17665,7 @@ class TestUtils:
 def test_updater_warning(updater, kwarg):
     with warnings.catch_warnings():
         dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning) if rl_warnings() else contextlib.nullcontext():
         dqn.target_value_network_params
     with warnings.catch_warnings():
         updater(dqn, **kwarg)

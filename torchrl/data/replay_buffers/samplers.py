@@ -21,7 +21,7 @@ from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
-from torchrl._utils import _replace_last, logger, RL_WARNINGS
+from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _auto_device, _is_int, unravel_index
 
@@ -373,7 +373,7 @@ class PrioritizedSampler(Sampler):
                 device=cpu,
                 is_shared=False)
         >>> print(info)
-        {'_weight': array([1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11,
+        {'priority_weight': array([1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11,
                1.e-11, 1.e-11], dtype=float32), 'index': array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])}
 
     .. note:: Using a :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer` can smoothen the
@@ -423,7 +423,7 @@ class PrioritizedSampler(Sampler):
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
-        if RL_WARNINGS and SumSegmentTreeFp32 is None:
+        if rl_warnings() and SumSegmentTreeFp32 is None:
             logger.warning(EXTENSION_WARNING)
 
     def __repr__(self):
@@ -588,7 +588,7 @@ class PrioritizedSampler(Sampler):
         weight = torch.pow(weight / p_min, -self._beta)
         if storage.ndim > 1:
             index = unravel_index(index, storage.shape)
-        return index, {"_weight": weight}
+        return index, {"priority_weight": weight}
 
     def add(self, index: torch.Tensor | int) -> None:
         super().add(index)
@@ -2068,7 +2068,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         episode [2, 2, 2, 2, 1, 1]
         >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 1, 2]
-        >>> print("weight", info["_weight"].tolist())
+        >>> print("weight", info["priority_weight"].tolist())
         weight [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         >>> priority = torch.tensor([0,3,3,0,0,0,1,1,1])
         >>> rb.update_priority(torch.arange(0,9,1), priority=priority)
@@ -2077,7 +2077,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         episode [2, 2, 2, 2, 2, 2]
         >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 0, 1]
-        >>> print("weight", info["_weight"].tolist())
+        >>> print("weight", info["priority_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
     """
 
@@ -2294,7 +2294,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)
         # starts = torch.as_tensor(starts, device=lengths.device)
-        info["_weight"] = torch.as_tensor(info["_weight"], device=lengths.device)
+        info["priority_weight"] = torch.as_tensor(
+            info["priority_weight"], device=lengths.device
+        )
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(
@@ -2302,7 +2304,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
 
         # repeat the weight of each slice to match the number of steps
-        info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
+        info["priority_weight"] = torch.repeat_interleave(
+            info["priority_weight"], seq_length
+        )
 
         if self.truncated_key is not None:
             # following logics borrowed from SliceSampler

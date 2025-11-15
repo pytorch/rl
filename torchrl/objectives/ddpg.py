@@ -171,6 +171,7 @@ class DDPGLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -202,11 +203,13 @@ class DDPGLoss(LossModule):
         gamma: float | None = None,
         separate_losses: bool = False,
         reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         self._in_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self.delay_actor = delay_actor
         self.delay_value = delay_value
 
@@ -268,6 +271,8 @@ class DDPGLoss(LossModule):
             *self.value_network.in_keys,
             *[unravel_key(("next", key)) for key in self.value_network.in_keys],
         }
+        if self.use_prioritized_weights:
+            in_keys.add(unravel_key(self.tensor_keys.priority_weight))
         self._in_keys = sorted(in_keys, key=str)
 
     @property
@@ -295,8 +300,15 @@ class DDPGLoss(LossModule):
             a tuple of 2 tensors containing the DDPG loss.
 
         """
-        loss_value, metadata = self.loss_value(tensordict)
-        loss_actor, metadata_actor = self.loss_actor(tensordict)
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss_value, metadata = self.loss_value(tensordict, weights=weights)
+        loss_actor, metadata_actor = self.loss_actor(tensordict, weights=weights)
         metadata.update(metadata_actor)
         td_out = TensorDict(
             source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
@@ -315,6 +327,7 @@ class DDPGLoss(LossModule):
     def loss_actor(
         self,
         tensordict: TensorDictBase,
+        weights: torch.Tensor | None = None,
     ) -> [torch.Tensor, dict]:
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys, strict=False
@@ -325,7 +338,7 @@ class DDPGLoss(LossModule):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
-        loss_actor = _reduce(loss_actor, self.reduction)
+        loss_actor = _reduce(loss_actor, self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             loss_actor,
@@ -339,6 +352,7 @@ class DDPGLoss(LossModule):
     def loss_value(
         self,
         tensordict: TensorDictBase,
+        weights: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, dict]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
@@ -372,7 +386,7 @@ class DDPGLoss(LossModule):
                 "target_value_max": target_value.max(),
                 "pred_value_max": pred_val.max(),
             }
-        loss_value = _reduce(loss_value, self.reduction)
+        loss_value = _reduce(loss_value, self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "value_network_params",

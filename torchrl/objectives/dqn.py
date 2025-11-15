@@ -160,6 +160,7 @@ class DQNLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -181,10 +182,12 @@ class DQNLoss(LossModule):
         action_space: str | TensorSpec = None,
         priority_key: str | None = None,
         reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         if double_dqn and not delay_value:
             raise ValueError("double_dqn=True requires delay_value=True.")
@@ -364,7 +367,14 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = _reduce(loss, reduction=self.reduction)
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
         td_out = TensorDict(loss=loss)
 
         self._clear_weakrefs(
@@ -440,6 +450,7 @@ class DistributionalDQNLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -457,10 +468,12 @@ class DistributionalDQNLoss(LossModule):
         delay_value: bool = True,
         priority_key: str | None = None,
         reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
         self.delay_value = delay_value
@@ -611,7 +624,14 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        loss = _reduce(loss, reduction=self.reduction)
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
         td_out = TensorDict(loss=loss)
         self._clear_weakrefs(
             tensordict,

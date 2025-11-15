@@ -1804,9 +1804,9 @@ def test_batch_errors():
 
 @pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
 def test_add_warning():
-    from torchrl._utils import RL_WARNINGS
+    from torchrl._utils import rl_warnings
 
-    if not RL_WARNINGS:
+    if not rl_warnings():
         return
     rb = ReplayBuffer(storage=ListStorage(10), batch_size=3)
     with pytest.warns(

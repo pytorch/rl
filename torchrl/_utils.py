@@ -1062,3 +1062,8 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
         runtime_env["env_vars"] = dict(runtime_env["env_vars"])
 
     return ray_init_config
+
+
+def rl_warnings():
+    """Checks the status of the RL_WARNINGS env varioble."""
+    return RL_WARNINGS

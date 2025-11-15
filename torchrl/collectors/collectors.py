@@ -47,7 +47,7 @@ from torchrl._utils import (
     compile_with_warmup,
     logger as torchrl_logger,
     prod,
-    RL_WARNINGS,
+    rl_warnings,
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
@@ -1218,7 +1218,7 @@ class SyncDataCollector(DataCollectorBase):
             total_frames = float("inf")
         else:
             remainder = total_frames % frames_per_batch
-            if remainder != 0 and RL_WARNINGS:
+            if remainder != 0 and rl_warnings():
                 warnings.warn(
                     f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
@@ -1238,7 +1238,7 @@ class SyncDataCollector(DataCollectorBase):
         if (
             init_random_frames not in (-1, None, 0)
             and init_random_frames % frames_per_batch != 0
-            and RL_WARNINGS
+            and rl_warnings()
         ):
             warnings.warn(
                 f"init_random_frames ({init_random_frames}) is not exactly a multiple of frames_per_batch ({frames_per_batch}), "
@@ -1261,7 +1261,7 @@ class SyncDataCollector(DataCollectorBase):
 
     def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
         """Calculate and validate frames per batch."""
-        if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
+        if frames_per_batch % self.n_env != 0 and rl_warnings():
             warnings.warn(
                 f"frames_per_batch ({frames_per_batch}) is not exactly divisible by the number of batched environments ({self.n_env}), "
                 f" this results in more frames_per_batch per iteration that requested"
@@ -2809,7 +2809,7 @@ class _MultiDataCollector(DataCollectorBase):
             total_frames = float("inf")
         else:
             remainder = total_frames % total_frames_per_batch
-            if remainder != 0 and RL_WARNINGS:
+            if remainder != 0 and rl_warnings():
                 warnings.warn(
                     f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({total_frames_per_batch}). "
                     f"This means {total_frames_per_batch - remainder} additional frames will be collected. "
@@ -3741,7 +3741,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def frames_per_batch_worker(self, worker_idx: int | None) -> int:
         if worker_idx is not None and isinstance(self._frames_per_batch, Sequence):
             return self._frames_per_batch[worker_idx]
-        if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
+        if self.requested_frames_per_batch % self.num_workers != 0 and rl_warnings():
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
                 f" this results in more frames_per_batch per iteration that requested."
