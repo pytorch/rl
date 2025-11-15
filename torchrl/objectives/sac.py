@@ -292,6 +292,7 @@ class SACLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
         def __post_init__(self):
             if self.log_prob is None:
@@ -337,12 +338,14 @@ class SACLoss(LossModule):
         reduction: str | None = None,
         skip_done_states: bool = False,
         deactivate_vmap: bool = False,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         self._in_keys = None
         self._out_keys = None
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # Actor
@@ -638,9 +641,18 @@ class SACLoss(LossModule):
         }
         if self._version == 1:
             out["loss_value"] = loss_value
-        td_out = TensorDict(out, [])
+        td_out = TensorDict(out)
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
+            lambda name, value: _reduce(
+                value, reduction=self.reduction, weights=weights
+            )
             if name.startswith("loss_")
             else value,
         )
@@ -1156,6 +1168,7 @@ class DiscreteSACLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         log_prob: NestedKey = "log_prob"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -1200,11 +1213,13 @@ class DiscreteSACLoss(LossModule):
         reduction: str | None = None,
         skip_done_states: bool = False,
         deactivate_vmap: bool = False,
+        use_prioritized_weights: str | bool = "auto",
     ):
         if reduction is None:
             reduction = "mean"
         self._in_keys = None
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -1347,8 +1362,17 @@ class DiscreteSACLoss(LossModule):
             "entropy": entropy.detach().mean(),
         }
         td_out = TensorDict(out, [])
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
+            lambda name, value: _reduce(
+                value, reduction=self.reduction, weights=weights
+            )
             if name.startswith("loss_")
             else value,
         )
