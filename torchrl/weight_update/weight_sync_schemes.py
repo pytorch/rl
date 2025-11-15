@@ -279,13 +279,15 @@ class WeightSender:
             if not self._transports:
                 yield self._transport
             else:
-                yield from self._transports.values()
+                # Make sure transports are sorted
+                for k in sorted(self._transports.keys()):
+                    yield self._transports[k]
         else:
             # Specific workers
             if isinstance(worker_ids, int):
                 worker_ids = [worker_ids]
             for worker_id in worker_ids:
-                if worker_id in self._transports:
+                if worker_id in sorted(self._transports.keys()):
                     yield self._transports[worker_id]
                 else:
                     raise ValueError(f"Worker {worker_id} not registered")
