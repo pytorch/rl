@@ -202,6 +202,7 @@ class TD3Loss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -240,10 +241,12 @@ class TD3Loss(LossModule):
         separate_losses: bool = False,
         reduction: str | None = None,
         deactivate_vmap: bool = False,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
 
@@ -379,6 +382,7 @@ class TD3Loss(LossModule):
         )
 
     def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -401,7 +405,7 @@ class TD3Loss(LossModule):
         metadata = {
             "state_action_value_actor": state_action_value_actor.detach(),
         }
-        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -412,6 +416,7 @@ class TD3Loss(LossModule):
         return loss_actor, metadata
 
     def value_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)
@@ -485,7 +490,7 @@ class TD3Loss(LossModule):
             "pred_value": current_qvalue.detach(),
             "target_value": target_value.detach(),
         }
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",

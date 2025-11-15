@@ -41,7 +41,7 @@ from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import accept_remote_rref_udf_invocation, RL_WARNINGS
+from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
@@ -871,7 +871,7 @@ class ReplayBuffer:
                     data = None
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
-        if RL_WARNINGS and is_tensor_collection(data) and data.ndim:
+        if rl_warnings() and is_tensor_collection(data) and data.ndim:
             warnings.warn(
                 f"Using `add()` with a TensorDict that has batch_size={data.batch_size}. "
                 f"Use `extend()` to add multiple elements, or `add()` with a single element (batch_size=torch.Size([])). "
@@ -1319,14 +1319,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         >>> # get the info to find what the indices are
         >>> sample, info = rb.sample(5, return_info=True)
         >>> print(sample, info)
-        tensor([2, 7, 4, 3, 5]) {'_weight': array([1., 1., 1., 1., 1.], dtype=float32), 'index': array([2, 7, 4, 3, 5])}
+        tensor([2, 7, 4, 3, 5]) {'priority_weight': array([1., 1., 1., 1., 1.], dtype=float32), 'index': array([2, 7, 4, 3, 5])}
         >>> # update priority
         >>> priority = torch.ones(5) * 5
         >>> rb.update_priority(info["index"], priority)
         >>> # and now a new sample, the weights should be updated
         >>> sample, info = rb.sample(5, return_info=True)
         >>> print(sample, info)
-        tensor([2, 5, 2, 2, 5]) {'_weight': array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],
+        tensor([2, 5, 2, 2, 5]) {'priority_weight': array([0.36278465, 0.36278465, 0.36278465, 0.36278465, 0.36278465],
               dtype=float32), 'index': array([2, 5, 2, 2, 5])}
 
     """
@@ -1861,7 +1861,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         >>> print(sample)
         TensorDict(
             fields={
-                _weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                priority_weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
                 a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 b: TensorDict(
                     fields={
@@ -1884,7 +1884,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         >>> print(sample)
         TensorDict(
             fields={
-                _weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                priority_weight: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
                 a: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
                 b: TensorDict(
                     fields={

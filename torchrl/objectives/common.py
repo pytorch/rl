@@ -19,7 +19,7 @@ from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
 
-from torchrl._utils import RL_WARNINGS
+from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
 from torchrl.objectives.utils import ValueEstimators
@@ -34,7 +34,7 @@ except ImportError:
 def _updater_check_forward_prehook(module, *args, **kwargs):
     if (
         not all(module._has_update_associated.values())
-        and RL_WARNINGS
+        and rl_warnings()
         and not is_compiling()
     ):
         warnings.warn(
@@ -128,6 +128,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     tensor_keys: _AcceptedKeys
     _vmap_randomness = None
     default_value_estimator: ValueEstimators = None
+    use_prioritized_weights: str | bool = "auto"
 
     deterministic_sampling_mode: ExplorationType = ExplorationType.DETERMINISTIC
 
@@ -449,7 +450,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 params = params.data
             elif (
                 not self._has_update_associated[item[7:-7]]
-                and RL_WARNINGS
+                and rl_warnings()
                 and not is_compiling()
             ):
                 # no updater associated
@@ -490,6 +491,25 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def reset(self) -> None:
         # mainly used for PPO with KL target
         pass
+
+    def _maybe_get_priority_weight(
+        self, tensordict: TensorDictBase
+    ) -> torch.Tensor | None:
+        """Extract priority weights from tensordict if prioritized replay is enabled.
+
+        Args:
+            tensordict (TensorDictBase): The input tensordict that may contain priority weights.
+
+        Returns:
+            torch.Tensor | None: The priority weights if available and enabled, None otherwise.
+        """
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        return weights
 
     def _reset_module_parameters(self, module_name, module):
         params_name = f"{module_name}_params"
