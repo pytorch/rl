@@ -3953,13 +3953,21 @@ class TestPolicyFactory:
         policy_weights = TensorDict.from_module(policy)
         kwargs = {}
         if weight_updater == "scheme_shared":
-            kwargs = {"weight_sync_schemes": {"policy": SharedMemWeightSyncScheme()}}
+            scheme = SharedMemWeightSyncScheme()
+            kwargs = {"weight_sync_schemes": {"policy": scheme}}
         elif weight_updater == "scheme_pipe":
-            kwargs = {"weight_sync_schemes": {"policy": MultiProcessWeightSyncScheme()}}
+            scheme = MultiProcessWeightSyncScheme()
+            kwargs = {"weight_sync_schemes": {"policy": scheme}}
         elif weight_updater == "weight_updater":
+            scheme = None
             kwargs = {"weight_updater": self.MPSWeightUpdaterBase(policy_weights, 2)}
         else:
             raise NotImplementedError
+
+        if scheme is not None:
+            scheme.init_on_sender(
+                model=policy_factory(), devices=[device] * 2, model_id="policy"
+            )
 
         collector = MultiSyncDataCollector(
             create_env_fn=[env_maker, env_maker],
@@ -3973,6 +3981,8 @@ class TestPolicyFactory:
             storing_device="cpu",
             **kwargs,
         )
+        if weight_updater == "weight_updater":
+            assert collector._legacy_weight_updater
 
         # When using policy_factory, must pass weights explicitly
         collector.update_policy_weights_(policy_weights)
