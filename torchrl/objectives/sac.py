@@ -616,14 +616,27 @@ class SACLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+
         if self._version == 1:
-            loss_qvalue, value_metadata = self._qvalue_v1_loss(tensordict)
-            loss_value, _ = self._value_loss(tensordict)
+            loss_qvalue, value_metadata = self.qvalue_v1_loss(
+                tensordict, weights=weights
+            )
+            loss_value, _ = self.value_loss(tensordict, weights=weights)
         else:
-            loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict)
+            loss_qvalue, value_metadata = self.qvalue_v2_loss(
+                tensordict, weights=weights
+            )
             loss_value = None
-        loss_actor, metadata_actor = self._actor_loss(tensordict)
+        loss_actor, metadata_actor = self.actor_loss(tensordict, weights=weights)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
+        loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
         tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -642,20 +655,6 @@ class SACLoss(LossModule):
         if self._version == 1:
             out["loss_value"] = loss_value
         td_out = TensorDict(out)
-        # Extract weights for prioritized replay buffer
-        weights = None
-        if (
-            self.use_prioritized_weights in (True, "auto")
-            and self.tensor_keys.priority_weight in tensordict.keys()
-        ):
-            weights = tensordict.get(self.tensor_keys.priority_weight)
-        td_out = td_out.named_apply(
-            lambda name, value: _reduce(
-                value, reduction=self.reduction, weights=weights
-            )
-            if name.startswith("loss_")
-            else value,
-        )
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -673,8 +672,8 @@ class SACLoss(LossModule):
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
-    def _actor_loss(
-        self, tensordict: TensorDictBase
+    def actor_loss(
+        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
     ) -> tuple[Tensor, dict[str, Tensor]]:
         with set_exploration_type(
             ExplorationType.RANDOM
@@ -697,81 +696,9 @@ class SACLoss(LossModule):
             raise RuntimeError(
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
             )
-        return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
-
-    @dispatch
-    def actor_loss(
-        self, tensordict: TensorDictBase
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        """Compute the actor loss for SAC.
-
-        This method computes the actor loss which encourages the policy to maximize
-        the expected Q-value while maintaining high entropy.
-
-        Args:
-            tensordict (TensorDictBase): A tensordict containing the data needed for
-                computing the actor loss. Should contain the observation and other
-                required keys for the actor network.
-
-        Returns:
-            A tuple containing:
-                - The actor loss tensor
-                - A dictionary with metadata including the log probability of actions
-        """
-        return self._actor_loss(tensordict)
-
-    @dispatch
-    def qvalue_loss(
-        self, tensordict: TensorDictBase
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        """Compute the Q-value loss for SAC.
-
-        This method computes the Q-value loss which trains the Q-networks to estimate
-        the expected return for state-action pairs.
-
-        Args:
-            tensordict (TensorDictBase): A tensordict containing the data needed for
-                computing the Q-value loss. Should contain the observation, action,
-                reward, done, and terminated keys.
-
-        Returns:
-            A tuple containing:
-                - The Q-value loss tensor
-                - A dictionary with metadata including the TD error
-        """
-        if self._version == 1:
-            return self._qvalue_v1_loss(tensordict)
-        else:
-            return self._qvalue_v2_loss(tensordict)
-
-    @dispatch
-    def value_loss(
-        self, tensordict: TensorDictBase
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        """Compute the value loss for SAC (version 1 only).
-
-        This method computes the value loss which trains the value network to estimate
-        the expected return for states. This is only used in SAC version 1.
-
-        Args:
-            tensordict (TensorDictBase): A tensordict containing the data needed for
-                computing the value loss. Should contain the observation and other
-                required keys for the value network.
-
-        Returns:
-            A tuple containing:
-                - The value loss tensor
-                - An empty dictionary (no metadata for value loss)
-
-        Raises:
-            RuntimeError: If called on SAC version 2 (which doesn't use a value network)
-        """
-        if self._version != 1:
-            raise RuntimeError(
-                "Value loss is only available in SAC version 1. "
-                "SAC version 2 doesn't use a separate value network."
-            )
-        return self._value_loss(tensordict)
+        loss_actor = self._alpha * log_prob - min_q_logprob
+        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
+        return loss_actor, {"log_prob": log_prob.detach()}
 
     def alpha_loss(self, log_prob: Tensor) -> Tensor:
         """Compute the alpha loss for SAC.
@@ -808,8 +735,8 @@ class SACLoss(LossModule):
             torch.Size([]),
         )
 
-    def _qvalue_v1_loss(
-        self, tensordict: TensorDictBase
+    def qvalue_v1_loss(
+        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
     ) -> tuple[Tensor, dict[str, Tensor]]:
         target_params = self._cached_target_params_actor_value
         with set_exploration_type(self.deterministic_sampling_mode):
@@ -841,6 +768,7 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
+        loss_value = _reduce(loss_value, reduction=self.reduction, weights=weights)
         metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
 
         return loss_value, metadata
@@ -923,8 +851,8 @@ class SACLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    def _qvalue_v2_loss(
-        self, tensordict: TensorDictBase
+    def qvalue_v2_loss(
+        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
     ) -> tuple[Tensor, dict[str, Tensor]]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._compute_target_v2(tensordict)
@@ -942,11 +870,12 @@ class SACLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
-    def _value_loss(
-        self, tensordict: TensorDictBase
+    def value_loss(
+        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
     ) -> tuple[Tensor, dict[str, Tensor]]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
@@ -979,6 +908,7 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function
         )
+        loss_value = _reduce(loss_value, reduction=self.reduction, weights=weights)
         return loss_value, {}
 
     def _alpha_loss(self, log_prob: Tensor) -> Tensor:
@@ -1342,26 +1272,6 @@ class DiscreteSACLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        loss_value, metadata_value = self._value_loss(tensordict)
-        loss_actor, metadata_actor = self._actor_loss(tensordict)
-        loss_alpha = self._alpha_loss(
-            log_prob=metadata_actor["log_prob"],
-        )
-
-        tensordict.set(self.tensor_keys.priority, metadata_value["td_error"])
-        if loss_actor.shape != loss_value.shape:
-            raise RuntimeError(
-                f"Losses shape mismatch: {loss_actor.shape}, and {loss_value.shape}"
-            )
-        entropy = -metadata_actor["log_prob"]
-        out = {
-            "loss_actor": loss_actor,
-            "loss_qvalue": loss_value,
-            "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
-        }
-        td_out = TensorDict(out, [])
         # Extract weights for prioritized replay buffer
         weights = None
         if (
@@ -1369,13 +1279,28 @@ class DiscreteSACLoss(LossModule):
             and self.tensor_keys.priority_weight in tensordict.keys()
         ):
             weights = tensordict.get(self.tensor_keys.priority_weight)
-        td_out = td_out.named_apply(
-            lambda name, value: _reduce(
-                value, reduction=self.reduction, weights=weights
-            )
-            if name.startswith("loss_")
-            else value,
+
+        loss_qvalue, metadata_value = self.qvalue_loss(tensordict, weights=weights)
+        loss_actor, metadata_actor = self.actor_loss(tensordict, weights=weights)
+        loss_alpha = self._alpha_loss(
+            log_prob=metadata_actor["log_prob"],
         )
+        loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
+
+        tensordict.set(self.tensor_keys.priority, metadata_value["td_error"])
+        if loss_actor.shape != loss_qvalue.shape:
+            raise RuntimeError(
+                f"Losses shape mismatch: {loss_actor.shape}, and {loss_qvalue.shape}"
+            )
+        entropy = -metadata_actor["log_prob"]
+        out = {
+            "loss_actor": loss_actor,
+            "loss_qvalue": loss_qvalue,
+            "loss_alpha": loss_alpha,
+            "alpha": self._alpha,
+            "entropy": entropy.detach().mean(),
+        }
+        td_out = TensorDict(out, [])
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -1464,50 +1389,8 @@ class DiscreteSACLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    @dispatch
-    def actor_loss(
-        self, tensordict: TensorDictBase
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        """Compute the actor loss for discrete SAC.
-
-        This method computes the actor loss which encourages the policy to maximize
-        the expected Q-value while maintaining high entropy for discrete actions.
-
-        Args:
-            tensordict (TensorDictBase): A tensordict containing the data needed for
-                computing the actor loss. Should contain the observation and other
-                required keys for the actor network.
-
-        Returns:
-            A tuple containing:
-                - The actor loss tensor
-                - A dictionary with metadata including the log probability of actions
-        """
-        return self._actor_loss(tensordict)
-
-    @dispatch
     def qvalue_loss(
-        self, tensordict: TensorDictBase
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        """Compute the Q-value loss for discrete SAC.
-
-        This method computes the Q-value loss which trains the Q-networks to estimate
-        the expected return for state-action pairs in discrete action spaces.
-
-        Args:
-            tensordict (TensorDictBase): A tensordict containing the data needed for
-                computing the Q-value loss. Should contain the observation, action,
-                reward, done, and terminated keys.
-
-        Returns:
-            A tuple containing:
-                - The Q-value loss tensor
-                - A dictionary with metadata including the TD error
-        """
-        return self._value_loss(tensordict)
-
-    def _value_loss(
-        self, tensordict: TensorDictBase
+        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
     ) -> tuple[Tensor, dict[str, Tensor]]:
         target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
@@ -1538,14 +1421,15 @@ class DiscreteSACLoss(LossModule):
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
         ).sum(0)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
 
         metadata = {
             "td_error": td_error.detach().max(0)[0],
         }
         return loss_qval, metadata
 
-    def _actor_loss(
-        self, tensordict: TensorDictBase
+    def actor_loss(
+        self, tensordict: TensorDictBase, weights: torch.Tensor | None = None
     ) -> tuple[Tensor, dict[str, Tensor]]:
         # get probs and log probs for actions
         with self.actor_network_params.to_module(self.actor_network):
@@ -1569,6 +1453,7 @@ class DiscreteSACLoss(LossModule):
         loss = self._alpha * log_prob - min_q
         # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
         loss = (prob * loss).sum(-1)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
 
         return loss, {"log_prob": (log_prob * prob).sum(-1).detach()}
 
