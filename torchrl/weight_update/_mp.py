@@ -5,37 +5,39 @@ from collections.abc import Callable
 from typing import Any, overload
 
 import torch
-from tensordict import TensorDict, TensorDictBase
-from torch import nn
+from tensordict import TensorDictBase
+from torch import multiprocessing as mp, nn
+from torchrl.weight_update._shared import SharedMemWeightSyncScheme
 
-from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
     TransportBackend,
     WeightReceiver,
     WeightSender,
-    WeightSyncScheme,
 )
 
 
-class MultiProcessWeightSyncScheme(WeightSyncScheme):
-    """Weight synchronization for multiprocess operations using pipes.
+class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
+    """Weight synchronization for multiprocess operations using queues.
 
-    This scheme creates transports that communicate via multiprocessing pipes.
-    It follows a memory-efficient two-phase pattern similar to SharedMemWeightSyncScheme:
+    This scheme creates transports that communicate via multiprocessing queues.
+    Unlike the parent SharedMemWeightSyncScheme which uses shared memory for in-place
+    updates, this scheme sends actual weight copies through queues to workers.
+
+    It follows the same two-phase pattern as SharedMemWeightSyncScheme:
 
     1. **init_on_sender()**: Stores the recipe for creating device-specific weights
        (model reference, devices, mapping functions) without creating actual copies
     2. **synchronize_weights()**: Creates device-specific weight copies on-demand,
-       sends them sequentially to workers via pipes, allowing garbage collection
+       sends them sequentially to workers via queues, allowing garbage collection
        between workers to minimize memory usage
 
     This approach avoids holding multiple weight copies in memory simultaneously,
     which is especially beneficial for large models with many workers.
 
     Synchronization flow:
-    - **init_on_sender()**: Store configuration and register worker pipes
+    - **init_on_sender()**: Store configuration and register worker queues
     - **synchronize_weights()**: Create and send initial weights on-demand
-    - **init_on_receiver()**: Create receiver that reads from pipe
+    - **init_on_receiver()**: Create receiver that reads from queue
     - **send()**: Extract and send weight updates, wait for acknowledgments
 
     Args:
@@ -62,121 +64,17 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
         is large.
     """
 
-    def synchronize_weights(self):
-        """Send initial weights to all workers before collection starts.
+    def __init__(self, strategy: str = "tensordict"):
+        """Initialize the MultiProcessWeightSyncScheme.
 
-        This method triggers the on-demand creation and distribution of device-specific
-        weight copies to workers. Unlike pre-computing all weights during init_on_sender(),
-        this approach creates each worker's weights sequentially, sends them via pipes,
-        and allows garbage collection before creating the next worker's weights.
-
-        This is a convenience method that delegates to the sender's synchronize_weights(),
-        which handles the actual weight creation and distribution.
-
-        Memory efficiency note:
-            If all workers share the same device, only one weight copy is created and
-            reused. If workers use different devices, weights are created and sent
-            sequentially to minimize peak memory usage.
-
-        Called automatically by:
-            - MultiSyncDataCollector during initialization
-            - MultiaSyncDataCollector during initialization
-
-        Raises:
-            RuntimeError: If init_on_sender() was not called first
+        Args:
+            strategy: The weight transmission strategy (default: "tensordict").
         """
-        if not self._initialized_on_sender or self._sender is None:
-            raise RuntimeError(
-                "Must call init_on_sender() before synchronize_weights() on MultiProcessWeightSyncScheme"
-            )
-        self._sender.synchronize_weights()
+        super().__init__(strategy)
+        # Override parent's shared transport - we don't use shared memory
+        self._shared_transport = None
 
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        model_id: str,
-        context: Any,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        params_map: dict[int, TensorDictBase],
-        model_id: str | None = None,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        params_map: dict[int, TensorDictBase],
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        weights: TensorDictBase,
-        devices: list[torch.device],
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        weights: TensorDictBase,
-        devices: list[torch.device],
-        model_id: str | None = None,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        model: nn.Module,
-        devices: list[torch.device],
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        model: nn.Module,
-        devices: list[torch.device],
-        model_id: str | None = None,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        weights: TensorDictBase,
-        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase],
-        num_workers: int,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        *,
-        model: nn.Module,
-        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase],
-        num_workers: int,
-        model_id: str | None = None,
-    ) -> None:
-        ...
-
-    def init_on_sender(
+    def _init_on_sender_impl(
         self,
         *,
         model_id: str | None = None,
@@ -187,7 +85,6 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
         devices: list[torch.device] | None = None,
         device_map_fn: Callable[[int, TensorDictBase], TensorDictBase] | None = None,
         num_workers: int | None = None,
-        pipes: list[Any] | None = None,
         **kwargs,
     ) -> None:
         """Initialize on the main process (sender side).
@@ -204,7 +101,6 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             model_id: Identifier for the model being synchronized (e.g., "policy").
                 Required when using context.
             context: Optional context object (e.g., collector) providing:
-                - pipes: List of multiprocessing pipes for worker communication
                 - num_workers: Number of worker processes
                 - policy_device: List of devices for each worker
                 When provided, model_id is used to resolve the model from context.
@@ -213,16 +109,14 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             model: Model to extract weights from. Mutually exclusive with weights
                 and context.
             params_map: Pre-computed mapping of worker_idx to device-specific weights.
-                Most explicit option. When provided, all other parameters except pipes
-                must be None.
+                Most explicit option. When provided, all other parameters must be None.
             devices: List of devices for each worker. Used with weights or model to
                 automatically create device-specific copies. Length must equal num_workers.
             device_map_fn: Custom function (worker_idx, weights) -> device_weights.
                 Allows full control over device mapping. Requires num_workers.
             num_workers: Number of workers. Required with device_map_fn, inferred
-                from devices length or pipes otherwise.
-            pipes: List of multiprocessing pipes. Required unless provided via context.
-            **kwargs: Alternative way to provide pipes (for backward compatibility).
+                from devices length otherwise.
+            **kwargs: Reserved for future use.
 
         Examples:
             Simple usage with collector context (most common):
@@ -243,7 +137,7 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             >>> scheme.init_on_sender(
             ...     weights=weights,
             ...     devices=[torch.device("cpu"), torch.device("cuda:0")],
-            ...     pipes=[pipe1, pipe2],
+            ...     num_workers=2,
             ... )
 
             Advanced: Pre-computed params_map:
@@ -252,25 +146,23 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             >>> weights_cuda = weights_cpu.to("cuda")
             >>> scheme.init_on_sender(
             ...     params_map={0: weights_cpu, 1: weights_cuda, 2: weights_cuda},
-            ...     pipes=[pipe1, pipe2, pipe3],
+            ...     num_workers=3,
             ... )
         """
-        # Extract parameters from context or parameters/kwargs
-        if context is not None:
-            pipes = getattr(context, "pipes", None)
-            num_workers = getattr(context, "num_workers", None)
-        else:
-            # Use the pipes parameter if provided, otherwise check kwargs
-            if pipes is None:
-                pipes = kwargs.get("pipes")
-
-        if pipes is None:
-            raise ValueError("pipes must be provided via context or kwargs")
-        if num_workers is None:
-            num_workers = len(pipes) if pipes else 0
+        # Get params_map from parent class logic
+        params_map_result = self._get_params_map(
+            context=context,
+            model_id=model_id,
+            weights=weights,
+            model=model,
+            params_map=params_map,
+            devices=devices,
+            device_map_fn=device_map_fn,
+            num_workers=num_workers,
+        )
 
         # Store the mapping recipe for later use in synchronize_weights
-        # Don't compute params_map yet to save memory
+        # Don't store params_map directly to save memory - we'll recompute on demand
         # Note: We don't store context directly to avoid pickle issues -
         # it's available via sender._context_ref
         self._device_mapping_info = {
@@ -280,154 +172,36 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
             "params_map": params_map,
             "devices": devices,
             "device_map_fn": device_map_fn,
-            "num_workers": num_workers,
+            "num_workers": num_workers
+            if num_workers is not None
+            else len(params_map_result),
         }
 
-        # Create sender with the shared transport
+        # Create per-worker queues for weight distribution
+        # Each worker gets its own queue for receiving weights
+        all_workers = list(params_map_result.keys())
+        if not hasattr(self, "_weight_init_queues"):
+            self._weight_init_queues = {}
+
+        for worker_idx in all_workers:
+            if worker_idx not in self._weight_init_queues:
+                self._weight_init_queues[worker_idx] = mp.Queue()
+
+        # Create sender
         sender = MPWeightSender(self)
         sender._model_id = model_id
         if context is not None:
             sender._context_ref = weakref.ref(context)
 
-        for worker_idx, pipe in enumerate(pipes):
-            sender._register_worker(worker_idx, pipe)
+        # Register workers with their queues
+        for worker_idx in all_workers:
+            queue = self._weight_init_queues[worker_idx]
+            # Create MPTransport for this worker
+            transport = MPTransport(weight_queue=queue, ack_queue=None)
+            sender._register_worker(worker_idx, transport)
 
         self._sender = sender
         self._initialized_on_sender = True
-
-    def _get_params_map(
-        self,
-        context: Any = None,
-        model_id: str | None = None,
-        weights: TensorDictBase | None = None,
-        model: nn.Module | None = None,
-        params_map: dict[int, TensorDictBase] | None = None,
-        devices: list[torch.device] | None = None,
-        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase] | None = None,
-        num_workers: int | None = None,
-    ):
-        """Compute the params_map (dict[worker_idx, device_weights]) on-demand.
-
-        This method creates device-specific weight copies based on the provided
-        configuration. It's called during synchronize_weights() rather than
-        init_on_sender() to reduce memory usage.
-
-        The method supports several input patterns:
-        1. Direct params_map: Returned as-is (already computed)
-        2. Context + model_id: Extract model and devices from context
-        3. Model/weights + devices: Create copies on specified devices
-        4. Model/weights + device_map_fn: Apply custom mapping function
-
-        Args:
-            context: Context object (e.g., collector) to extract model and devices from
-            model_id: Model identifier to resolve within context
-            weights: Pre-extracted weights as TensorDict
-            model: Model to extract weights from
-            params_map: Pre-computed mapping (returned as-is if provided)
-            devices: List of devices, one per worker
-            device_map_fn: Custom mapping function (worker_idx, weights) -> device_weights
-            num_workers: Number of workers (required with device_map_fn)
-
-        Returns:
-            dict[int, TensorDictBase]: Mapping from worker_idx to device-specific weights
-
-        Raises:
-            ValueError: If parameter combinations are invalid or mutually exclusive
-        """
-        if params_map is not None:
-            # Sanity check: params_map must be a dict[int, TensorDictBase]
-            # All other args must be None
-            if (
-                not isinstance(params_map, dict)
-                or not all(isinstance(v, int) for v in params_map.keys())
-                or not all(isinstance(v, TensorDictBase) for v in params_map.values())
-            ):
-                raise ValueError("params_map must be a dict[int, TensorDictBase]")
-            if model_id is not None or weights is not None or model is not None:
-                raise ValueError(
-                    "model_id, weights, and model cannot be provided if params_map is provided"
-                )
-            if context is not None:
-                raise ValueError("context cannot be provided if params_map is provided")
-            if devices is not None:
-                raise ValueError("devices cannot be provided if params_map is provided")
-            if device_map_fn is not None:
-                raise ValueError(
-                    "device_map_fn cannot be provided if params_map is provided"
-                )
-            if num_workers is not None:
-                raise ValueError(
-                    "num_workers cannot be provided if params_map is provided"
-                )
-            return params_map
-        elif context is not None:
-            if devices is not None:
-                raise ValueError("devices cannot be provided if context is provided")
-            # Sanity check: model_id must be provided if context is provided
-            # All other args must be None
-            if model_id is None:
-                raise ValueError("model_id must be provided if context is provided")
-            if model is not None:
-                raise ValueError("model cannot be provided if context is provided")
-            if weights is not None:
-                raise ValueError("weights cannot be provided if context is provided")
-            if device_map_fn is not None:
-                raise ValueError(
-                    "device_map_fn cannot be provided if context is provided"
-                )
-            # Get device map: the devices are stored as policy_device in the collector -- other contexts will be customized later
-            devices = context.policy_device
-            if num_workers is not None and num_workers != len(devices):
-                raise ValueError(
-                    "num_workers cannot be provided if context is provided"
-                )
-            # Get the weights
-            model = _resolve_model(context, model_id)
-            weights = TensorDict.from_module(model)
-        elif model is not None:
-            if weights is not None:
-                raise ValueError("weights cannot be provided if model is provided")
-            weights = TensorDict.from_module(model)
-        # To make the map, we need the list of devices, or the map fn
-        if devices is not None:
-            # Import _cast locally to avoid circular imports
-            from torchrl.collectors.utils import _cast
-
-            # Get the unique devices
-            devices_set = set(devices)
-            weights_devices = {p.device for p in weights.values(True, True)}
-            if len(weights_devices) == 1:
-                weights_device = weights_devices.pop()
-            else:
-                weights_device = None
-
-            # Create device map with proper Parameter handling using _cast
-            # _cast ensures Parameters stay as Parameters (with requires_grad=False)
-            device_map = {}
-            for d in devices_set:
-                if d != weights_device:
-                    # Move to device and apply _cast to preserve Parameter/Buffer types
-                    weights_on_device = weights.to(d)
-                    weights_on_device = weights_on_device.apply(_cast, weights)
-                    device_map[d] = weights_on_device
-                else:
-                    # Already on correct device, just apply _cast
-                    device_map[d] = weights.apply(_cast, weights)
-
-            # Create the map
-            params_map = {
-                worker_idx: device_map[device]
-                for worker_idx, device in enumerate(devices)
-            }
-            return params_map
-        if device_map_fn is not None:
-            return {
-                worker_idx: device_map_fn(worker_idx, weights)
-                for worker_idx in range(num_workers)
-            }
-        raise ValueError(
-            "Either params_map, model_id + context or model/weights + devices must be provided."
-        )
 
     @overload
     def init_on_receiver(
@@ -444,7 +218,7 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
         model_id: str,
         context: None = None,
         *,
-        pipe: Any = ...,
+        worker_idx: int = ...,
         model: Any | None = None,
         **kwargs,
     ) -> None:
@@ -460,69 +234,86 @@ class MultiProcessWeightSyncScheme(WeightSyncScheme):
 
         Args:
             model_id: Identifier for the model being synchronized
-            context: Optional context object providing pipe and model
-            **kwargs: Alternative to context (pipe, model, etc.)
+            context: Optional context object providing worker_idx and model
+            **kwargs: Alternative to context (worker_idx, model, etc.)
         """
         # Extract parameters from context or kwargs
         if context is not None:
-            pipe = getattr(context, "pipe", None)
+            worker_idx = getattr(context, "worker_idx", None)
             if hasattr(context, "get_model"):
                 model = context.get_model(model_id)
             else:
                 model = None
         else:
-            pipe = kwargs.get("pipe")
+            worker_idx = kwargs.get("worker_idx")
             model = kwargs.get("model")
 
-        if pipe is None:
-            raise ValueError("pipe must be provided via context or kwargs")
+        if worker_idx is None:
+            raise ValueError("worker_idx must be provided via context or kwargs")
+
+        # Get the queue for this worker
+        if worker_idx not in self._weight_init_queues:
+            raise ValueError(
+                f"Worker {worker_idx} not registered. init_on_sender() must be called first."
+            )
+
+        queue = self._weight_init_queues[worker_idx]
 
         # Create receiver and register model
         receiver = MPWeightReceiver(self)
         if context is not None:
             receiver._context_ref = weakref.ref(context)
-        receiver._register_worker_transport(pipe)
+
+        # Create transport with the worker's queue
+        transport = MPTransport(weight_queue=queue, ack_queue=None)
+        receiver._register_worker_transport(transport)
+
         if model is not None:
             receiver._register_model(model)
         else:
             # Register by model_id for later resolution
             receiver._register_model(model_id)
 
+        # Store worker_idx for synchronize_weights
+        receiver._worker_idx = worker_idx
+
         self._receiver = receiver
         self._initialized_on_worker = True
 
-    def create_transport(self, pipe: Any) -> TransportBackend:
-        """Create an MPTransport using the provided pipe.
+    def create_transport(self, queue: Any) -> TransportBackend:
+        """Create an MPTransport using the provided queue.
 
         Note:
             This is used internally by init_on_sender/init_on_receiver.
         """
-        return MPTransport(pipe)
+        return MPTransport(weight_queue=queue, ack_queue=None)
 
 
 class MPTransport:
-    """Multiprocessing transport using pipes.
+    """Multiprocessing transport using queues.
 
-    This transport uses pipes for weight distribution and synchronization.
+    This transport uses queues for weight distribution and synchronization.
     Similar to SharedMemTransport's queue-based approach, MPTransport uses
-    pipes to send initial weights to workers during synchronization.
+    queues to send initial weights to workers during synchronization.
 
     Initialization flow:
-    - MPWeightSender.synchronize_weights() extracts weights and sends to all workers via pipes
+    - MPWeightSender.synchronize_weights() extracts weights and sends to all workers via queues
     - Workers receive the initial weights via synchronize_weights_on_worker()
     - Subsequent updates use send_weights_async() followed by acknowledgments
 
     Args:
-        pipe_connection (mp.Pipe): The pipe connection to use for communication.
+        weight_queue (mp.Queue): The queue to use for sending weights.
+        ack_queue (mp.Queue): The queue to use for receiving acknowledgments.
         timeout (float): The timeout for waiting for acknowledgment. Default is 10 seconds.
     """
 
-    def __init__(self, pipe_connection, timeout: float = 10.0):
+    def __init__(self, weight_queue, ack_queue=None, timeout: float = 10.0):
         self.timeout = timeout
-        self.pipe = pipe_connection
+        self.weight_queue = weight_queue
+        self.ack_queue = ack_queue
 
     def send_weights(self, weights: Any) -> None:
-        """Send weights through the pipe.
+        """Send weights through the queue.
 
         Sends weights and waits for acknowledgment to ensure delivery.
         """
@@ -530,19 +321,20 @@ class MPTransport:
         self.wait_ack()
 
     def send_weights_async(self, weights: Any, model_id: str = "policy") -> None:
-        """Send weights through the pipe without waiting for acknowledgment.
+        """Send weights through the queue without waiting for acknowledgment.
 
         Use wait_ack() to wait for acknowledgment after sending to all workers.
         """
         # Send in format expected by worker loop: ((model_id, weights), "update_weights")
-        self.pipe.send(((model_id, weights), "update_weights"))
+        self.weight_queue.put(((model_id, weights), "update_weights"))
 
     def wait_ack(self) -> None:
         """Wait for acknowledgment from worker."""
-        self.check_ack("updated")
+        if self.ack_queue is not None:
+            self.check_ack("updated")
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
-        """Receive weights from the pipe (used in worker process).
+        """Receive weights from the queue (used in worker process).
 
         This method only handles weight update messages. Other messages
         (like "close", "continue", etc.) are ignored and should be handled
@@ -556,34 +348,28 @@ class MPTransport:
             model_id is returned as "policy" for backward compatibility, but transports
             are now bound to a single model during initialization.
         """
-        if self.pipe.poll(timeout):
-            data_in, msg = self.pipe.recv()
-            if msg == "update_weights":
-                # data_in is now (model_id, weights)
-                return data_in
-            else:
-                # Not a weight update message - put it back and return None
-                # This allows the main worker loop to handle other messages
-                # Note: We can't actually "put it back", so we'll just return None
-                # and the message is lost. This is why receive() should only be called
-                # when we're expecting weight updates, not in the main message loop.
-                return None
-        # No data available - return None instead of raising TimeoutError
-        # This allows non-blocking checks in the worker loop
-        return None
+        data_in, msg = self.weight_queue.get(timeout=timeout)
+        if msg == "update_weights":
+            # data_in is now (model_id, weights)
+            return data_in
+        else:
+            raise ValueError(f"Expected 'update_weights' but got {msg}")
 
     def send_ack(self, message: str = "updated") -> None:
         """Send acknowledgment back to sender."""
-        self.pipe.send((None, message))
+        if self.ack_queue is not None:
+            self.ack_queue.put((None, message))
 
     def check_ack(self, message: str = "updated") -> None:
         """Check for acknowledgment."""
-        _, msg = self.pipe.recv()
-        if msg != message:
-            raise RuntimeError(f"Expected acknowledgment '{message}', got '{msg}'")
+        if self.ack_queue is not None:
+            _, msg = self.ack_queue.get(timeout=self.timeout)
+            if msg != message:
+                raise RuntimeError(f"Expected acknowledgment '{message}', got '{msg}'")
 
     def check_connection(self) -> bool:
-        return not self.pipe.closed
+        # Queues don't have a 'closed' attribute, so we assume they're always open
+        return True
 
     def synchronize_weights_on_sender(self) -> None:
         """No-op for MPTransport - weights are sent via MPWeightSender.synchronize_weights().
@@ -591,7 +377,7 @@ class MPTransport:
         The actual sending happens in MPWeightSender.synchronize_weights(), which:
         1. Extracts weights from the context (e.g., collector.policy)
         2. Calls send_weights_async() on all worker transports
-        3. Sends initial weights through pipes to all workers
+        3. Sends initial weights through queues to all workers
 
         This is similar to SharedMemTransport.synchronize_weights_on_sender() which
         sends shared memory buffer references via queues.
@@ -601,8 +387,8 @@ class MPTransport:
         """Receive initial weights from sender during worker initialization.
 
         This method blocks waiting for the initial weights to be sent from the main process
-        via pipe. Similar to SharedMemTransport.synchronize_weights_on_worker() which receives
-        shared memory buffer references via queues, this receives the actual weights via pipes.
+        via queue. Similar to SharedMemTransport.synchronize_weights_on_worker() which receives
+        shared memory buffer references via queues, this receives the actual weights via queues.
 
         The received weights are then applied to the worker's model by MPWeightReceiver.synchronize_weights().
 
@@ -613,20 +399,19 @@ class MPTransport:
             The received weights if available, None otherwise (weights will come later via receive()).
         """
         # Wait for initial weights (blocking)
-        if self.pipe.poll(timeout=self.timeout):
-            data_in, msg = self.pipe.recv()
-            if msg == "update_weights":
-                # data_in is (model_id, weights), extract just the weights
-                _, weights = data_in
-                return weights
-        # If we don't receive weights, return None (weights will come later)
-        return None
+        data_in, msg = self.weight_queue.get(timeout=self.timeout)
+        if msg == "update_weights":
+            # data_in is (model_id, weights), extract just the weights
+            _, weights = data_in
+            return weights
+        else:
+            raise ValueError(f"Expected 'update_weights' but got {msg}")
 
 
 class MPWeightReceiver(WeightReceiver):
-    """Weight receiver for multiprocess systems using pipes.
+    """Weight receiver for multiprocess systems using queues.
 
-    Receives weight updates from the main process via multiprocessing pipes.
+    Receives weight updates from the main process via multiprocessing queues.
     This is typically instantiated and managed by :class:`MultiProcessWeightSyncScheme`.
     """
 
@@ -634,9 +419,9 @@ class MPWeightReceiver(WeightReceiver):
 
 
 class MPWeightSender(WeightSender):
-    """Weight sender for multiprocess systems using pipes.
+    """Weight sender for multiprocess systems using queues.
 
-    Sends weight updates to worker processes via multiprocessing pipes.
+    Sends weight updates to worker processes via multiprocessing queues.
     Supports both synchronous and asynchronous sending patterns.
     This is typically instantiated and managed by :class:`MultiProcessWeightSyncScheme`.
     """
@@ -755,7 +540,7 @@ class MPWeightSender(WeightSender):
         """Synchronize weights with workers before collection starts.
 
         Computes device-specific weight copies on-demand and sends them to workers
-        sequentially via pipes. This is called once after workers are initialized
+        sequentially via queues. This is called once after workers are initialized
         but before they start collecting data.
 
         Unlike send(), this does not wait for acknowledgments since workers are still
@@ -799,7 +584,7 @@ class MPWeightSender(WeightSender):
             num_workers=num_workers,
         )
 
-        # Send to workers sequentially via pipes (no ACK - workers are still initializing)
+        # Send to workers sequentially via queues (no ACK - workers are still initializing)
         # This allows GC to clean up each worker's weights before creating the next
         for i, transport in enumerate(self._iterate_transports()):
             worker_weights = params_map[i]
