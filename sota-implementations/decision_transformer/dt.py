@@ -42,6 +42,8 @@ def main(cfg: DictConfig):  # noqa: F821
     if model_device in ("", None):
         if torch.cuda.is_available():
             model_device = "cuda:0"
+        elif torch.npu.is_available():
+            model_device = "npu:0"
         else:
             model_device = "cpu"
     model_device = torch.device(model_device)
