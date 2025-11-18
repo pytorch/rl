@@ -835,9 +835,9 @@ class _MultiDataCollector(DataCollectorBase):
         # can be initialized here since all required resources exist
         if self._weight_sync_schemes:
             for model_id, scheme in self._weight_sync_schemes.items():
-                if hasattr(scheme, "init_on_sender"):
+                if not scheme.initialized_on_sender:
                     scheme.init_on_sender(model_id=model_id, context=self)
-                    self._weight_senders[model_id] = scheme.get_sender()
+                self._weight_senders[model_id] = scheme.get_sender()
 
         # Create a policy on the right device
         policy_factory = self.policy_factory

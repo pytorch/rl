@@ -34,7 +34,7 @@ class NoWeightSyncScheme(WeightSyncScheme):
     ) -> None:
         ...
 
-    def init_on_sender(
+    def _init_on_sender_impl(
         self,
         model_id: str,
         context: Any = None,

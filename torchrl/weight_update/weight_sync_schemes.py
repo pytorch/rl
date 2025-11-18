@@ -7,11 +7,12 @@ from __future__ import annotations
 import abc
 import warnings
 import weakref
-from collections.abc import Iterator
-from typing import Any, Literal, Protocol
+from collections.abc import Callable, Iterator
+from typing import Any, Literal, overload, Protocol
+
+import torch
 
 from tensordict import TensorDict, TensorDictBase
-
 from torch import nn
 
 __all__ = [
@@ -641,27 +642,111 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         self._initialized_on_sender = False
         self._initialized_on_worker = False
 
+    @overload
     def init_on_sender(
         self,
+        *,
         model_id: str,
-        context: Any = None,
+        context: Any,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        params_map: dict[int, TensorDictBase],
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        params_map: dict[int, TensorDictBase],
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        weights: TensorDictBase,
+        devices: list[torch.device],
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        weights: TensorDictBase,
+        devices: list[torch.device],
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        model: nn.Module,
+        devices: list[torch.device],
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        model: nn.Module,
+        devices: list[torch.device],
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        weights: TensorDictBase,
+        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase],
+        num_workers: int,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_sender(
+        self,
+        *,
+        model: nn.Module,
+        device_map_fn: Callable[[int, TensorDictBase], TensorDictBase],
+        num_workers: int,
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    def init_on_sender(
+        self,
+        *args,
         **kwargs,
     ) -> None:
         """Initialize on the main process (sender side).
 
         This method is called once in the collector's _run_processes() method,
         after workers have been started and are ready to receive messages.
-
-        Args:
-            model_id: Identifier for the model being synchronized
-            context: Optional context object (e.g., collector) providing:
-                - .pipes: list[mp.Connection]
-                - .get_model(model_id: str) -> nn.Module
-                - .get_cached_weights(model_id: str) -> TensorDict | None
-                - .num_workers: int
-            **kwargs: Alternative to context (pipes, num_workers, model, cached_weights, etc.)
         """
+        result = self._init_on_sender_impl(*args, **kwargs)
+        self._initialized_on_sender = True
+        return result
+
+    def _init_on_sender_impl(self, *args, **kwargs):
         raise NotImplementedError
+
+    @property
+    def initialized_on_sender(self):
+        return getattr(self, "_initialized_on_sender", False)
 
     def init_on_receiver(
         self,
