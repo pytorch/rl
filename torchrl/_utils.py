@@ -52,7 +52,7 @@ def strtobool(val: Any) -> bool:
 
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
-logger.setLevel(getattr(logging, LOGGING_LEVEL))
+logger.setLevel(LOGGING_LEVEL)
 logger.propagate = False
 # Clear existing handlers
 while logger.hasHandlers():
@@ -85,7 +85,9 @@ class _CustomFormatter(logging.Formatter):
 console_handler = logging.StreamHandler(stream=stream_handler)
 console_handler.setFormatter(_CustomFormatter())
 logger.addHandler(console_handler)
-console_handler.setLevel(logging.INFO)
+
+console_handler.setLevel(LOGGING_LEVEL)
+logger.debug(f"Logging level: {logger.getEffectiveLevel()}")
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"

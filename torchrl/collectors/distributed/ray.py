@@ -16,11 +16,11 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
+from torchrl.collectors._base import DataCollectorBase
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiaSyncDataCollector
 from torchrl.collectors._multi_sync import MultiSyncDataCollector
 from torchrl.collectors._single import SyncDataCollector
-from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
@@ -72,7 +72,7 @@ def print_remote_collector_info(self):
         f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
     )
     # torchrl_logger.warning(s)
-    torchrl_logger.info(s)
+    torchrl_logger.debug(s)
 
 
 class RayCollector(DataCollectorBase):
@@ -755,7 +755,7 @@ class RayCollector(DataCollectorBase):
             self.collected_frames < self.total_frames and not self._stop_event.is_set()
         ):
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
-                torchrl_logger.info("Updating weights on all workers")
+                torchrl_logger.debug("Updating weights on all workers")
                 self.update_policy_weights_()
 
             # Ask for batches to all remote workers.
@@ -872,7 +872,7 @@ class RayCollector(DataCollectorBase):
             yield out_td
 
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
-                torchrl_logger.info(f"Updating weights on worker {collector_index}")
+                torchrl_logger.debug(f"Updating weights on worker {collector_index}")
                 self.update_policy_weights_(worker_ids=collector_index + 1)
 
             # Schedule a new collection task

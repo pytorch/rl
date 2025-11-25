@@ -441,7 +441,7 @@ class VLLMWeightSyncScheme(WeightSyncScheme):
                     s.bind(("", 0))
                     self.master_port = s.getsockname()[1]
 
-    def create_transport(self, pipe_or_context: Any) -> VLLMCollectiveTransport:
+    def create_transport(self, **kwargs) -> VLLMCollectiveTransport:
         """Create transport for collective communication.
 
         For vLLM, this creates a transport but requires additional setup via init_all_workers_group().
@@ -449,7 +449,7 @@ class VLLMWeightSyncScheme(WeightSyncScheme):
         is more complex and typically handled by sender/receiver initialization.
 
         Args:
-            pipe_or_context: Not used for vLLM (kept for API compatibility).
+            **kwargs: Not used for vLLM (kept for API compatibility).
 
         Returns:
             A VLLMCollectiveTransport instance (needs init_all_workers_group() to be called).

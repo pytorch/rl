@@ -5,6 +5,8 @@
 """Re-exports of collector classes for backward compatibility."""
 from __future__ import annotations
 
+from torchrl.collectors._base import DataCollectorBase
+
 # Re-export constants for backward compatibility
 from torchrl.collectors._constants import (
     _Interruptor,
@@ -24,7 +26,6 @@ from torchrl.collectors._multi_sync import MultiSyncDataCollector
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import SyncDataCollector
 from torchrl.collectors._single_async import aSyncDataCollector
-from torchrl.collectors.base import DataCollectorBase
 
 __all__ = [
     "MultiSyncDataCollector",

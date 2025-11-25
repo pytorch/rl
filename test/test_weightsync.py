@@ -638,7 +638,7 @@ class TestSerializeScheme:
         assert restored._sender is None
         assert restored._receiver is None
         assert not restored._initialized_on_sender
-        assert not restored._initialized_on_worker
+        assert not restored._initialized_on_receiver
 
     def test_multiprocess_scheme_serialize_after_sender_init(self):
         """Test that initialized sender can be pickled (excluding runtime state)."""
@@ -660,7 +660,7 @@ class TestSerializeScheme:
         assert restored._sender is None  # Runtime state excluded
         assert restored._receiver is None
         assert not restored._initialized_on_sender  # Reset
-        assert not restored._initialized_on_worker
+        assert not restored._initialized_on_receiver
 
         # Clean up
         parent_pipe.close()

@@ -13,6 +13,7 @@ from torch import nn as nn
 
 from torchrl import logger as torchrl_logger
 from torchrl._utils import VERBOSE
+from torchrl.collectors._base import DataCollectorBase
 from torchrl.collectors._constants import (
     _MAX_IDLE_COUNT,
     _MIN_TIMEOUT,
@@ -20,34 +21,17 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
 )
 from torchrl.collectors._single import SyncDataCollector
-from torchrl.collectors.base import DataCollectorBase
 
-from torchrl.collectors.utils import _cast, _map_to_cpu_if_needed, _TrajectoryPool
+from torchrl.collectors.utils import (
+    _cast,
+    _make_policy_factory,
+    _map_to_cpu_if_needed,
+    _TrajectoryPool,
+)
 from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
-
-
-def _make_policy_factory(
-    *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
-):
-    if policy is not None and policy_factory is not None:
-        raise ValueError("policy cannot be used with policy_factory")
-    elif policy_factory is not None:
-        policy = policy_factory()
-
-    if weight_sync_scheme is not None:
-        # Initialize the receiver on the worker side
-        weight_sync_scheme.init_on_receiver(
-            model=policy,
-            model_id="policy",
-            worker_idx=worker_idx,
-        )
-        # Get the receiver and synchronize initial weights
-        receiver = weight_sync_scheme.get_receiver()
-        receiver.synchronize_weights(worker_idx=worker_idx)
-    return policy
 
 
 def _main_async_collector(
@@ -130,31 +114,18 @@ def _main_async_collector(
             compile_policy=compile_policy,
             cudagraph_policy=cudagraph_policy,
             no_cuda_sync=no_cuda_sync,
-            weight_sync_schemes=weight_sync_schemes,
+            # We don't pass the weight sync scheme as only the sender has the weight sync scheme within.
+            # weight_sync_schemes=weight_sync_schemes,
+            worker_idx=worker_idx,
         )
         # Set up weight receivers for worker process
         # Note: For the "policy" model, initialization is done in _make_policy_factory
         # This section only handles additional models (not "policy")
         if weight_sync_schemes:
-            inner_collector._weight_receivers = {}
-            inner_collector.pipe = pipe_child  # Add pipe attribute for context
-            inner_collector.worker_idx = (
-                worker_idx  # Add worker index for queue-based schemes
-            )
-
             for model_id, scheme in weight_sync_schemes.items():
-                if model_id == "policy":
-                    # Policy receiver was already initialized in _make_policy_factory
-                    receiver = scheme.get_receiver()
-                    inner_collector._weight_receivers[model_id] = receiver
-                else:
-                    # Initialize receivers for other models
+                if not scheme.initialized_on_receiver:
                     scheme.init_on_receiver(model_id=model_id, context=inner_collector)
-                    receiver = scheme.get_receiver()
-                    receiver.synchronize_weights(worker_idx=worker_idx)
-                    inner_collector._weight_receivers[model_id] = receiver
-        else:
-            inner_collector._weight_receivers = {}
+                    scheme.synchronize_weights()
 
         use_buffers = inner_collector._use_buffers
         if verbose:
@@ -256,6 +227,7 @@ def _main_async_collector(
         # to allow falling through from update_weights to continue
 
         if msg == "update":
+            # Legacy - weight updater
             torchrl_logger.info(f"worker {idx} updating the params...")
             inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
@@ -317,7 +289,7 @@ def _main_async_collector(
             continue
 
         if msg == "update_weights":
-            # New weight update protocol for simplified weight sync system
+            # weight update protocol with schemes
             if verbose:
                 torchrl_logger.info(
                     f"worker {idx} received weight update via new protocol"
@@ -325,15 +297,10 @@ def _main_async_collector(
             model_id, weights = data_in
 
             # Apply weights using the appropriate receiver for this model
-            if (
-                inner_collector._weight_receivers
-                and model_id in inner_collector._weight_receivers
-            ):
-                inner_collector._weight_receivers[model_id].apply_weights(weights)
-            else:
-                torchrl_logger.warning(
-                    f"worker {idx} received weights for unknown model '{model_id}'"
-                )
+            scheme = inner_collector._weight_sync_schemes.get(model_id)
+            if scheme is None:
+                raise KeyError(f"Model '{model_id}' not registered")
+            scheme.apply_weights(weights)
 
             # After applying weights, we continue collecting immediately as if we received
             # a "continue" message. This ensures the worker keeps collecting data without

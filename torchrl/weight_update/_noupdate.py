@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, overload
+from typing import Any
 
 from torchrl.weight_update.weight_sync_schemes import (
     TransportBackend,
@@ -15,24 +15,6 @@ class NoWeightSyncScheme(WeightSyncScheme):
 
     This scheme disables weight synchronization entirely.
     """
-
-    @overload
-    def init_on_sender(
-        self,
-        model_id: str,
-        context: Any,
-        **kwargs,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        model_id: str,
-        context: None = None,
-        **kwargs,
-    ) -> None:
-        ...
 
     def _init_on_sender_impl(
         self,
@@ -54,26 +36,9 @@ class NoWeightSyncScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    @overload
-    def init_on_receiver(
+    def _init_on_receiver_impl(
         self,
-        model_id: str,
-        context: Any,
-        **kwargs,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_receiver(
-        self,
-        model_id: str,
-        context: None = None,
-        **kwargs,
-    ) -> None:
-        ...
-
-    def init_on_receiver(
-        self,
+        *,
         model_id: str,
         context: Any = None,
         **kwargs,
@@ -90,7 +55,7 @@ class NoWeightSyncScheme(WeightSyncScheme):
         receiver._model_ref = model_id
 
         self._receiver = receiver
-        self._initialized_on_worker = True
+        self._initialized_on_receiver = True
 
     def create_transport(self, pipe_or_context: Any) -> TransportBackend:
         """Create a no-op transport.

@@ -293,3 +293,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                     self.pipes[idx].send((idx, "continue_random"))
                 else:
                     self.pipes[idx].send((idx, "continue"))
+
+    def _receive_weights_scheme(self):
+        return super()._receive_weights_scheme()

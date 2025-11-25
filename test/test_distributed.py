@@ -10,35 +10,21 @@ from __future__ import annotations
 
 import abc
 import argparse
+import importlib
 import os
+import socket
 import sys
 import time
 from functools import partial
 
 import pytest
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import logger as torchrl_logger
-from torchrl.data import (
-    LazyTensorStorage,
-    RandomSampler,
-    RayReplayBuffer,
-    RoundRobinWriter,
-    SamplerWithoutReplacement,
-)
-
-try:
-    import ray
-
-    _has_ray = True
-    RAY_ERR = None
-except ModuleNotFoundError as err:
-    _has_ray = False
-    RAY_ERR = err
 
 import torch
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase
 
 from torch import multiprocessing as mp, nn
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors import (
     MultiaSyncDataCollector,
@@ -52,7 +38,16 @@ from torchrl.collectors.distributed import (
     RPCDataCollector,
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+from torchrl.data import (
+    LazyTensorStorage,
+    RandomSampler,
+    RayReplayBuffer,
+    RoundRobinWriter,
+    SamplerWithoutReplacement,
+)
 from torchrl.envs.utils import RandomPolicy
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
@@ -115,7 +110,6 @@ class DistributedCollectorBase:
                 **cls.distributed_kwargs(),
             )
             total = 0
-            torchrl_logger.info("getting data...")
             for data in collector:
                 total += data.numel()
                 assert data.numel() == frames_per_batch
@@ -289,7 +283,9 @@ class DistributedCollectorBase:
                 n_collectors = 1
             else:
                 n_collectors = 2
-            collector = cls.distributed_class()(
+            dcls = cls.distributed_class()
+            torchrl_logger.info(f"Using distributed collector {dcls}")
+            collector = dcls(
                 [env] * n_collectors,
                 policy,
                 collector_class=collector_class,
@@ -307,6 +303,7 @@ class DistributedCollectorBase:
                 if i == 0:
                     first_batch = data
                     policy.weight.data += 1
+                    torchrl_logger.info("TEST -- Calling update_policy_weights_()")
                     collector.update_policy_weights_()
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
@@ -338,7 +335,8 @@ class DistributedCollectorBase:
         proc.start()
         try:
             out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            if out != "passed":
+                raise AssertionError(out)
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -353,7 +351,13 @@ class TestDistributedCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "4324"}
+        # Pick an ephemeral free TCP port on localhost for each test process to
+        # avoid address-in-use errors when tests are run repeatedly or in quick
+        # succession.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        return {"launcher": "mp", "tcp_port": str(port)}
 
     @classmethod
     def _start_worker(cls):
@@ -367,7 +371,10 @@ class TestRPCCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "4324"}
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        return {"launcher": "mp", "tcp_port": str(port)}
 
     @classmethod
     def _start_worker(cls):
@@ -381,7 +388,10 @@ class TestSyncCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "4324"}
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        return {"launcher": "mp", "tcp_port": str(port)}
 
     @classmethod
     def _start_worker(cls):
@@ -459,7 +469,9 @@ class TestSyncCollector(DistributedCollectorBase):
             queue.close()
 
 
-@pytest.mark.skipif(not _has_ray, reason=f"Ray not found (error: {RAY_ERR})")
+@pytest.mark.skipif(
+    not _has_ray, reason="Ray not found. Ray may be badly configured or not installed."
+)
 class TestRayCollector(DistributedCollectorBase):
     """A testing distributed data collector class that runs tests without using a Queue,
     to avoid potential deadlocks when combining Ray and multiprocessing.
@@ -467,6 +479,7 @@ class TestRayCollector(DistributedCollectorBase):
 
     @pytest.fixture(autouse=True, scope="class")
     def start_ray(self):
+        import ray
         from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
         ray.init(**DEFAULT_RAY_INIT_CONFIG)
@@ -480,6 +493,8 @@ class TestRayCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
+        import ray
+
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {

@@ -16,10 +16,11 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.utils import _map_weight
 
 from torchrl.collectors.weight_update import WeightUpdaterBase
-from torchrl.weight_update import WeightReceiver, WeightSender, WeightSyncScheme
+from torchrl.weight_update import WeightSyncScheme
 
 
 class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
@@ -35,8 +36,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     cudagraphed_policy: bool
     _weight_updater: WeightUpdaterBase | None = None
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
-    _weight_senders: dict[str, WeightSender] | None = None
-    _weight_receivers: dict[str, WeightReceiver] | None = None
     verbose: bool = False
 
     @property
@@ -320,39 +319,80 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         if policy_or_weights is not None:
             weights_dict = {"policy": policy_or_weights}
 
-        # Priority: new weight sync schemes > old weight updater system
-        if self._weight_senders:
-            if model_id is not None:
+        if self._weight_sync_schemes:
+            if model_id is None:
+                model_id = "policy"
+            if weights_dict is None:
                 # Compose weight_dict
                 weights_dict = {model_id: policy_or_weights}
-            if weights_dict is None:
-                if "policy" in self._weight_senders:
-                    weights_dict = {"policy": policy_or_weights}
-                elif len(self._weight_senders) == 1:
-                    single_model_id = next(iter(self._weight_senders.keys()))
-                    weights_dict = {single_model_id: policy_or_weights}
-                else:
-                    raise ValueError(
-                        "Cannot determine the model to update. Please provide a weights_dict."
-                    )
             for target_model_id, weights in weights_dict.items():
-                if target_model_id not in self._weight_senders:
+                if target_model_id not in self._weight_sync_schemes:
                     raise KeyError(
-                        f"Model '{target_model_id}' not found in registered weight senders. "
-                        f"Available models: {list(self._weight_senders.keys())}"
+                        f"Model '{target_model_id}' not found in registered weight sync schemes. "
+                        f"Available models: {list(self._weight_sync_schemes.keys())}"
                     )
                 processed_weights = self._extract_weights_if_needed(
                     weights, target_model_id
                 )
                 # Use new send() API with worker_ids support
-                self._weight_senders[target_model_id].send(
-                    weights=processed_weights, worker_ids=worker_ids
+                torchrl_logger.debug("weight update -- getting scheme")
+                scheme = self._weight_sync_schemes.get(target_model_id)
+                if not isinstance(scheme, WeightSyncScheme):
+                    raise TypeError(f"Expected WeightSyncScheme, got {target_model_id}")
+                torchrl_logger.debug(
+                    f"calling send() on scheme {type(scheme).__name__}"
                 )
+                scheme.send(weights=processed_weights, worker_ids=worker_ids)
         elif self._weight_updater is not None:
             # unreachable
             raise RuntimeError
         else:
             return self.receive_weights(policy_or_weights)
+
+    def _receive_weights_scheme(self):
+        """Receive weights via registered receiver schemes and cascade to nested collectors.
+
+        This method enables cascading weight updates across multiple collector layers:
+        - RPCDataCollector -> MultiSyncDataCollector -> SyncDataCollector
+        - DistributedDataCollector -> MultiSyncDataCollector -> SyncDataCollector
+
+        Process:
+        1. Receive weights for all registered receiver schemes (_receiver_schemes)
+        2. If this collector has nested collectors (_weight_sync_schemes), propagate
+           the updates by calling update_policy_weights_()
+
+        """
+        # Receive weights for all registered schemes
+        updates = {}
+        if not hasattr(self, "_receiver_schemes"):
+            raise RuntimeError("No receiver schemes registered.")
+
+        for model_id, scheme in self._receiver_schemes.items():
+            # scheme.receive() pulls weights from the transport and applies them locally
+            # For RPC/Ray: weights are already passed as argument, receive() is a no-op
+            # For Distributed: receive() pulls from TCPStore
+            # For MultiProcess: receive() checks the pipe
+            received_weights = scheme.receive()
+            if received_weights is not None:
+                updates[model_id] = received_weights
+
+        # If we have nested collectors (e.g., MultiSyncDataCollector with inner workers)
+        # AND we actually received updates, propagate them down via their senders
+        if (
+            updates
+            and hasattr(self, "_weight_sync_schemes")
+            and self._weight_sync_schemes
+        ):
+            # Build weights_dict for all models that need propagation to nested collectors
+            weights_dict = {}
+            for model_id in updates:
+                if model_id in self._weight_sync_schemes:
+                    # This model has a sender scheme - propagate to nested workers
+                    weights_dict[model_id] = updates[model_id]
+
+            if weights_dict:
+                # Propagate to nested collectors via their sender schemes
+                self.update_policy_weights_(weights_dict=weights_dict)
 
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
         # No weight updater configured
@@ -388,6 +428,42 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 weights = weights.to(self.policy_device)
             strategy.apply_weights(self.policy, weights)
         # Otherwise, no action needed - policy is local and changes are immediately visible
+
+    def _set_scheme_receiver(self, weight_sync_schemes: dict[str, WeightSyncScheme]):
+        """Set up receiver schemes for this collector.
+
+        This method initializes receiver schemes and stores them in _receiver_schemes
+        for later use by _receive_weights_scheme() and receive_weights().
+
+        Args:
+            weight_sync_schemes: Dictionary of {model_id: WeightSyncScheme} to set up as receivers
+        """
+        # Initialize _receiver_schemes if not already present
+        if not hasattr(self, "_receiver_schemes"):
+            self._receiver_schemes = {}
+
+        # Initialize each scheme on the receiver side
+        for model_id, scheme in weight_sync_schemes.items():
+            if not scheme.initialized_on_receiver:
+                if scheme.initialized_on_sender:
+                    raise RuntimeError(
+                        "Weight sync scheme cannot be initialized on both sender and receiver."
+                    )
+                scheme.init_on_receiver(
+                    model_id=model_id,
+                    context=self,
+                    worker_idx=getattr(self, "_worker_idx", None),
+                )
+
+            # Store the scheme for later use in receive_weights()
+            self._receiver_schemes[model_id] = scheme
+
+        # Perform initial synchronization
+        for scheme in weight_sync_schemes.values():
+            if not scheme.synchronized_on_receiver:
+                scheme.synchronize_weights(
+                    worker_idx=getattr(self, "_worker_idx", None)
+                )
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:

@@ -187,13 +187,11 @@ class VLLMDoubleBufferSyncScheme(WeightSyncScheme):
         self.num_threads = num_threads
         self.strategy_name = strategy
 
-    def create_transport(
-        self, pipe_or_context: Any = None
-    ) -> VLLMDoubleBufferTransport:
+    def create_transport(self, **kwargs) -> VLLMDoubleBufferTransport:
         """Create transport for double-buffered storage.
 
         Args:
-            pipe_or_context: Not used for file-based transport (kept for API compatibility).
+            **kwargs: Not used for file-based transport (kept for API compatibility).
 
         Returns:
             A VLLMDoubleBufferTransport instance.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import weakref
 from collections.abc import Callable
-from typing import Any, overload
+from typing import Any
 
 import torch
 import torch.distributed
@@ -71,7 +71,7 @@ class SharedMemTransport:
             weights = self._params_map[worker_idx]
             queue.put(weights)
 
-    def synchronize_weights_on_worker(
+    def synchronize_weights_on_receiver(
         self, worker_idx: int, timeout: float = 10.0
     ) -> TensorDictBase:
         """Receive shared memory buffer reference from sender via their per-worker queues.
@@ -137,6 +137,30 @@ class SharedMemTransport:
         return True
 
 
+class SharedMemWeightReceiver(WeightReceiver):
+    """Weight receiver for shared memory systems.
+
+    Receives weight updates via shared memory buffers. Workers automatically
+    see weight updates without explicit message passing, providing zero-copy
+    weight synchronization. This is typically instantiated and managed by
+    :class:`SharedMemWeightSyncScheme`.
+    """
+
+    _transport: SharedMemTransport | None
+
+
+class SharedMemWeightSender(WeightSender):
+    """Weight sender for shared memory systems.
+
+    Sends weight updates by writing directly to shared memory buffers.
+    All workers automatically see updates without explicit communication,
+    providing zero-copy weight synchronization. This is typically instantiated
+    and managed by :class:`SharedMemWeightSyncScheme`.
+    """
+
+    _transport: SharedMemTransport | None
+
+
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 
@@ -151,6 +175,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         >>> scheme = SharedMemWeightSyncScheme()
         >>> # Weights are initialized via init_on_sender()
     """
+
+    _sender_cls = SharedMemWeightSender
+    _receiver_cls = SharedMemWeightReceiver
 
     def __init__(
         self,
@@ -283,19 +310,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    def synchronize_weights(self):
-        """Method to be called once the workers have started.
-
-        Triggers a rendez-vous for the workers to receive their copy of the weights.
-
-        This is a convenience method that delegates to the sender's synchronize_weights().
-        """
-        if not self._initialized_on_sender or self._sender is None:
-            raise RuntimeError(
-                "Must call init_on_sender() before synchronize_weights() on SharedMemWeightSyncScheme"
-            )
-        self._sender.synchronize_weights()
-
     def _get_params_map(
         self,
         context: Any = None,
@@ -403,25 +417,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             "Either params_map, model_id + context or model/weights + devices must be provided."
         )
 
-    @overload
-    def init_on_receiver(
-        self,
-        *,
-        model_id: str,
-        context: Any,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_receiver(
-        self,
-        *,
-        model: Any,
-        worker_idx: int,
-    ) -> None:
-        ...
-
-    def init_on_receiver(
+    def _init_on_receiver_impl(
         self,
         *,
         model_id: str | None = None,
@@ -466,7 +462,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         receiver._worker_idx = worker_idx
 
         self._receiver = receiver
-        self._initialized_on_worker = True
+        self._initialized_on_receiver = True
 
     def get_weight_queues(self):
         """Get the per-worker weight initialization queues.
@@ -535,27 +531,3 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
         # Fall back to default behavior
         return super().prepare_weights(weights, model_id, strategy, context)
-
-
-class SharedMemWeightReceiver(WeightReceiver):
-    """Weight receiver for shared memory systems.
-
-    Receives weight updates via shared memory buffers. Workers automatically
-    see weight updates without explicit message passing, providing zero-copy
-    weight synchronization. This is typically instantiated and managed by
-    :class:`SharedMemWeightSyncScheme`.
-    """
-
-    _transport: SharedMemTransport | None
-
-
-class SharedMemWeightSender(WeightSender):
-    """Weight sender for shared memory systems.
-
-    Sends weight updates by writing directly to shared memory buffers.
-    All workers automatically see updates without explicit communication,
-    providing zero-copy weight synchronization. This is typically instantiated
-    and managed by :class:`SharedMemWeightSyncScheme`.
-    """
-
-    _transport: SharedMemTransport | None

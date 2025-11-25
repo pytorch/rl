@@ -428,3 +428,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         self.out_buffer = None
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
+
+    def _receive_weights_scheme(self):
+        return super()._receive_weights_scheme()

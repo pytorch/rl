@@ -14,6 +14,7 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 
 __all__ = [
     "TransportBackend",
@@ -23,6 +24,7 @@ __all__ = [
     "WeightSyncScheme",
 ]
 
+from torchrl.collectors.utils import _cast
 from torchrl.weight_update.utils import _resolve_model
 
 
@@ -55,7 +57,7 @@ class TransportBackend(Protocol):
         """
         ...
 
-    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+    def synchronize_weights_on_receiver(self, worker_idx: int) -> Any:
         """Synchronize weights on worker side before collection starts.
 
         This is called once in each worker after initialization to receive
@@ -257,18 +259,25 @@ class WeightSender:
         if model_id is not None:
             self._model_id = model_id
 
-    def _register_worker(self, worker_idx: int, pipe_or_context: Any) -> None:
+    def _register_worker(
+        self, worker_idx: int, pipe_or_context: Any = None, **transport_kwargs
+    ) -> None:
         """Register a worker's communication pipe (internal).
 
         This is now handled by init_on_sender(). Only kept for internal use.
 
         Args:
             worker_idx: The worker index.
-            pipe_or_context: The pipe connection for this worker.
+            pipe_or_context: Legacy parameter (deprecated, use transport_kwargs).
+            **transport_kwargs: Transport-specific configuration.
         """
         if worker_idx not in self._transports:
+            # Support legacy pipe_or_context for backward compatibility
+            if pipe_or_context is not None and not transport_kwargs:
+                # Legacy mode: try to infer kwargs from pipe_or_context
+                transport_kwargs = {"pipe": pipe_or_context}
             self._transports[worker_idx] = self._scheme.create_transport(
-                pipe_or_context
+                **transport_kwargs
             )
 
     def _iterate_transports(
@@ -328,6 +337,7 @@ class WeightSender:
         context = self._context_ref() if self._context_ref is not None else None
 
         # Let the scheme prepare the weights
+        torchrl_logger.debug("Preparing weights")
         prepared_weights = self._scheme.prepare_weights(
             weights=weights,
             model_id=self._model_id,
@@ -337,15 +347,22 @@ class WeightSender:
 
         transports = list(self._iterate_transports(worker_ids))
 
+        if not transports:
+            raise RuntimeError("No transports available.")
+
         # Send to all workers first (non-blocking if transport supports it)
+        torchrl_logger.debug(f"Sending over transports {transports}")
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
+                torchrl_logger.debug(f"Sending through {transport} asynchronously.")
                 transport.send_weights_async(prepared_weights)
             else:
                 # Fallback for transports that don't support async send
+                torchrl_logger.debug(f"Sending through {transport} synchronously.")
                 transport.send_weights(prepared_weights)
 
         # Wait for all acknowledgments
+        torchrl_logger.debug("Waiting for acknowledgement")
         for transport in transports:
             if hasattr(transport, "wait_ack"):
                 transport.wait_ack()
@@ -417,7 +434,7 @@ class WeightSender:
         self._pending_async = False
         self._pending_transports = None
 
-    def synchronize_weights(self) -> None:
+    def synchronize_weights(self, worker_idx: int | None = None) -> None:
         """Synchronize weights with workers before collection starts.
 
         This method is called once after workers are initialized to send
@@ -429,7 +446,9 @@ class WeightSender:
         update weights.
         """
         # For other schemes (SharedMemWeightSyncScheme, etc.), use transport's method
-        for transport in self._iterate_transports():
+        for idx, transport in enumerate(self._iterate_transports()):
+            if worker_idx is not None and idx != worker_idx:
+                continue
             transport.synchronize_weights_on_sender()
 
     def update_weights(self, weights: Any) -> None:
@@ -495,15 +514,19 @@ class WeightReceiver:
         """
         self._model_ref = model_ref
 
-    def _register_worker_transport(self, pipe: Any) -> None:
+    def _register_worker_transport(self, pipe: Any = None, **transport_kwargs) -> None:
         """Register this worker's communication pipe (internal).
 
         This is now handled by init_on_receiver(). Only kept for internal use.
 
         Args:
-            pipe: The pipe connection for this worker.
+            pipe: Legacy parameter (deprecated, use transport_kwargs).
+            **transport_kwargs: Transport-specific configuration.
         """
-        self._transport = self._scheme.create_transport(pipe)
+        # Support legacy pipe parameter for backward compatibility
+        if pipe is not None and not transport_kwargs:
+            transport_kwargs = {"pipe": pipe}
+        self._transport = self._scheme.create_transport(**transport_kwargs)
 
     def receive(self, timeout: float = 0.001) -> bool:
         """Check for and apply new weights (non-blocking).
@@ -527,6 +550,7 @@ class WeightReceiver:
             return False
 
         # Try to receive weights
+        torchrl_logger.debug(f"Calling receive_weights on transport {self._transport}")
         result = self._transport.receive_weights(timeout=timeout)
         if result is None:
             return False
@@ -538,10 +562,12 @@ class WeightReceiver:
             raise ValueError("No model registered")
 
         model = self._resolve_model_ref()
+        torchrl_logger.debug(f"Applying {weights=} on {model=}")
         self._strategy.apply_weights(model, weights)
 
         # Send acknowledgment if transport supports it
         if hasattr(self._transport, "send_ack"):
+            torchrl_logger.debug(f"Sending acknowledgement on {model_id=}")
             self._transport.send_ack("updated")
 
         return True
@@ -569,7 +595,7 @@ class WeightReceiver:
             worker_idx = getattr(self, "_worker_idx", None)
 
         # Call transport's synchronize method if available
-        weights = self._transport.synchronize_weights_on_worker(worker_idx)
+        weights = self._transport.synchronize_weights_on_receiver(worker_idx)
 
         # Apply weights to model if received (SharedMemTransport case)
         # For other transports (MPTransport, etc.), weights is None and synchronization
@@ -635,12 +661,15 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     The collector maintains a dict of {model_id: scheme} pairs.
     """
 
+    _receiver_cls = WeightReceiver
+    _sender_cls = WeightSender
+
     def __init__(self, strategy: Literal["state_dict", "tensordict"] = "tensordict"):
         self.strategy = strategy
         self._sender = None
         self._receiver = None
         self._initialized_on_sender = False
-        self._initialized_on_worker = False
+        self._initialized_on_receiver = False
 
     @overload
     def init_on_sender(
@@ -737,8 +766,8 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         This method is called once in the collector's _run_processes() method,
         after workers have been started and are ready to receive messages.
         """
-        result = self._init_on_sender_impl(*args, **kwargs)
         self._initialized_on_sender = True
+        result = self._init_on_sender_impl(*args, **kwargs)
         return result
 
     def _init_on_sender_impl(self, *args, **kwargs):
@@ -748,8 +777,44 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     def initialized_on_sender(self):
         return getattr(self, "_initialized_on_sender", False)
 
+    @property
+    def initialized_on_receiver(self):
+        return getattr(self, "_initialized_on_receiver", False)
+
+    def apply_weights(self, weights: TensorDictBase) -> None:
+        """Apply weights to the model."""
+        if not self.initialized_on_receiver:
+            if self.initialized_on_sender:
+                raise RuntimeError("apply_weights() called on a sender side.")
+            raise RuntimeError(
+                "apply_weights() called before init_on_receiver has been called."
+            )
+        return self._receiver.apply_weights(weights)
+
+    @overload
     def init_on_receiver(
         self,
+        model_id: str,
+        context: Any,
+        **kwargs,
+    ) -> None:
+        ...
+
+    @overload
+    def init_on_receiver(
+        self,
+        model_id: str,
+        context: None = None,
+        *,
+        worker_idx: int = ...,
+        model: Any | None = None,
+        **kwargs,
+    ) -> None:
+        ...
+
+    def init_on_receiver(
+        self,
+        *,
         model_id: str,
         context: Any = None,
         **kwargs,
@@ -765,7 +830,69 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
                 - .get_model(model_id: str) -> nn.Module
             **kwargs: Alternative to context (pipe, model, etc.)
         """
+        self._initialized_on_receiver = True
+        result = self._init_on_receiver_impl(
+            model_id=model_id, context=context, **kwargs
+        )
+        return result
+
+    def _init_on_receiver_impl(
+        self,
+        model_id: str,
+        context: Any = None,
+        **kwargs,
+    ) -> None:
         raise NotImplementedError
+
+    def _get_weights_buffer_from_model(self, model: nn.Module | Any) -> TensorDictBase:
+        if isinstance(model, torch.nn.Module):
+            td = TensorDict.from_module(model)
+            td = td.data.apply(_cast, td)
+            return td
+        # Return an empty TD
+        return TensorDict()
+
+    def synchronize_weights(self, worker_idx: int | None = None) -> None:
+        """Method to be called once the workers have started.
+
+        Triggers a rendez-vous for the workers to receive their copy of the weights.
+
+        This is a convenience method that delegates to the sender's or receiver synchronize_weights().
+        """
+        if self._initialized_on_sender:
+            self.synchronized_on_sender = True
+            if self._sender is None:
+                raise RuntimeError(
+                    "self._sender is None. Check that init_on_sender() has been called."
+                )
+            self._sender.synchronize_weights(worker_idx=worker_idx)
+        elif self._initialized_on_receiver:
+            self.synchronized_on_receiver = True
+            if self._receiver is None:
+                raise RuntimeError(
+                    "self._receiver is None. Check that init_on_receiver() has been called."
+                )
+            self._receiver.synchronize_weights(worker_idx=worker_idx)
+        else:
+            raise RuntimeError(
+                "Neither init_on_sender nor init_on_receiver have abeen called."
+            )
+
+    @property
+    def synchronized_on_sender(self):
+        return getattr(self, "_synchronized_on_sender", False)
+
+    @synchronized_on_sender.setter
+    def synchronized_on_sender(self, value: bool):
+        self._synchronized_on_sender = value
+
+    @property
+    def synchronized_on_receiver(self):
+        return getattr(self, "_synchronized_on_receiver", False)
+
+    @synchronized_on_receiver.setter
+    def synchronized_on_receiver(self, value: bool):
+        self._synchronized_on_receiver = value
 
     def get_sender(self) -> WeightSender:
         """Get the sender instance.
@@ -791,7 +918,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         Raises:
             RuntimeError: If init_on_receiver() hasn't been called yet
         """
-        if not self._initialized_on_worker or self._receiver is None:
+        if not self._initialized_on_receiver or self._receiver is None:
             raise RuntimeError(
                 f"Must call init_on_receiver() before get_receiver() on {type(self).__name__}"
             )
@@ -809,7 +936,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         state["_sender"] = None
         state["_receiver"] = None
         state["_initialized_on_sender"] = False
-        state["_initialized_on_worker"] = False
+        state["_initialized_on_receiver"] = False
         return state
 
     def __setstate__(self, state):
@@ -817,11 +944,11 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         self.__dict__.update(state)
 
     @abc.abstractmethod
-    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
+    def create_transport(self, **kwargs) -> TransportBackend:
         """Create transport for communication.
 
         Args:
-            pipe_or_context: Either a pipe connection or context object to extract pipe from.
+            **kwargs: Transport-specific configuration parameters.
 
         Returns:
             A transport backend instance.
@@ -840,7 +967,8 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         Note:
             Typically you should use init_on_sender() followed by get_sender() instead.
         """
-        return WeightSender(self)
+        self._sender = self._sender_cls(self)
+        return self._sender
 
     def create_receiver(self) -> WeightReceiver:
         """Create a receiver for this scheme.
@@ -851,7 +979,8 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         Note:
             Typically you should use init_on_receiver() followed by get_receiver() instead.
         """
-        return WeightReceiver(self)
+        self._receiver = self._receiver_cls(self)
+        return self._receiver
 
     def prepare_weights(
         self,
@@ -901,3 +1030,24 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         else:
             # Already extracted weights (TensorDict, dict, etc.)
             return weights
+
+    def send(
+        self,
+        weights: Any = None,
+        worker_ids: int | list[int] | None = None,
+    ) -> Any:
+        """Send the given weights to specified workers.
+
+        Args:
+            weights: Weights to send (None to extract from source model)
+            worker_ids: Worker IDs to send to (None for all workers)
+        """
+        if not self.initialized_on_sender:
+            raise RuntimeError("Sender must be initialized before sending weights")
+        self._sender.send(weights=weights, worker_ids=worker_ids)
+
+    def receive(self) -> Any:
+        """Send the given weights."""
+        if not self.initialized_on_receiver:
+            raise RuntimeError("Sender must be initialized before receiving weights")
+        self._receiver.receive()

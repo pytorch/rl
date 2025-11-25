@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import torch
 from pyvers import implement_for
@@ -264,7 +264,13 @@ def split_trajectories(
 
 
 @implement_for("torch", "2.5.0")
-def _cast(p, param_maybe_buffer):
+def _cast(
+    p: nn.Parameter | torch.Tensor,
+    param_maybe_buffer: nn.Parameter | torch.Tensor | None = None,
+) -> nn.Parameter | torch.Tensor:
+    if param_maybe_buffer is None:
+        param_maybe_buffer = p
+        p = p.data
     if isinstance(param_maybe_buffer, Parameter):
         # Create parameter without gradients to avoid serialization issues
         return Parameter(p, requires_grad=False)
@@ -291,7 +297,13 @@ def _make_meta_policy(policy: nn.Module):
 
 
 @implement_for("torch", None, "2.5.0")
-def _cast(p, param_maybe_buffer):  # noqa
+def _cast(  # noqa
+    p: nn.Parameter | torch.Tensor,
+    param_maybe_buffer: nn.Parameter | torch.Tensor | None = None,
+) -> nn.Parameter | torch.Tensor:
+    if param_maybe_buffer is None:
+        param_maybe_buffer = p
+        p = p.data
     if isinstance(param_maybe_buffer, Parameter):
         # Create parameter without gradients to avoid serialization issues
         return Parameter(p, requires_grad=False)
@@ -357,3 +369,30 @@ def _map_weight(
     elif is_buffer:
         weight = Buffer(weight)
     return weight
+
+
+def _make_policy_factory(
+    *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
+):
+    has_policy_factory = policy_factory is not None and (
+        (isinstance(policy_factory, Sequence) and any(policy_factory))
+        or not isinstance(policy_factory, Sequence)
+    )
+    if policy is not None and has_policy_factory:
+        raise ValueError("policy cannot be used with policy_factory")
+    elif has_policy_factory:
+        if isinstance(policy_factory, Sequence):
+            return policy_factory
+        else:
+            policy = policy_factory()
+
+    if weight_sync_scheme is not None:
+        # Initialize the receiver on the worker side
+        weight_sync_scheme.init_on_receiver(
+            model=policy,
+            model_id="policy",
+            worker_idx=worker_idx,
+        )
+        # Synchronize initial weights
+        weight_sync_scheme.synchronize_weights(worker_idx=worker_idx)
+    return policy

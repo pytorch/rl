@@ -19,11 +19,11 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
+from torchrl.collectors._base import DataCollectorBase
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiaSyncDataCollector
 from torchrl.collectors._multi_sync import MultiSyncDataCollector
 from torchrl.collectors._single import SyncDataCollector
-from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
@@ -44,6 +44,7 @@ except ModuleNotFoundError as err:
 
 
 def _distributed_init_collection_node(
+    *,
     rank,
     rank0_ip,
     tcpport,
@@ -64,7 +65,7 @@ def _distributed_init_collection_node(
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"node with rank {rank} -- creating collector of type {collector_class}"
         )
     if not issubclass(collector_class, SyncDataCollector):
@@ -97,9 +98,9 @@ def _distributed_init_collection_node(
         **collector_kwargs,
     )
 
-    torchrl_logger.info(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
+    torchrl_logger.debug(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
     if verbose:
-        torchrl_logger.info(f"node with rank {rank} -- launching distributed")
+        torchrl_logger.debug(f"node with rank {rank} -- launching distributed")
     torch.distributed.init_process_group(
         backend,
         rank=rank,
@@ -108,9 +109,9 @@ def _distributed_init_collection_node(
         # init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        torchrl_logger.info(f"node with rank {rank} -- creating store")
+        torchrl_logger.debug(f"node with rank {rank} -- creating store")
     if verbose:
-        torchrl_logger.info(f"node with rank {rank} -- loop")
+        torchrl_logger.debug(f"node with rank {rank} -- loop")
     policy_weights.irecv(0)
     frames = 0
     for i, data in enumerate(collector):
@@ -471,7 +472,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         backend,
     ):
         TCP_PORT = self.tcp_port
-        torchrl_logger.info("init master...")
+        torchrl_logger.debug("init master...")
         torch.distributed.init_process_group(
             backend,
             rank=0,
@@ -479,7 +480,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
-        torchrl_logger.info("done")
+        torchrl_logger.debug("done")
 
     def _make_container(self):
         env_constructor = self.env_constructors[0]
@@ -505,20 +506,21 @@ class DistributedSyncDataCollector(DataCollectorBase):
             env_make = CloudpickleWrapper(env_make)
         job = executor.submit(
             _distributed_init_collection_node,
-            i + 1,
-            self.IPAddr,
-            int(TCP_PORT),
-            self.num_workers + 1,
-            self.backend,
-            self.collector_class,
-            self.num_workers_per_collector,
-            env_make,
-            self.policy,
-            self.policy_factory[i],
-            self._frames_per_batch_corrected,
-            self.collector_kwargs[i],
-            self.update_interval,
-            self.total_frames_per_collector,
+            rank=i + 1,
+            rank0_ip=self.IPAddr,
+            tcpport=int(TCP_PORT),
+            world_size=self.num_workers + 1,
+            backend=self.backend,
+            collector_class=self.collector_class,
+            num_workers=self.num_workers_per_collector,
+            env_make=env_make,
+            policy=self.policy,
+            policy_factory=self.policy_factory[i],
+            frames_per_batch=self._frames_per_batch_corrected,
+            collector_kwargs=self.collector_kwargs[i],
+            update_interval=self.update_interval,
+            total_frames=self.total_frames_per_collector,
+            verbose=VERBOSE,
         )
         return job
 
@@ -529,21 +531,22 @@ class DistributedSyncDataCollector(DataCollectorBase):
             env_make = CloudpickleWrapper(env_make)
         job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
-            args=(
-                i + 1,
-                self.IPAddr,
-                int(TCP_PORT),
-                self.num_workers + 1,
-                self.backend,
-                self.collector_class,
-                self.num_workers_per_collector,
-                env_make,
-                self.policy,
-                self.policy_factory[i],
-                self._frames_per_batch_corrected,
-                self.collector_kwargs[i],
-                self.update_interval,
-                self.total_frames_per_collector,
+            kwargs=dict(  # noqa: C408
+                rank=i + 1,
+                rank0_ip=self.IPAddr,
+                tcpport=int(TCP_PORT),
+                world_size=self.num_workers + 1,
+                backend=self.backend,
+                collector_class=self.collector_class,
+                num_workers=self.num_workers_per_collector,
+                env_make=env_make,
+                policy=self.policy,
+                policy_factory=self.policy_factory[i],
+                frames_per_batch=self._frames_per_batch_corrected,
+                collector_kwargs=self.collector_kwargs[i],
+                update_interval=self.update_interval,
+                total_frames=self.total_frames_per_collector,
+                verbose=VERBOSE,
             ),
         )
         job.start()
@@ -553,7 +556,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
         hostname = socket.gethostname()
         IPAddr = socket.gethostbyname(hostname)
-        torchrl_logger.info(f"Server IP address: {IPAddr}")
+        torchrl_logger.debug(f"Server IP address: {IPAddr}")
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -565,18 +568,18 @@ class DistributedSyncDataCollector(DataCollectorBase):
             executor = submitit.AutoExecutor(folder="log_test")
             executor.update_parameters(**self.slurm_kwargs)
         for i in range(self.num_workers):
-            torchrl_logger.info("Submitting job")
+            torchrl_logger.debug("Submitting job")
             if self.launcher == "submitit":
                 job = self._init_worker_dist_submitit(
                     executor,
                     i,
                 )
-                torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
+                torchrl_logger.debug(f"job id {job.job_id}")  # ID of your job
             elif self.launcher == "mp":
                 job = self._init_worker_dist_mp(
                     i,
                 )
-                torchrl_logger.info("job launched")
+                torchrl_logger.debug("job launched")
             self.jobs.append(job)
         self._init_master_dist(self.num_workers + 1, self.backend)
 

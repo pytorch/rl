@@ -22,12 +22,12 @@ from torchrl._utils import (
     prod,
     RL_WARNINGS,
 )
+from torchrl.collectors._base import DataCollectorBase
 from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
 )
-from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.utils import _TrajectoryPool, split_trajectories
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
@@ -41,6 +41,7 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.utils import _resolve_model
 
 
 @accept_remote_rref_udf_invocation
@@ -311,9 +312,11 @@ class SyncDataCollector(DataCollectorBase):
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
+        worker_idx: int | None = None,
         **kwargs,
     ):
         self.closed = True
+        self._worker_idx = worker_idx
 
         # Initialize environment
         env = self._init_env(create_env_fn, create_env_kwargs)
@@ -791,7 +794,6 @@ class SyncDataCollector(DataCollectorBase):
         if weight_sync_schemes is not None:
             # Use new simplified weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
-            self._weight_senders = {}
             # For single-process collectors, we don't need senders/receivers
             # The policy is local and changes are immediately visible
             # Senders will be set up in multiprocess collectors during _run_processes
@@ -813,12 +815,10 @@ class SyncDataCollector(DataCollectorBase):
             )
             self.weight_updater = weight_updater
             self._weight_sync_schemes = None
-            self._weight_senders = {}
         else:
             # No weight sync needed for single-process collectors
             self.weight_updater = None
             self._weight_sync_schemes = None
-            self._weight_senders = {}
 
     @property
     def _traj_pool(self):
@@ -1545,7 +1545,7 @@ class SyncDataCollector(DataCollectorBase):
                     break
             else:
                 if self._use_buffers:
-                    torchrl_logger.info("Returning final rollout within buffer.")
+                    torchrl_logger.debug("Returning final rollout within buffer.")
                     result = self._final_rollout
                     try:
                         result = torch.stack(
@@ -1792,8 +1792,7 @@ class SyncDataCollector(DataCollectorBase):
             else:
                 raise ValueError(f"No policy found for model_id '{model_id}'")
         else:
-            # Try to resolve via attribute access
-            if hasattr(self, model_id):
-                return getattr(self, model_id)
-            else:
-                raise ValueError(f"Unknown model_id: {model_id}")
+            return _resolve_model(self, model_id)
+
+    def _receive_weights_scheme(self):
+        return super()._receive_weights_scheme()

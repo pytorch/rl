@@ -5,12 +5,13 @@
 
 from torchrl.envs.utils import RandomPolicy
 
+from ._base import DataCollectorBase
+
 from ._multi_async import MultiaSyncDataCollector
 from ._multi_sync import MultiSyncDataCollector
 from ._single import SyncDataCollector
 
 from ._single_async import aSyncDataCollector
-from .base import DataCollectorBase
 from .weight_update import (
     MultiProcessedWeightUpdater,
     RayWeightUpdater,

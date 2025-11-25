@@ -16,6 +16,7 @@ from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp, nn
 from torchrl import logger as torchrl_logger
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, RL_WARNINGS
+from torchrl.collectors._base import DataCollectorBase
 from torchrl.collectors._constants import (
     _InterruptorManager,
     _is_osx,
@@ -25,7 +26,6 @@ from torchrl.collectors._constants import (
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import SyncDataCollector
-from torchrl.collectors.base import DataCollectorBase
 from torchrl.collectors.utils import _make_meta_policy, _TrajectoryPool
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
@@ -37,6 +37,7 @@ from torchrl.weight_update import (
     SharedMemWeightSyncScheme,
     WeightSyncScheme,
 )
+from torchrl.weight_update.utils import _resolve_model
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -357,8 +358,8 @@ class _MultiDataCollector(DataCollectorBase):
         self.policy = policy
         self.policy_factory = policy_factory
 
-        # Set up fallback policy for weight extraction
-        self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
+        # # Set up fallback policy for weight extraction
+        # self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
 
         # Set up total frames and other parameters
         self._setup_multi_total_frames(
@@ -518,7 +519,7 @@ class _MultiDataCollector(DataCollectorBase):
             if weight_sync_policy is None:
                 return
             if any(p is not None for p in policy_factory):
-                if not weight_sync_policy._initialized_on_sender:
+                if not weight_sync_policy.initialized_on_sender:
                     raise RuntimeError(
                         f"the weight sync scheme must be initialized on sender ahead of time when passing a policy factory. Got {policy_factory=}"
                     )
@@ -574,6 +575,7 @@ class _MultiDataCollector(DataCollectorBase):
                 # For multiprocessed collectors, use MultiProcessWeightSyncScheme by default
                 if weight_sync_schemes is None:
                     weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
+                    self._weight_sync_schemes = weight_sync_schemes
         elif weight_updater is None:
             warnings.warn(
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
@@ -593,14 +595,12 @@ class _MultiDataCollector(DataCollectorBase):
         if weight_sync_schemes is not None:
             # Use weight sync schemes for weight distribution
             self._weight_sync_schemes = weight_sync_schemes
-            self._weight_senders = {}
             # Senders will be created in _run_processes
             self.weight_updater = None
         else:
             # Use weight updater for weight distribution
             self.weight_updater = weight_updater
             self._weight_sync_schemes = None
-            self._weight_senders = {}
 
     def _setup_multi_policy_version_tracking(
         self, track_policy_version: bool | PolicyVersion
@@ -621,6 +621,7 @@ class _MultiDataCollector(DataCollectorBase):
                 )
             self.policy_version_tracker = None
 
+    # TODO: Remove this
     def _setup_fallback_policy(
         self,
         policy: TensorDictModule | Callable | None,
@@ -837,7 +838,6 @@ class _MultiDataCollector(DataCollectorBase):
             for model_id, scheme in self._weight_sync_schemes.items():
                 if not scheme.initialized_on_sender:
                     scheme.init_on_sender(model_id=model_id, context=self)
-                self._weight_senders[model_id] = scheme.get_sender()
 
         # Create a policy on the right device
         policy_factory = self.policy_factory
@@ -972,9 +972,15 @@ also that the state dict is synchronised across processes if needed."""
         # Synchronize initial weights with workers AFTER starting processes but BEFORE waiting for "instantiated"
         # This must happen after proc.start() but before workers send "instantiated" to avoid deadlock:
         # Workers will call receiver.synchronize_weights() during init and may block waiting for data
-        if self._weight_senders:
-            for sender in self._weight_senders.values():
-                sender.synchronize_weights()
+        if self._weight_sync_schemes:
+            # start with policy
+            policy_scheme = self._weight_sync_schemes.get("policy")
+            if policy_scheme is not None:
+                policy_scheme.synchronize_weights()
+            for key, scheme in self._weight_sync_schemes.items():
+                if key == "policy":
+                    continue
+                scheme.synchronize_weights()
 
         # Wait for workers to be ready
         for i, pipe_parent in enumerate(self.pipes):
@@ -1414,18 +1420,15 @@ also that the state dict is synchronised across processes if needed."""
         """
         if model_id == "policy":
             # Return the fallback policy instance
-            if hasattr(self, "_fallback_policy") and self._fallback_policy is not None:
-                return self._fallback_policy
+            if (fallback_policy := getattr(self, "_fallback_policy", None)) is not None:
+                return fallback_policy
             elif hasattr(self, "policy") and self.policy is not None:
                 return self.policy
             else:
                 raise ValueError(f"No policy found for model_id '{model_id}'")
         else:
             # Try to resolve via attribute access
-            if hasattr(self, model_id):
-                return getattr(self, model_id)
-            else:
-                raise ValueError(f"Unknown model_id: {model_id}")
+            return _resolve_model(self, model_id)
 
     def get_cached_weights(self, model_id: str):
         """Get cached shared memory weights if available (for weight sync schemes).
@@ -1445,3 +1448,6 @@ also that the state dict is synchronised across processes if needed."""
             # Return cached weights for this device
             return self._policy_weights_dict.get(policy_device)
         return None
+
+    def _receive_weights_scheme(self):
+        return super()._receive_weights_scheme()

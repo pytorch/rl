@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import weakref
-from typing import Any, Literal, overload
+from typing import Any, Literal
 
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
@@ -22,40 +22,29 @@ class RayWeightSyncScheme(WeightSyncScheme):
     as multiprocess collectors.
     """
 
-    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
+    def create_transport(
+        self,
+        *,
+        remote_collector=None,
+        tensor_transport: Literal["object_store", "nixl"] = "object_store",
+        **kwargs,
+    ) -> TransportBackend:
         """Create Ray-based transport for a specific remote collector.
 
         Args:
-            pipe_or_context: The Ray actor handle for the remote collector.
+            remote_collector: The Ray actor handle for the remote collector.
+            tensor_transport: Transport mechanism for tensors ("object_store" or "nixl").
+            **kwargs: Additional transport configuration.
 
         Returns:
             RayTransport configured for this specific remote collector.
         """
-        return RayTransport(remote_collector=pipe_or_context)
+        return RayTransport(
+            remote_collector=remote_collector,
+            tensor_transport=tensor_transport,
+        )
 
-    @overload
-    def init_on_sender(
-        self,
-        model_id: str,
-        context: Any,
-        **kwargs,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        model_id: str,
-        context: None = None,
-        *,
-        remote_collectors: list = ...,
-        num_workers: int | None = None,
-        source_model: Any | None = None,
-        **kwargs,
-    ) -> None:
-        ...
-
-    def init_on_sender(
+    def _init_on_sender_impl(
         self,
         model_id: str,
         context: Any = None,
@@ -87,9 +76,12 @@ class RayWeightSyncScheme(WeightSyncScheme):
         sender = WeightSender(self)
         sender._model_id = model_id
 
-        # Register each Ray actor - _register_worker will create the transport
+        # Register each Ray actor with explicit transport kwargs
         for worker_idx, remote_collector in enumerate(remote_collectors):
-            sender._register_worker(worker_idx, remote_collector)
+            sender._register_worker(
+                worker_idx,
+                remote_collector=remote_collector,
+            )
 
         # Set context with weak reference to avoid circular refs
         if context is not None:
@@ -103,27 +95,7 @@ class RayWeightSyncScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    @overload
-    def init_on_receiver(
-        self,
-        model_id: str,
-        context: Any,
-        **kwargs,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_receiver(
-        self,
-        model_id: str,
-        context: None = None,
-        *,
-        model: Any | None = None,
-        **kwargs,
-    ) -> None:
-        ...
-
-    def init_on_receiver(
+    def _init_on_receiver_impl(
         self,
         model_id: str,
         context: Any = None,
@@ -155,7 +127,118 @@ class RayWeightSyncScheme(WeightSyncScheme):
             receiver._set_context(weakref.ref(context))
 
         self._receiver = receiver
-        self._initialized_on_worker = True
+        self._initialized_on_receiver = True
+
+
+class RayModuleTransformReceiver(WeightReceiver):
+    """Specialized receiver for RayModuleTransform actors.
+
+    This receiver handles weight updates within Ray actors.
+    Since Ray actors receive weights through direct method calls,
+    this receiver primarily validates and applies weights locally.
+    """
+
+    def __init__(self, scheme: RayModuleTransformScheme):
+        super().__init__(scheme)
+
+    def _register_worker_transport(
+        self, actor_or_context: Any = None, **transport_kwargs
+    ) -> None:
+        """Register the Ray actor's transport (internal).
+
+        This is now handled by init_on_receiver(). Only kept for internal use.
+
+        Args:
+            actor_or_context: Legacy parameter (deprecated, use transport_kwargs).
+            **transport_kwargs: Transport-specific configuration (e.g., actor_ref=...).
+        """
+        # Support legacy actor_or_context for backward compatibility
+        if actor_or_context is not None and not transport_kwargs:
+            transport_kwargs = {"actor_ref": actor_or_context}
+        self._transport = self._scheme.create_transport(**transport_kwargs)
+
+    def apply_weights(self, weights: Any, inplace: bool = True) -> None:
+        """Apply received weights to registered model.
+
+        For Ray actors, weights are applied directly to the module
+        within the actor's process space.
+
+        Args:
+            weights: The weights to apply.
+            inplace: Whether to apply weights in place. Default is `True`.
+        """
+        if self._model_ref is None:
+            raise ValueError("No model registered")
+
+        model = self._resolve_model_ref()
+        self._strategy.apply_weights(model, weights, inplace=inplace)
+
+
+class RayModuleTransformSender(WeightSender):
+    """Specialized sender for :class:`~torchrl.envs.transforms.module.RayModuleTransform` actors.
+
+    This sender handles weight updates for models hosted within Ray actors.
+    Unlike the base WeightSender which uses pipes for multiprocessing,
+    this sender directly communicates with Ray actors via their remote methods.
+
+    For Ray actors, there is typically only one shared actor instance, so we
+    store a single transport rather than per-worker transports.
+    """
+
+    def __init__(self, scheme: RayModuleTransformScheme):
+        super().__init__(scheme)
+        self._actor_ref = None
+        self._single_transport = None
+        self._context_ref = None
+        self._model_id_str = None
+
+    def _set_context(self, context: Any, model_id: str) -> None:
+        """Set context for lazy actor resolution (internal).
+
+        This is now handled by init_on_sender(). Only kept for internal use.
+
+        Args:
+            context: The collector instance.
+            model_id: String path to the Ray actor (e.g., "env.transform[0]").
+        """
+        self._context_ref = weakref.ref(context)
+        self._model_id_str = model_id
+
+    def _register_worker(self, worker_idx: int, pipe_or_context: Any) -> None:
+        """For Ray actors, worker registration is a no-op (internal).
+
+        Ray actors are shared across all workers, so we don't need per-worker
+        transports. The actor reference is resolved lazily on first use.
+        """
+
+    def update_weights(self, weights: Any) -> None:
+        """Send weights to the Ray actor.
+
+        Args:
+            weights: Weights to send.
+        """
+        if self._single_transport is None:
+            self._initialize_transport()
+
+        if self._single_transport is not None:
+            self._single_transport.send_weights(weights)
+
+    def _initialize_transport(self) -> None:
+        """Lazily initialize the transport by resolving the actor reference."""
+        if self._context_ref is None or self._model_id_str is None:
+            return
+
+        context = self._context_ref()
+        if context is None:
+            return
+
+        model = _resolve_model(context, self._model_id_str)
+        if hasattr(model, "_actor"):
+            self._actor_ref = model._actor
+            self._single_transport = self._scheme.create_transport(actor_ref=model)
+        elif type(model).__name__ == "ActorHandle":
+            self._actor_ref = model
+            self._single_transport = self._scheme.create_transport(actor_ref=model)
 
 
 class RayModuleTransformScheme(WeightSyncScheme):
@@ -170,21 +253,44 @@ class RayModuleTransformScheme(WeightSyncScheme):
             Default is "tensordict".
     """
 
+    _sender_cls = RayModuleTransformSender
+    _receiver_cls = RayModuleTransformReceiver
+
     def __init__(self, strategy: str = "tensordict"):
         super().__init__(strategy)
 
-    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
+    def create_transport(
+        self,
+        *,
+        actor_ref=None,
+        update_method: str | None = None,
+        tensor_transport: Literal["object_store", "nixl"] = "object_store",
+        **kwargs,
+    ) -> TransportBackend:
         """Create RayActorTransport for the given actor.
 
         Args:
-            pipe_or_context: Either a Ray actor reference or a context object
-                from which to extract the actor reference.
+            actor_ref: Ray actor reference or context object with _actor attribute.
+            update_method: Weight update method ("tensordict" or "state_dict").
+                If None, uses self.strategy.
+            tensor_transport: Transport mechanism for tensors ("object_store" or "nixl").
+            **kwargs: Additional transport configuration.
 
         Returns:
             RayActorTransport configured with the actor reference.
         """
-        actor_ref = self._extract_actor_ref(pipe_or_context)
-        return RayActorTransport(actor_ref=actor_ref, update_method=self.strategy)
+        # Extract actor reference if needed
+        if actor_ref is not None and hasattr(actor_ref, "_actor"):
+            actor_ref = actor_ref._actor
+
+        if update_method is None:
+            update_method = self.strategy
+
+        return RayActorTransport(
+            actor_ref=actor_ref,
+            update_method=update_method,
+            tensor_transport=tensor_transport,
+        )
 
     def _extract_actor_ref(self, pipe_or_context: Any) -> Any:
         """Extract the Ray actor reference from the context.
@@ -207,29 +313,6 @@ class RayModuleTransformScheme(WeightSyncScheme):
     def create_receiver(self) -> RayModuleTransformReceiver:
         """Create a specialized receiver for Ray actor communication."""
         return RayModuleTransformReceiver(self)
-
-    @overload
-    def init_on_sender(
-        self,
-        model_id: str,
-        context: Any,
-        **kwargs,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_sender(
-        self,
-        model_id: str,
-        context: None = None,
-        *,
-        actor_refs: list | None = None,
-        actors: list | None = None,
-        remote_collectors: list | None = None,
-        source_model: Any | None = None,
-        **kwargs,
-    ) -> None:
-        ...
 
     def _init_on_sender_impl(
         self,
@@ -268,9 +351,12 @@ class RayModuleTransformScheme(WeightSyncScheme):
         sender = self.create_sender()
         sender._model_id = model_id
 
-        # Register all actors - _register_worker will create the transport
+        # Register all actors with explicit transport kwargs
         for worker_idx, actor_ref in enumerate(actor_refs):
-            sender._register_worker(worker_idx, actor_ref)
+            sender._register_worker(
+                worker_idx,
+                actor_ref=actor_ref,
+            )
 
         # Set context with weak reference
         if context is not None:
@@ -284,29 +370,9 @@ class RayModuleTransformScheme(WeightSyncScheme):
         self._sender = sender
         self._initialized_on_sender = True
 
-    @overload
-    def init_on_receiver(
+    def _init_on_receiver_impl(
         self,
-        model_id: str,
-        context: Any,
-        **kwargs,
-    ) -> None:
-        ...
-
-    @overload
-    def init_on_receiver(
-        self,
-        model_id: str,
-        context: None = None,
         *,
-        actor_ref: Any | None = None,
-        model: Any | None = None,
-        **kwargs,
-    ) -> None:
-        ...
-
-    def init_on_receiver(
-        self,
         model_id: str,
         context: Any = None,
         **kwargs,
@@ -322,11 +388,10 @@ class RayModuleTransformScheme(WeightSyncScheme):
         receiver = self.create_receiver()
 
         # Extract actor reference if needed
-        actor_ref = kwargs.get("actor_ref") or context
-        if actor_ref is not None:
+        actor_ref_arg = kwargs.get("actor_ref") or context
+        if actor_ref_arg is not None:
             # Register the transport for this actor
-            transport = self.create_transport(actor_ref)
-            receiver._register_worker_transport(transport)
+            receiver._register_worker_transport(actor_ref=actor_ref_arg)
 
         # Register model if provided
         model = kwargs.get("model") or (
@@ -342,7 +407,7 @@ class RayModuleTransformScheme(WeightSyncScheme):
             receiver._set_context(weakref.ref(context))
 
         self._receiver = receiver
-        self._initialized_on_worker = True
+        self._initialized_on_receiver = True
 
 
 class RayTransport:
@@ -415,7 +480,7 @@ class RayTransport:
     def synchronize_weights_on_sender(self) -> None:
         """No-op for RayTransport - weights are sent via send_weights()."""
 
-    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+    def synchronize_weights_on_receiver(self, worker_idx: int) -> Any:
         """No-op for RayTransport - weights are received via remote method calls."""
         return None
 
@@ -519,111 +584,6 @@ class RayActorTransport:
     def synchronize_weights_on_sender(self) -> None:
         """No-op for RayActorTransport - weights are sent via send_weights()."""
 
-    def synchronize_weights_on_worker(self, worker_idx: int) -> Any:
+    def synchronize_weights_on_receiver(self, worker_idx: int) -> Any:
         """No-op for RayActorTransport - weights are received via remote method calls."""
         return None
-
-
-class RayModuleTransformReceiver(WeightReceiver):
-    """Specialized receiver for RayModuleTransform actors.
-
-    This receiver handles weight updates within Ray actors.
-    Since Ray actors receive weights through direct method calls,
-    this receiver primarily validates and applies weights locally.
-    """
-
-    def __init__(self, scheme: RayModuleTransformScheme):
-        super().__init__(scheme)
-
-    def _register_worker_transport(self, actor_or_context: Any) -> None:
-        """Register the Ray actor's transport (internal).
-
-        This is now handled by init_on_receiver(). Only kept for internal use.
-
-        Args:
-            actor_or_context: Either a Ray actor reference or a context object.
-        """
-        self._transport = self._scheme.create_transport(actor_or_context)
-
-    def apply_weights(self, weights: Any, inplace: bool = True) -> None:
-        """Apply received weights to registered model.
-
-        For Ray actors, weights are applied directly to the module
-        within the actor's process space.
-
-        Args:
-            weights: The weights to apply.
-            inplace: Whether to apply weights in place. Default is `True`.
-        """
-        if self._model_ref is None:
-            raise ValueError("No model registered")
-
-        model = self._resolve_model_ref()
-        self._strategy.apply_weights(model, weights, inplace=inplace)
-
-
-class RayModuleTransformSender(WeightSender):
-    """Specialized sender for :class:`~torchrl.envs.transforms.module.RayModuleTransform` actors.
-
-    This sender handles weight updates for models hosted within Ray actors.
-    Unlike the base WeightSender which uses pipes for multiprocessing,
-    this sender directly communicates with Ray actors via their remote methods.
-
-    For Ray actors, there is typically only one shared actor instance, so we
-    store a single transport rather than per-worker transports.
-    """
-
-    def __init__(self, scheme: RayModuleTransformScheme):
-        super().__init__(scheme)
-        self._actor_ref = None
-        self._single_transport = None
-        self._context_ref = None
-        self._model_id_str = None
-
-    def _set_context(self, context: Any, model_id: str) -> None:
-        """Set context for lazy actor resolution (internal).
-
-        This is now handled by init_on_sender(). Only kept for internal use.
-
-        Args:
-            context: The collector instance.
-            model_id: String path to the Ray actor (e.g., "env.transform[0]").
-        """
-        self._context_ref = weakref.ref(context)
-        self._model_id_str = model_id
-
-    def _register_worker(self, worker_idx: int, pipe_or_context: Any) -> None:
-        """For Ray actors, worker registration is a no-op (internal).
-
-        Ray actors are shared across all workers, so we don't need per-worker
-        transports. The actor reference is resolved lazily on first use.
-        """
-
-    def update_weights(self, weights: Any) -> None:
-        """Send weights to the Ray actor.
-
-        Args:
-            weights: Weights to send.
-        """
-        if self._single_transport is None:
-            self._initialize_transport()
-
-        if self._single_transport is not None:
-            self._single_transport.send_weights(weights)
-
-    def _initialize_transport(self) -> None:
-        """Lazily initialize the transport by resolving the actor reference."""
-        if self._context_ref is None or self._model_id_str is None:
-            return
-
-        context = self._context_ref()
-        if context is None:
-            return
-
-        model = _resolve_model(context, self._model_id_str)
-        if hasattr(model, "_actor"):
-            self._actor_ref = model._actor
-            self._single_transport = self._scheme.create_transport(model)
-        elif type(model).__name__ == "ActorHandle":
-            self._actor_ref = model
-            self._single_transport = self._scheme.create_transport(model)
