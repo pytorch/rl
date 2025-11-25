@@ -3761,7 +3761,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         if cat_results is None:
             cat_results = "stack"
 
-        self.buffers = {}
+        self.buffers = [None for _ in range(self.num_workers)]
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
@@ -3844,8 +3844,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if preempt:
                     # mask buffers if cat, and create a mask if stack
                     if cat_results != "stack":
-                        buffers = {}
-                        for worker_idx, buffer in self.buffers.items():
+                        buffers = [None] * self.num_workers
+                        for worker_idx, buffer in enumerate(filter(None.__ne__, self.buffers)):
                             valid = buffer.get(("collector", "traj_ids")) != -1
                             if valid.ndim > 2:
                                 valid = valid.flatten(0, -2)
@@ -3853,7 +3853,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                                 valid = valid.any(0)
                             buffers[worker_idx] = buffer[..., valid]
                     else:
-                        for buffer in self.buffers.values():
+                        for buffer in filter(None.__ne__, self.buffers):
                             with buffer.unlock_():
                                 buffer.set(
                                     ("collector", "mask"),
@@ -3886,7 +3886,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
-            for idx in buffers.keys():
+            for idx,buffer in enumerate(filter(None.__ne__, buffers)):
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
                 if preempt:
@@ -3901,7 +3901,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in self.buffers.values():
+                for item in filter(None.__ne__, self.buffers):
                     if prev_device is None:
                         prev_device = item.device
                     else:
@@ -3912,33 +3912,21 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     torch.stack if self._use_buffers else TensorDict.maybe_dense_stack
                 )
                 if same_device:
-                    self.out_buffer = stack(list(buffers.values()), 0)
+                    self.out_buffer = stack([item for item in buffers if item is not None], 0)
                 else:
-                    self.out_buffer = stack(
-                        [item.cpu() for item in buffers.values()], 0
-                    )
+                    self.out_buffer = stack([item.cpu() for item in buffers if item is not None], 0)
             else:
                 if self._use_buffers is None:
-                    torchrl_logger.warning(
-                        "use_buffer not specified and not yet inferred from data, assuming `True`."
-                    )
+                    torchrl_logger.warning("use_buffer not specified and not yet inferred from data, assuming `True`.")
                 elif not self._use_buffers:
-                    raise RuntimeError(
-                        "Cannot concatenate results with use_buffers=False"
-                    )
+                    raise RuntimeError("Cannot concatenate results with use_buffers=False")
                 try:
                     if same_device:
-                        self.out_buffer = torch.cat(list(buffers.values()), cat_results)
+                        self.out_buffer = torch.cat([item for item in buffers if item is not None], cat_results)
                     else:
-                        self.out_buffer = torch.cat(
-                            [item.cpu() for item in buffers.values()], cat_results
-                        )
+                        self.out_buffer = torch.cat([item.cpu() for item in buffers if item is not None], cat_results)
                 except RuntimeError as err:
-                    if (
-                        preempt
-                        and cat_results != -1
-                        and "Sizes of tensors must match" in str(err)
-                    ):
+                    if preempt and cat_results != -1 and "Sizes of tensors must match" in str(err):
                         raise RuntimeError(
                             "The value provided to cat_results isn't compatible with the collectors outputs. "
                             "Consider using `cat_results=-1`."
@@ -3956,11 +3944,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             self._frames += n_collected
 
             if self.postprocs:
-                self.postprocs = (
-                    self.postprocs.to(out.device)
-                    if hasattr(self.postprocs, "to")
-                    else self.postprocs
-                )
+                self.postprocs = self.postprocs.to(out.device) if hasattr(self.postprocs, "to") else self.postprocs
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
