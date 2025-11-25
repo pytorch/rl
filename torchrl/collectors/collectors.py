@@ -3845,7 +3845,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     # mask buffers if cat, and create a mask if stack
                     if cat_results != "stack":
                         buffers = [None] * self.num_workers
-                        for worker_idx, buffer in enumerate(filter(None.__ne__, self.buffers)):
+                        for worker_idx, buffer in enumerate(
+                            filter(None.__ne__, self.buffers)
+                        ):
                             valid = buffer.get(("collector", "traj_ids")) != -1
                             if valid.ndim > 2:
                                 valid = valid.flatten(0, -2)
@@ -3886,7 +3888,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
-            for idx,buffer in enumerate(filter(None.__ne__, buffers)):
+            for idx, buffer in enumerate(filter(None.__ne__, buffers)):
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
                 if preempt:
@@ -3912,9 +3914,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     torch.stack if self._use_buffers else TensorDict.maybe_dense_stack
                 )
                 if same_device:
-                    self.out_buffer = stack([item for item in buffers if item is not None], 0)
+                    self.out_buffer = stack(
+                        [item for item in buffers if item is not None], 0
+                    )
                 else:
-                    self.out_buffer = stack([item.cpu() for item in buffers if item is not None], 0)
+                    self.out_buffer = stack(
+                        [item.cpu() for item in buffers if item is not None], 0
+                    )
             else:
                 if self._use_buffers is None:
                     torchrl_logger.warning("use_buffer not specified and not yet inferred from data, assuming `True`.")
@@ -3922,9 +3928,14 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     raise RuntimeError("Cannot concatenate results with use_buffers=False")
                 try:
                     if same_device:
-                        self.out_buffer = torch.cat([item for item in buffers if item is not None], cat_results)
+                        self.out_buffer = torch.cat(
+                            [item for item in buffers if item is not None], cat_results
+                        )
                     else:
-                        self.out_buffer = torch.cat([item.cpu() for item in buffers if item is not None], cat_results)
+                        self.out_buffer = torch.cat(
+                            [item.cpu() for item in buffers if item is not None],
+                            cat_results,
+                        )
                 except RuntimeError as err:
                     if preempt and cat_results != -1 and "Sizes of tensors must match" in str(err):
                         raise RuntimeError(
