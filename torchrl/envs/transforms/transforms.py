@@ -592,13 +592,11 @@ class Transform(nn.Module):
         in_keys = {unravel_key(k) for k in self.in_keys}
         for key in out_keys - in_keys:
             if unravel_key(key) not in output_spec_keys:
-                warnings.warn(
+                raise KeyError(
                     f"The key '{key}' is unaccounted for by the transform (expected keys {output_spec_keys}). "
                     f"Every new entry in the tensordict resulting from a call to a transform must be "
                     f"registered in the specs for torchrl rollouts to be consistently built. "
-                    f"Make sure transform_output_spec/transform_observation_spec/... is coded correctly. "
-                    "This warning will trigger a KeyError in v0.9, make sure to adapt your code accordingly.",
-                    category=FutureWarning,
+                    f"Make sure transform_output_spec/transform_observation_spec/... is coded correctly."
                 )
         return output_spec
 
