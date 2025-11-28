@@ -3760,7 +3760,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         cat_results = self.cat_results
         if cat_results is None:
             cat_results = "stack"
-
         self.buffers = [None for _ in range(self.num_workers)]
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
@@ -3781,7 +3780,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     msg = "continue_random"
                 else:
                     msg = "continue"
-                # Debug: sending 'continue'
                 self.pipes[idx].send((None, msg))
 
             self._iter += 1
@@ -3845,15 +3843,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     # mask buffers if cat, and create a mask if stack
                     if cat_results != "stack":
                         buffers = [None] * self.num_workers
-                        for worker_idx, buffer in enumerate(
-                            filter(None.__ne__, self.buffers)
-                        ):
+                        for idx, buffer in enumerate(filter(None.__ne__, self.buffers)):
                             valid = buffer.get(("collector", "traj_ids")) != -1
                             if valid.ndim > 2:
                                 valid = valid.flatten(0, -2)
                             if valid.ndim == 2:
                                 valid = valid.any(0)
-                            buffers[worker_idx] = buffer[..., valid]
+                            buffers[idx] = buffer[..., valid]
                     else:
                         for buffer in filter(None.__ne__, self.buffers):
                             with buffer.unlock_():
@@ -3865,11 +3861,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 else:
                     buffers = self.buffers
 
-                # Skip frame counting if this worker didn't send data this iteration
-                # (happens when reusing buffers or on first iteration with some workers)
-                if idx not in buffers:
-                    continue
-
                 workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
@@ -3878,17 +3869,15 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if self.replay_buffer is not None:
                 yield
                 self._frames += sum(
-                    [
-                        self.frames_per_batch_worker(worker_idx)
-                        for worker_idx in range(self.num_workers)
-                    ]
+                    self.frames_per_batch_worker(worker_idx)
+                    for worker_idx in range(self.num_workers)
                 )
                 continue
 
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
-            for idx, buffer in enumerate(filter(None.__ne__, buffers)):
+            for idx in range(self.num_workers):
                 buffer = buffers[idx]
                 traj_ids = buffer.get(("collector", "traj_ids"))
                 if preempt:
