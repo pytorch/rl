@@ -7,10 +7,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import nullcontext
 from typing import overload, TYPE_CHECKING
-from torchrl._utils import logger as torchrl_logger
+
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
     from torchrl.weight_update import WeightSyncScheme
 
 __all__ = ["ModuleTransform", "RayModuleTransform"]
-
 
 
 class RayModuleTransform(RayTransform):
@@ -55,9 +55,10 @@ class RayModuleTransform(RayTransform):
             weight_sync_scheme.init_on_sender()
 
             # Initialize receiver in the actor
-            torchrl_logger.debug(f"Setting up weight sync scheme on sender -- sender will do the remote call")
-            weight_sync_scheme.setup_connection_and_weights()
-
+            torchrl_logger.debug(
+                "Setting up weight sync scheme on sender -- sender will do the remote call"
+            )
+            weight_sync_scheme.connect()
 
     @property
     def in_keys(self):

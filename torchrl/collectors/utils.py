@@ -398,5 +398,5 @@ def _make_policy_factory(
             worker_idx=worker_idx,
         )
         # Synchronize initial weights
-        weight_sync_scheme.setup_connection_and_weights(worker_idx=worker_idx)
+        weight_sync_scheme.connect(worker_idx=worker_idx)
     return policy

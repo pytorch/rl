@@ -443,8 +443,8 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         self._initialized_on_receiver = True
         try:
             result = self._init_on_receiver_impl(
-            model_id=model_id, context=context, **kwargs
-        )
+                model_id=model_id, context=context, **kwargs
+            )
         except Exception:
             self._initialized_on_receiver = False
             raise
@@ -1031,14 +1031,14 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         return self.initialized_on_receiver
 
     @overload
-    def setup_connection_and_weights(self, *, worker_idx: int | None = None) -> None:
+    def connect(self, *, worker_idx: int | None = None) -> None:
         ...
 
     @overload
-    def setup_connection_and_weights(self, *, weights: Any | None = None) -> None:
+    def connect(self, *, weights: Any | None = None) -> None:
         ...
 
-    def setup_connection_and_weights(
+    def connect(
         self, *, worker_idx: int | None = None, weights: Any | None = None
     ) -> None:
         """Method to be called once the workers have started.
@@ -1072,7 +1072,9 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
                 )
             self.synchronized_on_receiver = True
             try:
-                self._setup_connection_and_weights_on_receiver_impl(worker_idx=worker_idx)
+                self._setup_connection_and_weights_on_receiver_impl(
+                    worker_idx=worker_idx
+                )
             except Exception:
                 self.synchronized_on_receiver = False
                 raise
@@ -1082,14 +1084,17 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             )
 
     def _setup_connection_and_weights_on_sender_impl(
-        self, *, worker_idx: int | None = None, weights: Any | None = None,
+        self,
+        *,
+        worker_idx: int | None = None,
+        weights: Any | None = None,
     ) -> None:
         """Synchronize weights on sender side.
 
         Default implementation uses transport's setup_connection_and_weights_on_sender().
         Subclasses may override for custom behavior.
         """
-        if self.shared_transport is not None:
+        if self._shared_transport is not None:
             # We only need to synchronize once
             self.shared_transport.setup_connection_and_weights_on_sender()
             return

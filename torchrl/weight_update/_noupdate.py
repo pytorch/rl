@@ -80,7 +80,7 @@ class NoWeightSyncScheme(WeightSyncScheme):
         """No-op receive - always returns False."""
         return False
 
-    def setup_connection_and_weights(self, *, worker_idx: int | None = None) -> None:
+    def connect(self, *, worker_idx: int | None = None) -> None:
         """No-op synchronize - does nothing."""
         if self._initialized_on_sender:
             self.synchronized_on_sender = True

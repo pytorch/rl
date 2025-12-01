@@ -26,6 +26,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         super().__init__()
         self.backend = backend
         self.sync = sync
+        self._num_workers = None
 
     def _init_on_sender_impl(
         self,
@@ -36,6 +37,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         **kwargs,
     ) -> None:
         self.model_id = model_id
+        self._num_workers = num_workers
 
         # Attach context so we can resolve the model and prepare
         # weights on demand via scheme.prepare_weights().
@@ -47,7 +49,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         for i in range(num_workers):
             rank = i + 1  # Workers are 1-indexed in distributed
             transport = self.create_transport(
-                store=context._store, rank=rank, weights_buffer=weights_buffer
+                store=context._store, rank=rank, weights_buffer=weights_buffer, sync=self.sync
             )
             self._register_worker_sender(worker_idx=i, transport=transport)
 
@@ -87,11 +89,74 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
         weights_buffer = self._get_weights_buffer_from_model(model)
         self._receiver_transport = self.create_transport(
-            store=store, rank=rank, weights_buffer=weights_buffer
+            store=store, rank=rank, weights_buffer=weights_buffer, sync=self.sync
         )
 
         # Store worker_idx for synchronize_weights
         self._worker_idx = rank
+
+    def _setup_connection_and_weights_on_sender_impl(
+        self, *, worker_idx: int | None = None, weights: Any | None = None
+    ) -> None:
+        """Send initial weights to all workers during connect().
+
+        If the sender has a stateful model (weights available), send them
+        to all workers so they start with the correct weights.
+
+        Note: This uses direct torch.distributed send/recv without TCPStore
+        signaling to avoid interfering with the main collection loop.
+        """
+        # Check if we have weights to send
+        if self.model is None:
+            torchrl_logger.debug(
+                "DistributedWeightSyncScheme: No model on sender, skipping initial weight sync"
+            )
+            return
+
+        # Prepare weights from model
+        weights = self._get_weights_buffer_from_model(self.model)
+        if weights is None or weights.is_empty():
+            torchrl_logger.debug(
+                "DistributedWeightSyncScheme: Empty weights, skipping initial weight sync"
+            )
+            return
+
+        torchrl_logger.debug(
+            f"DistributedWeightSyncScheme: Sending initial weights to {self._num_workers} workers"
+        )
+
+        # Send to all workers using direct torch.distributed (no TCPStore signaling)
+        for i, transport in enumerate(self._iterate_transports()):
+            if worker_idx is not None and i != worker_idx:
+                continue
+            transport.send_initial_weights(weights)
+
+    def _setup_connection_and_weights_on_receiver_impl(
+        self, *, worker_idx: int | None = None
+    ) -> None:
+        """Receive initial weights from sender during connect().
+
+        The receiver always has a model that needs weights, so we block
+        waiting for the initial weights from the sender.
+        """
+        if self._receiver_transport is None:
+            return
+
+        # Use stored worker_idx if not provided
+        if worker_idx is None:
+            worker_idx = self._worker_idx
+
+        torchrl_logger.debug(
+            f"DistributedWeightSyncScheme: Worker {worker_idx} waiting for initial weights"
+        )
+
+        # Receive initial weights (blocking, no TCPStore coordination)
+        weights = self._receiver_transport.receive_initial_weights()
+        if weights is not None and self.model is not None:
+            self._strategy.apply_weights(self.model, weights, inplace=False)
+            torchrl_logger.debug(
+                f"DistributedWeightSyncScheme: Worker {worker_idx} received and applied initial weights"
+            )
 
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create distributed transport for a specific worker."""
@@ -226,9 +291,42 @@ class DistributedTransport:
         """Check if torch.distributed is initialized."""
         return torch.distributed.is_initialized()
 
+    def send_initial_weights(self, weights: Any) -> None:
+        """Send initial weights during connect() without TCPStore signaling.
+
+        This is used for the initial weight sync during connect() to avoid
+        interfering with the main collection loop's TCPStore-based coordination.
+        """
+        if self._rank is None:
+            return
+
+        torchrl_logger.debug(
+            f"DistributedTransport: Sending initial weights to rank {self._rank}"
+        )
+        if self._sync:
+            weights.send(self._rank)
+        else:
+            weights.isend(self._rank)
+
+    def receive_initial_weights(self) -> Any:
+        """Receive initial weights during connect() without TCPStore signaling.
+
+        This is used for the initial weight sync during connect() to avoid
+        interfering with the main collection loop's TCPStore-based coordination.
+
+        Returns:
+            The received weights TensorDict.
+        """
+        torchrl_logger.debug("DistributedTransport: Receiving initial weights from rank 0")
+        if self._sync:
+            self._weights_buffer.recv(src=0)
+        else:
+            self._weights_buffer.irecv(src=0)
+        return self._weights_buffer
+
     def setup_connection_and_weights_on_sender(self) -> None:
-        """No-op for DistributedTransport - weights are sent via send_weights()."""
+        """No-op for DistributedTransport - handled by scheme."""
 
     def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
-        """No-op for DistributedTransport - weights are received via receive_weights()."""
+        """No-op for DistributedTransport - handled by scheme."""
         return None

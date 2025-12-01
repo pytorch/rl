@@ -7,6 +7,7 @@ from ._distributed import DistributedTransport, DistributedWeightSyncScheme
 from ._mp import MPTransport, MultiProcessWeightSyncScheme
 from ._noupdate import NoWeightSyncScheme
 from ._ray import (
+    # RayActorTransport and RayModuleTransformTransport are deprecated aliases for RayTransport
     RayActorTransport,
     RayModuleTransformScheme,
     RayModuleTransformTransport,
@@ -26,8 +27,8 @@ __all__ = [
     "MPTransport",
     "SharedMemTransport",
     "RayTransport",
-    "RayActorTransport",
-    "RayModuleTransformTransport",
+    "RayActorTransport",  # Deprecated alias for RayTransport
+    "RayModuleTransformTransport",  # Deprecated alias for RayTransport
     "RPCTransport",
     "DistributedTransport",
     # Schemes

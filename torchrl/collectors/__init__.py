@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from torchrl.modules.tensordict_module.exploration import RandomPolicy
+
 from ._base import DataCollectorBase
 
 from ._multi_async import MultiaSyncDataCollector
@@ -22,6 +24,7 @@ from .weight_update import (
 __all__ = [
     "WeightUpdaterBase",
     "VanillaWeightUpdater",
+    "RandomPolicy",
     "RayWeightUpdater",
     "RemoteModuleWeightUpdater",
     "MultiProcessedWeightUpdater",

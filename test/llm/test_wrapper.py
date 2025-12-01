@@ -7,8 +7,10 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import threading
 
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
 
 import pytest
@@ -412,8 +414,6 @@ def monkey_patch_forward_for_timing():
 @pytest.fixture
 def monkey_patch_forward_for_instrumentation():
     """Fixture to monkey patch the forward method to add detailed processing event tracking."""
-    import threading
-    import time
 
     # Track processing events
     processing_events = []
@@ -2706,8 +2706,6 @@ class TestBatching:
         monkey_patch_forward_for_timing,
     ):
         """Test that with min_batch_size=1, first request is processed immediately and subsequent ones are grouped."""
-        import time
-        from concurrent.futures import ThreadPoolExecutor, wait
 
         # Create wrapper using helper function
         wrapper = create_batching_test_wrapper(

@@ -18,7 +18,6 @@ import sys
 from copy import copy
 from functools import partial
 from sys import platform
-from torchrl import logger as torchrl_logger
 
 import numpy as np
 
@@ -39,6 +38,7 @@ from tensordict import (
 from tensordict.nn import TensorDictModule, TensorDictSequential, WrapModule
 from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
+from torchrl import logger as torchrl_logger
 from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -57,7 +57,6 @@ from torchrl.data import (
     Unbounded,
     UnboundedContinuous,
 )
-from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs import (
     ActionMask,
     BinarizeReward,
@@ -139,7 +138,14 @@ from torchrl.envs.transforms.transforms import (
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
-from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal, RandomPolicy
+from torchrl.modules import (
+    GRUModule,
+    LSTMModule,
+    MLP,
+    ProbabilisticActor,
+    RandomPolicy,
+    TanhNormal,
+)
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.record.recorder import VideoRecorder
 from torchrl.testing.modules import BiasModule

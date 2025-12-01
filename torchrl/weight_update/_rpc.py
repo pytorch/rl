@@ -93,7 +93,6 @@ class RPCWeightSyncScheme(WeightSyncScheme):
         Returns:
             The received weights as a TensorDict, or None if no context/policy available.
         """
-
         if not self.initialized_on_receiver:
             raise RuntimeError(
                 "Must be initialized on receiver before receiving weights"

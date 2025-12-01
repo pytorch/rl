@@ -104,7 +104,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             ...     worker_idx=0
             ... )
         """
-
         attr = _resolve_attr(self, attr_path)
         if callable(attr):
             return attr(*args, **kwargs)
@@ -514,7 +513,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         weight_recv_schemes: dict[str, WeightSyncScheme],
         *,
         synchronize_weights: bool = True,
-    ):
+    ):  # noqa: D417
         """Set up receiver schemes for this collector to receive weights from parent collectors.
 
         This method initializes receiver schemes and stores them in _receiver_schemes
@@ -560,9 +559,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     torchrl_logger.debug(
                         f"Synchronizing weights for scheme {type(scheme).__name__} for model '{model_id}'"
                     )
-                    scheme.setup_connection_and_weights(
-                        worker_idx=getattr(self, "_worker_idx", None)
-                    )
+                    scheme.connect(worker_idx=getattr(self, "_worker_idx", None))
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:

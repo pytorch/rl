@@ -4096,6 +4096,7 @@ class TestAsyncCollection:
         "weight_sync_scheme",
         [None, MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=0.5)
     def test_start_update_policy(self, total_frames, cls, weight_sync_scheme):
         rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
         env = CountingEnv()

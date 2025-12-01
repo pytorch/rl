@@ -209,7 +209,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             context: Optional context object providing worker_idx and model
             **kwargs: Alternative to context (worker_idx, model, etc.)
         """
-
         # Extract parameters from context or kwargs
         if context is not None:
             worker_idx = getattr(context, "worker_idx", None)
@@ -360,7 +359,10 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         self._pending_async = True
 
     def _setup_connection_and_weights_on_sender_impl(
-        self, *, worker_idx: int | None = None, weights: Any | None = None,
+        self,
+        *,
+        worker_idx: int | None = None,
+        weights: Any | None = None,
     ) -> None:
         """Synchronize weights with workers before collection starts.
 

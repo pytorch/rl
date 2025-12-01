@@ -656,7 +656,7 @@ class RayCollector(DataCollectorBase):
             torchrl_logger.debug(
                 f"RayCollector: Synchronizing weights for model '{model_id}'"
             )
-            scheme.setup_connection_and_weights()
+            scheme.connect()
 
         # Block sync
         torchrl_logger.debug(

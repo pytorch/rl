@@ -101,6 +101,8 @@ In this setup:
 
 from __future__ import annotations
 
+import time
+
 from typing import Any, Literal
 
 import torch
@@ -230,7 +232,6 @@ class VLLMCollectiveTransport:
 
             # Small delay to ensure worker background threads have entered the NCCL collective
             # This prevents a race where the trainer starts NCCL before workers are ready
-            import time
 
             time.sleep(0.2)
 

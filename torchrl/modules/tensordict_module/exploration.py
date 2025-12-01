@@ -14,7 +14,7 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.utils import expand_as_right, expand_right, NestedKey
+from tensordict.utils import expand_as_right, expand_right
 from torch import nn
 
 from torchrl.data.tensor_specs import Composite, TensorSpec

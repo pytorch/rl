@@ -215,7 +215,7 @@ def _run_collector(
                 rank=rank,
             )
             torchrl_logger.debug(f"RANK {rank} -- initial weight sync (if any)")
-            scheme.setup_connection_and_weights()
+            scheme.connect()
             torchrl_logger.debug(
                 f"RANK {rank} -- initial weight sync for '{model_id}' completed"
             )
@@ -686,6 +686,9 @@ class DistributedDataCollector(DataCollectorBase):
             self.register_scheme_receiver(weight_recv_schemes)
 
         self._make_container()
+        if self._weight_sync_schemes is not None:
+            for model_id, scheme in self._weight_sync_schemes.items():
+                scheme.connect()
 
     @property
     def device(self) -> list[torch.device]:

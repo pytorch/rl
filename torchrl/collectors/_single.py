@@ -819,7 +819,7 @@ class SyncDataCollector(DataCollectorBase):
                 if not scheme.initialized_on_sender:
                     scheme.init_on_sender(model_id=model_id, context=self)
                 if not scheme.synchronized_on_sender:
-                    scheme.setup_connection_and_weights()
+                    scheme.connect()
             self.weight_updater = None  # Don't use legacy system
         elif weight_updater is not None:
             # Use legacy weight updater system if explicitly provided

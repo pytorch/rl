@@ -146,7 +146,7 @@ class SharedMemTransport:
                     weights_to_update.requires_grad is False
                 ), "Gradients should not be required for weights."
                 buffer.update_(weights_to_update, non_blocking=True)
-            except:
+            except Exception:
                 torchrl_logger.info(
                     f"Failed to update buffer {buffer} with {weights_to_update}."
                 )
@@ -463,6 +463,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Store worker_idx for synchronize_weights
         self.worker_idx = worker_idx
 
+        self.create_transport()
+
     def get_weight_queues(self):
         """Get the per-worker weight initialization queues.
 
@@ -550,10 +552,49 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         Returns:
             The weights TensorDict if available, None otherwise.
         """
-        # First try to get from the shared transport (works for params_map initialization)
-        if self.shared_transport is not None:
+        # First, try to get from the shared transport (works for params_map initialization)
+        if self._shared_transport is not None:
             # Return the first unique weight (all workers share the same logical weights)
             return self.shared_transport.unique_weights[0]
 
         # Fall back to parent implementation (works for context-based initialization)
         return super().weights
+
+    def _setup_connection_and_weights_on_receiver_impl(
+        self, *, worker_idx: int | None = None
+    ) -> None:
+        """Synchronize weights on receiver side for shared memory.
+
+        Reads the shared memory buffer from the queue and applies it to the model.
+        If a receiver_transport is set (e.g., for MultiProcessWeightSyncScheme),
+        defers to the base class implementation.
+        """
+        # If receiver_transport is set (e.g., MultiProcess subclass), use base behavior
+        if self._receiver_transport is not None:
+            return super()._setup_connection_and_weights_on_receiver_impl(
+                worker_idx=worker_idx
+            )
+
+        # SharedMem-specific: use shared_transport
+        if self._shared_transport is None:
+            raise RuntimeError(
+                "SharedMemWeightSyncScheme requires shared_transport to be set."
+            )
+
+        # Use stored worker_idx if not provided
+        if worker_idx is None:
+            worker_idx = self.worker_idx
+
+        if worker_idx is None:
+            raise RuntimeError(
+                "worker_idx must be provided for _setup_connection_and_weights_on_receiver_impl."
+            )
+
+        # Read shared memory buffer from queue
+        weights = self._shared_transport.setup_connection_and_weights_on_receiver(
+            worker_idx=worker_idx
+        )
+
+        # Apply weights to model
+        if weights is not None and self.model is not None:
+            self._strategy.apply_weights(self.model, weights, inplace=False)

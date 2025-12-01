@@ -860,9 +860,6 @@ class _MultiDataCollector(DataCollectorBase):
             for model_id, scheme in self._weight_sync_schemes.items():
                 if not scheme.initialized_on_sender:
                     scheme.init_on_sender(model_id=model_id, context=self)
-                else:
-                    # Check we have access to the weights
-                    scheme.check_weight_access()
 
         # Create a policy on the right device
         policy_factory = self.policy_factory
@@ -1001,11 +998,11 @@ also that the state dict is synchronised across processes if needed."""
             # start with policy
             policy_scheme = self._weight_sync_schemes.get("policy")
             if policy_scheme is not None:
-                policy_scheme.setup_connection_and_weights()
+                policy_scheme.connect()
             for key, scheme in self._weight_sync_schemes.items():
                 if key == "policy":
                     continue
-                scheme.setup_connection_and_weights()
+                scheme.connect()
 
         # Wait for workers to be ready
         for i, pipe_parent in enumerate(self.pipes):
