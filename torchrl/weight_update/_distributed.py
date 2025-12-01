@@ -49,7 +49,10 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         for i in range(num_workers):
             rank = i + 1  # Workers are 1-indexed in distributed
             transport = self.create_transport(
-                store=context._store, rank=rank, weights_buffer=weights_buffer, sync=self.sync
+                store=context._store,
+                rank=rank,
+                weights_buffer=weights_buffer,
+                sync=self.sync,
             )
             self._register_worker_sender(worker_idx=i, transport=transport)
 
@@ -317,7 +320,9 @@ class DistributedTransport:
         Returns:
             The received weights TensorDict.
         """
-        torchrl_logger.debug("DistributedTransport: Receiving initial weights from rank 0")
+        torchrl_logger.debug(
+            "DistributedTransport: Receiving initial weights from rank 0"
+        )
         if self._sync:
             self._weights_buffer.recv(src=0)
         else:

@@ -187,13 +187,17 @@ class WeightStrategy:
             if any(isinstance(key, str) and "." in key for key in destination.keys()):
                 destination = destination.unflatten_keys(".")
 
-        if not isinstance(weights, TensorDictBase) or not isinstance(
-            destination, TensorDictBase
-        ):
+        if not isinstance(weights, TensorDictBase):
             raise ValueError(
-                f"Unsupported weights or destination type: {type(weights)=} or {type(destination)=}. Expected TensorDictBase."
+                f"Unsupported weights type: {type(weights)}. Must be dict or TensorDictBase."
             )
-            # Apply TensorDict format
+        if not isinstance(destination, TensorDictBase):
+            if not weights.is_empty():
+                raise ValueError(
+                    "Non-empty weights are associated with a non-dict, non-td, non-Module destination."
+                )
+            return
+
         try:
             if not inplace:
                 destination.update(weights)

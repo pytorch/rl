@@ -993,7 +993,7 @@ also that the state dict is synchronised across processes if needed."""
 
         # Synchronize initial weights with workers AFTER starting processes but BEFORE waiting for "instantiated"
         # This must happen after proc.start() but before workers send "instantiated" to avoid deadlock:
-        # Workers will call receiver.synchronize_weights() during init and may block waiting for data
+        # Workers will call receiver.collect() during init and may block waiting for data
         if self._weight_sync_schemes:
             # start with policy
             policy_scheme = self._weight_sync_schemes.get("policy")

@@ -478,11 +478,9 @@ class RPCDataCollector(DataCollectorBase):
                 scheme.init_on_sender(
                     model_id=model_id,
                     num_workers=self.num_workers,
-                    collector_infos=self.collector_infos,
-                    collector_class=self.collector_class,
-                    collector_rrefs=self.collector_rrefs,
                     context=self,
                 )
+                scheme.connect()
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:

@@ -50,7 +50,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         ...     total_frames=1000,
         ...     weight_sync_schemes={"policy": scheme},
         ... )
-        >>> # scheme.synchronize_weights() is called automatically by collector
+        >>> # scheme.collect() is called automatically by collector
         >>> # Weights are created on-demand and sent to workers efficiently
 
     Note:

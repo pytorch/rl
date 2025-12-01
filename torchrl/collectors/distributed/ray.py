@@ -647,7 +647,7 @@ class RayCollector(DataCollectorBase):
             for model_id in self._weight_sync_schemes:
                 self._sync_futures.append(
                     remote_collector.cascade_execute.remote(
-                        f"_receiver_schemes['{model_id}'].synchronize_weights"
+                        f"_receiver_schemes['{model_id}'].connect"
                     )
                 )
 

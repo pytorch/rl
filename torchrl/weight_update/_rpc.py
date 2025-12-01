@@ -22,14 +22,25 @@ class RPCWeightSyncScheme(WeightSyncScheme):
         model_id: str,
         context: Any = None,
         num_workers: int,
-        collector_infos: list[Any],
-        collector_rrefs: list[Any],
-        collector_class: Any,
     ) -> None:
         # Store model_id and context on scheme
         self.model_id = model_id
         if context is not None:
             self.context = context
+        else:
+            raise RuntimeError(f"Expected a context for {type(self).__name__}.")
+        collector_infos = getattr(self.context, "collector_infos", None)
+        collector_rrefs = getattr(self.context, "collector_rrefs", None)
+        collector_class = getattr(self.context, "collector_class", None)
+        if (
+            collector_infos is None
+            or collector_rrefs is None
+            or collector_class is None
+        ):
+            raise RuntimeError(
+                "RPCWeightSyncScheme requires a context with the following attributes: "
+                "(context.collector_infos, context.collector_rrefs, context.collector_class)"
+            )
 
         # Create transports for each remote collector
         # worker_rank is i+1 because rank 0 is the main/trainer process

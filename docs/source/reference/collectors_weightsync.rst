@@ -35,76 +35,133 @@ transfer:
 
 Each of these classes is detailed below.
 
+.. note::
+    **For most users, weight synchronization happens automatically.** When using TorchRL collectors
+    with the ``weight_sync_schemes`` argument, the collector handles all initialization, connection,
+    and synchronization calls internally. You simply call ``collector.update_policy_weights_()`` and
+    the weights are propagated to all workers.
+
+    The detailed lifecycle documentation below is primarily intended for developers who want to:
+
+    - Understand the internals of weight synchronization
+    - Implement custom weight sync schemes for specialized use cases (e.g., new distributed backends, custom serialization)
+    - Debug synchronization issues in complex distributed setups
+    - Use weight sync schemes outside of collectors for custom multiprocessing scenarios
+
 Lifecycle of Weight Synchronization
 -----------------------------------
 
-Weight synchronization follows a **two-phase initialization pattern**:
+Weight synchronization follows a **two-phase initialization pattern** with a clear separation between
+local setup and inter-process communication:
+
+.. code-block:: text
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                        SENDER (Main Process)                            │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │  1. scheme.init_on_sender(model_id, context, ...)                       │
+    │     └─ Sets up local state, creates transports, NO communication        │
+    │                                                                         │
+    │  2. Send scheme to receiver (via multiprocessing/pickle)                │
+    │     └─ Scheme object is passed to worker processes                      │
+    │                                                                         │
+    │  3. scheme.connect()  ◄──── BLOCKING RENDEZ-VOUS ────►                  │
+    │     └─ Sends initial weights (if model is stateful)                     │
+    │                                                                         │
+    │  4. scheme.send(weights)  [ready for ongoing updates]                   │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                       RECEIVER (Worker Process)                         │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │  1. scheme.init_on_receiver(model_id, context, ...)                     │
+    │     └─ Sets up local state, resolves model, NO communication            │
+    │                                                                         │
+    │  2. scheme.connect()  ◄──── BLOCKING RENDEZ-VOUS ────►                  │
+    │     └─ Receives initial weights, applies to model                       │
+    │     └─ (May be no-op if sender handles via remote call)                 │
+    │                                                                         │
+    │  3. scheme.receive()  [for ongoing updates]                             │
+    └─────────────────────────────────────────────────────────────────────────┘
 
 Phase 1: Initialization (No Communication)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The first phase uses ``init_on_sender()`` and ``init_on_receiver()`` methods. These methods:
+The ``init_on_sender()`` and ``init_on_receiver()`` methods prepare local state without any
+inter-process communication:
 
 - Set up local attributes and references (model, context, worker indices)
 - Create transport objects and register them
 - Prepare queues, buffers, or other communication primitives
 - **Do NOT perform any inter-worker communication**
 
-This phase can happen independently on sender and receiver sides, in any order.
+This separation allows the scheme to be pickled and sent to worker processes after sender
+initialization but before any actual communication occurs.
 
 .. code-block:: python
 
-    # On sender (main process)
+    # === SENDER (main process) ===
     scheme = SharedMemWeightSyncScheme()
     scheme.init_on_sender(
         model_id="policy",
-        context=collector,  # or explicit params
+        context=collector,  # or explicit params like weights, devices, num_workers
     )
 
-    # On receiver (worker process) - can happen before or after sender init
+    # === Scheme is passed to workers via multiprocessing ===
+    # (The scheme object is pickled and sent to worker processes)
+
+    # === RECEIVER (worker process) ===
     scheme.init_on_receiver(
         model_id="policy",
-        context=inner_collector,
+        context=inner_collector,  # or explicit params like model, worker_idx
     )
 
 Phase 2: Connection and Initial Weights (Rendez-vous)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The second phase uses ``connect()`` which dispatches to:
+The ``connect()`` method performs the actual inter-process communication. **Both sender and receiver
+must call this method** (simultaneously or in the expected order for the scheme):
 
-- ``_setup_connection_and_weights_on_sender_impl()`` on the sender side
-- ``_setup_connection_and_weights_on_receiver_impl()`` on the receiver side
-
-This phase performs the actual inter-worker communication:
-
-1. **Connection rendez-vous**: Sender and receiver synchronize (e.g., torch.distributed process group initialization,
-   shared memory buffer exchange via queues)
-2. **Initial weight transfer** (optional): If the model has weights, they are sent from sender to receivers
+1. **Connection rendez-vous**: Sender and receiver synchronize (e.g., torch.distributed process group
+   initialization, shared memory buffer exchange via queues)
+2. **Initial weight transfer**: If the sender has a stateful model, weights are sent to receivers
+   so they start with the correct parameters
 
 .. code-block:: python
 
-    # Both sides must call this - order depends on the scheme
-    # Sender side:
-    scheme.connect()
+    # === Called simultaneously on both ends ===
 
-    # Receiver side (in worker process):
-    scheme.connect(worker_idx=0)
+    # Sender side (main process):
+    scheme.connect()  # Blocks until receivers are ready, sends initial weights
+
+    # Receiver side (worker process):
+    scheme.connect(worker_idx=0)  # Blocks until sender sends, receives initial weights
 
 .. note::
-    The ``connect()`` method is a **blocking rendez-vous** for most schemes. Both sender
-    and receiver must call it for the synchronization to complete. The exact blocking behavior depends on the
-    scheme:
-    
-    - **Queue-based schemes** (SharedMem, MultiProcess): Sender puts to queue, receiver blocks reading from queue
-    - **Distributed schemes** (Ray, RPC, Distributed): Both sides block on ``init_process_group`` or similar collective operations
+    The ``connect()`` method is a **blocking rendez-vous** for most schemes. The exact behavior
+    depends on the scheme:
 
-Ongoing Weight Updates
-~~~~~~~~~~~~~~~~~~~~~~
+    - **Queue-based schemes** (SharedMem, MultiProcess): Sender puts to queue, receiver blocks reading
+    - **Distributed schemes** (Distributed, Ray): Both sides block on ``torch.distributed.send/recv``
+    - **RPC/Ray with remote calls**: Receiver's ``connect()`` may be a no-op if the sender triggers
+      the receiver via a remote call (e.g., ``RayModuleTransformScheme``)
 
-After initialization, weight updates use:
+Phase 3: Ongoing Weight Updates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``send()`` / ``send_async()`` on the sender side
-- ``receive()`` on the receiver side (or automatic for shared memory)
+After ``connect()`` completes, the scheme is ready for ongoing weight synchronization:
+
+- ``send()`` / ``send_async()`` on the sender side pushes new weights
+- ``receive()`` on the receiver side (or automatic for shared memory schemes)
+
+.. code-block:: python
+
+    # Training loop
+    for batch in dataloader:
+        loss = train_step(batch)
+
+        # Push updated weights to workers
+        scheme.send(new_weights)
 
 For some schemes (Ray, RPC), the sender's ``send()`` makes a remote call that triggers the receiver
 automatically, so the user doesn't need to explicitly poll ``receive()``.
@@ -182,9 +239,9 @@ training scenarios where processes are already part of a process group.
      - Creates transport with store + rank
      - None
    * - ``connect``
-     - No-op (process group already exists)
-     - No-op
-     - None
+     - Sends initial weights via ``torch.distributed.send()``
+     - Receives initial weights via ``torch.distributed.recv()``, applies to model
+     - **Rendez-vous**: torch.distributed send/recv
    * - ``send``
      - Sets TCPStore flag + ``torch.distributed.send()``
      - Must poll TCPStore, then call ``receive()``
@@ -329,31 +386,39 @@ Weight sync schemes integrate seamlessly with TorchRL collectors. The collector 
 Using Weight Sync Schemes Standalone
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For custom multiprocessing scenarios, you can use schemes directly:
+For custom multiprocessing scenarios, you can use schemes directly. The key is to follow the
+two-phase pattern: initialize first (no communication), then connect (blocking rendez-vous):
 
 .. code-block:: python
 
+    import torch
     import torch.nn as nn
     from torch import multiprocessing as mp
     from tensordict import TensorDict
     from torchrl.weight_update import SharedMemWeightSyncScheme
 
     def worker_fn(scheme, worker_idx):
-        # Phase 1: Initialize on receiver (no communication)
+        """Worker process - receives scheme via pickle."""
+        # Create local model (weights will be overwritten by sender's weights)
         model = nn.Linear(4, 2)
-        scheme.init_on_receiver(model_id="policy", model=model, worker_idx=worker_idx)
-        
-        # Phase 2: Rendez-vous - receive initial weights
-        scheme.connect(worker_idx=worker_idx)
-        
-        # Now model has the weights from sender
-        # For SharedMem, subsequent updates are automatic (shared memory)
 
-    # Main process
+        # PHASE 1: Initialize on receiver (no communication yet)
+        scheme.init_on_receiver(model_id="policy", model=model, worker_idx=worker_idx)
+
+        # PHASE 2: Blocking rendez-vous - receive initial weights from sender
+        scheme.connect(worker_idx=worker_idx)
+        # model now has the sender's weights!
+
+        # Ready to work - for SharedMem, weight updates are automatic
+        while True:
+            # ... use model for inference ...
+            # model.parameters() automatically reflect sender's updates
+
+    # === MAIN PROCESS (Sender) ===
     policy = nn.Linear(4, 2)
     scheme = SharedMemWeightSyncScheme()
 
-    # Phase 1: Initialize on sender
+    # PHASE 1: Initialize on sender (no communication yet)
     scheme.init_on_sender(
         model_id="policy",
         weights=TensorDict.from_module(policy),
@@ -361,18 +426,19 @@ For custom multiprocessing scenarios, you can use schemes directly:
         num_workers=2,
     )
 
-    # Start workers
+    # Spawn workers - scheme is pickled and sent to each worker
     workers = [mp.Process(target=worker_fn, args=(scheme, i)) for i in range(2)]
     for w in workers:
         w.start()
 
-    # Phase 2: Rendez-vous - send initial weights
+    # PHASE 2: Blocking rendez-vous - send initial weights to workers
     scheme.connect()
+    # Workers now have copies of policy's weights!
 
-    # Ongoing updates (zero-copy for shared memory)
-    for _ in range(10):
-        # ... training ...
-        scheme.send()  # Updates shared memory in-place
+    # PHASE 3: Ongoing updates (zero-copy for shared memory)
+    for epoch in range(10):
+        # ... training step updates policy weights ...
+        scheme.send()  # Workers automatically see the new weights
 
     for w in workers:
         w.join()

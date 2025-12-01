@@ -115,12 +115,13 @@ class DistributedCollectorBase:
                 total += data.numel()
                 assert data.numel() == frames_per_batch
             assert data.names[-1] == "time"
-            collector.shutdown()
             assert total == 1000
             queue.put(("passed", None))
         except Exception as e:
             tb = traceback.format_exc()
             queue.put(("not passed", (e, tb)))
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
     def test_distributed_collector_basic(self, frames_per_batch):
@@ -160,9 +161,10 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
             collector.shutdown()
             assert total == -frames_per_batch * (1000 // -frames_per_batch)
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {e}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     def test_distributed_collector_mult(self, frames_per_batch=200):
         """Testing multiple nodes."""
@@ -174,8 +176,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -202,9 +205,10 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
             collector.shutdown()
             assert total == 200
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize("sync", [False, True])
     def test_distributed_collector_sync(self, sync):
@@ -216,8 +220,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -244,9 +249,10 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
             collector.shutdown()
             assert total == 200
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -265,8 +271,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -314,9 +321,10 @@ class DistributedCollectorBase:
             assert (last_batch["action"] == 2).all(), last_batch["action"]
             collector.shutdown()
             assert total == total_frames
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -337,9 +345,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
+            out, maybe_err = queue.get(timeout=TIMEOUT)
             if out != "passed":
-                raise AssertionError(out)
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -421,7 +429,6 @@ class TestSyncCollector(DistributedCollectorBase):
             **cls.distributed_kwargs(),
         )
         try:
-
             total = 0
             first_batch = None
             last_batch = None
@@ -439,10 +446,12 @@ class TestSyncCollector(DistributedCollectorBase):
             else:
                 assert (last_batch["action"] == 1).all(), last_batch["action"]
             assert total == total_frames
-            queue.put("passed")
+            queue.put(("passed", None))
+        except Exception as e:
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
         finally:
             collector.shutdown()
-            queue.put("not passed")
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -463,8 +472,9 @@ class TestSyncCollector(DistributedCollectorBase):
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():

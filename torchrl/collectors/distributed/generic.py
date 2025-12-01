@@ -687,7 +687,7 @@ class DistributedDataCollector(DataCollectorBase):
 
         self._make_container()
         if self._weight_sync_schemes is not None:
-            for model_id, scheme in self._weight_sync_schemes.items():
+            for scheme in self._weight_sync_schemes.values():
                 scheme.connect()
 
     @property
