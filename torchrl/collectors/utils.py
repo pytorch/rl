@@ -276,6 +276,8 @@ def _cast(
         return Parameter(p, requires_grad=False)
     if isinstance(param_maybe_buffer, Buffer):
         return Buffer(p)
+    if p.requires_grad:
+        raise RuntimeError(f"Cannot cast tensor {p} with gradients")
     return p
 
 
@@ -307,6 +309,8 @@ def _cast(  # noqa
     if isinstance(param_maybe_buffer, Parameter):
         # Create parameter without gradients to avoid serialization issues
         return Parameter(p, requires_grad=False)
+    if p.requires_grad:
+        raise RuntimeError(f"Cannot cast tensor {p} with gradients")
     return p
 
 
@@ -394,5 +398,5 @@ def _make_policy_factory(
             worker_idx=worker_idx,
         )
         # Synchronize initial weights
-        weight_sync_scheme.synchronize_weights(worker_idx=worker_idx)
+        weight_sync_scheme.setup_connection_and_weights(worker_idx=worker_idx)
     return policy

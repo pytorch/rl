@@ -697,7 +697,7 @@ class TestSerializeScheme:
 
             def init_on_sender(scheme, pipe):
                 scheme.init_on_sender(params_map={0: shared_buffer})
-                scheme.synchronize_weights()
+                scheme.setup_connection_and_weights()
                 msg = pipe.recv()
                 assert msg == "registered"
 
@@ -705,7 +705,7 @@ class TestSerializeScheme:
                 scheme.init_on_receiver(
                     worker_idx=0, model=nn.Linear(4, 2, device="meta")
                 )
-                scheme.synchronize_weights()
+                scheme.setup_connection_and_weights()
                 child_pipe.send("registered")
 
             future_sender = threading.Thread(

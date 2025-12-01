@@ -9,7 +9,6 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torch import nn as nn
 
 from torchrl import logger as torchrl_logger
 from torchrl._utils import VERBOSE
@@ -118,18 +117,14 @@ def _main_async_collector(
             # weight_sync_schemes=weight_sync_schemes,
             worker_idx=worker_idx,
         )
-        # Set up weight receivers for worker process
-        # Note: For the "policy" model, initialization is done in _make_policy_factory
-        # This section only handles additional models (not "policy")
+        # Set up weight receivers for worker process using the standard register_scheme_receiver API.
+        # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
-            for model_id, scheme in weight_sync_schemes.items():
-                if not scheme.initialized_on_receiver:
-                    scheme.init_on_receiver(model_id=model_id, context=inner_collector)
-                    scheme.synchronize_weights()
+            inner_collector.register_scheme_receiver(weight_sync_schemes)
 
         use_buffers = inner_collector._use_buffers
         if verbose:
-            torchrl_logger.info("Sync data collector created")
+            torchrl_logger.debug("Sync data collector created")
         dc_iter = iter(inner_collector)
         j = 0
         pipe_child.send("instantiated")
@@ -161,10 +156,10 @@ def _main_async_collector(
             counter = 0
             data_in, msg = pipe_child.recv()
             if verbose:
-                torchrl_logger.info(f"worker {idx} received {msg}")
+                torchrl_logger.debug(f"worker {idx} received {msg}")
         elif not run_free:
             if verbose:
-                torchrl_logger.info(f"poll failed, j={j}, worker={idx}")
+                torchrl_logger.debug(f"poll failed, j={j}, worker={idx}")
             # default is "continue" (after first iteration)
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
@@ -184,7 +179,7 @@ def _main_async_collector(
 
                 counter += _timeout
                 if verbose:
-                    torchrl_logger.info(f"worker {idx} has counter {counter}")
+                    torchrl_logger.debug(f"worker {idx} has counter {counter}")
                 if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
                     raise RuntimeError(
                         f"This process waited for {counter} seconds "
@@ -198,7 +193,7 @@ def _main_async_collector(
         else:
             # placeholder, will be checked after
             if msg != "continue":
-                torchrl_logger.info(f"worker {idx} will reset {msg} to 'continue'")
+                torchrl_logger.debug(f"worker {idx} will reset {msg} to 'continue'")
             msg = "continue"
         if msg == "run_free":
             run_free = True
@@ -207,7 +202,7 @@ def _main_async_collector(
             # Capture shutdown / update / seed signal, but continue should not be expected
             if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
-                torchrl_logger.info(f"worker {idx} received {msg} while running free")
+                torchrl_logger.debug(f"worker {idx} received {msg} while running free")
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
@@ -228,86 +223,25 @@ def _main_async_collector(
 
         if msg == "update":
             # Legacy - weight updater
-            torchrl_logger.info(f"worker {idx} updating the params...")
+            torchrl_logger.debug(f"worker {idx} updating the params...")
             inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
 
-        if msg == "register_shared_weights":
-            # Shared memory lazy registration: main process sends buffer reference
-            if verbose:
-                torchrl_logger.info(
-                    f"worker {idx} received shared memory buffer registration"
-                )
-            model_id, shared_buffer = data_in
-
-            # Store the shared buffer reference for this model
-            # The receiver will use this buffer for all future weight accesses
-            if (
-                inner_collector._weight_receivers
-                and model_id in inner_collector._weight_receivers
-            ):
-                # Update receiver's buffer reference
-                receiver = inner_collector._weight_receivers[model_id]
-                # Store the shared buffer - the model's parameters should point to this
-                if hasattr(receiver, "_shared_weights"):
-                    receiver._shared_weights[model_id] = shared_buffer
-
-                # Apply the buffer to the model immediately
-                # Only apply if the model is an nn.Module (has learnable parameters)
-                try:
-                    model = receiver._resolve_model_ref()
-                except (ValueError, AttributeError) as e:
-                    # Model not registered or reference is invalid
-                    if verbose:
-                        torchrl_logger.warning(
-                            f"worker {idx} could not resolve model '{model_id}': {e}"
-                        )
-                    continue
-
-                if isinstance(model, nn.Module):
-                    receiver.apply_weights(shared_buffer)
-                else:
-                    if verbose:
-                        torchrl_logger.info(
-                            f"worker {idx} skipping weight application for non-nn.Module model '{model_id}'"
-                        )
-
-                if verbose:
-                    torchrl_logger.info(
-                        f"worker {idx} registered shared buffer for model '{model_id}'"
-                    )
-            else:
-                torchrl_logger.warning(
-                    f"worker {idx} received shared buffer for unknown model '{model_id}'"
-                )
-
-            # Send acknowledgment back to main process
-            pipe_child.send((None, "registered"))
-            has_timed_out = False
-            continue
-
         if msg == "update_weights":
-            # weight update protocol with schemes
+            # Weight update protocol: let the collector handle everything via receive_weights()
             if verbose:
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"worker {idx} received weight update via new protocol"
                 )
-            model_id, weights = data_in
 
-            # Apply weights using the appropriate receiver for this model
-            scheme = inner_collector._weight_sync_schemes.get(model_id)
-            if scheme is None:
-                raise KeyError(f"Model '{model_id}' not registered")
-            scheme.apply_weights(weights)
+            # receive_weights() will get weights from the registered receiver schemes
+            inner_collector.receive_weights()
 
-            # After applying weights, we continue collecting immediately as if we received
-            # a "continue" message. This ensures the worker keeps collecting data without
-            # waiting for an explicit continue from the main process.
+            # After applying weights, we continue collecting immediately
             has_timed_out = False
             msg = "continue"
-            # Now check if we should continue collecting
 
         if msg in ("continue", "continue_random"):
             # This block handles both explicit continue messages and implicit ones after weight updates
@@ -340,13 +274,13 @@ def _main_async_collector(
                 try:
                     queue_out.put((idx, j), timeout=_TIMEOUT)
                     if verbose:
-                        torchrl_logger.info(f"worker {idx} successfully sent data")
+                        torchrl_logger.debug(f"worker {idx} successfully sent data")
                     j += 1
                     has_timed_out = False
                     continue
                 except queue.Full:
                     if verbose:
-                        torchrl_logger.info(f"worker {idx} has timed out")
+                        torchrl_logger.debug(f"worker {idx} has timed out")
                     has_timed_out = True
                     continue
 
@@ -399,13 +333,13 @@ def _main_async_collector(
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
-                    torchrl_logger.info(f"worker {idx} successfully sent data")
+                    torchrl_logger.debug(f"worker {idx} successfully sent data")
                 j += 1
                 has_timed_out = False
                 continue
             except queue.Full:
                 if verbose:
-                    torchrl_logger.info(f"worker {idx} has timed out")
+                    torchrl_logger.debug(f"worker {idx} has timed out")
                 has_timed_out = True
                 continue
 
@@ -470,7 +404,7 @@ def _main_async_collector(
             del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
-                torchrl_logger.info(f"collector {idx} closed")
+                torchrl_logger.debug(f"collector {idx} closed")
             break
 
         else:

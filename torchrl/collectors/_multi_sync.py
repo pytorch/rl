@@ -193,7 +193,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
-    def frames_per_batch_worker(self, worker_idx: int | None) -> int:
+    def frames_per_batch_worker(self, *, worker_idx: int | None = None) -> int:
         if worker_idx is not None and isinstance(self._frames_per_batch, Sequence):
             return self._frames_per_batch[worker_idx]
         if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
@@ -332,7 +332,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 yield
                 self._frames += sum(
                     [
-                        self.frames_per_batch_worker(worker_idx)
+                        self.frames_per_batch_worker(worker_idx=worker_idx)
                         for worker_idx in range(self.num_workers)
                     ]
                 )
@@ -429,5 +429,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
+    # for RPC
+    def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        return super().receive_weights(policy_or_weights)
+
+    # for RPC
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()

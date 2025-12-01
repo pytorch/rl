@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import weakref
 from collections.abc import Callable
 from typing import Any
 
@@ -11,11 +10,11 @@ from tensordict import TensorDict, TensorDictBase
 
 from torch import multiprocessing as mp, nn
 
+from torchrl._utils import logger as torchrl_logger
+
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
     TransportBackend,
-    WeightReceiver,
-    WeightSender,
     WeightStrategy,
     WeightSyncScheme,
 )
@@ -44,10 +43,23 @@ class SharedMemTransport:
         )
         self._unique_weights = None
 
+    @property
+    def unique_weights(self) -> list[TensorDictBase]:
+        """Get the unique weights.
+
+        Returns:
+            The unique weights.
+        """
+        if self._unique_weights is None:
+            raise RuntimeError("Unique weights not set. Call register_weights() first.")
+        return self._unique_weights
+
     def register_weights(
         self, params_map: dict[int, mp.Queue], init_queues: dict[int, mp.Queue]
     ) -> None:
         """Initialize per-worker queues for shared memory buffer distribution."""
+        from torchrl.collectors.utils import _cast
+
         self._weight_queues = init_queues
         self._params_map = params_map
         # Create set of the unique weights
@@ -55,15 +67,17 @@ class SharedMemTransport:
         for weights in params_map.values():
             if id(weights) in [id(w) for w in self._unique_weights]:
                 continue
+            weights = weights.data.apply(_cast, weights)
             self._unique_weights.append(weights)
 
-    def synchronize_weights_on_sender(self) -> None:
+    def setup_connection_and_weights_on_sender(self) -> None:
         """Send shared memory buffer reference to workers via their per-worker queues.
 
         Both CPU and CUDA tensors maintain shared references through queues.
         Each worker reads from its own dedicated queue, to avoid race conditions.
 
         """
+        torchrl_logger.debug("Sending shared memory weights to workers.")
         if self._weight_queues is None:
             raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
 
@@ -71,8 +85,8 @@ class SharedMemTransport:
             weights = self._params_map[worker_idx]
             queue.put(weights)
 
-    def synchronize_weights_on_receiver(
-        self, worker_idx: int, timeout: float = 10.0
+    def setup_connection_and_weights_on_receiver(
+        self, *, worker_idx: int | None = None, timeout: float = 10.0
     ) -> TensorDictBase:
         """Receive shared memory buffer reference from sender via their per-worker queues.
 
@@ -85,6 +99,9 @@ class SharedMemTransport:
         Returns:
             The shared memory weights TensorDict.
         """
+        torchrl_logger.debug(
+            f"Receiving shared memory weights from worker {worker_idx}."
+        )
         if self._weight_queues is None:
             raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
 
@@ -109,16 +126,31 @@ class SharedMemTransport:
         if isinstance(weights, dict):
             weights = TensorDict(weights)
         if not isinstance(weights, TensorDictBase):
-            raise ValueError(f"Unsupported weights type: {type(weights)}")
+            raise ValueError(f"Unsupported weights type: {type(weights)=}")
         # Unflatten if needed to match shared buffer structure
         weights_to_update = weights
         if any("." in key for key in weights.keys()):
             weights_to_update = weights.unflatten_keys(".")
 
+        # Detach weights to allow in-place updates (gradients are not needed for weight sync)
+        weights_to_update = weights_to_update.detach()
+
         if self._unique_weights is None:
             raise RuntimeError("Unique weights not set. Call register_weights() first.")
         for buffer in self._unique_weights:
-            buffer.update_(weights_to_update, non_blocking=True)
+            try:
+                assert (
+                    buffer.requires_grad is False
+                ), "Gradients should not be required for shared memory buffers."
+                assert (
+                    weights_to_update.requires_grad is False
+                ), "Gradients should not be required for weights."
+                buffer.update_(weights_to_update, non_blocking=True)
+            except:
+                torchrl_logger.info(
+                    f"Failed to update buffer {buffer} with {weights_to_update}."
+                )
+                raise
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
@@ -137,30 +169,6 @@ class SharedMemTransport:
         return True
 
 
-class SharedMemWeightReceiver(WeightReceiver):
-    """Weight receiver for shared memory systems.
-
-    Receives weight updates via shared memory buffers. Workers automatically
-    see weight updates without explicit message passing, providing zero-copy
-    weight synchronization. This is typically instantiated and managed by
-    :class:`SharedMemWeightSyncScheme`.
-    """
-
-    _transport: SharedMemTransport | None
-
-
-class SharedMemWeightSender(WeightSender):
-    """Weight sender for shared memory systems.
-
-    Sends weight updates by writing directly to shared memory buffers.
-    All workers automatically see updates without explicit communication,
-    providing zero-copy weight synchronization. This is typically instantiated
-    and managed by :class:`SharedMemWeightSyncScheme`.
-    """
-
-    _transport: SharedMemTransport | None
-
-
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 
@@ -176,16 +184,14 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         >>> # Weights are initialized via init_on_sender()
     """
 
-    _sender_cls = SharedMemWeightSender
-    _receiver_cls = SharedMemWeightReceiver
-
     def __init__(
         self,
         strategy: str = "tensordict",
     ):
         super().__init__(strategy)
         # Create a single shared transport for all workers
-        self._shared_transport = SharedMemTransport()
+        self.shared_transport = SharedMemTransport()
+
         # Create per-worker queues to avoid race conditions
         # Each worker gets its own queue for weight initialization
         self._weight_init_queues = {}  # worker_idx -> Queue
@@ -298,17 +304,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 self._weight_init_queues[worker_idx] = mp.Queue()
 
         # Set worker info in transport
-        self._shared_transport.register_weights(params_map, self._weight_init_queues)
+        self.shared_transport.register_weights(params_map, self._weight_init_queues)
 
-        # Create sender with the shared transport
-        sender = SharedMemWeightSender(self)
-        sender._model_id = model_id
-        sender._transport = self._shared_transport  # Use shared transport
+        # Store model_id and context on scheme
+        self.model_id = model_id
         if context is not None:
-            sender._context_ref = weakref.ref(context)
-
-        self._sender = sender
-        self._initialized_on_sender = True
+            self.context = context
 
     def _get_params_map(
         self,
@@ -322,6 +323,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         num_workers: int | None = None,
     ):
         """Get the params_map for init_on_sender()."""
+        # Import _cast locally to avoid circular imports
+        from torchrl.collectors.utils import _cast
+
         if params_map is not None:
             # Sanity check: params_map must be a dict[int, TensorDictBase]
             # All other args must be None
@@ -376,11 +380,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             if weights is not None:
                 raise ValueError("weights cannot be provided if model is provided")
             weights = TensorDict.from_module(model)
+        weights = weights.data.apply(_cast, weights)
         # To make the map, we need the list of devices, or the map fn
         if devices is not None:
-            # Import _cast locally to avoid circular imports
-            from torchrl.collectors.utils import _cast
-
             # Get the unique devices
             devices_set = set(devices)
             weights_devices = {p.device for p in weights.values(True, True)}
@@ -449,20 +451,17 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 model = _resolve_model(context, model_id)
             worker_idx = getattr(context, "worker_idx", worker_idx)
 
-        # Create receiver with the shared transport
-        receiver = SharedMemWeightReceiver(self)
+        # Store on scheme directly
+        self.model_id = model_id
         if context is not None:
-            receiver._context_ref = weakref.ref(context)
-        receiver._transport = self._shared_transport  # Use shared transport
+            self.context = context
 
         # Register the model
-        receiver._register_model(model)
+        if model is not None:
+            self.model = model
 
         # Store worker_idx for synchronize_weights
-        receiver._worker_idx = worker_idx
-
-        self._receiver = receiver
-        self._initialized_on_receiver = True
+        self.worker_idx = worker_idx
 
     def get_weight_queues(self):
         """Get the per-worker weight initialization queues.
@@ -485,7 +484,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """
         return self._message_queue
 
-    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
+    def create_transport(self, **kwargs) -> TransportBackend:
         """Create shared memory transport.
 
         Returns the shared transport instance that all workers will use.
@@ -494,7 +493,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         Note:
             This is used internally by init_on_sender/init_on_receiver.
         """
-        return self._shared_transport
+        return self.shared_transport
 
     def prepare_weights(
         self,
@@ -506,7 +505,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """Prepare weights for SharedMemWeightSyncScheme.
 
         For SharedMemWeightSyncScheme, we prioritize using cached shared memory weights
-        from the context (collector) to avoid extracting fresh (non-shared) weights.
+        from the transport or context (collector) to avoid extracting fresh (non-shared) weights.
 
         Args:
             weights: Raw weights input
@@ -517,8 +516,17 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         Returns:
             Shared memory weights ready to send
         """
-        # If no weights provided, check for cached shared memory weights in collector
-        if weights is None and context is not None:
+        # If weights are explicitly provided, use them
+        if weights is not None:
+            return super().prepare_weights(weights, model_id, strategy, context)
+
+        # Try to get weights from the transport's stored shared memory buffers
+        # This is set when init_on_sender() is called with params_map
+        if self._shared_transport is not None:
+            return self.shared_transport.unique_weights[0]
+
+        # Try cached shared memory weights in collector context
+        if context is not None:
             if model_id == "policy" and hasattr(context, "_policy_weights_dict"):
                 policy_device = (
                     context.policy_device
@@ -529,5 +537,23 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 if cached_weights is not None:
                     return cached_weights
 
-        # Fall back to default behavior
+        # Fall back to default behavior (extract from model in context)
         return super().prepare_weights(weights, model_id, strategy, context)
+
+    @property
+    def weights(self) -> Any | None:
+        """Get the current weights from shared memory.
+
+        For SharedMemWeightSyncScheme, weights are stored in the transport's
+        _unique_weights after init_on_sender() is called with params_map.
+
+        Returns:
+            The weights TensorDict if available, None otherwise.
+        """
+        # First try to get from the shared transport (works for params_map initialization)
+        if self.shared_transport is not None:
+            # Return the first unique weight (all workers share the same logical weights)
+            return self.shared_transport.unique_weights[0]
+
+        # Fall back to parent implementation (works for context-based initialization)
+        return super().weights

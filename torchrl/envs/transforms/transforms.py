@@ -241,20 +241,42 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[NestedKey] = None,
+        in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
     ):
         super().__init__()
-        self.in_keys = in_keys
-        self.out_keys = out_keys
-        self.in_keys_inv = in_keys_inv
-        self.out_keys_inv = out_keys_inv
+        if in_keys is not None:
+            self.in_keys = in_keys
+        if out_keys is not None:
+            self.out_keys = out_keys
+        if in_keys_inv is not None:
+            self.in_keys_inv = in_keys_inv
+        if out_keys_inv is not None:
+            self.out_keys_inv = out_keys_inv
         self._missing_tolerance = False
         # we use __dict__ to avoid having nn.Module placing these objects in the module list
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
+
+    def _getattr(self, val, *args, **kwargs):
+        if args:
+            if len(args) > 1:
+                raise TypeError(
+                    f"Expected at most 1 positional argument, got {len(args)}"
+                )
+            default = args[0]
+            return getattr(self, val, default)
+        if kwargs:
+            try:
+                default = kwargs.pop("default")
+            except KeyError:
+                raise TypeError("Only 'default' keyword argument is supported")
+            if args:
+                raise TypeError("Got two values for keyword argument 'default'")
+            return getattr(self, val, default)
+        return getattr(self, val)
 
     def _ready(self):
         # Used to block ray until the actor is ready, see RayTransform
@@ -3501,7 +3523,7 @@ class CatFrames(ObservationTransform):
     gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:
 
     Examples:
-        >>> from torchrl.envs.utils import RandomPolicy        >>> from torchrl.envs import UnsqueezeTransform, CatFrames
+        >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.envs import UnsqueezeTransform, CatFrames
         >>> from torchrl.collectors import SyncDataCollector
         >>> # Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension
         >>> env = TransformedEnv(
@@ -8800,7 +8822,7 @@ class Reward2GoTransform(Transform):
     append the `inv` method of the transform.
 
     Examples:
-        >>> from torchrl.envs.utils import RandomPolicy        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> t = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
         >>> env = GymEnv("Pendulum-v1")

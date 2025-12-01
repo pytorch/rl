@@ -233,13 +233,23 @@ class _MultiDataCollector(DataCollectorBase):
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
             which handles weight synchronization across multiple processes.
             Consider using a constructor if the updater needs to be serialized.
-        weight_sync_schemes (dict[str, WeightSyncScheme], optional): A dictionary of weight sync schemes for the different models.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            SENDING weights to worker sub-collectors. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to send weights to child processes.
             If not provided, a :class:`~torchrl.collectors.MultiProcessWeightSyncScheme` will be used by default.
+            This is for propagating weights DOWN the hierarchy (parent -> children).
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This enables cascading in hierarchies like: RPCDataCollector -> MultiSyncDataCollector -> SyncDataCollector.
+            Received weights are automatically propagated to sub-collectors if matching model_ids exist.
+            Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        worker_idx (int, optional): the index of the worker.
 
     """
 
@@ -287,9 +297,12 @@ class _MultiDataCollector(DataCollectorBase):
         | Callable[[], WeightUpdaterBase]
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
+        worker_idx: int | None = None,
     ):
         self.closed = True
+        self.worker_idx = worker_idx
 
         # Set up workers and environment functions
         create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
@@ -335,21 +348,26 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory = self._setup_policy_factory(policy_factory)
 
         # Set up weight synchronization
-        if weight_sync_schemes is None:
+        if weight_sync_schemes is None and weight_updater is None:
             weight_sync_schemes = {}
+        elif weight_sync_schemes is not None and weight_updater is not None:
+            raise TypeError(
+                "Cannot specify both weight_sync_schemes and weight_updater."
+            )
         if (
-            not any(policy_factory)
+            weight_sync_schemes is not None
+            and not any(policy_factory)
             and not weight_sync_schemes
             and weight_updater is None
             and isinstance(policy, nn.Module)
         ):
             weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
 
+        self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
+
         self._setup_multi_policy_and_weights(
             policy, policy_factory, weight_updater, weight_sync_schemes
         )
-
-        self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
         # Set up policy version tracking
         self._setup_multi_policy_version_tracking(track_policy_version)
@@ -393,6 +411,10 @@ class _MultiDataCollector(DataCollectorBase):
         except Exception as e:
             self.shutdown(raise_on_error=False)
             raise e
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
 
         # Set up frame tracking and other options
         self._exclude_private_keys = True
@@ -805,7 +827,7 @@ class _MultiDataCollector(DataCollectorBase):
         )
         return storing_device, policy_device, env_device
 
-    def frames_per_batch_worker(self, worker_idx: int | None = None) -> int:
+    def frames_per_batch_worker(self, *, worker_idx: int | None = None) -> int:
         raise NotImplementedError
 
     @property
@@ -838,6 +860,9 @@ class _MultiDataCollector(DataCollectorBase):
             for model_id, scheme in self._weight_sync_schemes.items():
                 if not scheme.initialized_on_sender:
                     scheme.init_on_sender(model_id=model_id, context=self)
+                else:
+                    # Check we have access to the weights
+                    scheme.check_weight_access()
 
         # Create a policy on the right device
         policy_factory = self.policy_factory
@@ -976,11 +1001,11 @@ also that the state dict is synchronised across processes if needed."""
             # start with policy
             policy_scheme = self._weight_sync_schemes.get("policy")
             if policy_scheme is not None:
-                policy_scheme.synchronize_weights()
+                policy_scheme.setup_connection_and_weights()
             for key, scheme in self._weight_sync_schemes.items():
                 if key == "policy":
                     continue
-                scheme.synchronize_weights()
+                scheme.setup_connection_and_weights()
 
         # Wait for workers to be ready
         for i, pipe_parent in enumerate(self.pipes):
@@ -1049,12 +1074,12 @@ also that the state dict is synchronised across processes if needed."""
             RuntimeError: If no replay buffer is defined during the collector's initialization.
 
         Example:
-            >>> import time
+            >>> from torchrl.modules import RandomPolicy            >>>             >>> import time
             >>> from functools import partial
             >>>
             >>> import tqdm
             >>>
-            >>> from torchrl.collectors import MultiaSyncDataCollector, RandomPolicy
+            >>> from torchrl.collectors import MultiaSyncDataCollector
             >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
             >>> from torchrl.envs import GymEnv, set_gym_backend
             >>> import ale_py
@@ -1128,7 +1153,7 @@ also that the state dict is synchronised across processes if needed."""
                 idx, msg = self.queue_out.get()
                 if msg != "paused":
                     raise ValueError(f"Expected paused, but got {msg=}.")
-                torchrl_logger.info(f"Worker {idx} is paused.")
+                torchrl_logger.debug(f"Worker {idx} is paused.")
             self._running_free = False
             yield None
             for pipe in self.pipes:
@@ -1449,5 +1474,36 @@ also that the state dict is synchronised across processes if needed."""
             return self._policy_weights_dict.get(policy_device)
         return None
 
+    def _weight_update_impl(
+        self,
+        policy_or_weights: TensorDictBase | nn.Module | dict | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
+        """Override to send signal through pipes after scheme.send() puts weights in queue."""
+        # Call parent implementation which calls scheme.send() to put weights in the queue
+        super()._weight_update_impl(
+            policy_or_weights=policy_or_weights,
+            worker_ids=worker_ids,
+            model_id=model_id,
+            weights_dict=weights_dict,
+            **kwargs,
+        )
+
+        # For MultiProcessWeightSyncScheme, we need to signal workers through the pipes
+        # so they know to call receive_weights() to get weights from the queue
+        if self._weight_sync_schemes:
+            _check_for_faulty_process(self.procs)
+            for pipe in self.pipes:
+                pipe.send((None, "update_weights"))
+
+    # for RPC
+    def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        return super().receive_weights(policy_or_weights)
+
+    # for RPC
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()

@@ -2,35 +2,105 @@ from __future__ import annotations
 
 from typing import Any
 
+from tensordict import TensorDict
+
 from torchrl.weight_update.utils import _resolve_model
-from torchrl.weight_update.weight_sync_schemes import (
-    TransportBackend,
-    WeightReceiver,
-    WeightSender,
-    WeightSyncScheme,
-)
+from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme
 
 
-class RPCWeightReceiver(WeightReceiver):
-    """Weight receiver for RPC-based distributed systems.
+class RPCWeightSyncScheme(WeightSyncScheme):
+    """Weight synchronization for torch.distributed.rpc.
 
-    Receives weight updates from the main process via torch.distributed primitives.
-    This is typically instantiated and managed by :class:`RPCWeightSyncScheme`.
+    This scheme uses RPC calls to synchronize weights across distributed
+    workers. Each remote collector gets its own transport, following the
+    same pattern as multiprocess collectors.
     """
+
+    def _init_on_sender_impl(
+        self,
+        *,
+        model_id: str,
+        context: Any = None,
+        num_workers: int,
+        collector_infos: list[Any],
+        collector_rrefs: list[Any],
+        collector_class: Any,
+    ) -> None:
+        # Store model_id and context on scheme
+        self.model_id = model_id
+        if context is not None:
+            self.context = context
+
+        # Create transports for each remote collector
+        # worker_rank is i+1 because rank 0 is the main/trainer process
+        for i in range(num_workers):
+            worker_rank = i + 1
+            transport = self.create_transport(
+                collector_info=collector_infos[i],
+                collector_rref=collector_rrefs[i],
+                collector_class=collector_class,
+                worker_rank=worker_rank,
+            )
+            self._register_worker_sender(worker_idx=i, transport=transport)
+
+        # Store reference to source model for automatic extraction
+        if (
+            model_id == "policy"
+            and hasattr(context, "policy")
+            and context.policy is not None
+        ):
+            self.model = context.policy
+        else:
+            self.model = _resolve_model(context, model_id)
+
+    def _init_on_receiver_impl(
+        self, *, model_id: str, context: Any = None, worker_idx: int | None = None
+    ) -> None:
+        """Initialize scheme on the worker (receiver) side.
+
+        Expected kwargs (as provided by collectors):
+            - model_id: str              # e.g. "policy"
+            - context: Any               # collector / inner collector
+            - worker_idx: int | None     # worker index (optional)
+        """
+        if context is None:
+            raise ValueError(
+                "RPCWeightSyncScheme.init_on_receiver requires a 'context' "
+                "providing access to the model to be synchronized."
+            )
+
+        # Store model_id and context on scheme
+        self.model_id = model_id
+        self.worker_idx = worker_idx
+        self.context = context
+
+        # Resolve the target model on this worker
+        model = _resolve_model(context, model_id)
+        self.model = model
+
+        # Note: For RPC, we don't create a transport on the receiver side
+        # The receiver just needs to call recv() when signaled
+        self._receiver_transport = None
 
     def receive(self, timeout: float = 0.001) -> Any:
         """Receive weights from the main process using torch.distributed.recv().
+
+        This is the custom receive implementation for RPC-based weight sync.
 
         Args:
             timeout: Not used for RPC receivers (included for interface compatibility).
 
         Returns:
-            The received weights as a TensorDict.
+            The received weights as a TensorDict, or None if no context/policy available.
         """
-        from tensordict import TensorDict
+
+        if not self.initialized_on_receiver:
+            raise RuntimeError(
+                "Must be initialized on receiver before receiving weights"
+            )
 
         # Dereference the weakref to get the actual context
-        context = self._context_ref() if hasattr(self, "_context_ref") else None
+        context = self.context
         if context is None:
             return None
 
@@ -47,67 +117,6 @@ class RPCWeightReceiver(WeightReceiver):
             return weights
 
         return None
-
-
-class RPCWeightSender(WeightSender):
-    """Weight sender for RPC-based distributed systems.
-
-    Sends weight updates to remote collectors via torch.distributed.rpc calls.
-    This is typically instantiated and managed by :class:`RPCWeightSyncScheme`.
-    """
-
-
-class RPCWeightSyncScheme(WeightSyncScheme):
-    """Weight synchronization for torch.distributed.rpc.
-
-    This scheme uses RPC calls to synchronize weights across distributed
-    workers. Each remote collector gets its own transport, following the
-    same pattern as multiprocess collectors.
-    """
-
-    _sender_cls = RPCWeightSender
-    _receiver_cls = RPCWeightReceiver
-
-    def _init_on_receiver_impl(self, *args, **kwargs) -> None:
-        """Initialize scheme on the worker (receiver) side.
-
-        Expected kwargs (as provided by collectors):
-            - model_id: str              # e.g. "policy"
-            - context: Any               # collector / inner collector
-            - worker_idx: int | None     # worker index (optional)
-        """
-        import weakref
-
-        context = kwargs.pop("context", None)
-        model_id = kwargs.pop("model_id")
-        worker_idx = kwargs.pop("worker_idx", None)
-
-        if context is None:
-            raise ValueError(
-                "RPCWeightSyncScheme.init_on_receiver requires a 'context' "
-                "providing access to the model to be synchronized."
-            )
-
-        # Create receiver instance
-        receiver = self._receiver_cls(self)
-        receiver._model_id = model_id
-        receiver._worker_idx = worker_idx
-
-        # Attach context so we can resolve string model refs like "policy"
-        receiver._context_ref = weakref.ref(context)
-
-        # Resolve the target model on this worker
-        from torchrl.weight_update.utils import _resolve_model
-
-        model = _resolve_model(context, model_id)
-        receiver._register_model(model)
-
-        # Note: For RPC, we don't create a transport on the receiver side
-        # The receiver just needs to call recv() when signaled
-        receiver._transport = None
-
-        # Store receiver on scheme so get_receiver() works as expected
-        self._receiver = receiver
 
     def create_transport(
         self,
@@ -136,43 +145,6 @@ class RPCWeightSyncScheme(WeightSyncScheme):
             collector_class=collector_class,
             worker_rank=worker_rank,
         )
-
-    def _init_on_sender_impl(self, *args, **kwargs):
-        model_id = kwargs["model_id"]
-        num_workers = kwargs["num_workers"]
-        collector_infos = kwargs["collector_infos"]
-        collector_rrefs = kwargs["collector_rrefs"]
-        collector_class = kwargs["collector_class"]
-        context = kwargs["context"]
-
-        sender = self.create_sender()
-        sender._model_id = model_id
-
-        # Create transports for each remote collector
-        # worker_rank is i+1 because rank 0 is the main/trainer process
-        for i in range(num_workers):
-            worker_rank = i + 1
-            transport = self.create_transport(
-                collector_info=collector_infos[i],
-                collector_rref=collector_rrefs[i],
-                collector_class=collector_class,
-                worker_rank=worker_rank,
-            )
-            sender._transports[i] = transport
-
-        # Set context and register model
-        if hasattr(sender, "_set_context"):
-            sender._set_context(context, model_id)
-
-        # Store reference to source model for automatic extraction
-        if (
-            model_id == "policy"
-            and hasattr(context, "policy")
-            and context.policy is not None
-        ):
-            sender._source_model = context.policy
-        else:
-            sender._source_model = _resolve_model(context, model_id)
 
 
 class RPCTransport:
@@ -274,9 +246,9 @@ class RPCTransport:
         dist_initialized = torch.distributed.is_initialized()
         return rpc_initialized and dist_initialized
 
-    def synchronize_weights_on_sender(self) -> None:
+    def setup_connection_and_weights_on_sender(self) -> None:
         """No-op for RPCTransport - weights are sent via send_weights()."""
 
-    def synchronize_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
         """No-op for RPCTransport - weights are received via receive()."""
         return None

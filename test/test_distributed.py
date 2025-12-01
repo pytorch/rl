@@ -15,13 +15,14 @@ import os
 import socket
 import sys
 import time
+import traceback
 from functools import partial
 
 import pytest
 
 import torch
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger
@@ -45,7 +46,7 @@ from torchrl.data import (
     RoundRobinWriter,
     SamplerWithoutReplacement,
 )
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -116,9 +117,10 @@ class DistributedCollectorBase:
             assert data.names[-1] == "time"
             collector.shutdown()
             assert total == 1000
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
     def test_distributed_collector_basic(self, frames_per_batch):
@@ -130,8 +132,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -487,6 +490,16 @@ class TestRayCollector(DistributedCollectorBase):
         yield
         ray.shutdown()
 
+    @pytest.fixture(autouse=True, scope="function")
+    def reset_process_group(self):
+        import torch.distributed as dist
+
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        yield
+
     @classmethod
     def distributed_class(cls) -> type:
         return RayCollector
@@ -646,7 +659,19 @@ class TestRayCollector(DistributedCollectorBase):
         env = CountingEnv
 
         def policy_constructor():
-            return lambda td: td.set("action", torch.full(td.shape, 2))
+            return TensorDictSequential(
+                TensorDictModule(
+                    lambda x: x.float(),
+                    in_keys=["observation"],
+                    out_keys=["_obs_float"],
+                ),
+                TensorDictModule(
+                    nn.Linear(1, 1), out_keys=["action"], in_keys=["_obs_float"]
+                ),
+                TensorDictModule(
+                    lambda x: x.int(), in_keys=["action"], out_keys=["action"]
+                ),
+            )
 
         collector = self.distributed_class()(
             [env] * n_collectors,
@@ -656,9 +681,16 @@ class TestRayCollector(DistributedCollectorBase):
             frames_per_batch=frames_per_batch,
             **self.distributed_kwargs(),
         )
+        p = policy_constructor()
+        # p(env().reset())
+        weights = TensorDict.from_module(p)
+        weights["module", "1", "module", "weight"].data.fill_(0)
+        weights["module", "1", "module", "bias"].data.fill_(2)
+        collector.update_policy_weights_(weights)
         try:
             for data in collector:
                 assert (data["action"] == 2).all()
+                collector.update_policy_weights_(weights)
         finally:
             collector.shutdown()
 

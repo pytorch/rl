@@ -189,13 +189,13 @@ class VLLMCollectiveTransport:
 
         if self.rank == 0:
             # Trainer side - initialize process group
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"Initializing trainer collective group: rank={self.rank}, world_size={self.world_size}, device={self.device}"
             )
             # Ray sets CUDA_VISIBLE_DEVICES, so we always use device 0
             # Set CUDA device before initializing NCCL to avoid segfaults
             torch.cuda.set_device(self.device)
-            torchrl_logger.info(f"Set CUDA device to {self.device}")
+            torchrl_logger.debug(f"Set CUDA device to {self.device}")
 
             self._comm_group = stateless_init_process_group(
                 self.master_address,
@@ -204,13 +204,13 @@ class VLLMCollectiveTransport:
                 self.world_size,
                 device=self.device,
             )
-            torchrl_logger.info("Trainer collective group initialized successfully")
+            torchrl_logger.debug("Trainer collective group initialized successfully")
         else:
             # vLLM worker side - initialize through engine
             if self.vllm_engine is None:
                 raise ValueError("vllm_engine must be provided for worker ranks")
 
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 "Initializing vLLM worker collective group through engine"
             )
             # Call vLLM engine's init method - it returns futures for all workers
@@ -224,7 +224,7 @@ class VLLMCollectiveTransport:
             import ray
 
             ray.get(refs)
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"All {len(refs)} vLLM workers have dispatched NCCL init RPCs"
             )
 
@@ -235,7 +235,7 @@ class VLLMCollectiveTransport:
             time.sleep(0.2)
 
             self._comm_group = True  # Mark as initialized
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 "vLLM workers should now be blocked in NCCL collective, ready for trainer"
             )
 
@@ -283,7 +283,7 @@ class VLLMCollectiveTransport:
         else:
             weights_dict = weights
 
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Broadcasting {len(weights_dict)} weights for model '{model_id}'"
         )
 
@@ -314,7 +314,7 @@ class VLLMCollectiveTransport:
             del tensor
 
         torch.cuda.synchronize()
-        torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
+        torchrl_logger.debug(f"Broadcast complete for model '{model_id}'")
 
     def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
         """Receive weights from broadcaster.
@@ -546,7 +546,7 @@ class VLLMWeightSender(WeightSender):
             device=self._scheme.device,
             vllm_engine=vllm_engine,
         )
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Initializing transport from sender with world_size={world_size}"
         )
         self._transport.init_all_workers_group(model_metadata)
@@ -642,7 +642,7 @@ class VLLMWeightReceiver(WeightReceiver):
             device=self._scheme.device,
             vllm_engine=self._vllm_engine,
         )
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Initializing transport from receiver with world_size={world_size}."
         )
         self._transport.init_all_workers_group(model_metadata)

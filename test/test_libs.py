@@ -123,16 +123,12 @@ from torchrl.envs.libs.unity_mlagents import (
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
-from torchrl.envs.utils import (
-    check_env_specs,
-    ExplorationType,
-    MarlGroupMapType,
-    RandomPolicy,
-)
+from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
 from torchrl.modules import (
     ActorCriticOperator,
     MaskedCategorical,
     MLP,
+    RandomPolicy,
     SafeModule,
     ValueOperator,
 )

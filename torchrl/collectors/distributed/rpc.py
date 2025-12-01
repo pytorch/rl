@@ -284,6 +284,16 @@ class RPCDataCollector(DataCollectorBase):
             If not provided, an :class:`~torchrl.collectors.distributed.RPCWeightUpdater` will be used by default, which
             handles weight synchronization via RPC.
             Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            SENDING weights to remote collector workers. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to send weights via RPC.
+            If not provided, an :class:`~torchrl.weight_update.RPCWeightSyncScheme` will be used by default.
+            This is for propagating weights from the main process to remote collectors.
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This is typically used when RPCDataCollector is itself a worker in a larger distributed setup.
+            Defaults to ``None``.
 
     """
 
@@ -325,6 +335,7 @@ class RPCDataCollector(DataCollectorBase):
         | Callable[[], WeightUpdaterBase]
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
 
         if self._VERBOSE:
@@ -472,6 +483,10 @@ class RPCDataCollector(DataCollectorBase):
                     collector_rrefs=self.collector_rrefs,
                     context=self,
                 )
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
 
     @property
     def device(self) -> list[torch.device]:
@@ -629,9 +644,9 @@ class RPCDataCollector(DataCollectorBase):
                 torchrl_logger.debug(
                     f"Setting up receiver schemes on remote collector {i}"
                 )
-                # Call _set_scheme_receiver on the remote collector using rref.rpc_sync()
+                # Call register_scheme_receiver on the remote collector using rref.rpc_sync()
                 # This properly dereferences the rref and calls the instance method
-                collector_rrefs[i].rpc_sync()._set_scheme_receiver(
+                collector_rrefs[i].rpc_sync().register_scheme_receiver(
                     self._weight_sync_schemes
                 )
 

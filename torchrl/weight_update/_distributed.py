@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import weakref
-
 from typing import Any
 
 import torch
@@ -9,35 +7,7 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.weight_update.utils import _resolve_model
-from torchrl.weight_update.weight_sync_schemes import (
-    TransportBackend,
-    WeightReceiver,
-    WeightSender,
-    WeightSyncScheme,
-)
-
-
-class DistributedWeightReceiver(WeightReceiver):
-    """Weight receiver for torch.distributed systems.
-
-    Receives weight updates from the main process via torch.distributed send/recv
-    primitives and TCPStore signaling. This is typically instantiated and managed
-    by :class:`DistributedWeightSyncScheme`.
-    """
-
-    _transport: DistributedTransport | None
-
-
-class DistributedWeightSender(WeightSender):
-    """Weight sender for torch.distributed systems.
-
-    Sends weight updates to distributed workers via torch.distributed send/recv
-    primitives and TCPStore signaling. This is typically instantiated and managed
-    by :class:`DistributedWeightSyncScheme`.
-    """
-
-    _transport: DistributedTransport | None
+from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme
 
 
 class DistributedWeightSyncScheme(WeightSyncScheme):
@@ -52,9 +22,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         sync (bool): Whether to use synchronous weight updates
     """
 
-    _receiver_cls = DistributedWeightReceiver
-    _sender_cls = DistributedWeightSender
-
     def __init__(self, backend: str = "gloo", sync: bool = True):
         super().__init__()
         self.backend = backend
@@ -62,41 +29,36 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
     def _init_on_sender_impl(
         self,
-        *args,
+        *,
+        model_id: str,
+        context: Any = None,
+        num_workers: int,
         **kwargs,
     ) -> None:
-        num_workers = kwargs.pop("num_workers")
-        context = kwargs.pop("context")
-        model_id = kwargs.pop("model_id")
+        self.model_id = model_id
 
-        # Create and configure sender for this model
-        sender = self.create_sender()
-        sender._model_id = model_id
-
-        # Attach context so the sender can resolve the model and prepare
+        # Attach context so we can resolve the model and prepare
         # weights on demand via scheme.prepare_weights().
         if context is not None:
-            sender._set_context(context, model_id)
+            self.context = context
 
-        # Store reference to source model for automatic extraction
-        try:
-            sender._source_model = _resolve_model(context, model_id)
-        except (AttributeError, IndexError):
-            pass
+        weights_buffer = self._get_weights_buffer_from_model(self.model)
 
-        # Create transports for each remote collector
-        weights_buffer = self._get_weights_buffer_from_model(sender._source_model)
         for i in range(num_workers):
             rank = i + 1  # Workers are 1-indexed in distributed
             transport = self.create_transport(
                 store=context._store, rank=rank, weights_buffer=weights_buffer
             )
-            sender._transports[i] = transport
+            self._register_worker_sender(worker_idx=i, transport=transport)
 
-        # Expose sender through the base API
-        self._sender = sender
-
-    def _init_on_receiver_impl(self, *args, **kwargs) -> None:
+    def _init_on_receiver_impl(
+        self,
+        *,
+        model_id: str,
+        context: Any = None,
+        store: torch.distributed.Store = None,
+        rank: int = None,
+    ) -> None:
         """Initialize scheme on the worker (receiver) side.
 
         Expected kwargs (as provided by collectors):
@@ -105,55 +67,35 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             - store: TCPStore | None     # distributed TCP store
             - rank: int | None           # worker rank (1-indexed)
         """
-        context = kwargs.pop("context", None)
-        model_id = kwargs.pop("model_id")
-        store = kwargs.pop("store", None)
-        rank = kwargs.pop("rank", None)
-
         if context is None:
             raise ValueError(
                 "DistributedWeightSyncScheme.init_on_receiver requires a 'context' "
                 "providing access to the model to be synchronized."
             )
 
-        # Create receiver instance
-        receiver = self._receiver_cls(self)
-        receiver._model_id = model_id
-
-        # Attach context so we can resolve string model refs like "policy"
-        receiver._context_ref = weakref.ref(context)
+        # Store model_id and context on scheme
+        self.model_id = model_id
+        self.context = context
 
         # Resolve the target model on this worker
         model = None
         # Prefer a collector-specific get_model if available, but fall back
         # gracefully to attribute resolution when no mapping exists.
         if hasattr(context, "get_model"):
-            try:
-                model = context.get_model(model_id)
-            except (ValueError, AttributeError):
-                model = None
-        if model is None:
-            model = _resolve_model(context, model_id)
-        receiver._register_model(model)
+            model = context.get_model(model_id)
+            self.model = model
 
         weights_buffer = self._get_weights_buffer_from_model(model)
-        receiver._transport = self.create_transport(
+        self._receiver_transport = self.create_transport(
             store=store, rank=rank, weights_buffer=weights_buffer
         )
 
-        # Store receiver on scheme so get_receiver() works as expected
-        self._receiver = receiver
+        # Store worker_idx for synchronize_weights
+        self._worker_idx = rank
 
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create distributed transport for a specific worker."""
-        if self._initialized_on_receiver:
-            return DistributedTransport(**kwargs)
-        elif self._initialized_on_sender:
-            return DistributedTransport(**kwargs)
-        else:
-            raise RuntimeError(
-                "DistributedWeightSyncScheme.create_transport must be called after initialization has been marked."
-            )
+        return DistributedTransport(**kwargs)
 
 
 class DistributedTransport:
@@ -217,13 +159,13 @@ class DistributedTransport:
             return
 
         # Instruct worker to expect weight update
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"RANK 0 -- Setting weight sync instructions to store for rank {self._rank}"
         )
         self._store.set(f"NODE_{self._rank}_in", b"update_weights")
 
         # Send weights via torch.distributed
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"RANK 0 -- Send {weights=} to rank {self._rank} with sync={self._sync}"
         )
         if self._sync:
@@ -284,9 +226,9 @@ class DistributedTransport:
         """Check if torch.distributed is initialized."""
         return torch.distributed.is_initialized()
 
-    def synchronize_weights_on_sender(self) -> None:
+    def setup_connection_and_weights_on_sender(self) -> None:
         """No-op for DistributedTransport - weights are sent via send_weights()."""
 
-    def synchronize_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
         """No-op for DistributedTransport - weights are received via receive_weights()."""
         return None

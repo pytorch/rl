@@ -35,7 +35,7 @@ from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
 from torchrl._utils import _replace_last, logger as torchrl_logger
-from torchrl.collectors import RandomPolicy, SyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     CompressedListStorage,
@@ -107,6 +107,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
+from torchrl.modules import RandomPolicy
 
 
 if os.getenv("PYTORCH_TEST_FBCODE"):

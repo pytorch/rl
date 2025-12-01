@@ -201,7 +201,7 @@ class RayTransform(Transform, ABC):
             **kwargs: Additional arguments passed to Transform
         """
         super().__init__(
-            in_keys=kwargs.get("in_keys", []), out_keys=kwargs.get("out_keys", [])
+            in_keys=kwargs.get("in_keys"), out_keys=kwargs.get("out_keys")
         )
 
         self._num_cpus = num_cpus

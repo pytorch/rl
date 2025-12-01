@@ -20,7 +20,8 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.utils import _map_weight
 
 from torchrl.collectors.weight_update import WeightUpdaterBase
-from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.utils import _resolve_attr
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 
 class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
@@ -53,6 +54,66 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             if value.collector is not self:
                 raise RuntimeError("Failed to register collector.")
         self._weight_updater = value
+
+    @property
+    def worker_idx(self) -> int:
+        """Get the worker index for this collector.
+
+        Returns:
+            The worker index (0-indexed).
+
+        Raises:
+            RuntimeError: If worker_idx has not been set.
+        """
+        if not hasattr(self, "_worker_idx") or self._worker_idx is None:
+            raise RuntimeError(
+                "worker_idx has not been set. This collector may not have been "
+                "initialized as a worker in a distributed setup."
+            )
+        return self._worker_idx
+
+    @worker_idx.setter
+    def worker_idx(self, value: int | None) -> None:
+        """Set the worker index for this collector.
+
+        Args:
+            value: The worker index (0-indexed) or None.
+        """
+        self._worker_idx = value
+
+    def cascade_execute(self, attr_path: str, *args, **kwargs) -> Any:
+        """Execute a method on a nested attribute of this collector.
+
+        This method allows remote callers to invoke methods on nested attributes
+        of the collector without needing to know the full structure. It's particularly
+        useful for calling methods on weight sync schemes from the sender side.
+
+        Args:
+            attr_path: Full path to the callable, e.g.,
+                "_receiver_schemes['model_id']._set_dist_connection_info"
+            *args: Positional arguments to pass to the method.
+            **kwargs: Keyword arguments to pass to the method.
+
+        Returns:
+            The return value of the method call.
+
+        Examples:
+            >>> collector.cascade_execute(
+            ...     "_receiver_schemes['policy']._set_dist_connection_info",
+            ...     connection_info_ref,
+            ...     worker_idx=0
+            ... )
+        """
+
+        attr = _resolve_attr(self, attr_path)
+        if callable(attr):
+            return attr(*args, **kwargs)
+        else:
+            if args or kwargs:
+                raise ValueError(
+                    f"Arguments and keyword arguments are not supported for non-callable attributes. Got {args} and {kwargs} for {attr_path}"
+                )
+            return attr
 
     def _get_policy_and_device(
         self,
@@ -316,14 +377,13 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 "Cannot specify both 'weights_dict' and 'policy_or_weights'"
             )
 
-        if policy_or_weights is not None:
-            weights_dict = {"policy": policy_or_weights}
-
         if self._weight_sync_schemes:
             if model_id is None:
                 model_id = "policy"
-            if weights_dict is None:
-                # Compose weight_dict
+            if policy_or_weights is not None and weights_dict is None:
+                # Use model_id as the key, not hardcoded "policy"
+                weights_dict = {model_id: policy_or_weights}
+            elif weights_dict is None:
                 weights_dict = {model_id: policy_or_weights}
             for target_model_id, weights in weights_dict.items():
                 if target_model_id not in self._weight_sync_schemes:
@@ -342,26 +402,23 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 torchrl_logger.debug(
                     f"calling send() on scheme {type(scheme).__name__}"
                 )
-                scheme.send(weights=processed_weights, worker_ids=worker_ids)
+                self._send_weights_scheme(
+                    scheme=scheme,
+                    processed_weights=processed_weights,
+                    worker_ids=worker_ids,
+                    model_id=target_model_id,
+                )
         elif self._weight_updater is not None:
             # unreachable
             raise RuntimeError
         else:
             return self.receive_weights(policy_or_weights)
 
-    def _receive_weights_scheme(self):
-        """Receive weights via registered receiver schemes and cascade to nested collectors.
+    def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
+        # method to override if the scheme requires an RPC call to receive the weights
+        scheme.send(weights=processed_weights, worker_ids=worker_ids)
 
-        This method enables cascading weight updates across multiple collector layers:
-        - RPCDataCollector -> MultiSyncDataCollector -> SyncDataCollector
-        - DistributedDataCollector -> MultiSyncDataCollector -> SyncDataCollector
-
-        Process:
-        1. Receive weights for all registered receiver schemes (_receiver_schemes)
-        2. If this collector has nested collectors (_weight_sync_schemes), propagate
-           the updates by calling update_policy_weights_()
-
-        """
+    def _receive_weights_scheme(self, cascade_weights: bool = True):
         # Receive weights for all registered schemes
         updates = {}
         if not hasattr(self, "_receiver_schemes"):
@@ -372,6 +429,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             # For RPC/Ray: weights are already passed as argument, receive() is a no-op
             # For Distributed: receive() pulls from TCPStore
             # For MultiProcess: receive() checks the pipe
+            torchrl_logger.debug(
+                f"Receiving weights for scheme {type(scheme).__name__} for model '{model_id}' on worker {self._worker_idx}"
+            )
             received_weights = scheme.receive()
             if received_weights is not None:
                 updates[model_id] = received_weights
@@ -379,7 +439,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         # If we have nested collectors (e.g., MultiSyncDataCollector with inner workers)
         # AND we actually received updates, propagate them down via their senders
         if (
-            updates
+            cascade_weights
+            and updates
             and hasattr(self, "_weight_sync_schemes")
             and self._weight_sync_schemes
         ):
@@ -389,12 +450,31 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 if model_id in self._weight_sync_schemes:
                     # This model has a sender scheme - propagate to nested workers
                     weights_dict[model_id] = updates[model_id]
+                else:
+                    # Clear error message when model_id mismatch
+                    raise KeyError(
+                        f"Received weights for model '{model_id}' but no sender "
+                        f"scheme found to propagate to sub-collectors. "
+                        f"Available sender schemes: {list(self._weight_sync_schemes.keys())}. "
+                        f"To receive weights without cascading, call with cascade_weights=False."
+                    )
 
             if weights_dict:
                 # Propagate to nested collectors via their sender schemes
+                torchrl_logger.debug(
+                    f"Cascading weights to nested collectors: {weights_dict}"
+                )
                 self.update_policy_weights_(weights_dict=weights_dict)
 
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        if getattr(self, "_receiver_schemes", None) is not None:
+            if policy_or_weights is not None:
+                raise ValueError(
+                    "Cannot specify 'policy_or_weights' when using 'receiver_schemes'. Schemes should know how to get the weights."
+                )
+            self._receive_weights_scheme()
+            return
+
         # No weight updater configured
         # For single-process collectors, apply weights locally if explicitly provided
         if policy_or_weights is not None:
@@ -429,21 +509,36 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             strategy.apply_weights(self.policy, weights)
         # Otherwise, no action needed - policy is local and changes are immediately visible
 
-    def _set_scheme_receiver(self, weight_sync_schemes: dict[str, WeightSyncScheme]):
-        """Set up receiver schemes for this collector.
+    def register_scheme_receiver(
+        self,
+        weight_recv_schemes: dict[str, WeightSyncScheme],
+        *,
+        synchronize_weights: bool = True,
+    ):
+        """Set up receiver schemes for this collector to receive weights from parent collectors.
 
         This method initializes receiver schemes and stores them in _receiver_schemes
         for later use by _receive_weights_scheme() and receive_weights().
 
+        Receiver schemes enable cascading weight updates across collector hierarchies:
+        - Parent collector sends weights via its weight_sync_schemes (senders)
+        - Child collector receives weights via its weight_recv_schemes (receivers)
+        - If child is also a parent (intermediate node), it can propagate to its own children
+
         Args:
-            weight_sync_schemes: Dictionary of {model_id: WeightSyncScheme} to set up as receivers
+            weight_recv_schemes (dict[str, WeightSyncScheme]): Dictionary of {model_id: WeightSyncScheme} to set up as receivers.
+                These schemes will receive weights from parent collectors.
+
+        Keyword Args:
+            synchronize_weights (bool, optional): If True, synchronize weights immediately after registering the schemes.
+                Defaults to `True`.
         """
         # Initialize _receiver_schemes if not already present
         if not hasattr(self, "_receiver_schemes"):
             self._receiver_schemes = {}
 
         # Initialize each scheme on the receiver side
-        for model_id, scheme in weight_sync_schemes.items():
+        for model_id, scheme in weight_recv_schemes.items():
             if not scheme.initialized_on_receiver:
                 if scheme.initialized_on_sender:
                     raise RuntimeError(
@@ -459,11 +554,15 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             self._receiver_schemes[model_id] = scheme
 
         # Perform initial synchronization
-        for scheme in weight_sync_schemes.values():
-            if not scheme.synchronized_on_receiver:
-                scheme.synchronize_weights(
-                    worker_idx=getattr(self, "_worker_idx", None)
-                )
+        if synchronize_weights:
+            for model_id, scheme in weight_recv_schemes.items():
+                if not scheme.synchronized_on_receiver:
+                    torchrl_logger.debug(
+                        f"Synchronizing weights for scheme {type(scheme).__name__} for model '{model_id}'"
+                    )
+                    scheme.setup_connection_and_weights(
+                        worker_idx=getattr(self, "_worker_idx", None)
+                    )
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:

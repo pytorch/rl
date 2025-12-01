@@ -115,7 +115,7 @@ def main():
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
     from torchrl.data import Bounded
     from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-    from torchrl.envs.utils import RandomPolicy
+    from torchrl.modules import RandomPolicy
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"

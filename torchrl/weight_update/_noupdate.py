@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from torchrl.weight_update.weight_sync_schemes import (
-    TransportBackend,
-    WeightReceiver,
-    WeightSender,
-    WeightSyncScheme,
-)
+from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme
 
 
 class NoWeightSyncScheme(WeightSyncScheme):
@@ -29,12 +24,8 @@ class NoWeightSyncScheme(WeightSyncScheme):
             context: Optional context object (not used)
             **kwargs: Optional parameters (not used)
         """
-        # Create a no-op sender
-        sender = WeightSender(self)
-        sender._model_id = model_id
-
-        self._sender = sender
-        self._initialized_on_sender = True
+        # Store model_id directly on scheme (no-op)
+        self.model_id = model_id
 
     def _init_on_receiver_impl(
         self,
@@ -50,14 +41,10 @@ class NoWeightSyncScheme(WeightSyncScheme):
             context: Optional context object (not used)
             **kwargs: Optional parameters (not used)
         """
-        # Create a no-op receiver
-        receiver = WeightReceiver(self)
-        receiver._model_ref = model_id
+        # Store model_id directly on scheme (no-op)
+        self.model_id = model_id
 
-        self._receiver = receiver
-        self._initialized_on_receiver = True
-
-    def create_transport(self, pipe_or_context: Any) -> TransportBackend:
+    def create_transport(self, **kwargs) -> TransportBackend:
         """Create a no-op transport.
 
         Note:
@@ -74,4 +61,28 @@ class NoWeightSyncScheme(WeightSyncScheme):
             def check_connection(self) -> bool:
                 return True
 
+            def setup_connection_and_weights_on_sender(self) -> None:
+                pass
+
+            def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
+                return None
+
         return NoOpTransport()
+
+    def send(
+        self,
+        weights: Any = None,
+        worker_ids: int | list[int] | None = None,
+    ) -> None:
+        """No-op send - does nothing."""
+
+    def receive(self, timeout: float = 0.001) -> bool:
+        """No-op receive - always returns False."""
+        return False
+
+    def setup_connection_and_weights(self, *, worker_idx: int | None = None) -> None:
+        """No-op synchronize - does nothing."""
+        if self._initialized_on_sender:
+            self.synchronized_on_sender = True
+        elif self._initialized_on_receiver:
+            self.synchronized_on_receiver = True

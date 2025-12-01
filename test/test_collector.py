@@ -78,9 +78,13 @@ from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     check_env_specs,
     PARTIAL_MISSING_ERR,
-    RandomPolicy,
 )
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from torchrl.modules import (
+    Actor,
+    OrnsteinUhlenbeckProcessModule,
+    RandomPolicy,
+    SafeModule,
+)
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
@@ -1504,7 +1508,6 @@ if __name__ == "__main__":
             cudagraph_policy=cudagraph,
             **kwargs,
         )
-        assert "policy" in collector._weight_senders, collector._weight_senders.keys()
         try:
             # collect state_dict
             state_dict = collector.state_dict()
@@ -3942,7 +3945,7 @@ class TestPolicyFactory:
     @pytest.mark.parametrize(
         "weight_updater", ["scheme_shared", "scheme_pipe", "weight_updater"]
     )
-    def test_weight_update(self, weight_updater):
+    def test_update_weights(self, weight_updater):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         env_maker = lambda: GymEnv(PENDULUM_VERSIONED(), device="cpu")
         policy_factory = lambda: TensorDictModule(
@@ -3980,12 +3983,13 @@ class TestPolicyFactory:
             storing_device="cpu",
             **kwargs,
         )
-        if weight_updater == "weight_updater":
-            assert collector._legacy_weight_updater
-
-        # When using policy_factory, must pass weights explicitly
-        collector.update_policy_weights_(policy_weights)
         try:
+            if weight_updater == "weight_updater":
+                assert collector._legacy_weight_updater
+
+            # When using policy_factory, must pass weights explicitly
+            collector.update_policy_weights_(policy_weights)
+
             for i, data in enumerate(collector):
                 if i == 2:
                     assert (data["action"] != 0).any()
@@ -4150,7 +4154,7 @@ class TestAsyncCollection:
                 if (rb[-16:]["action"] == 1).all():
                     break
             else:
-                raise RuntimeError
+                raise RuntimeError("Failed to update policy weights")
         finally:
             collector.async_shutdown(timeout=10)
             del collector

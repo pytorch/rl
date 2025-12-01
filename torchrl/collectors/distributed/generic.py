@@ -215,7 +215,7 @@ def _run_collector(
                 rank=rank,
             )
             torchrl_logger.debug(f"RANK {rank} -- initial weight sync (if any)")
-            scheme.synchronize_weights()
+            scheme.setup_connection_and_weights()
             torchrl_logger.debug(
                 f"RANK {rank} -- initial weight sync for '{model_id}' completed"
             )
@@ -491,6 +491,16 @@ class DistributedDataCollector(DataCollectorBase):
             If not provided, a :class:`~torchrl.collectors.distributed.DistributedWeightUpdater` will be used by
             default, which handles weight synchronization across distributed workers.
             Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            SENDING weights to distributed worker collectors. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to send weights via torch.distributed.
+            If not provided, a :class:`~torchrl.weight_update.DistributedWeightSyncScheme` will be used by default.
+            This is for propagating weights from the main process to distributed workers.
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This is typically used when DistributedDataCollector is itself a worker in a larger distributed setup.
+            Defaults to ``None``.
 
     """
 
@@ -530,6 +540,7 @@ class DistributedDataCollector(DataCollectorBase):
         | Callable[[], WeightUpdaterBase]
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
 
         if self._VERBOSE:
@@ -669,6 +680,10 @@ class DistributedDataCollector(DataCollectorBase):
                 scheme.init_on_sender(
                     num_workers=self.num_workers, context=self, model_id=model_id
                 )
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
 
         self._make_container()
 

@@ -30,7 +30,7 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 parser = ArgumentParser()
 parser.add_argument(

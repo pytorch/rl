@@ -103,7 +103,7 @@ class MultiStep(nn.Module):
         within the replay buffer instead.
 
     Examples:
-        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> from torchrl.modules import RandomPolicy        >>>         >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.data.postprocs import MultiStep
         >>> from torchrl.envs import GymEnv, TransformedEnv, StepCounter
         >>> env = TransformedEnv(GymEnv("CartPole-v1"), StepCounter())

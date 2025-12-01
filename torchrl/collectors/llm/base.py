@@ -308,7 +308,7 @@ class LLMCollector(SyncDataCollector):
         policy_input = self._shuttle
         while collected_steps < self.dialog_turns_per_batch:
             if self.verbose:
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"LLMCollector: Collected {collected_steps} steps over {self.dialog_turns_per_batch} requested."
                 )
             env_input = self.policy(policy_input)
@@ -341,7 +341,7 @@ class LLMCollector(SyncDataCollector):
             if self._result_numel >= self.dialog_turns_per_batch:
                 break
             elif self.verbose:
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"LLMCollector: Collected {collected_steps} steps with {self._result_numel} elements in the resulting batch, over {self.dialog_turns_per_batch} requested."
                 )
             env_input = self.policy(next_output)
@@ -385,7 +385,7 @@ class LLMCollector(SyncDataCollector):
             self._result_numel -= result[-1].numel()
         result = torch.cat(result, -1)
         if self.verbose:
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
             )
         return result
@@ -447,7 +447,7 @@ class LLMCollector(SyncDataCollector):
 
         result = self._trajectory_queue.popleft()
         if self.verbose:
-            torchrl_logger.info(
+            torchrl_logger.debug(
                 f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
             )
         return result

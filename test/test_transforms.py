@@ -13,10 +13,12 @@ import itertools
 import os
 import pickle
 import re
+
 import sys
 from copy import copy
 from functools import partial
 from sys import platform
+from torchrl import logger as torchrl_logger
 
 import numpy as np
 
@@ -39,7 +41,7 @@ from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
 
-from torchrl.collectors import MultiSyncDataCollector
+from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data import (
     Bounded,
     BoundedContinuous,
@@ -55,6 +57,7 @@ from torchrl.data import (
     Unbounded,
     UnboundedContinuous,
 )
+from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs import (
     ActionMask,
     BinarizeReward,
@@ -136,9 +139,11 @@ from torchrl.envs.transforms.transforms import (
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
-from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
+from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal, RandomPolicy
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.record.recorder import VideoRecorder
+from torchrl.testing.modules import BiasModule
+from torchrl.weight_update import RayModuleTransformScheme
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (  # noqa
@@ -15013,6 +15018,132 @@ class TestModuleTransform(TransformBase):
         finally:
             if not ray_init:
                 ray.stop()
+
+
+class TestRayModuleTransform:
+    @pytest.fixture(autouse=True, scope="function")
+    def start_ray(self):
+        import ray
+        from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+
+        if ray.is_initialized():
+            ray.shutdown()
+
+        ray.init(**DEFAULT_RAY_INIT_CONFIG)
+
+        yield
+        ray.shutdown()
+
+    @pytest.fixture(autouse=True, scope="function")
+    def reset_process_group(self):
+        import torch.distributed as dist
+
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        yield
+
+    def test_ray_module_transform_scheme_flow(self):
+        bias_module = BiasModule(2.0)
+        module_fact = lambda: TensorDictModule(
+            bias_module,
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        # Create scheme and transform
+        scheme = RayModuleTransformScheme()
+        transform = ModuleTransform(
+            module_factory=module_fact,
+            weight_sync_scheme=scheme,
+            use_ray_service=True,
+            actor_name="my_transform",
+        )
+        assert transform.in_keys == ["observation"]
+        assert transform.out_keys == ["action"]
+        dummy_data = TensorDict(observation=torch.zeros(2, 3), batch_size=[2])
+
+        module = module_fact()
+        assert (module(dummy_data)["action"] == 2).all()
+
+        # test sending weights
+        weights = TensorDict.from_module(module)
+        d = weights.data
+        d *= 0
+        d += 1
+        scheme.send(weights)
+        assert (module(dummy_data)["action"] == 1).all()
+
+    def test_ray_module_transform_scheme_collector(self):
+        # Create a simple module that adds a learnable bias to observations
+        # We use addition instead of scaling to avoid issues with observation values
+
+        bias_module = BiasModule()
+        module = TensorDictModule(
+            bias_module,
+            in_keys=["observation"],
+            out_keys=["observation"],  # Transform in-place
+        )
+
+        # Create scheme and transform
+        scheme = RayModuleTransformScheme()
+        transform = RayModuleTransform(
+            module=module,
+            weight_sync_scheme=scheme,
+        )
+
+        # Create transformed env
+        base_env = ContinuousActionVecMockEnv
+
+        def make_env():
+            return TransformedEnv(base_env(), transform)
+
+        # Create collector with scheme registered
+        torchrl_logger.debug("Creating collector")
+        policy = RandomPolicy(base_env().action_spec)
+        collector = SyncDataCollector(
+            make_env,
+            policy,
+            frames_per_batch=50,
+            total_frames=200,
+            weight_sync_schemes={"transform_module": scheme},
+        )
+
+        torchrl_logger.debug("Starting collector")
+        first_batch_mean = None
+        second_batch_mean = None
+        try:
+            for i, data in enumerate(collector):
+                obs_mean = data["observation"].mean().item()
+
+                if i == 0:
+                    first_batch_mean = obs_mean
+
+                    # Update weights: set bias to 100.0 (large value to be clearly visible)
+                    torchrl_logger.debug("Updating weights")
+                    new_weights = TensorDict.from_module(module)
+                    new_weights["module", "bias"].data.fill_(100.0)
+                    collector.update_policy_weights_(
+                        new_weights, model_id="transform_module"
+                    )
+                elif i == 1:
+                    second_batch_mean = obs_mean
+                    break
+        finally:
+            collector.shutdown()
+
+        # Verify that weights were updated
+        # With bias=0.0, first batch should have observations around 0 (env default)
+        # With bias=100.0, second batch should have observations shifted by 100
+        assert first_batch_mean is not None, "First batch not collected"
+        assert second_batch_mean is not None, "Second batch not collected"
+
+        # The second batch should have significantly higher mean due to bias=100
+        assert second_batch_mean > first_batch_mean + 50, (
+            f"Weight update did not take effect: first_mean={first_batch_mean:.2f}, "
+            f"second_mean={second_batch_mean:.2f}. Expected second to be at least 50 higher."
+        )
 
 
 if __name__ == "__main__":

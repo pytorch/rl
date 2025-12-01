@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-
-from torchrl.envs.common import EnvBase
+from typing import TYPE_CHECKING
 from torchrl.modules.planners.common import MPCPlannerBase
 
+if TYPE_CHECKING:
+    from torchrl.envs.common import EnvBase
 
 class CEMPlanner(MPCPlannerBase):
     """CEMPlanner Module.

@@ -184,7 +184,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
-    def frames_per_batch_worker(self, worker_idx: int | None = None) -> int:
+    def frames_per_batch_worker(self, *, worker_idx: int | None = None) -> int:
         return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> tuple[int, int, TensorDictBase]:
@@ -294,5 +294,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 else:
                     self.pipes[idx].send((idx, "continue"))
 
+    # for RPC
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
+
+    # for RPC
+    def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        return super().receive_weights(policy_or_weights)

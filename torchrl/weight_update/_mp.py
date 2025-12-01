@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import weakref
 from collections.abc import Callable
 from typing import Any
 
@@ -8,203 +7,9 @@ import torch
 from tensordict import TensorDictBase
 from torch import multiprocessing as mp, nn
 from torchrl.weight_update._shared import SharedMemWeightSyncScheme
+from torchrl.weight_update.utils import _resolve_model
 
-from torchrl.weight_update.weight_sync_schemes import (
-    TransportBackend,
-    WeightReceiver,
-    WeightSender,
-)
-
-
-class MPWeightReceiver(WeightReceiver):
-    """Weight receiver for multiprocess systems using queues.
-
-    Receives weight updates from the main process via multiprocessing queues.
-    This is typically instantiated and managed by :class:`MultiProcessWeightSyncScheme`.
-    """
-
-    _transport: MPTransport | None
-
-
-class MPWeightSender(WeightSender):
-    """Weight sender for multiprocess systems using queues.
-
-    Sends weight updates to worker processes via multiprocessing queues.
-    Supports both synchronous and asynchronous sending patterns.
-    This is typically instantiated and managed by :class:`MultiProcessWeightSyncScheme`.
-    """
-
-    _transport: MPTransport | None
-    _model_id: str
-    _scheme: MultiProcessWeightSyncScheme
-
-    def send(
-        self,
-        weights: Any = None,
-        worker_ids: int | list[int] | None = None,
-    ) -> None:
-        """Send weights synchronously to workers.
-
-        This method:
-        1. Prepares weights (extracts from model if weights=None)
-        2. Sends to specified workers (or all if worker_ids=None)
-        3. Waits for acknowledgments from those workers
-        4. Returns when workers have applied the weights
-
-        Args:
-            weights: Weights to send. Can be:
-                - None: Extract from model via context.get_model(model_id)
-                - nn.Module: Extract weights from module
-                - TensorDict: Use directly
-                - dict: Convert to TensorDict
-            worker_ids: Which workers to send to:
-                - None: Send to all workers (default)
-                - int: Send to single worker
-                - list[int]: Send to specific workers
-
-        Note: This is a blocking call that ensures specified workers are updated
-        before returning.
-        """
-        if self._pending_async:
-            raise RuntimeError(
-                "Cannot call send() while an async send is pending. Call wait_async() first."
-            )
-
-        model_id = self._model_id
-        context = self._context_ref() if self._context_ref is not None else None
-
-        # Let the scheme prepare the weights
-        prepared_weights = self._scheme.prepare_weights(
-            weights=weights,
-            model_id=model_id,
-            strategy=self._strategy,
-            context=context,
-        )
-
-        transports = list(self._iterate_transports(worker_ids))
-
-        # Send to all workers first (non-blocking if transport supports it)
-        for transport in transports:
-            if hasattr(transport, "send_weights_async"):
-                # For MPTransport, pass model_id; other transports don't need it
-                transport.send_weights_async(prepared_weights, model_id=model_id)
-            else:
-                # Fallback for transports that don't support async send
-                transport.send_weights(prepared_weights)
-
-        # Wait for all acknowledgments
-        for transport in transports:
-            if hasattr(transport, "wait_ack"):
-                transport.wait_ack()
-
-    def send_async(
-        self,
-        weights: Any = None,
-        worker_ids: int | list[int] | None = None,
-    ) -> None:
-        """Send weights asynchronously to workers (non-blocking).
-
-        This initiates the send but returns immediately without waiting
-        for workers to acknowledge. You must call wait_async() before
-        the next send_async() or send() call.
-
-        Args:
-            weights: Same as send()
-            worker_ids: Same as send()
-
-        Raises:
-            RuntimeError: If a previous send_async() is still pending
-        """
-        if self._pending_async:
-            raise RuntimeError(
-                "Cannot call send_async() again while a previous send is pending. Call wait_async() first."
-            )
-
-        context = self._context_ref() if self._context_ref is not None else None
-
-        # Let the scheme prepare the weights
-        prepared_weights = self._scheme.prepare_weights(
-            weights=weights,
-            model_id=self._model_id,
-            strategy=self._strategy,
-            context=context,
-        )
-
-        # Store transports for wait_async
-        self._pending_transports = list(self._iterate_transports(worker_ids))
-
-        # Send to all workers (non-blocking)
-        for transport in self._pending_transports:
-            if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(prepared_weights, model_id=self._model_id)
-            else:
-                raise RuntimeError(
-                    f"transport of type {type(transport)} does not support async send."
-                )
-
-        self._pending_async = True
-
-    def synchronize_weights(self) -> None:
-        """Synchronize weights with workers before collection starts.
-
-        Computes device-specific weight copies on-demand and sends them to workers
-        sequentially via queues. This is called once after workers are initialized
-        but before they start collecting data.
-
-        Unlike send(), this does not wait for acknowledgments since workers are still
-        in their initialization phase.
-
-        This approach creates weight copies on-demand and sends them sequentially,
-        allowing garbage collection between workers to reduce memory usage.
-
-        Raises:
-            RuntimeError: If init_on_sender() was not called first.
-        """
-        # Get the device mapping info stored during init_on_sender
-        if not hasattr(self._scheme, "_device_mapping_info"):
-            raise RuntimeError(
-                "MPWeightSender.synchronize_weights() requires a call to MultiProcessWeightSyncScheme.init_on_sender"
-            )
-
-        mapping_info = self._scheme._device_mapping_info
-
-        # Get context from sender's weakref
-        context = self._context_ref() if self._context_ref is not None else None
-
-        # Compute params_map on-demand
-        # Extract with explicit type casting for type checker
-        model_id = mapping_info["model_id"]
-        weights = mapping_info["weights"]
-        model = mapping_info["model"]
-        params_map_arg = mapping_info["params_map"]
-        devices = mapping_info["devices"]
-        device_map_fn = mapping_info["device_map_fn"]
-        num_workers = mapping_info["num_workers"]
-
-        params_map = self._scheme._get_params_map(
-            context=context,
-            model_id=model_id,
-            weights=weights,
-            model=model,
-            params_map=params_map_arg,
-            devices=devices,
-            device_map_fn=device_map_fn,
-            num_workers=num_workers,
-        )
-
-        # Send to workers sequentially via queues (no ACK - workers are still initializing)
-        # This allows GC to clean up each worker's weights before creating the next
-        for i, transport in enumerate(self._iterate_transports()):
-            worker_weights = params_map[i]
-            if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(worker_weights, model_id=self._model_id)  # type: ignore[attr-defined]
-            else:
-                raise RuntimeError(
-                    f"Transport {type(transport)} does not support async send for synchronization"
-                )
-
-        # Clean up the mapping info after synchronization
-        delattr(self._scheme, "_device_mapping_info")
+from torchrl.weight_update.weight_sync_schemes import TransportBackend
 
 
 class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
@@ -254,9 +59,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         reduced, especially when workers use different devices or when the model
         is large.
     """
-
-    _sender_cls = MPWeightSender
-    _receiver_cls = MPWeightReceiver
 
     def __init__(self, strategy: str = "tensordict"):
         """Initialize the MultiProcessWeightSyncScheme.
@@ -358,7 +160,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         # Store the mapping recipe for later use in synchronize_weights
         # Don't store params_map directly to save memory - we'll recompute on demand
         # Note: We don't store context directly to avoid pickle issues -
-        # it's available via sender._context_ref
+        # it's available via _context_ref
         self._device_mapping_info = {
             "model_id": model_id,
             "weights": weights,
@@ -381,21 +183,17 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             if worker_idx not in self._weight_init_queues:
                 self._weight_init_queues[worker_idx] = mp.Queue()
 
-        # Create sender
-        sender = MPWeightSender(self)
-        sender._model_id = model_id
+        # Store model_id and context on scheme
+        self.model_id = model_id
         if context is not None:
-            sender._context_ref = weakref.ref(context)
+            self.context = context
 
         # Register workers with their queues
         for worker_idx in all_workers:
             queue = self._weight_init_queues[worker_idx]
             # Create MPTransport for this worker
             transport = MPTransport(weight_queue=queue, ack_queue=None)
-            sender._register_worker(worker_idx, transport)
-
-        self._sender = sender
-        self._initialized_on_sender = True
+            self._register_worker_sender(worker_idx=worker_idx, transport=transport)
 
     def _init_on_receiver_impl(
         self,
@@ -411,13 +209,14 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             context: Optional context object providing worker_idx and model
             **kwargs: Alternative to context (worker_idx, model, etc.)
         """
+
         # Extract parameters from context or kwargs
         if context is not None:
             worker_idx = getattr(context, "worker_idx", None)
             if hasattr(context, "get_model"):
                 model = context.get_model(model_id)
             else:
-                model = None
+                model = _resolve_model(context, model_id)
         else:
             worker_idx = kwargs.get("worker_idx")
             model = kwargs.get("model")
@@ -433,33 +232,206 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
 
         queue = self._weight_init_queues[worker_idx]
 
-        # Create receiver and register model
-        receiver = MPWeightReceiver(self)
+        # Store on scheme directly
+        self.model_id = model_id
         if context is not None:
-            receiver._context_ref = weakref.ref(context)
+            self.context = context
 
         # Create transport with the worker's queue
         transport = MPTransport(weight_queue=queue, ack_queue=None)
-        receiver._register_worker_transport(transport)
+        self._register_transport_receiver(transport=transport)
 
         if model is not None:
-            receiver._register_model(model)
-        else:
-            # Register by model_id for later resolution
-            receiver._register_model(model_id)
+            self.model = model
 
         # Store worker_idx for synchronize_weights
-        receiver._worker_idx = worker_idx
+        self.worker_idx = worker_idx
 
-        self._receiver = receiver
-        self._initialized_on_receiver = True
+    def send(
+        self,
+        weights: Any = None,
+        worker_ids: int | list[int] | None = None,
+    ) -> None:
+        """Send weights synchronously to workers.
 
-    def create_transport(self, queue: Any) -> TransportBackend:
+        This method:
+        1. Prepares weights (extracts from model if weights=None)
+        2. Sends to specified workers (or all if worker_ids=None)
+        3. Waits for acknowledgments from those workers
+        4. Returns when workers have applied the weights
+
+        Args:
+            weights: Weights to send. Can be:
+                - None: Extract from model via context.get_model(model_id)
+                - nn.Module: Extract weights from module
+                - TensorDict: Use directly
+                - dict: Convert to TensorDict
+            worker_ids: Which workers to send to:
+                - None: Send to all workers (default)
+                - int: Send to single worker
+                - list[int]: Send to specific workers
+
+        Note: This is a blocking call that ensures specified workers are updated
+        before returning.
+        """
+        if not self.initialized_on_sender:
+            raise RuntimeError("Must be initialized on sender before sending weights")
+
+        if self._pending_async:
+            raise RuntimeError(
+                "Cannot call send() while an async send is pending. Call wait_async() first."
+            )
+
+        model_id = self.model_id
+        context = self.context
+
+        # Let the scheme prepare the weights
+        prepared_weights = self.prepare_weights(
+            weights=weights,
+            model_id=model_id,
+            strategy=self._strategy,
+            context=context,
+        )
+
+        transports = list(self._iterate_transports(worker_ids))
+
+        # Send to all workers first (non-blocking if transport supports it)
+        for transport in transports:
+            if hasattr(transport, "send_weights_async"):
+                # For MPTransport, pass model_id; other transports don't need it
+                transport.send_weights_async(prepared_weights, model_id=model_id)
+            else:
+                # Fallback for transports that don't support async send
+                transport.send_weights(prepared_weights)
+
+        # Wait for all acknowledgments
+        for transport in transports:
+            if hasattr(transport, "wait_ack"):
+                transport.wait_ack()
+
+    def send_async(
+        self,
+        weights: Any = None,
+        worker_ids: int | list[int] | None = None,
+    ) -> None:
+        """Send weights asynchronously to workers (non-blocking).
+
+        This initiates the send but returns immediately without waiting
+        for workers to acknowledge. You must call wait_async() before
+        the next send_async() or send() call.
+
+        Args:
+            weights: Same as send()
+            worker_ids: Same as send()
+
+        Raises:
+            RuntimeError: If a previous send_async() is still pending
+        """
+        if not self.initialized_on_sender:
+            raise RuntimeError("Must be initialized on sender before sending weights")
+
+        if self._pending_async:
+            raise RuntimeError(
+                "Cannot call send_async() again while a previous send is pending. Call wait_async() first."
+            )
+
+        context = self.context
+
+        # Let the scheme prepare the weights
+        prepared_weights = self.prepare_weights(
+            weights=weights,
+            model_id=self.model_id,
+            strategy=self._strategy,
+            context=context,
+        )
+
+        # Store transports for wait_async
+        self._pending_transports = list(self._iterate_transports(worker_ids))
+
+        # Send to all workers (non-blocking)
+        for transport in self._pending_transports:
+            if hasattr(transport, "send_weights_async"):
+                transport.send_weights_async(prepared_weights, model_id=self._model_id)
+            else:
+                raise RuntimeError(
+                    f"transport of type {type(transport)} does not support async send."
+                )
+
+        self._pending_async = True
+
+    def _setup_connection_and_weights_on_sender_impl(
+        self, *, worker_idx: int | None = None, weights: Any | None = None,
+    ) -> None:
+        """Synchronize weights with workers before collection starts.
+
+        Computes device-specific weight copies on-demand and sends them to workers
+        sequentially via queues. This is called once after workers are initialized
+        but before they start collecting data.
+
+        Unlike send(), this does not wait for acknowledgments since workers are still
+        in their initialization phase.
+
+        This approach creates weight copies on-demand and sends them sequentially,
+        allowing garbage collection between workers to reduce memory usage.
+
+        Raises:
+            RuntimeError: If init_on_sender() was not called first.
+        """
+        # Get the device mapping info stored during init_on_sender
+        if not hasattr(self, "_device_mapping_info"):
+            raise RuntimeError(
+                "synchronize_weights() requires init_on_sender() to be called first"
+            )
+
+        mapping_info = self._device_mapping_info
+
+        # Get context from weakref
+        context = self.context
+
+        # Compute params_map on-demand
+        # Extract with explicit type casting for type checker
+        model_id = mapping_info["model_id"]
+        weights = mapping_info["weights"]
+        model = mapping_info["model"]
+        params_map_arg = mapping_info["params_map"]
+        devices = mapping_info["devices"]
+        device_map_fn = mapping_info["device_map_fn"]
+        num_workers = mapping_info["num_workers"]
+
+        params_map = self._get_params_map(
+            context=context,
+            model_id=model_id,
+            weights=weights,
+            model=model,
+            params_map=params_map_arg,
+            devices=devices,
+            device_map_fn=device_map_fn,
+            num_workers=num_workers,
+        )
+
+        # Send to workers sequentially via queues (no ACK - workers are still initializing)
+        # This allows GC to clean up each worker's weights before creating the next
+        for i, transport in enumerate(self._iterate_transports()):
+            if worker_idx is not None and i != worker_idx:
+                continue
+            worker_weights = params_map[i]
+            if hasattr(transport, "send_weights_async"):
+                transport.send_weights_async(worker_weights, model_id=self._model_id)
+            else:
+                raise RuntimeError(
+                    f"Transport {type(transport)} does not support async send for synchronization"
+                )
+
+        # Clean up the mapping info after synchronization
+        delattr(self, "_device_mapping_info")
+
+    def create_transport(self, **kwargs) -> TransportBackend:
         """Create an MPTransport using the provided queue.
 
         Note:
             This is used internally by init_on_sender/init_on_receiver.
         """
+        queue = kwargs.get("queue")
         return MPTransport(weight_queue=queue, ack_queue=None)
 
 
@@ -471,8 +443,8 @@ class MPTransport:
     queues to send initial weights to workers during synchronization.
 
     Initialization flow:
-    - MPWeightSender.synchronize_weights() extracts weights and sends to all workers via queues
-    - Workers receive the initial weights via synchronize_weights_on_receiver()
+    - synchronize_weights() extracts weights and sends to all workers via queues
+    - Workers receive the initial weights via setup_connection_and_weights_on_receiver()
     - Subsequent updates use send_weights_async() followed by acknowledgments
 
     Args:
@@ -545,26 +517,26 @@ class MPTransport:
         # Queues don't have a 'closed' attribute, so we assume they're always open
         return True
 
-    def synchronize_weights_on_sender(self) -> None:
-        """No-op for MPTransport - weights are sent via MPWeightSender.synchronize_weights().
+    def setup_connection_and_weights_on_sender(self) -> None:
+        """No-op for MPTransport - weights are sent via scheme's synchronize_weights().
 
-        The actual sending happens in MPWeightSender.synchronize_weights(), which:
+        The actual sending happens in MultiProcessWeightSyncScheme._setup_connection_and_weights_on_sender_impl(), which:
         1. Extracts weights from the context (e.g., collector.policy)
         2. Calls send_weights_async() on all worker transports
         3. Sends initial weights through queues to all workers
 
-        This is similar to SharedMemTransport.synchronize_weights_on_sender() which
+        This is similar to SharedMemTransport.setup_connection_and_weights_on_sender() which
         sends shared memory buffer references via queues.
         """
 
-    def synchronize_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
         """Receive initial weights from sender during worker initialization.
 
         This method blocks waiting for the initial weights to be sent from the main process
-        via queue. Similar to SharedMemTransport.synchronize_weights_on_receiver() which receives
+        via queue. Similar to SharedMemTransport.setup_connection_and_weights_on_receiver() which receives
         shared memory buffer references via queues, this receives the actual weights via queues.
 
-        The received weights are then applied to the worker's model by MPWeightReceiver.synchronize_weights().
+        The received weights are then applied to the worker's model by the scheme's synchronize_weights().
 
         Args:
             worker_idx: The worker index (used for logging/debugging).

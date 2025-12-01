@@ -32,7 +32,7 @@ from torchrl.collectors.utils import _TrajectoryPool, split_trajectories
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import EnvBase, EnvCreator, RandomPolicy, StepCounter, TransformedEnv
+from torchrl.envs import EnvBase, EnvCreator, StepCounter, TransformedEnv
 from torchrl.envs.common import _do_nothing
 from torchrl.envs.llm.transforms import PolicyVersion
 from torchrl.envs.utils import (
@@ -40,6 +40,7 @@ from torchrl.envs.utils import (
     _make_compatible_policy,
     set_exploration_type,
 )
+from torchrl.modules import RandomPolicy
 from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 
@@ -208,6 +209,16 @@ class SyncDataCollector(DataCollectorBase):
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): **Not supported for SyncDataCollector**.
+            SyncDataCollector is a leaf collector and cannot send weights to sub-collectors.
+            Providing this parameter will raise a ValueError.
+            Use ``weight_recv_schemes`` if you need to receive weights from a parent collector.
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This enables cascading weight updates in hierarchies like:
+            RPCDataCollector -> MultiSyncDataCollector -> SyncDataCollector.
+            Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
@@ -311,12 +322,16 @@ class SyncDataCollector(DataCollectorBase):
         | Callable[[], WeightUpdaterBase]
         | None = None,
         weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         **kwargs,
     ):
         self.closed = True
-        self._worker_idx = worker_idx
+        self.worker_idx = worker_idx
+
+        # Note: weight_sync_schemes can be used to send weights to components
+        # within the environment (e.g., RayModuleTransform), not just sub-collectors
 
         # Initialize environment
         env = self._init_env(create_env_fn, create_env_kwargs)
@@ -419,6 +434,10 @@ class SyncDataCollector(DataCollectorBase):
 
         # Set up weight synchronization
         self._setup_weight_sync(weight_updater, weight_sync_schemes)
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
 
     def _init_env(
         self,
@@ -794,9 +813,13 @@ class SyncDataCollector(DataCollectorBase):
         if weight_sync_schemes is not None:
             # Use new simplified weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
-            # For single-process collectors, we don't need senders/receivers
-            # The policy is local and changes are immediately visible
-            # Senders will be set up in multiprocess collectors during _run_processes
+            # Initialize and synchronize schemes that need sender-side setup
+            # (e.g., RayModuleTransformScheme for updating transforms in the env)
+            for model_id, scheme in weight_sync_schemes.items():
+                if not scheme.initialized_on_sender:
+                    scheme.init_on_sender(model_id=model_id, context=self)
+                if not scheme.synchronized_on_sender:
+                    scheme.setup_connection_and_weights()
             self.weight_updater = None  # Don't use legacy system
         elif weight_updater is not None:
             # Use legacy weight updater system if explicitly provided
@@ -1188,20 +1211,17 @@ class SyncDataCollector(DataCollectorBase):
 
             while self._frames < self.total_frames:
                 self._iter += 1
-                if self.verbose:
-                    torchrl_logger.info("Collector: rollout.")
+                torchrl_logger.debug("Collector: rollout.")
                 tensordict_out = self.rollout()
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
-                    if self.verbose:
-                        torchrl_logger.info("Collector: No tensordict_out. Yielding.")
+                    torchrl_logger.debug("Collector: No tensordict_out. Yielding.")
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
                 tensordict_out = self._postproc(tensordict_out)
-                if self.verbose:
-                    torchrl_logger.info("Collector: postproc done.")
+                torchrl_logger.debug("Collector: postproc done.")
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
@@ -1212,11 +1232,10 @@ class SyncDataCollector(DataCollectorBase):
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
                     self.replay_buffer.extend(tensordict_out)
-                    if self.verbose:
-                        torchrl_logger.info(
-                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. "
-                            "Buffer write count: {self.replay_buffer.write_count}. Yielding."
-                        )
+                    torchrl_logger.debug(
+                        f"Collector: Added {tensordict_out.numel()} frames to replay buffer. "
+                        "Buffer write count: {self.replay_buffer.write_count}. Yielding."
+                    )
                     yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
@@ -1241,12 +1260,12 @@ class SyncDataCollector(DataCollectorBase):
             RuntimeError: If no replay buffer is defined during the collector's initialization.
 
         Example:
-            >>> import time
+            >>> from torchrl.modules import RandomPolicy            >>>             >>> import time
             >>> from functools import partial
             >>>
             >>> import tqdm
             >>>
-            >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+            >>> from torchrl.collectors import SyncDataCollector
             >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
             >>> from torchrl.envs import GymEnv, set_gym_backend
             >>> import ale_py
@@ -1466,28 +1485,25 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.verbose:
-                    torchrl_logger.info(
-                        f"Collector: Rollout step completed {self._iter=}."
-                    )
+                torchrl_logger.debug(
+                    f"Collector: Rollout step completed {self._iter=}, {self._worker_idx=}."
+                )
                 if (
                     self.replay_buffer is not None
                     and not self._ignore_rb
                     and not self.extend_buffer
                 ):
-                    if self.verbose:
-                        torchrl_logger.info(
-                            f"Collector: Adding {env_output.numel()} frames to replay buffer using add()."
-                        )
+                    torchrl_logger.debug(
+                        f"Collector: Adding {env_output.numel()} frames to replay buffer using add()."
+                    )
                     self.replay_buffer.add(self._shuttle)
                     if self._increment_frames(self._shuttle.numel()):
                         return
                 else:
                     if self.storing_device is not None:
-                        if self.verbose:
-                            torchrl_logger.info(
-                                f"Collector: Moving to {self.storing_device} and adding to queue."
-                            )
+                        torchrl_logger.debug(
+                            f"Collector: Moving to {self.storing_device} and adding to queue."
+                        )
                         non_blocking = (
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
@@ -1499,10 +1515,7 @@ class SyncDataCollector(DataCollectorBase):
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
-                        if self.verbose:
-                            torchrl_logger.info(
-                                "Collector: Adding to queue (no device)."
-                            )
+                        torchrl_logger.debug("Collector: Adding to queue (no device).")
                         tensordicts.append(self._shuttle)
 
                 # carry over collector data without messing up devices
@@ -1517,8 +1530,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
-                    if self.verbose:
-                        torchrl_logger.info("Collector: Interruptor stopped.")
+                    torchrl_logger.debug("Collector: Interruptor stopped.")
                     if (
                         self.replay_buffer is not None
                         and not self._ignore_rb
@@ -1568,7 +1580,7 @@ class SyncDataCollector(DataCollectorBase):
                 ):
                     return
                 else:
-                    torchrl_logger.info(
+                    torchrl_logger.debug(
                         "Returning final rollout with NO buffer (maybe_dense_stack)."
                     )
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
