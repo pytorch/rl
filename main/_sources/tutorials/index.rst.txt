@@ -22,7 +22,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-4_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_getting-started-4.py`
+  :doc:`/tutorials/getting-started-4`
 
 .. raw:: html
 
@@ -39,7 +39,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-0_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_getting-started-0.py`
+  :doc:`/tutorials/getting-started-0`
 
 .. raw:: html
 
@@ -56,7 +56,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-2_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_getting-started-2.py`
+  :doc:`/tutorials/getting-started-2`
 
 .. raw:: html
 
@@ -73,7 +73,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-3_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_getting-started-3.py`
+  :doc:`/tutorials/getting-started-3`
 
 .. raw:: html
 
@@ -90,7 +90,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_pretrained_models_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_pretrained_models.py`
+  :doc:`/tutorials/pretrained_models`
 
 .. raw:: html
 
@@ -107,7 +107,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-5_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_getting-started-5.py`
+  :doc:`/tutorials/getting-started-5`
 
 .. raw:: html
 
@@ -124,7 +124,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_getting-started-1_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_getting-started-1.py`
+  :doc:`/tutorials/getting-started-1`
 
 .. raw:: html
 
@@ -141,7 +141,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_multi_task_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_multi_task.py`
+  :doc:`/tutorials/multi_task`
 
 .. raw:: html
 
@@ -158,7 +158,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_llm_browser_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_llm_browser.py`
+  :doc:`/tutorials/llm_browser`
 
 .. raw:: html
 
@@ -175,7 +175,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_dqn_with_rnn_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_dqn_with_rnn.py`
+  :doc:`/tutorials/dqn_with_rnn`
 
 .. raw:: html
 
@@ -192,7 +192,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_export_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_export.py`
+  :doc:`/tutorials/export`
 
 .. raw:: html
 
@@ -209,7 +209,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_multiagent_ppo_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_multiagent_ppo.py`
+  :doc:`/tutorials/multiagent_ppo`
 
 .. raw:: html
 
@@ -226,7 +226,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_torchrl_envs_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_torchrl_envs.py`
+  :doc:`/tutorials/torchrl_envs`
 
 .. raw:: html
 
@@ -243,7 +243,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_coding_ppo_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_coding_ppo.py`
+  :doc:`/tutorials/coding_ppo`
 
 .. raw:: html
 
@@ -260,7 +260,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_rb_tutorial_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_rb_tutorial.py`
+  :doc:`/tutorials/rb_tutorial`
 
 .. raw:: html
 
@@ -277,7 +277,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_llm_wrappers_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_llm_wrappers.py`
+  :doc:`/tutorials/llm_wrappers`
 
 .. raw:: html
 
@@ -294,7 +294,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_coding_dqn_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_coding_dqn.py`
+  :doc:`/tutorials/coding_dqn`
 
 .. raw:: html
 
@@ -311,7 +311,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_pendulum_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_pendulum.py`
+  :doc:`/tutorials/pendulum`
 
 .. raw:: html
 
@@ -328,7 +328,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_torchrl_demo_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_torchrl_demo.py`
+  :doc:`/tutorials/torchrl_demo`
 
 .. raw:: html
 
@@ -345,7 +345,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_multiagent_competitive_ddpg_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py`
+  :doc:`/tutorials/multiagent_competitive_ddpg`
 
 .. raw:: html
 
@@ -362,7 +362,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
   .. image:: /tutorials/images/thumb/sphx_glr_coding_ddpg_thumb.png
     :alt:
 
-  :ref:`sphx_glr_tutorials_coding_ddpg.py`
+  :doc:`/tutorials/coding_ddpg`
 
 .. raw:: html
 

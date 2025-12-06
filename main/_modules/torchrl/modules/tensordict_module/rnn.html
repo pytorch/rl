@@ -1146,9 +1146,6 @@
             <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">default</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span>
         <span class="p">)</span>
-        <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
-        <span class="n">device</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span>
-        <span class="n">dtype</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span>
         <span class="c1"># packed sequences do not help to get the accurate last hidden values</span>
         <span class="c1"># if splits is not None:</span>
         <span class="c1">#     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)</span>
@@ -1159,8 +1156,13 @@
             <span class="c1">#  When using the recurrent_mode=True option, the lstm can be called from</span>
             <span class="c1">#  any intermediate state, hence zeroing should not be done.</span>
             <span class="n">is_init_expand</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">is_init</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">)</span>
-            <span class="n">hidden0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">)</span>
-            <span class="n">hidden1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden1</span><span class="p">)</span>
+            <span class="n">zeros</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden0</span><span class="p">)</span>
+            <span class="n">hidden0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">)</span>
+            <span class="n">hidden1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">hidden1</span><span class="p">)</span>
+
+        <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span>
 
         <span class="n">val</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm</span><span class="p">(</span>
             <span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span>
