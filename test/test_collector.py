@@ -85,6 +85,7 @@ from torchrl.modules import (
     RandomPolicy,
     SafeModule,
 )
+from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
@@ -4000,6 +4001,79 @@ class TestPolicyFactory:
                 elif i == 3:
                     assert (data["action"] == 0).all(), data["action"]
                     break
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [
+            functools.partial(MultiSyncDataCollector, cat_results="stack"),
+            MultiaSyncDataCollector,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme_cls",
+        [MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+    )
+    def test_nonserializable_policy_with_factory_and_weight_sync(
+        self, collector_cls, weight_sync_scheme_cls
+    ):
+        """Test that a non-serializable policy can be used on the main node alongside a policy_factory.
+
+        The policy instance is used only for weight extraction on the main node, while
+        the policy_factory is what gets sent to and instantiated on workers.
+        """
+
+        # Simple continuous-control env
+        def create_env():
+            return ContinuousActionVecMockEnv()
+
+        # Non-serializable policy instance on main node
+        base_module = NonSerializableBiasModule(0.0)
+        policy = TensorDictModule(
+            base_module, in_keys=["observation"], out_keys=["action"]
+        )
+
+        # Serializable factory used to build worker policies
+        def policy_factory():
+            return TensorDictModule(
+                BiasModule(0.0), in_keys=["observation"], out_keys=["action"]
+            )
+
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+        # Weight sync scheme will be initialized on the sender side by the collector,
+        # using the policy instance passed above as the source of weights.
+        weight_sync_scheme = weight_sync_scheme_cls()
+
+        collector = collector_cls(
+            [create_env, create_env],
+            policy=policy,
+            policy_factory=policy_factory,
+            frames_per_batch=16,
+            total_frames=64,
+            device=device,
+            storing_device="cpu",
+            weight_sync_schemes={"policy": weight_sync_scheme},
+        )
+
+        try:
+            # Ensure we can collect at least one batch without serialization issues
+            iterator = iter(collector)
+            _ = next(iterator)
+
+            # Change the main-node policy weights and update workers without passing weights explicitly
+            with torch.no_grad():
+                base_module.bias.add_(1.0)
+
+            # This call should:
+            # - Use the (non-serializable) policy to extract weights via TensorDict.from_module()
+            # - Send those weights through the weight sync scheme
+            # - NOT attempt to serialize the policy itself
+            collector.update_policy_weights_()
+
+            # Collect again to exercise the updated weights path and ensure workers didn't crash
+            _ = next(iterator)
         finally:
             collector.shutdown()
 

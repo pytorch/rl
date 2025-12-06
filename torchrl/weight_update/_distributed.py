@@ -34,6 +34,8 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         model_id: str,
         context: Any = None,
         num_workers: int,
+        model: Any = None,
+        weights: Any = None,
         **kwargs,
     ) -> None:
         self.model_id = model_id
@@ -41,10 +43,23 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
         # Attach context so we can resolve the model and prepare
         # weights on demand via scheme.prepare_weights().
+        weights_buffer = None
         if context is not None:
             self.context = context
+        if weights is not None:
+            self.weights = weights
+            weights_buffer = weights
+        if model is not None:
+            self.model = model
+        else:
+            # resolve model
+            try:
+                model = self.model
+            except (AttributeError, ValueError):
+                pass
 
-        weights_buffer = self._get_weights_buffer_from_model(self.model)
+        if weights_buffer is None and model is not None:
+            weights_buffer = self._get_weights_buffer_from_model(model)
 
         for i in range(num_workers):
             rank = i + 1  # Workers are 1-indexed in distributed
@@ -82,15 +97,11 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         self.model_id = model_id
         self.context = context
 
-        # Resolve the target model on this worker
-        model = None
-        # Prefer a collector-specific get_model if available, but fall back
-        # gracefully to attribute resolution when no mapping exists.
-        if hasattr(context, "get_model"):
-            model = context.get_model(model_id)
+        if (model := getattr(self, "model", None)) is not None:
             self.model = model
-
-        weights_buffer = self._get_weights_buffer_from_model(model)
+            weights_buffer = self._get_weights_buffer_from_model(model)
+        else:
+            raise RuntimeError("Couldn't find weights")
         self._receiver_transport = self.create_transport(
             store=store, rank=rank, weights_buffer=weights_buffer, sync=self.sync
         )
@@ -110,12 +121,14 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         signaling to avoid interfering with the main collection loop.
         """
         # Check if we have weights to send
-        if self.model is None:
+        if weights is None and getattr(self, "model", None) is None:
             torchrl_logger.debug(
                 "DistributedWeightSyncScheme: No model on sender, skipping initial weight sync"
             )
+            self.context._store.set("STATELESS_MODEL", b"1")
             return
 
+        self.context._store.set("STATELESS_MODEL", b"0")
         # Prepare weights from model
         weights = self._get_weights_buffer_from_model(self.model)
         if weights is None or weights.is_empty():
@@ -143,6 +156,14 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         waiting for the initial weights from the sender.
         """
         if self._receiver_transport is None:
+            return
+        stateless_model = self.receiver_transport._store.get("STATELESS_MODEL")
+        if stateless_model not in (b"0", b"1"):
+            raise RuntimeError(f"Invalid STATELESS_MODEL value: {stateless_model}")
+        if stateless_model == b"1":
+            torchrl_logger.debug(
+                "DistributedWeightSyncScheme: Skipping initial weight sync on receiver because of stateless model."
+            )
             return
 
         # Use stored worker_idx if not provided

@@ -23,6 +23,7 @@ from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 from torchrl.collectors._base import DataCollectorBase
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiaSyncDataCollector
+from torchrl.collectors._multi_base import _MultiDataCollector
 from torchrl.collectors._multi_sync import MultiSyncDataCollector
 from torchrl.collectors._single import SyncDataCollector
 from torchrl.collectors.distributed.default_configs import (
@@ -181,6 +182,18 @@ def _run_collector(
                 "SyncDataCollector and subclasses can only support a single environment."
             )
 
+    if issubclass(collector_class, _MultiDataCollector) and (
+        (not isinstance(policy_factory, Sequence) and policy_factory is not None)
+        or (isinstance(policy_factory, Sequence) and any(policy_factory))
+    ):
+        # We build an intermediate policy to get the weights from for weight updates. This is slow
+        # (main -> dist worker -> mp worker), but in some cases there is no alternative
+        policy = (
+            policy_factory[0]()
+            if isinstance(policy_factory, Sequence)
+            else policy_factory()
+        )
+
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict.from_module(policy)
         policy_weights = policy_weights.data.apply(_cast, policy_weights).lock_()
@@ -193,6 +206,14 @@ def _run_collector(
         policy_weights = TensorDict(lock=True)
 
     torchrl_logger.debug(f"RANK {rank} -- init collector")
+    # NOTE:
+    # - `weight_sync_schemes` here are the *distributed* schemes used to send
+    #   weights from the main process to this node.
+    # - Inner multi-process collectors (e.g., MultiSyncDataCollector) should
+    #   manage their own local weight sync schemes (SharedMem / MP) for their
+    #   sub-workers.
+    #   Therefore, we do NOT pass `weight_sync_schemes` down into
+    #   `collector_class` so that it can set up its own local schemes.
     collector = collector_class(
         env_make,
         policy=policy,
@@ -293,6 +314,9 @@ def _run_collector(
 
                 # Propagate updated weights to inner workers via the nested
                 # collector's own weight sync schemes.
+                torchrl_logger.debug(
+                    f"RANK {rank} -- propagating updated weights to inner workers"
+                )
                 collector.update_policy_weights_()
 
                 # Acknowledgment is handled by the transport (send_ack in the
@@ -563,10 +587,6 @@ class DistributedDataCollector(DataCollectorBase):
             policy_weights = policy_weights.data.lock_()
         elif any(policy_factory):
             policy_weights = None
-            if weight_updater is None:
-                raise RuntimeError(
-                    "weight_updater must be passed along with " "a policy_factory."
-                )
         else:
             if not any(policy_factory):
                 warnings.warn(_NON_NN_POLICY_WEIGHTS)

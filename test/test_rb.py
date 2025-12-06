@@ -1399,17 +1399,17 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
     if datatype == "tc":
         rb.update_priority(index, sampled_td)
         sampled_td, info = rb.sample(return_info=True)
-        assert (info["_weight"] > 0).all()
+        assert (info["priority_weight"] > 0).all()
         assert sampled_td.batch_size == torch.Size([3, 4])
     else:
         rb.update_tensordict_priority(sampled_td)
         sampled_td = rb.sample(include_info=True)
-        assert (sampled_td.get("_weight") > 0).all()
+        assert (sampled_td.get("priority_weight") > 0).all()
         assert sampled_td.batch_size == torch.Size([3, 4])
 
     # # set back the trajectory length
     # sampled_td_filtered = sampled_td.to_tensordict().exclude(
-    #     "_weight", "index", "td_error"
+    #     "priority_weight", "index", "td_error"
     # )
     # sampled_td_filtered.batch_size = [3, 4]
 
@@ -1905,12 +1905,12 @@ def test_rb_trajectories(stack, reduction):
     sampled_td.set("td_error", torch.rand(3, 4))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(include_info=True)
-    assert (sampled_td.get("_weight") > 0).all()
+    assert (sampled_td.get("priority_weight") > 0).all()
     assert sampled_td.batch_size == torch.Size([3, 4])
 
     # set back the trajectory length
     sampled_td_filtered = sampled_td.to_tensordict().exclude(
-        "_weight", "index", "td_error"
+        "priority_weight", "index", "td_error"
     )
     sampled_td_filtered.batch_size = [3, 4]
 
@@ -3380,14 +3380,14 @@ def test_prioritized_slice_sampler_doc_example():
     sample, info = rb.sample(return_info=True)
     # print("episode", sample["episode"].tolist())
     # print("steps", sample["steps"].tolist())
-    # print("weight", info["_weight"].tolist())
+    # print("weight", info["priority_weight"].tolist())
 
     priority = torch.tensor([0, 3, 3, 0, 0, 0, 1, 1, 1])
     rb.update_priority(torch.arange(0, 9, 1), priority=priority)
     sample, info = rb.sample(return_info=True)
     # print("episode", sample["episode"].tolist())
     # print("steps", sample["steps"].tolist())
-    # print("weight", info["_weight"].tolist())
+    # print("weight", info["priority_weight"].tolist())
 
 
 @pytest.mark.parametrize("device", get_default_devices())

@@ -70,9 +70,21 @@ class _MultiDataCollector(DataCollectorBase):
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
                 pickled directly), the ``policy_factory`` should be used instead.
 
+            .. note:: When using ``weight_sync_schemes``, both ``policy`` and ``policy_factory`` can be provided together.
+                In this case, the ``policy`` is used ONLY for weight extraction (via ``TensorDict.from_module()``) to
+                set up weight synchronization, but it is NOT sent to workers and its weights are NOT depopulated.
+                The ``policy_factory`` is what actually gets passed to workers to create their local policy instances.
+                This is useful when the policy is hard to serialize but you have a copy on the main node for
+                weight synchronization purposes.
+
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
-            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
+            (or list of callables) that returns a policy instance.
+
+            When not using ``weight_sync_schemes``, this is mutually exclusive with the ``policy`` argument.
+
+            When using ``weight_sync_schemes``, both ``policy`` and ``policy_factory`` can be provided:
+            the ``policy`` is used for weight extraction only, while ``policy_factory`` creates policies on workers.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -356,25 +368,32 @@ class _MultiDataCollector(DataCollectorBase):
             )
         if (
             weight_sync_schemes is not None
-            and not any(policy_factory)
             and not weight_sync_schemes
             and weight_updater is None
             and isinstance(policy, nn.Module)
+            or any(policy_factory)
         ):
+            # Set up a default local shared-memory sync scheme for the policy.
+            # This is used to propagate weights from the orchestrator policy
+            # (possibly combined with a policy_factory) down to worker policies.
             weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
+        # Store policy and policy_factory - temporary set to make them visible to the receiver
+        self.policy = policy
+        self.policy_factory = policy_factory
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
+
         self._setup_multi_policy_and_weights(
-            policy, policy_factory, weight_updater, weight_sync_schemes
+            self.policy, self.policy_factory, weight_updater, weight_sync_schemes
         )
 
         # Set up policy version tracking
         self._setup_multi_policy_version_tracking(track_policy_version)
-
-        # Store policy and policy_factory
-        self.policy = policy
-        self.policy_factory = policy_factory
 
         # # Set up fallback policy for weight extraction
         # self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
@@ -411,10 +430,6 @@ class _MultiDataCollector(DataCollectorBase):
         except Exception as e:
             self.shutdown(raise_on_error=False)
             raise e
-
-        # Set up weight receivers if provided
-        if weight_recv_schemes is not None:
-            self.register_scheme_receiver(weight_recv_schemes)
 
         # Set up frame tracking and other options
         self._exclude_private_keys = True
@@ -532,21 +547,42 @@ class _MultiDataCollector(DataCollectorBase):
 
         With weight sync schemes: validates and stores policy without weight extraction.
         With weight updater: extracts weights and creates stateful policies.
+
+        When both policy and policy_factory are provided (with weight_sync_schemes):
+        - The policy is used ONLY for weight extraction via get_model()
+        - The policy is NOT depopulated of its weights
+        - The policy is NOT sent to workers
+        - The policy_factory is used to create policies on workers
         """
         if any(policy_factory) and policy is not None:
-            raise TypeError("policy_factory and policy are mutually exclusive")
+            if weight_sync_schemes is None:
+                raise TypeError(
+                    "policy_factory and policy are mutually exclusive when not using weight_sync_schemes. "
+                    "When using weight_sync_schemes, policy can be provided alongside policy_factory "
+                    "for weight extraction purposes only (the policy will not be sent to workers)."
+                )
+            # Store policy as fallback for weight extraction only
+            # The policy keeps its weights and is NOT sent to workers
+            self._fallback_policy = policy
 
         if weight_sync_schemes is not None:
             weight_sync_policy = weight_sync_schemes.get("policy")
             if weight_sync_policy is None:
                 return
-            if any(p is not None for p in policy_factory):
+            # If we only have a policy_factory (no policy instance), the scheme must
+            # be pre-initialized on the sender, since there is no policy on the
+            # collector to extract weights from.
+            if any(p is not None for p in policy_factory) and policy is None:
                 if not weight_sync_policy.initialized_on_sender:
                     raise RuntimeError(
-                        f"the weight sync scheme must be initialized on sender ahead of time when passing a policy factory. Got {policy_factory=}"
+                        "the weight sync scheme must be initialized on sender ahead of time "
+                        "when passing a policy_factory without a policy instance on the collector. "
+                        f"Got {policy_factory=}"
                     )
-            # Weight sync scheme initialization happens in _run_processes
-            # where pipes and workers are available
+            # When a policy instance is provided alongside a policy_factory, the scheme
+            # can rely on the collector context (and its policy) to extract weights.
+            # Weight sync scheme initialization then happens in _run_processes where
+            # pipes and workers are available.
         else:
             # Using legacy weight updater - extract weights and create stateful policies
             self._setup_multi_policy_and_weights_legacy(
@@ -859,11 +895,15 @@ class _MultiDataCollector(DataCollectorBase):
         if self._weight_sync_schemes:
             for model_id, scheme in self._weight_sync_schemes.items():
                 if not scheme.initialized_on_sender:
+                    torchrl_logger.debug(
+                        f"Init scheme {type(scheme)} on sender side of {type(self)} with {model_id=} and model {_resolve_model(self, model_id)}."
+                    )
                     scheme.init_on_sender(model_id=model_id, context=self)
 
         # Create a policy on the right device
         policy_factory = self.policy_factory
-        if any(policy_factory):
+        has_policy_factory = any(policy_factory)
+        if has_policy_factory:
             policy_factory = [
                 CloudpickleWrapper(_policy_factory)
                 for _policy_factory in policy_factory
@@ -882,14 +922,18 @@ class _MultiDataCollector(DataCollectorBase):
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
 
-            # Prepare policy for worker based on weight synchronization method
+            # Prepare policy for worker based on weight synchronization method.
+            # IMPORTANT: when a policy_factory is provided, the policy instance
+            # is used ONLY on the main process (for weight extraction etc.) and
+            # is NOT sent to workers.
             policy = self.policy
 
             if self._weight_sync_schemes:
-                # With weight sync schemes, send stateless policies
-                # Schemes handle weight distribution on worker side
-                if any(policy_factory):
-                    policy_to_send = None  # Factory will create policy in worker
+                # With weight sync schemes, send stateless policies.
+                # Schemes handle weight distribution on worker side.
+                if has_policy_factory:
+                    # Factory will create policy in worker; don't send policy.
+                    policy_to_send = None
                     cm = contextlib.nullcontext()
                 elif policy is not None:
                     # Send policy with meta-device parameters (empty structure) - schemes apply weights
@@ -900,20 +944,27 @@ class _MultiDataCollector(DataCollectorBase):
                     cm = contextlib.nullcontext()
             elif hasattr(self, "_policy_weights_dict"):
                 # LEGACY:
-                # With weight updater, use in-place weight replacement
+                # With weight updater, use in-place weight replacement.
                 # Take the weights and locally dispatch them to the policy before sending.
                 # This ensures a given set of shared weights for a device are shared
                 # for all policies that rely on that device.
                 policy_weights = self._policy_weights_dict.get(policy_device)
-                policy_to_send = policy
-                if policy is not None and policy_weights is not None:
-                    cm = policy_weights.to_module(policy)
-                else:
+                if has_policy_factory:
+                    # Even in legacy mode, when a policy_factory is present, do not
+                    # send the stateful policy down to workers.
+                    policy_to_send = None
                     cm = contextlib.nullcontext()
+                else:
+                    policy_to_send = policy
+                    if policy is not None and policy_weights is not None:
+                        cm = policy_weights.to_module(policy)
+                    else:
+                        cm = contextlib.nullcontext()
             else:
-                # Parameter-less policy
+                # Parameter-less policy.
                 cm = contextlib.nullcontext()
-                policy_to_send = policy
+                # When a policy_factory exists, never send the policy instance.
+                policy_to_send = None if has_policy_factory else policy
 
             with cm:
                 kwargs = {

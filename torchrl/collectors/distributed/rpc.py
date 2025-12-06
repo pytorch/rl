@@ -616,6 +616,21 @@ class RPCDataCollector(DataCollectorBase):
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
             torchrl_logger.debug("Making collector in remote node")
+            # When using weight sync schemes together with a policy_factory, the
+            # main-node `policy` should be used only as a weight source on the
+            # trainer, and NOT sent to remote collectors (which will build their
+            # own policies from the factory). This mirrors the behaviour of
+            # `DistributedDataCollector` with multi-process collectors.
+            policy_to_send = (
+                None
+                if (
+                    policy is not None
+                    and policy_factory[i] is not None
+                    and getattr(self, "_weight_sync_schemes", None) is not None
+                )
+                else policy
+            )
+
             collector_rref = rpc.remote(
                 collector_infos[i],
                 collector_class,
@@ -623,13 +638,14 @@ class RPCDataCollector(DataCollectorBase):
                     [env_make] * num_workers_per_collector
                     if collector_class is not SyncDataCollector
                     else env_make,
-                    policy,
+                    policy_to_send,
                 ),
                 kwargs={
                     "policy_factory": policy_factory[i],
                     "frames_per_batch": frames_per_batch,
                     "total_frames": -1,
                     "split_trajs": False,
+                    "weight_recv_schemes": self._weight_sync_schemes,
                     **collector_kwargs[i],
                 },
             )

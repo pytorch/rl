@@ -557,7 +557,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         if self._model_id is not None:
             model = _resolve_model(self.context, self._model_id)
             if model is None:
-                raise ValueError(
+                raise AttributeError(
                     f"Model {self._model_id} was `None` in context {self.context}"
                 )
             self._model_ref = weakref.ref(model)
@@ -582,10 +582,16 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         Returns:
             The weights as TensorDict if available, None otherwise.
         """
+        if (weights := getattr(self, "_weights", None)) is not None:
+            return weights
         model = self.model
         if model is not None:
             return self._strategy.extract_weights(model)
         return None
+
+    @weights.setter
+    def weights(self, value: Any):
+        self._weights = value
 
     def _get_weights_buffer_from_model(self, model: nn.Module | Any) -> TensorDictBase:
         from torchrl.collectors.utils import _cast

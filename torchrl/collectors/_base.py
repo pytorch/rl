@@ -432,6 +432,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 f"Receiving weights for scheme {type(scheme).__name__} for model '{model_id}' on worker {self._worker_idx}"
             )
             received_weights = scheme.receive()
+            torchrl_logger.debug(f"Received weights: {received_weights}")
             if received_weights is not None:
                 updates[model_id] = received_weights
 

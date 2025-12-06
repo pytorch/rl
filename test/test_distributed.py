@@ -281,23 +281,36 @@ class DistributedCollectorBase:
             queue.close()
 
     @classmethod
-    def _test_distributed_collector_updatepolicy(cls, queue, collector_class, sync):
+    def _test_distributed_collector_updatepolicy(
+        cls, queue, collector_class, sync, pfactory
+    ):
         try:
             frames_per_batch = 50
             total_frames = 300
             env = CountingEnv
-            policy = CountingPolicy()
+            if pfactory:
+                policy_factory = CountingPolicy
+                policy = None
+            else:
+                policy = CountingPolicy()
+                policy_factory = None
             if collector_class is MultiaSyncDataCollector:
                 # otherwise we may collect data from a collector that has not yet been
                 # updated
                 n_collectors = 1
             else:
                 n_collectors = 2
+            weights = None
+            if policy is None and policy_factory is not None:
+                policy_stateful = policy_factory()
+                weights = TensorDict.from_module(policy_stateful).lock_()
             dcls = cls.distributed_class()
             torchrl_logger.info(f"Using distributed collector {dcls}")
+            collector = None
             collector = dcls(
                 [env] * n_collectors,
                 policy,
+                policy_factory=policy_factory,
                 collector_class=collector_class,
                 total_frames=total_frames,
                 frames_per_batch=frames_per_batch,
@@ -312,9 +325,13 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
+                    if policy is not None:
+                        policy.weight.data += 1
+                    else:
+                        weights.data += 1
                     torchrl_logger.info("TEST -- Calling update_policy_weights_()")
-                    collector.update_policy_weights_()
+                    collector.update_policy_weights_(weights)
+                    torchrl_logger.info("TEST -- Done calling update_policy_weights_()")
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
             assert (first_batch["action"] == 1).all(), first_batch["action"]
@@ -335,13 +352,14 @@ class DistributedCollectorBase:
         ],
     )
     @pytest.mark.parametrize("sync", [False, True])
-    def test_distributed_collector_updatepolicy(self, collector_class, sync):
+    @pytest.mark.parametrize("pfactory", [False, True])
+    def test_distributed_collector_updatepolicy(self, collector_class, sync, pfactory):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)
 
         proc = mp.Process(
             target=self._test_distributed_collector_updatepolicy,
-            args=(queue, collector_class, sync),
+            args=(queue, collector_class, sync, pfactory),
         )
         proc.start()
         try:
@@ -413,15 +431,24 @@ class TestSyncCollector(DistributedCollectorBase):
 
     @classmethod
     def _test_distributed_collector_updatepolicy(
-        cls, queue, collector_class, update_interval
+        cls,
+        queue,
+        collector_class,
+        update_interval,
+        pfactory,
     ):
         frames_per_batch = 50
         total_frames = 300
         env = CountingEnv
+        if pfactory:
+            policy_factory = CountingPolicy
+        else:
+            policy_factory = None
         policy = CountingPolicy()
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
+            policy_factory=policy_factory,
             collector_class=collector_class,
             total_frames=total_frames,
             frames_per_batch=frames_per_batch,
@@ -462,13 +489,16 @@ class TestSyncCollector(DistributedCollectorBase):
         ],
     )
     @pytest.mark.parametrize("update_interval", [1])
-    def test_distributed_collector_updatepolicy(self, collector_class, update_interval):
+    @pytest.mark.parametrize("pfactory", [True, False])
+    def test_distributed_collector_updatepolicy(
+        self, collector_class, update_interval, pfactory
+    ):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)
 
         proc = mp.Process(
             target=self._test_distributed_collector_updatepolicy,
-            args=(queue, collector_class, update_interval),
+            args=(queue, collector_class, update_interval, pfactory),
         )
         proc.start()
         try:
@@ -595,20 +625,31 @@ class TestRayCollector(DistributedCollectorBase):
         ],
     )
     @pytest.mark.parametrize("sync", [False, True])
-    def test_distributed_collector_updatepolicy(self, collector_class, sync):
+    @pytest.mark.parametrize("pfactory", [False, True])
+    def test_distributed_collector_updatepolicy(self, collector_class, sync, pfactory):
         frames_per_batch = 50
         total_frames = 300
         env = CountingEnv
-        policy = CountingPolicy()
+        if pfactory:
+            policy_factory = CountingPolicy
+            policy = None
+        else:
+            policy = CountingPolicy()
+            policy_factory = None
         if collector_class is MultiaSyncDataCollector:
             # otherwise we may collect data from a collector that has not yet been
             # updated
             n_collectors = 1
         else:
             n_collectors = 2
+        weights = None
+        if policy is None and policy_factory is not None:
+            policy_stateful = policy_factory()
+            weights = TensorDict.from_module(policy_stateful)
         collector = self.distributed_class()(
             [env] * n_collectors,
             policy,
+            policy_factory=policy_factory,
             collector_class=collector_class,
             total_frames=total_frames,
             frames_per_batch=frames_per_batch,
@@ -624,8 +665,11 @@ class TestRayCollector(DistributedCollectorBase):
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
-                    collector.update_policy_weights_()
+                    if policy is not None:
+                        policy.weight.data += 1
+                    else:
+                        weights.data += 1
+                    collector.update_policy_weights_(weights)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
             assert (first_batch["action"] == 1).all(), first_batch["action"]

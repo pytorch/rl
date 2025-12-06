@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import weakref
 from typing import Any
 
-from tensordict import TensorDict
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.weight_update.utils import _resolve_model
-from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    TransportBackend,
+    WeightStrategy,
+    WeightSyncScheme,
+)
 
 
 class RPCWeightSyncScheme(WeightSyncScheme):
@@ -54,16 +59,6 @@ class RPCWeightSyncScheme(WeightSyncScheme):
             )
             self._register_worker_sender(worker_idx=i, transport=transport)
 
-        # Store reference to source model for automatic extraction
-        if (
-            model_id == "policy"
-            and hasattr(context, "policy")
-            and context.policy is not None
-        ):
-            self.model = context.policy
-        else:
-            self.model = _resolve_model(context, model_id)
-
     def _init_on_receiver_impl(
         self, *, model_id: str, context: Any = None, worker_idx: int | None = None
     ) -> None:
@@ -84,14 +79,10 @@ class RPCWeightSyncScheme(WeightSyncScheme):
         self.model_id = model_id
         self.worker_idx = worker_idx
         self.context = context
+        # Access weights to set up missing elements
+        self.weights  # noqa
 
-        # Resolve the target model on this worker
-        model = _resolve_model(context, model_id)
-        self.model = model
-
-        # Note: For RPC, we don't create a transport on the receiver side
-        # The receiver just needs to call recv() when signaled
-        self._receiver_transport = None
+        self._receiver_transport = RPCTransport(worker_rank=worker_idx)
 
     def receive(self, timeout: float = 0.001) -> Any:
         """Receive weights from the main process using torch.distributed.recv().
@@ -108,25 +99,44 @@ class RPCWeightSyncScheme(WeightSyncScheme):
             raise RuntimeError(
                 "Must be initialized on receiver before receiving weights"
             )
+        self.receiver_transport.receive_weights(
+            timeout=timeout,
+            model=self.model,
+            strategy=self._strategy,
+            weights=self.weights,
+        )
+        if self.context is not None and hasattr(self.context, "update_policy_weights_"):
+            self.context.update_policy_weights_(
+                model_id=self.model_id, policy_or_weights=self.weights
+            )
+        return self.weights
 
-        # Dereference the weakref to get the actual context
-        context = self.context
-        if context is None:
-            return None
+    @property
+    def model(self) -> Any | None:
+        if self._model_ref is not None:
+            return self._model_ref()
+        if self._model_id is not None:
+            model = _resolve_model(self.context, self._model_id)
+            if model is None:
+                if self._model_id == "policy":
+                    torchrl_logger.debug(
+                        f"Creating policy from factory and setting in collector {type(self.context)}"
+                    )
+                    model = self.context.policy_factory[0]()
+                    self.context.policy = model
+                    torchrl_logger.debug(f"{self.context.policy=}")
+                else:
+                    raise AttributeError(
+                        f"Model {self._model_id} was `None` in context {self.context}"
+                    )
+            self._model_ref = weakref.ref(model)
+            return model
 
-        # Get the policy to determine the structure of weights to receive
-        if hasattr(context, "policy") and context.policy is not None:
-            policy = context.policy
-            # Create an empty TensorDict with the same structure as the policy weights
-            weights = TensorDict.from_module(policy)
-            # Receive weights from rank 0 (the main/trainer process)
-            weights.recv(0)
-
-            # Apply the received weights to the policy
-            self._strategy.apply_weights(policy, weights)
-            return weights
-
-        return None
+    @model.setter
+    def model(self, value: Any):
+        if value is None:
+            return
+        self._model_ref = weakref.ref(value)
 
     def create_transport(
         self,
@@ -238,12 +248,19 @@ class RPCTransport:
             self._pending_future.wait()
             del self._pending_future
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
+    def receive_weights(
+        self,
+        timeout: float = 1.0,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: WeightStrategy = None,
+    ) -> tuple[str, Any] | None:
         """Receive weights from sender using torch.distributed.recv()."""
-        # In RPC, we don't typically call this directly - instead, the receiver
-        # scheme's receive() method should handle the recv() call.
-        # This is here for completeness but may not be used in the RPC pattern.
-        return None
+        weights.recv(0)
+        # Apply the received weights to the policy
+        strategy.apply_weights(model, weights)
+        return weights
 
     def check_connection(self) -> bool:
         """Check if both RPC and torch.distributed are initialized."""

@@ -899,7 +899,6 @@ class TensorStorage(Storage):
                     self._init(tree_map(lambda x: x[0], data))
             else:
                 self._init(data)
-            assert self.initialized
 
         if is_tensor_collection(data):
             self._storage[cursor] = data
@@ -944,7 +943,6 @@ class TensorStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
-            assert self.initialized
 
         if not isinstance(cursor, (*INT_CLASSES, slice)):
             if not isinstance(cursor, torch.Tensor):

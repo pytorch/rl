@@ -13,3 +13,14 @@ class BiasModule(nn.Module):
 
     def forward(self, x):
         return x + self.bias
+
+
+class NonSerializableBiasModule(BiasModule):
+    """Bias module that intentionally fails to serialize.
+
+    This is used in tests to simulate a policy that cannot be pickled.
+    """
+
+    def __getstate__(self):
+        # Simulate a non-serializable policy by raising on pickling
+        raise RuntimeError("NonSerializableBiasModule cannot be pickled")

@@ -138,19 +138,11 @@ class SharedMemTransport:
         if self._unique_weights is None:
             raise RuntimeError("Unique weights not set. Call register_weights() first.")
         for buffer in self._unique_weights:
-            try:
-                assert (
-                    buffer.requires_grad is False
-                ), "Gradients should not be required for shared memory buffers."
-                assert (
-                    weights_to_update.requires_grad is False
-                ), "Gradients should not be required for weights."
-                buffer.update_(weights_to_update, non_blocking=True)
-            except Exception:
-                torchrl_logger.info(
-                    f"Failed to update buffer {buffer} with {weights_to_update}."
-                )
-                raise
+            if buffer.requires_grad:
+                raise RuntimeError("Gradients should not be required for shared memory buffers.")
+            if weights_to_update.requires_grad:
+                raise RuntimeError("Gradients should not be required for weights.")
+            buffer.update_(weights_to_update, non_blocking=True)
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
