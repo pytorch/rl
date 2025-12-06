@@ -139,7 +139,9 @@ class SharedMemTransport:
             raise RuntimeError("Unique weights not set. Call register_weights() first.")
         for buffer in self._unique_weights:
             if buffer.requires_grad:
-                raise RuntimeError("Gradients should not be required for shared memory buffers.")
+                raise RuntimeError(
+                    "Gradients should not be required for shared memory buffers."
+                )
             if weights_to_update.requires_grad:
                 raise RuntimeError("Gradients should not be required for weights.")
             buffer.update_(weights_to_update, non_blocking=True)
@@ -367,17 +369,26 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 )
             # Get the weights
             model = _resolve_model(context, model_id)
+            if model is None:
+                if model_id == "policy":
+                    # we need to get a copy of the weights from the factory
+                    model = context.policy_factory[0]()
             weights = TensorDict.from_module(model)
         elif model is not None:
             if weights is not None:
                 raise ValueError("weights cannot be provided if model is provided")
             weights = TensorDict.from_module(model)
-        weights = weights.data.apply(_cast, weights)
+        if weights is not None:
+            weights = weights.data.apply(_cast, weights)
         # To make the map, we need the list of devices, or the map fn
         if devices is not None:
             # Get the unique devices
             devices_set = set(devices)
-            weights_devices = {p.device for p in weights.values(True, True)}
+            weights_devices = (
+                {p.device for p in weights.values(True, True)}
+                if weights is not None
+                else set()
+            )
             if len(weights_devices) == 1:
                 weights_device = weights_devices.pop()
             else:

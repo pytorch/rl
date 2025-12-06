@@ -1121,6 +1121,7 @@ class TestDQN(LossModuleTestBase):
             value_network=value, action_space="categorical", reduction="mean"
         )
         loss_fn.make_value_estimator()
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
 
         # Create prioritized replay buffer
         rb = TensorDictPrioritizedReplayBuffer(
@@ -1174,6 +1175,7 @@ class TestDQN(LossModuleTestBase):
             reduction="none",
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_reduction, eps=0.5)
         loss_fn_no_reduction.make_value_estimator()
         loss_fn_no_reduction.target_value_network_params = (
             loss_fn.target_value_network_params
@@ -1673,6 +1675,7 @@ class TestQMixer(LossModuleTestBase):
         loss_fn = DQNLoss(
             value_network=value, action_space="categorical", reduction="mean"
         )
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -1727,6 +1730,7 @@ class TestQMixer(LossModuleTestBase):
             reduction="none",
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_reduction, eps=0.5)
         loss_fn_no_reduction.make_value_estimator()
         loss_fn_no_reduction.target_value_network_params = (
             loss_fn.target_value_network_params
@@ -2396,6 +2400,7 @@ class TestDDPG(LossModuleTestBase):
 
         # Create DDPG loss
         loss_fn = DDPGLoss(actor_network=actor, value_network=qvalue)
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -2449,6 +2454,7 @@ class TestDDPG(LossModuleTestBase):
             value_network=qvalue,
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_weights, eps=0.5)
         loss_fn_no_weights.make_value_estimator()
         loss_fn_no_weights.value_network_params = loss_fn.value_network_params
         loss_fn_no_weights.target_value_network_params = (
@@ -3303,6 +3309,7 @@ class TestTD3(LossModuleTestBase):
                 low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
             ),
         )
+        softupdate = SoftUpdate(loss_fn, eps=0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -3360,6 +3367,7 @@ class TestTD3(LossModuleTestBase):
             ),
             use_prioritized_weights=False,
         )
+        softupdate = SoftUpdate(loss_fn_no_weights, eps=0.5)
         loss_fn_no_weights.make_value_estimator()
         loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
         loss_fn_no_weights.target_qvalue_network_params = (
@@ -7809,6 +7817,7 @@ class TestREDQ(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=2,
         )
+        SoftUpdate(loss_fn, 0.5)
         loss_fn.make_value_estimator()
 
         # Create prioritized replay buffer
@@ -7864,6 +7873,7 @@ class TestREDQ(LossModuleTestBase):
             num_qvalue_nets=2,
             use_prioritized_weights=False,
         )
+        SoftUpdate(loss_fn_no_weights, 0.5)
         loss_fn_no_weights.make_value_estimator()
         loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
         loss_fn_no_weights.target_qvalue_network_params = (

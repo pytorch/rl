@@ -370,8 +370,7 @@ class _MultiDataCollector(DataCollectorBase):
             weight_sync_schemes is not None
             and not weight_sync_schemes
             and weight_updater is None
-            and isinstance(policy, nn.Module)
-            or any(policy_factory)
+            and (isinstance(policy, nn.Module) or any(policy_factory))
         ):
             # Set up a default local shared-memory sync scheme for the policy.
             # This is used to propagate weights from the orchestrator policy
@@ -569,20 +568,20 @@ class _MultiDataCollector(DataCollectorBase):
             weight_sync_policy = weight_sync_schemes.get("policy")
             if weight_sync_policy is None:
                 return
-            # If we only have a policy_factory (no policy instance), the scheme must
-            # be pre-initialized on the sender, since there is no policy on the
-            # collector to extract weights from.
-            if any(p is not None for p in policy_factory) and policy is None:
-                if not weight_sync_policy.initialized_on_sender:
-                    raise RuntimeError(
-                        "the weight sync scheme must be initialized on sender ahead of time "
-                        "when passing a policy_factory without a policy instance on the collector. "
-                        f"Got {policy_factory=}"
-                    )
-            # When a policy instance is provided alongside a policy_factory, the scheme
-            # can rely on the collector context (and its policy) to extract weights.
-            # Weight sync scheme initialization then happens in _run_processes where
-            # pipes and workers are available.
+            # # If we only have a policy_factory (no policy instance), the scheme must
+            # # be pre-initialized on the sender, since there is no policy on the
+            # # collector to extract weights from.
+            # if any(p is not None for p in policy_factory) and policy is None:
+            #     if not weight_sync_policy.initialized_on_sender:
+            #         raise RuntimeError(
+            #             "the weight sync scheme must be initialized on sender ahead of time "
+            #             "when passing a policy_factory without a policy instance on the collector. "
+            #             f"Got {policy_factory=}"
+            #         )
+            # # When a policy instance is provided alongside a policy_factory, the scheme
+            # # can rely on the collector context (and its policy) to extract weights.
+            # # Weight sync scheme initialization then happens in _run_processes where
+            # # pipes and workers are available.
         else:
             # Using legacy weight updater - extract weights and create stateful policies
             self._setup_multi_policy_and_weights_legacy(

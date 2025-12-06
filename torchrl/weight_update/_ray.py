@@ -26,7 +26,14 @@ class ConnectionInfo(UserDict):
     Allows creating a remote dict.
     """
 
-    ...
+    # This class explicitly defines __init__ and get methods to avoid
+    # Ray signature introspection issues with UserDict's __class_getitem__
+    # in Python 3.12+ (ValueError: no signature found for builtin type GenericAlias).
+    def __init__(self, **kwargs):
+        super().__init__(kwargs)
+
+    def get(self, key, default=None):
+        return self.data.get(key, default)
 
 
 class RayTransport:
