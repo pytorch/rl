@@ -4,7 +4,7 @@ import os
 import socket
 
 import time
-from collections import UserDict
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -20,20 +20,23 @@ from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSy
 _DIST_TIMEOUT = timedelta(seconds=60)
 
 
-class ConnectionInfo(UserDict):
+@dataclass
+class ConnectionInfo:
     """Connection info for Ray distributed computing.
 
-    Allows creating a remote dict.
+    Uses dataclass instead of UserDict to avoid Ray signature introspection
+    issues with UserDict's __class_getitem__ in Python 3.11+
+    (ValueError: no signature found for builtin type GenericAlias).
     """
 
-    # This class explicitly defines __init__ and get methods to avoid
-    # Ray signature introspection issues with UserDict's __class_getitem__
-    # in Python 3.12+ (ValueError: no signature found for builtin type GenericAlias).
-    def __init__(self, **kwargs):
-        super().__init__(kwargs)
+    master_addr: str
+    master_port: int
+    world_size: int
+    stateful_model: bool
 
-    def get(self, key, default=None):
-        return self.data.get(key, default)
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a connection info value by key name."""
+        return getattr(self, key, default)
 
 
 class RayTransport:

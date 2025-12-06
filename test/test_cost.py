@@ -5296,6 +5296,120 @@ class TestSAC(LossModuleTestBase):
                     continue
                 assert loss[key].shape == torch.Size([])
 
+    def test_sac_prioritized_weights(self):
+        """Test SAC with prioritized replay buffer weighted loss reduction."""
+        n_obs = 4
+        n_act = 2
+        batch_size = 32
+        buffer_size = 100
+
+        # Actor network
+        actor_net = nn.Sequential(
+            nn.Linear(n_obs, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2 * n_act),
+            NormalParamExtractor(),
+        )
+        actor_module = TensorDictModule(
+            actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            spec=Bounded(
+                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
+            ),
+        )
+
+        # Q-value network
+        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
+        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
+
+        # Value network for SAC v1
+        value_net = MLP(in_features=n_obs, out_features=1, num_cells=[64, 64])
+        value = ValueOperator(module=value_net, in_keys=["observation"])
+
+        # Create SAC loss
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+        )
+        SoftUpdate(loss_fn, eps=0.5)
+        loss_fn.make_value_estimator()
+
+        # Create prioritized replay buffer
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(buffer_size),
+            batch_size=batch_size,
+            priority_key="td_error",
+        )
+
+        # Create initial data
+        initial_data = TensorDict(
+            {
+                "observation": torch.randn(buffer_size, n_obs),
+                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
+                ("next", "observation"): torch.randn(buffer_size, n_obs),
+                ("next", "reward"): torch.randn(buffer_size, 1),
+                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
+            },
+            batch_size=[buffer_size],
+        )
+        rb.extend(initial_data)
+
+        # Sample (weights should all be identical initially)
+        sample1 = rb.sample()
+        assert "priority_weight" in sample1.keys()
+        weights1 = sample1["priority_weight"]
+        assert torch.allclose(weights1, weights1[0], atol=1e-5)
+
+        # Run loss to get priorities
+        loss_fn(sample1)
+        assert "td_error" in sample1.keys()
+
+        # Update replay buffer with new priorities
+        rb.update_tensordict_priority(sample1)
+
+        # Sample again - weights should now be non-equal
+        sample2 = rb.sample()
+        weights2 = sample2["priority_weight"]
+        assert weights2.std() > 1e-5
+
+        # Run loss again with varied weights
+        loss_out2 = loss_fn(sample2)
+        assert torch.isfinite(loss_out2["loss_qvalue"])
+
+        # Verify weighted vs unweighted differ
+        loss_fn_no_weights = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+            use_prioritized_weights=False,
+        )
+        SoftUpdate(loss_fn_no_weights, eps=0.5)
+        loss_fn_no_weights.make_value_estimator()
+        loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
+        loss_fn_no_weights.target_qvalue_network_params = (
+            loss_fn.target_qvalue_network_params
+        )
+        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
+        loss_fn_no_weights.value_network_params = loss_fn.value_network_params
+        loss_fn_no_weights.target_value_network_params = (
+            loss_fn.target_value_network_params
+        )
+
+        loss_out_no_weights = loss_fn_no_weights(sample2)
+        # Weighted and unweighted should differ (in general)
+        assert torch.isfinite(loss_out_no_weights["loss_qvalue"])
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
@@ -7774,120 +7888,6 @@ class TestREDQ(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
-
-    def test_sac_prioritized_weights(self):
-        """Test SAC with prioritized replay buffer weighted loss reduction."""
-        n_obs = 4
-        n_act = 2
-        batch_size = 32
-        buffer_size = 100
-
-        # Actor network
-        actor_net = nn.Sequential(
-            nn.Linear(n_obs, 64),
-            nn.ReLU(),
-            nn.Linear(64, 2 * n_act),
-            NormalParamExtractor(),
-        )
-        actor_module = TensorDictModule(
-            actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
-        actor = ProbabilisticActor(
-            module=actor_module,
-            in_keys=["loc", "scale"],
-            distribution_class=TanhNormal,
-            return_log_prob=True,
-            spec=Bounded(
-                low=-torch.ones(n_act), high=torch.ones(n_act), shape=(n_act,)
-            ),
-        )
-
-        # Q-value network
-        qvalue_net = MLP(in_features=n_obs + n_act, out_features=1, num_cells=[64, 64])
-        qvalue = ValueOperator(module=qvalue_net, in_keys=["observation", "action"])
-
-        # Value network for SAC v1
-        value_net = MLP(in_features=n_obs, out_features=1, num_cells=[64, 64])
-        value = ValueOperator(module=value_net, in_keys=["observation"])
-
-        # Create SAC loss
-        loss_fn = SACLoss(
-            actor_network=actor,
-            qvalue_network=qvalue,
-            value_network=value,
-            num_qvalue_nets=2,
-        )
-        SoftUpdate(loss_fn, 0.5)
-        loss_fn.make_value_estimator()
-
-        # Create prioritized replay buffer
-        rb = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.9,
-            storage=LazyTensorStorage(buffer_size),
-            batch_size=batch_size,
-            priority_key="td_error",
-        )
-
-        # Create initial data
-        initial_data = TensorDict(
-            {
-                "observation": torch.randn(buffer_size, n_obs),
-                "action": torch.randn(buffer_size, n_act).clamp(-1, 1),
-                ("next", "observation"): torch.randn(buffer_size, n_obs),
-                ("next", "reward"): torch.randn(buffer_size, 1),
-                ("next", "done"): torch.zeros(buffer_size, 1, dtype=torch.bool),
-                ("next", "terminated"): torch.zeros(buffer_size, 1, dtype=torch.bool),
-            },
-            batch_size=[buffer_size],
-        )
-        rb.extend(initial_data)
-
-        # Sample (weights should all be identical initially)
-        sample1 = rb.sample()
-        assert "priority_weight" in sample1.keys()
-        weights1 = sample1["priority_weight"]
-        assert torch.allclose(weights1, weights1[0], atol=1e-5)
-
-        # Run loss to get priorities
-        loss_fn(sample1)
-        assert "td_error" in sample1.keys()
-
-        # Update replay buffer with new priorities
-        rb.update_tensordict_priority(sample1)
-
-        # Sample again - weights should now be non-equal
-        sample2 = rb.sample()
-        weights2 = sample2["priority_weight"]
-        assert weights2.std() > 1e-5
-
-        # Run loss again with varied weights
-        loss_out2 = loss_fn(sample2)
-        assert torch.isfinite(loss_out2["loss_qvalue"])
-
-        # Verify weighted vs unweighted differ
-        loss_fn_no_weights = SACLoss(
-            actor_network=actor,
-            qvalue_network=qvalue,
-            value_network=value,
-            num_qvalue_nets=2,
-            use_prioritized_weights=False,
-        )
-        SoftUpdate(loss_fn_no_weights, 0.5)
-        loss_fn_no_weights.make_value_estimator()
-        loss_fn_no_weights.qvalue_network_params = loss_fn.qvalue_network_params
-        loss_fn_no_weights.target_qvalue_network_params = (
-            loss_fn.target_qvalue_network_params
-        )
-        loss_fn_no_weights.actor_network_params = loss_fn.actor_network_params
-        loss_fn_no_weights.value_network_params = loss_fn.value_network_params
-        loss_fn_no_weights.target_value_network_params = (
-            loss_fn.target_value_network_params
-        )
-
-        loss_out_no_weights = loss_fn_no_weights(sample2)
-        # Weighted and unweighted should differ (in general)
-        assert torch.isfinite(loss_out_no_weights["loss_qvalue"])
 
 
 class TestCQL(LossModuleTestBase):
