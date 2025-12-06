@@ -3944,7 +3944,7 @@ class TestPolicyFactory:
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     @pytest.mark.parametrize(
-        "weight_updater", ["scheme_shared", "scheme_pipe", "weight_updater"]
+        "weight_updater", ["scheme_shared", "scheme_mp", "weight_updater"]
     )
     def test_update_weights(self, weight_updater):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -3958,7 +3958,7 @@ class TestPolicyFactory:
         if weight_updater == "scheme_shared":
             scheme = SharedMemWeightSyncScheme()
             kwargs = {"weight_sync_schemes": {"policy": scheme}}
-        elif weight_updater == "scheme_pipe":
+        elif weight_updater == "scheme_mp":
             scheme = MultiProcessWeightSyncScheme()
             kwargs = {"weight_sync_schemes": {"policy": scheme}}
         elif weight_updater == "weight_updater":

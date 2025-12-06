@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import weakref
 from typing import Any
 
@@ -83,33 +84,6 @@ class RPCWeightSyncScheme(WeightSyncScheme):
         self.weights  # noqa
 
         self._receiver_transport = RPCTransport(worker_rank=worker_idx)
-
-    def receive(self, timeout: float = 0.001) -> Any:
-        """Receive weights from the main process using torch.distributed.recv().
-
-        This is the custom receive implementation for RPC-based weight sync.
-
-        Args:
-            timeout: Not used for RPC receivers (included for interface compatibility).
-
-        Returns:
-            The received weights as a TensorDict, or None if no context/policy available.
-        """
-        if not self.initialized_on_receiver:
-            raise RuntimeError(
-                "Must be initialized on receiver before receiving weights"
-            )
-        self.receiver_transport.receive_weights(
-            timeout=timeout,
-            model=self.model,
-            strategy=self._strategy,
-            weights=self.weights,
-        )
-        if self.context is not None and hasattr(self.context, "update_policy_weights_"):
-            self.context.update_policy_weights_(
-                model_id=self.model_id, policy_or_weights=self.weights
-            )
-        return self.weights
 
     @property
     def model(self) -> Any | None:
@@ -250,17 +224,54 @@ class RPCTransport:
 
     def receive_weights(
         self,
-        timeout: float = 1.0,
+        timeout: float | None = None,
         *,
         weights: Any = None,
         model: Any = None,
-        strategy: WeightStrategy = None,
+        strategy: WeightStrategy | None = None,
     ) -> tuple[str, Any] | None:
-        """Receive weights from sender using torch.distributed.recv()."""
-        weights.recv(0)
-        # Apply the received weights to the policy
-        strategy.apply_weights(model, weights)
-        return weights
+        """Receive weights from sender using torch.distributed.
+
+        Args:
+            timeout: Maximum time to wait for weights (seconds). If None,
+                blocks until weights are received.
+            weights: Pre-allocated weight buffer to receive into.
+            model: The model to apply weights to.
+            strategy: Strategy for applying weights to the model.
+
+        Returns:
+            Tuple of (model_id, weights) where model_id is "policy", or None
+            if timeout expires before weights are received.
+        """
+        if weights is None:
+            return None
+
+        if timeout is None:
+            # Blocking receive
+            weights.recv(0)
+        else:
+            # Non-blocking receive with timeout support
+            futures = weights.irecv(src=0, return_premature=True)
+            if futures:
+                start_time = time.monotonic()
+                while True:
+                    # Check if all futures are complete
+                    all_complete = all(f.is_completed() for f in futures)
+                    if all_complete:
+                        break
+                    # Check timeout
+                    elapsed = time.monotonic() - start_time
+                    if elapsed >= timeout:
+                        # Timeout expired before receiving all weights
+                        return None
+                    # Small sleep to avoid busy-waiting
+                    time.sleep(0.001)
+
+        # Apply the received weights to the model
+        if model is not None and strategy is not None:
+            strategy.apply_weights(model, weights)
+
+        return ("policy", weights)
 
     def check_connection(self) -> bool:
         """Check if both RPC and torch.distributed are initialized."""
@@ -276,6 +287,13 @@ class RPCTransport:
     def setup_connection_and_weights_on_sender(self) -> None:
         """No-op for RPCTransport - weights are sent via send_weights()."""
 
-    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(
+        self,
+        *,
+        worker_idx: int,
+        weights: Any = None,
+        model: Any = None,
+        strategy: WeightStrategy | None = None,
+    ) -> Any:
         """No-op for RPCTransport - weights are received via receive()."""
         return None

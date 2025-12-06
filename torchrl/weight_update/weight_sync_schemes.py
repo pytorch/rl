@@ -38,8 +38,27 @@ class TransportBackend(Protocol):
         """Send weights to the receiver."""
         ...
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
-        """Receive weights from the sender. Returns (model_id, weights) or None if timeout."""
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: WeightStrategy | None = None,
+    ) -> tuple[str, Any] | None:
+        """Receive weights from the sender and apply them to the model.
+
+        Args:
+            timeout: Maximum time to wait for weights (seconds).
+                     None means no timeout (blocking). Some transports may not
+                     support timeout and will raise ValueError if specified.
+            weights: Pre-allocated weight buffer to receive into.
+            model: The model to apply weights to.
+            strategy: Strategy for applying weights to the model.
+
+        Returns:
+            Tuple of (model_id, weights) if weights were received, None if timeout.
+        """
         ...
 
     def check_connection(self) -> bool:
@@ -55,7 +74,14 @@ class TransportBackend(Protocol):
         """
         ...
 
-    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(
+        self,
+        *,
+        worker_idx: int,
+        weights: Any = None,
+        model: Any = None,
+        strategy: WeightStrategy | None = None,
+    ) -> Any:
         """Synchronize weights on worker side before collection starts.
 
         This is called once in each worker after initialization to receive
@@ -64,6 +90,9 @@ class TransportBackend(Protocol):
 
         Args:
             worker_idx: The worker index.
+            weights: Pre-allocated weight buffer to receive into.
+            model: The model to apply weights to.
+            strategy: Strategy for applying weights to the model.
 
         Returns:
             The received weights (for SharedMemTransport) or None.
@@ -264,7 +293,7 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     _worker_idx: int | None
 
     def __init__(self, strategy: Literal["state_dict", "tensordict"] = "tensordict"):
-        self.strategy = strategy
+        self.strategy_str = strategy
         self._strategy = _get_strategy(strategy)
         self._initialized_on_sender = False
         self._initialized_on_receiver = False
@@ -288,6 +317,14 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     # ========================================================================
     # Initialization
     # ========================================================================
+
+    @property
+    def strategy(self) -> WeightStrategy:
+        return self._strategy
+
+    @strategy.setter
+    def strategy(self, value: WeightStrategy) -> None:
+        self._strategy = value
 
     @overload
     def init_on_sender(
@@ -947,22 +984,23 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     # Receiving Weights (Receiver Side)
     # ========================================================================
 
-    def receive(self, timeout: float = 0.001) -> bool:
+    def receive(self, timeout: float | None = None) -> TensorDictBase | None:
         """Check for and apply new weights (non-blocking).
 
         This method is called in the worker's main loop to check if
         new weights have been sent. If weights are available, they
-        are applied to the registered model immediately.
+        are applied to the registered model immediately, and the update
+        is cascaded to any sub-collectors via context.update_policy_weights_().
 
         Args:
             timeout: Maximum time to wait for weights (seconds).
-                     Use 0 for immediate return.
+                     None means no timeout (blocking). Some transports may not
+                     support timeout and will raise ValueError if specified.
 
         Returns:
-            True if weights were received and applied
-            False if no weights were available
+            The received weights if available, None otherwise.
 
-        Note: For SharedMemWeightSyncScheme, this always returns False
+        Note: For SharedMemWeightSyncScheme, this always returns None
         since workers automatically see updates via shared memory.
         """
         if not self.initialized_on_receiver:
@@ -975,32 +1013,39 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             )
 
         if self._receiver_transport is None:
-            return False
+            return None
 
-        # Try to receive weights
+        # Try to receive weights - transport handles receiving and applying
         torchrl_logger.debug(
             f"Calling receive_weights on transport {self.receiver_transport}"
         )
-        result = self.receiver_transport.receive_weights(timeout=timeout)
+        result = self.receiver_transport.receive_weights(
+            timeout=timeout,
+            weights=self.weights,
+            model=self.model,
+            strategy=self._strategy,
+        )
         if result is None:
-            return False
+            return None
 
         model_id, weights = result
+        torchrl_logger.debug(f"Received weights for {model_id=}")
 
-        # Apply weights to the model
-        if self._model_ref is None:
-            raise ValueError("No model registered")
-
-        model = self.model
-        torchrl_logger.debug(f"Applying {weights=} on {model=}")
-        self._strategy.apply_weights(model, weights)
+        # Cascade weight update to sub-collectors if context supports it
+        if self.context is not None and hasattr(self.context, "update_policy_weights_"):
+            torchrl_logger.debug(
+                f"Cascading weight update to sub-collectors for {model_id=}"
+            )
+            self.context.update_policy_weights_(
+                model_id=model_id, policy_or_weights=weights
+            )
 
         # Send acknowledgment if transport supports it
         if hasattr(self.receiver_transport, "send_ack"):
             torchrl_logger.debug(f"Sending acknowledgement on {model_id=}")
             self.receiver_transport.send_ack("updated")
 
-        return True
+        return weights
 
     def apply_weights(self, weights: TensorDictBase, inplace: bool = True) -> None:
         """Apply weights to the model.
@@ -1132,9 +1177,12 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         if worker_idx is None:
             worker_idx = self._worker_idx
 
-        # Call transport's synchronize method if available
+        # Call transport's synchronize method with all relevant kwargs
         weights = self.receiver_transport.setup_connection_and_weights_on_receiver(
-            worker_idx=worker_idx
+            worker_idx=worker_idx,
+            weights=self.weights,
+            model=self.model,
+            strategy=self._strategy,
         )
 
         # Apply weights to model if received (SharedMemTransport case)

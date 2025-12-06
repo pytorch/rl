@@ -86,7 +86,13 @@ class SharedMemTransport:
             queue.put(weights)
 
     def setup_connection_and_weights_on_receiver(
-        self, *, worker_idx: int | None = None, timeout: float = 10.0
+        self,
+        *,
+        worker_idx: int | None = None,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+        timeout: float = 10.0,
     ) -> TensorDictBase:
         """Receive shared memory buffer reference from sender via their per-worker queues.
 
@@ -94,6 +100,9 @@ class SharedMemTransport:
 
         Args:
             worker_idx: The worker index.
+            weights: Ignored (weights come from queue).
+            model: Ignored.
+            strategy: Ignored.
             timeout: Timeout for reading from queue.
 
         Returns:
@@ -110,8 +119,8 @@ class SharedMemTransport:
 
         # Read from dedicated queue for this worker
         worker_queue = self._weight_queues[worker_idx]
-        weights = worker_queue.get(timeout=timeout)
-        return weights
+        received_weights = worker_queue.get(timeout=timeout)
+        return received_weights
 
     def send_weights(self, weights: Any) -> None:
         """Update weights in-place in shared memory.
@@ -148,8 +157,26 @@ class SharedMemTransport:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
-        """No-op for shared memory - weights are already visible."""
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+    ) -> tuple[str, Any] | None:
+        """No-op for shared memory - weights are already visible via shared memory.
+
+        Args:
+            timeout: Ignored (shared memory is instant).
+            weights: Ignored.
+            model: Ignored.
+            strategy: Ignored.
+
+        Returns:
+            None - workers automatically see updates via shared memory.
+        """
+        # Timeout is ignored since shared memory doesn't involve waiting
         return None
 
     def send_ack(self, message: str = "updated") -> None:

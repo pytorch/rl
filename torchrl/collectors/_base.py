@@ -8,7 +8,7 @@ import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from copy import deepcopy
-from typing import Any
+from typing import Any, overload
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -275,48 +275,148 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def _legacy_weight_updater(self) -> bool:
         return self._weight_updater is not None
 
+    # Overloads for update_policy_weights_ to support multiple calling conventions
+    @overload
     def update_policy_weights_(
         self,
-        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | nn.Module | dict,
+        /,
+    ) -> None:
+        ...
+
+    @overload
+    def update_policy_weights_(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | nn.Module | dict,
+        /,
         *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def update_policy_weights_(
+        self,
+        *,
+        weights: TensorDictBase | dict,
+        model_id: str | None = None,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def update_policy_weights_(
+        self,
+        *,
+        policy: TensorDictModuleBase | nn.Module,
+        model_id: str | None = None,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+    ) -> None:
+        ...
+
+    @overload
+    def update_policy_weights_(
+        self,
+        *,
+        weights_dict: dict[
+            str, TensorDictBase | TensorDictModuleBase | nn.Module | dict
+        ],
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+    ) -> None:
+        ...
+
+    def update_policy_weights_(
+        self,
+        policy_or_weights: TensorDictBase
+        | TensorDictModuleBase
+        | nn.Module
+        | dict
+        | None = None,
+        *,
+        weights: TensorDictBase | dict | None = None,
+        policy: TensorDictModuleBase | nn.Module | None = None,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
         model_id: str | None = None,
         weights_dict: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
-        """Updates the policy weights for the data collector, accommodating both local and remote execution contexts.
+        """Update policy weights for the data collector.
 
-        This method ensures that the policy weights used by the data collector are synchronized with the latest
-        trained weights. It supports both local and remote weight updates, depending on the configuration of the
-        data collector. The local (download) update is performed before the remote (upload) update, such that weights
-        can be transferred to the children workers from a server.
+        This method synchronizes the policy weights used by the collector with the latest
+        trained weights. It supports both local and remote weight updates, depending on
+        the collector configuration.
+
+        The method accepts weights in multiple forms for convenience:
+
+        Examples:
+            >>> # Pass policy module as positional argument
+            >>> collector.update_policy_weights_(policy_module)
+            >>>
+            >>> # Pass TensorDict weights as positional argument
+            >>> collector.update_policy_weights_(weights_tensordict)
+            >>>
+            >>> # Use keyword arguments for clarity
+            >>> collector.update_policy_weights_(weights=weights_td, model_id="actor")
+            >>> collector.update_policy_weights_(policy=actor_module, model_id="actor")
+            >>>
+            >>> # Update multiple models atomically
+            >>> collector.update_policy_weights_(weights_dict={
+            ...     "actor": actor_weights,
+            ...     "critic": critic_weights,
+            ... })
 
         Args:
-            policy_or_weights (TensorDictBase | TensorDictModuleBase | dict | None): The weights to update with. Can be:
-                - TensorDictModuleBase: A policy module whose weights will be extracted
-                - TensorDictBase: A TensorDict containing weights
-                - dict: A regular dict containing weights
-                - None: Will try to get weights from server using _get_server_weights()
-            worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
-                workers that need to be updated. This is relevant when the collector has more than one worker associated
-                with it.
-            model_id (str | None, optional): The model identifier to update. If provided, only updates this specific
-                model. Cannot be used together with weights_dict.
-            weights_dict (dict[str, Any] | None, optional): Dictionary mapping model_id to weights for updating
-                multiple models atomically. Keys should match the model_ids registered in weight_sync_schemes.
-                Cannot be used together with model_id or policy_or_weights.
+            policy_or_weights: The weights to update with. Can be:
+
+                - ``nn.Module``: A policy module whose weights will be extracted
+                - ``TensorDictModuleBase``: A TensorDict module whose weights will be extracted
+                - ``TensorDictBase``: A TensorDict containing weights
+                - ``dict``: A regular dict containing weights
+                - ``None``: Will try to get weights from server using ``_get_server_weights()``
+
+        Keyword Args:
+            weights: Alternative to positional argument. A TensorDict or dict containing
+                weights to update. Cannot be used together with ``policy_or_weights`` or ``policy``.
+            policy: Alternative to positional argument. An ``nn.Module`` or ``TensorDictModuleBase``
+                whose weights will be extracted. Cannot be used together with ``policy_or_weights``
+                or ``weights``.
+            worker_ids: Identifiers for the workers to update. Relevant when the collector
+                has multiple workers. Can be int, list of ints, device, or list of devices.
+            model_id: The model identifier to update (default: ``"policy"``).
+                Cannot be used together with ``weights_dict``.
+            weights_dict: Dictionary mapping model_id to weights for updating
+                multiple models atomically. Keys should match model_ids registered in
+                ``weight_sync_schemes``. Cannot be used together with ``model_id``,
+                ``policy_or_weights``, ``weights``, or ``policy``.
 
         Raises:
-            TypeError: If `worker_ids` is provided but no `weight_updater` is configured.
-            ValueError: If conflicting parameters are provided (e.g., both model_id and weights_dict).
+            TypeError: If ``worker_ids`` is provided but no ``weight_updater`` is configured.
+            ValueError: If conflicting parameters are provided.
 
-        .. note:: Users should extend the `WeightUpdaterBase` classes to customize
-            the weight update logic for specific use cases. This method should not be overwritten.
+        .. note:: Users should extend the ``WeightUpdaterBase`` classes to customize
+            the weight update logic for specific use cases.
 
         .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
+        # Handle the different keyword argument forms
+        if weights is not None:
+            if policy_or_weights is not None:
+                raise ValueError(
+                    "Cannot specify both positional 'policy_or_weights' and keyword 'weights'"
+                )
+            if policy is not None:
+                raise ValueError("Cannot specify both 'weights' and 'policy'")
+            policy_or_weights = weights
+
+        if policy is not None:
+            if policy_or_weights is not None:
+                raise ValueError(
+                    "Cannot specify both positional 'policy_or_weights' and keyword 'policy'"
+                )
+            policy_or_weights = policy
         if self._legacy_weight_updater:
             return self._legacy_weight_update_impl(
                 policy_or_weights=policy_or_weights,
@@ -417,56 +517,122 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         # method to override if the scheme requires an RPC call to receive the weights
         scheme.send(weights=processed_weights, worker_ids=worker_ids)
 
-    def _receive_weights_scheme(self, cascade_weights: bool = True):
-        # Receive weights for all registered schemes
-        updates = {}
+    def _receive_weights_scheme(self):
+        """Receive weights for all registered receiver schemes.
+
+        scheme.receive() handles both applying weights locally and cascading
+        to sub-collectors via context.update_policy_weights_().
+        """
         if not hasattr(self, "_receiver_schemes"):
             raise RuntimeError("No receiver schemes registered.")
 
         for model_id, scheme in self._receiver_schemes.items():
-            # scheme.receive() pulls weights from the transport and applies them locally
-            # For RPC/Ray: weights are already passed as argument, receive() is a no-op
-            # For Distributed: receive() pulls from TCPStore
-            # For MultiProcess: receive() checks the pipe
             torchrl_logger.debug(
                 f"Receiving weights for scheme {type(scheme).__name__} for model '{model_id}' on worker {self._worker_idx}"
             )
             received_weights = scheme.receive()
-            torchrl_logger.debug(f"Received weights: {received_weights}")
-            if received_weights is not None:
-                updates[model_id] = received_weights
+            torchrl_logger.debug(f"Received weights: {type(received_weights)=}")
 
-        # If we have nested collectors (e.g., MultiSyncDataCollector with inner workers)
-        # AND we actually received updates, propagate them down via their senders
-        if (
-            cascade_weights
-            and updates
-            and hasattr(self, "_weight_sync_schemes")
-            and self._weight_sync_schemes
-        ):
-            # Build weights_dict for all models that need propagation to nested collectors
-            weights_dict = {}
-            for model_id in updates:
-                if model_id in self._weight_sync_schemes:
-                    # This model has a sender scheme - propagate to nested workers
-                    weights_dict[model_id] = updates[model_id]
-                else:
-                    # Clear error message when model_id mismatch
-                    raise KeyError(
-                        f"Received weights for model '{model_id}' but no sender "
-                        f"scheme found to propagate to sub-collectors. "
-                        f"Available sender schemes: {list(self._weight_sync_schemes.keys())}. "
-                        f"To receive weights without cascading, call with cascade_weights=False."
-                    )
+    # Overloads for receive_weights to support multiple calling conventions
+    @overload
+    def receive_weights(self) -> None:
+        ...
 
-            if weights_dict:
-                # Propagate to nested collectors via their sender schemes
-                torchrl_logger.debug(
-                    f"Cascading weights to nested collectors: {weights_dict}"
+    @overload
+    def receive_weights(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | nn.Module | dict,
+        /,
+    ) -> None:
+        ...
+
+    @overload
+    def receive_weights(
+        self,
+        *,
+        weights: TensorDictBase | dict,
+    ) -> None:
+        ...
+
+    @overload
+    def receive_weights(
+        self,
+        *,
+        policy: TensorDictModuleBase | nn.Module,
+    ) -> None:
+        ...
+
+    def receive_weights(
+        self,
+        policy_or_weights: TensorDictBase
+        | TensorDictModuleBase
+        | nn.Module
+        | dict
+        | None = None,
+        *,
+        weights: TensorDictBase | dict | None = None,
+        policy: TensorDictModuleBase | nn.Module | None = None,
+    ) -> None:
+        """Receive and apply weights to the collector's policy.
+
+        This method applies weights to the local policy. When receiver schemes are
+        registered, it delegates to those schemes. Otherwise, it directly applies
+        the provided weights.
+
+        The method accepts weights in multiple forms for convenience:
+
+        Examples:
+            >>> # Receive from registered schemes (distributed collectors)
+            >>> collector.receive_weights()
+            >>>
+            >>> # Apply weights from a policy module (positional)
+            >>> collector.receive_weights(trained_policy)
+            >>>
+            >>> # Apply weights from a TensorDict (positional)
+            >>> collector.receive_weights(weights_tensordict)
+            >>>
+            >>> # Use keyword arguments for clarity
+            >>> collector.receive_weights(weights=weights_td)
+            >>> collector.receive_weights(policy=trained_policy)
+
+        Args:
+            policy_or_weights: The weights to apply. Can be:
+
+                - ``nn.Module``: A policy module whose weights will be extracted and applied
+                - ``TensorDictModuleBase``: A TensorDict module whose weights will be extracted
+                - ``TensorDictBase``: A TensorDict containing weights
+                - ``dict``: A regular dict containing weights
+                - ``None``: Receive from registered schemes or mirror from original policy
+
+        Keyword Args:
+            weights: Alternative to positional argument. A TensorDict or dict containing
+                weights to apply. Cannot be used together with ``policy_or_weights`` or ``policy``.
+            policy: Alternative to positional argument. An ``nn.Module`` or ``TensorDictModuleBase``
+                whose weights will be extracted. Cannot be used together with ``policy_or_weights``
+                or ``weights``.
+
+        Raises:
+            ValueError: If conflicting parameters are provided or if arguments are passed
+                when receiver schemes are registered.
+
+        """
+        # Handle the different keyword argument forms
+        if weights is not None:
+            if policy_or_weights is not None:
+                raise ValueError(
+                    "Cannot specify both positional 'policy_or_weights' and keyword 'weights'"
                 )
-                self.update_policy_weights_(weights_dict=weights_dict)
+            if policy is not None:
+                raise ValueError("Cannot specify both 'weights' and 'policy'")
+            policy_or_weights = weights
 
-    def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        if policy is not None:
+            if policy_or_weights is not None:
+                raise ValueError(
+                    "Cannot specify both positional 'policy_or_weights' and keyword 'policy'"
+                )
+            policy_or_weights = policy
+
         if getattr(self, "_receiver_schemes", None) is not None:
             if policy_or_weights is not None:
                 raise ValueError(

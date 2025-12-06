@@ -300,7 +300,9 @@ def _run_collector(
                     torchrl_logger.debug(
                         f"RANK {rank} -- using weight sync schemes for update"
                     )
-                # Receive fresh weights from the main process for each model
+                # Receive fresh weights from the main process for each model.
+                # scheme.receive() handles both applying weights locally and
+                # cascading to sub-collectors via context.update_policy_weights_().
                 for model_id, scheme in weight_sync_schemes.items():
                     if verbose:
                         torchrl_logger.debug(
@@ -309,15 +311,8 @@ def _run_collector(
                     scheme.receive()
                     if verbose:
                         torchrl_logger.debug(
-                            f"RANK {rank} -- received weights for model '{model_id}'"
+                            f"RANK {rank} -- received and cascaded weights for model '{model_id}'"
                         )
-
-                # Propagate updated weights to inner workers via the nested
-                # collector's own weight sync schemes.
-                torchrl_logger.debug(
-                    f"RANK {rank} -- propagating updated weights to inner workers"
-                )
-                collector.update_policy_weights_()
 
                 # Acknowledgment is handled by the transport (send_ack in the
                 # WeightReceiver), so we can continue without touching the

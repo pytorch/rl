@@ -317,11 +317,24 @@ class VLLMCollectiveTransport:
         torch.cuda.synchronize()
         torchrl_logger.debug(f"Broadcast complete for model '{model_id}'")
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+    ) -> tuple[str, Any] | None:
         """Receive weights from broadcaster.
 
         This should only be called from worker ranks (rank > 0).
         This method is called by vLLM engine internally through collective operations.
+
+        Args:
+            timeout: Ignored (vLLM handles synchronization internally).
+            weights: Ignored.
+            model: Ignored.
+            strategy: Ignored.
 
         Returns:
             None - vLLM handles weight application internally via collectives.

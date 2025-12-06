@@ -55,7 +55,14 @@ class NoWeightSyncScheme(WeightSyncScheme):
             def send_weights(self, weights: Any) -> None:
                 pass
 
-            def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
+            def receive_weights(
+                self,
+                timeout: float | None = None,
+                *,
+                weights: Any = None,
+                model: Any = None,
+                strategy: Any = None,
+            ) -> tuple[str, Any] | None:
                 return None
 
             def check_connection(self) -> bool:
@@ -64,7 +71,14 @@ class NoWeightSyncScheme(WeightSyncScheme):
             def setup_connection_and_weights_on_sender(self) -> None:
                 pass
 
-            def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
+            def setup_connection_and_weights_on_receiver(
+                self,
+                *,
+                worker_idx: int,
+                weights: Any = None,
+                model: Any = None,
+                strategy: Any = None,
+            ) -> Any:
                 return None
 
         return NoOpTransport()
@@ -76,9 +90,9 @@ class NoWeightSyncScheme(WeightSyncScheme):
     ) -> None:
         """No-op send - does nothing."""
 
-    def receive(self, timeout: float = 0.001) -> bool:
-        """No-op receive - always returns False."""
-        return False
+    def receive(self, timeout: float | None = None) -> None:
+        """No-op receive - always returns None."""
+        return None
 
     def connect(self, *, worker_idx: int | None = None) -> None:
         """No-op synchronize - does nothing."""

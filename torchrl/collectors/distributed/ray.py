@@ -725,7 +725,7 @@ class RayCollector(DataCollectorBase):
             if model is not None:
                 from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
-                strategy = WeightStrategy(extract_as=scheme.strategy)
+                strategy = WeightStrategy(extract_as=scheme.strategy_str)
                 return strategy.extract_weights(model)
 
         # Fall back to base class behavior

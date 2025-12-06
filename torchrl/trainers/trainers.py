@@ -1881,7 +1881,7 @@ class UpdateWeights(TrainerHookBase):
                 and destination in self.collector._weight_sync_schemes
             ):
                 scheme = self.collector._weight_sync_schemes[destination]
-                strategy = WeightStrategy(extract_as=scheme.strategy)
+                strategy = WeightStrategy(extract_as=scheme.strategy_str)
                 weights = strategy.extract_weights(source_module)
             else:
                 # Fallback: use TensorDict extraction if no scheme found

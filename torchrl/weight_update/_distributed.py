@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import torch
@@ -7,7 +8,11 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    TransportBackend,
+    WeightStrategy,
+    WeightSyncScheme,
+)
 
 
 class DistributedWeightSyncScheme(WeightSyncScheme):
@@ -273,8 +278,15 @@ class DistributedTransport:
             raise RuntimeError(f"Expected 'updated' but got status {status}.")
         self._store.delete_key(f"NODE_{self._rank}_out")
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
-        r"""Receive weights via torch.distributed.
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: WeightStrategy | None = None,
+    ) -> tuple[str, Any] | None:
+        r"""Receive weights via torch.distributed and apply them to the model.
 
         The surrounding collector loop is responsible for checking the TCPStore
         for the \"update_weights\" instruction. When this method is called we
@@ -282,23 +294,52 @@ class DistributedTransport:
         already performed the corresponding ``send()``.
 
         Args:
-            timeout: Unused for now (kept for TransportBackend compatibility).
+            timeout: Maximum time to wait for weights (seconds). If None,
+                blocks until weights are received.
+            weights: Pre-allocated weight buffer to receive into.
+            model: The model to apply weights to.
+            strategy: Strategy for applying weights to the model.
 
         Returns:
             Tuple of (model_id, weights) where model_id is currently always
-            \"policy\".
+            \"policy\", or None if timeout expires before weights are received.
         """
         if self._store is None or self._rank is None:
             return None
 
-        # Receive weights via torch.distributed into the buffer
-        if self._sync:
-            self._weights_buffer.recv(src=0)
-        else:
-            # irecv() blocks until weights have been received
-            self._weights_buffer.irecv(src=0)
+        # Use provided weights buffer or fallback to stored one
+        weights_buffer = weights if weights is not None else self._weights_buffer
 
-        return ("policy", self._weights_buffer)
+        # Receive weights via torch.distributed into the buffer
+        if self._sync or timeout is None:
+            # Blocking receive - no timeout support
+            if self._sync:
+                weights_buffer.recv(src=0)
+            else:
+                weights_buffer.irecv(src=0)
+        else:
+            # Non-blocking receive with timeout support
+            futures = weights_buffer.irecv(src=0, return_premature=True)
+            if futures:
+                start_time = time.monotonic()
+                while True:
+                    # Check if all futures are complete
+                    all_complete = all(f.is_completed() for f in futures)
+                    if all_complete:
+                        break
+                    # Check timeout
+                    elapsed = time.monotonic() - start_time
+                    if elapsed >= timeout:
+                        # Timeout expired before receiving all weights
+                        return None
+                    # Small sleep to avoid busy-waiting
+                    time.sleep(0.001)
+
+        # Apply weights if model and strategy provided
+        if model is not None and strategy is not None:
+            strategy.apply_weights(model, weights_buffer)
+
+        return ("policy", weights_buffer)
 
     def send_ack(self, message: str = "updated") -> None:
         """Send acknowledgment back to sender via TCPStore.
@@ -353,6 +394,13 @@ class DistributedTransport:
     def setup_connection_and_weights_on_sender(self) -> None:
         """No-op for DistributedTransport - handled by scheme."""
 
-    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(
+        self,
+        *,
+        worker_idx: int,
+        weights: Any = None,
+        model: Any = None,
+        strategy: WeightStrategy | None = None,
+    ) -> Any:
         """No-op for DistributedTransport - handled by scheme."""
         return None

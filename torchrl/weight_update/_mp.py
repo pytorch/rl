@@ -481,12 +481,26 @@ class MPTransport:
         if self.ack_queue is not None:
             self.check_ack("updated")
 
-    def receive_weights(self, timeout: float = 1.0) -> tuple[str, Any] | None:
+    def receive_weights(
+        self,
+        timeout: float | None = None,
+        *,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+    ) -> tuple[str, Any] | None:
         """Receive weights from the queue (used in worker process).
 
         This method only handles weight update messages. Other messages
         (like "close", "continue", etc.) are ignored and should be handled
         by the main worker loop.
+
+        Args:
+            timeout: Maximum time to wait for weights (seconds).
+                     None means use the transport's default timeout.
+            weights: Ignored (weights come from queue).
+            model: The model to apply weights to.
+            strategy: Strategy for applying weights to the model.
 
         Returns:
             Tuple of (model_id, weights) if weights were received, None if no data available
@@ -496,10 +510,19 @@ class MPTransport:
             model_id is returned as "policy" for backward compatibility, but transports
             are now bound to a single model during initialization.
         """
+        # Use transport's default timeout if not specified
+        if timeout is None:
+            timeout = self.timeout
         data_in, msg = self.weight_queue.get(timeout=timeout)
         if msg == "update_weights":
             # data_in is now (model_id, weights)
-            return data_in
+            model_id, received_weights = data_in
+
+            # Apply weights to model if provided
+            if model is not None and strategy is not None:
+                strategy.apply_weights(model, received_weights)
+
+            return (model_id, received_weights)
         else:
             raise ValueError(f"Expected 'update_weights' but got {msg}")
 
@@ -531,7 +554,14 @@ class MPTransport:
         sends shared memory buffer references via queues.
         """
 
-    def setup_connection_and_weights_on_receiver(self, worker_idx: int) -> Any:
+    def setup_connection_and_weights_on_receiver(
+        self,
+        *,
+        worker_idx: int,
+        weights: Any = None,
+        model: Any = None,
+        strategy: Any = None,
+    ) -> Any:
         """Receive initial weights from sender during worker initialization.
 
         This method blocks waiting for the initial weights to be sent from the main process
@@ -542,6 +572,9 @@ class MPTransport:
 
         Args:
             worker_idx: The worker index (used for logging/debugging).
+            weights: Ignored (weights come from queue).
+            model: Ignored.
+            strategy: Ignored.
 
         Returns:
             The received weights if available, None otherwise (weights will come later via receive()).
@@ -550,7 +583,7 @@ class MPTransport:
         data_in, msg = self.weight_queue.get(timeout=self.timeout)
         if msg == "update_weights":
             # data_in is (model_id, weights), extract just the weights
-            _, weights = data_in
-            return weights
+            _, received_weights = data_in
+            return received_weights
         else:
             raise ValueError(f"Expected 'update_weights' but got {msg}")
