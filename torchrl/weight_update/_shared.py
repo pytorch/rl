@@ -536,8 +536,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
     ) -> Any:
         """Prepare weights for SharedMemWeightSyncScheme.
 
-        For SharedMemWeightSyncScheme, we prioritize using cached shared memory weights
-        from the transport or context (collector) to avoid extracting fresh (non-shared) weights.
+        When weights=None, we extract fresh weights from the model and update
+        the shared memory buffer in-place so workers see the change.
 
         Args:
             weights: Raw weights input
@@ -548,29 +548,25 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         Returns:
             Shared memory weights ready to send
         """
-        # If weights are explicitly provided, use them
+        # If weights are explicitly provided, use them directly
         if weights is not None:
-            return super().prepare_weights(weights, model_id, strategy, context)
+            fresh_weights = super().prepare_weights(weights, model_id, strategy, context)
+        else:
+            # Extract fresh weights from the model (base class handles this)
+            fresh_weights = super().prepare_weights(None, model_id, strategy, context)
 
-        # Try to get weights from the transport's stored shared memory buffers
-        # This is set when init_on_sender() is called with params_map
-        if self._shared_transport is not None:
-            return self.shared_transport.unique_weights[0]
+        if fresh_weights is None:
+            return None
 
-        # Try cached shared memory weights in collector context
-        if context is not None:
-            if model_id == "policy" and hasattr(context, "_policy_weights_dict"):
-                policy_device = (
-                    context.policy_device
-                    if not isinstance(context.policy_device, (list, tuple))
-                    else context.policy_device[0]
-                )
-                cached_weights = context._policy_weights_dict.get(policy_device)
-                if cached_weights is not None:
-                    return cached_weights
+        # Update the shared memory buffer in-place so workers see the change
+        if self._shared_transport is not None and self.shared_transport.unique_weights:
+            shared_weights = self.shared_transport.unique_weights[0]
+            # In-place update of shared memory buffer with fresh weights
+            shared_weights.data.update_(fresh_weights.data)
+            return shared_weights
 
-        # Fall back to default behavior (extract from model in context)
-        return super().prepare_weights(weights, model_id, strategy, context)
+        # If no shared transport, just return the fresh weights
+        return fresh_weights
 
     @property
     def weights(self) -> Any | None:
