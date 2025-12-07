@@ -51,6 +51,7 @@ from torchrl.collectors import (
     WeightUpdaterBase,
 )
 from torchrl.collectors._constants import _Interruptor
+from torchrl.collectors._multi_base import _MultiDataCollector
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -2337,6 +2338,9 @@ class TestAutoWrap:
             ),
             device=device,
         )
+        if isinstance(collector, _MultiDataCollector):
+            assert collector._weight_sync_schemes is not None
+            assert "policy" in collector._weight_sync_schemes
 
         try:
             out_keys = ["action"]
