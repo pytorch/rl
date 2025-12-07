@@ -229,7 +229,7 @@ class RPCTransport:
         weights: Any = None,
         model: Any = None,
         strategy: WeightStrategy | None = None,
-    ) -> tuple[str, Any] | None:
+    ) -> Any | None:
         """Receive weights from sender using torch.distributed.
 
         Args:
@@ -240,8 +240,7 @@ class RPCTransport:
             strategy: Strategy for applying weights to the model.
 
         Returns:
-            Tuple of (model_id, weights) where model_id is "policy", or None
-            if timeout expires before weights are received.
+            The received weights, or None if timeout expires.
         """
         if weights is None:
             return None
@@ -271,7 +270,7 @@ class RPCTransport:
         if model is not None and strategy is not None:
             strategy.apply_weights(model, weights)
 
-        return ("policy", weights)
+        return weights
 
     def check_connection(self) -> bool:
         """Check if both RPC and torch.distributed are initialized."""

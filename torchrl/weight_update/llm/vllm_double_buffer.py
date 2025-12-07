@@ -124,7 +124,7 @@ class VLLMDoubleBufferTransport:
         weights: Any = None,
         model: Any = None,
         strategy: Any = None,
-    ) -> TensorDict:
+    ) -> Any | None:
         """Reads the weights from the shared directory.
 
         Args:

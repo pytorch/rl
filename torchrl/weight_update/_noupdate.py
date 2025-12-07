@@ -62,7 +62,7 @@ class NoWeightSyncScheme(WeightSyncScheme):
                 weights: Any = None,
                 model: Any = None,
                 strategy: Any = None,
-            ) -> tuple[str, Any] | None:
+            ) -> Any | None:
                 return None
 
             def check_connection(self) -> bool:

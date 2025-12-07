@@ -45,7 +45,7 @@ class TransportBackend(Protocol):
         weights: Any = None,
         model: Any = None,
         strategy: WeightStrategy | None = None,
-    ) -> tuple[str, Any] | None:
+    ) -> Any | None:
         """Receive weights from the sender and apply them to the model.
 
         Args:
@@ -57,7 +57,7 @@ class TransportBackend(Protocol):
             strategy: Strategy for applying weights to the model.
 
         Returns:
-            Tuple of (model_id, weights) if weights were received, None if timeout.
+            The received/applied weights, or None if timeout/no weights available.
         """
         ...
 
@@ -1028,7 +1028,8 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         if result is None:
             return None
 
-        model_id, weights = result
+        weights = result
+        model_id = self._model_id or "policy"
         torchrl_logger.debug(f"Received weights for {model_id=}")
 
         # Cascade weight update to sub-collectors if context supports it

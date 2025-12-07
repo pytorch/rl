@@ -488,7 +488,7 @@ class MPTransport:
         weights: Any = None,
         model: Any = None,
         strategy: Any = None,
-    ) -> tuple[str, Any] | None:
+    ) -> Any | None:
         """Receive weights from the queue (used in worker process).
 
         This method only handles weight update messages. Other messages
@@ -503,26 +503,21 @@ class MPTransport:
             strategy: Strategy for applying weights to the model.
 
         Returns:
-            Tuple of (model_id, weights) if weights were received, None if no data available
-            or if a non-weight message was received.
-
-        Note:
-            model_id is returned as "policy" for backward compatibility, but transports
-            are now bound to a single model during initialization.
+            The received weights, or None if no data available.
         """
         # Use transport's default timeout if not specified
         if timeout is None:
             timeout = self.timeout
         data_in, msg = self.weight_queue.get(timeout=timeout)
         if msg == "update_weights":
-            # data_in is now (model_id, weights)
-            model_id, received_weights = data_in
+            # data_in is (model_id, weights) - we ignore model_id, scheme knows it
+            _model_id, received_weights = data_in
 
             # Apply weights to model if provided
             if model is not None and strategy is not None:
                 strategy.apply_weights(model, received_weights)
 
-            return (model_id, received_weights)
+            return received_weights
         else:
             raise ValueError(f"Expected 'update_weights' but got {msg}")
 

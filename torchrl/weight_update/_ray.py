@@ -228,7 +228,7 @@ class RayTransport:
         weights: Any = None,
         model: Any = None,
         strategy: WeightStrategy | None = None,
-    ) -> tuple[str, Any] | None:
+    ) -> Any | None:
         """Receive weights from sender via torch.distributed.
 
         Args:
@@ -239,8 +239,7 @@ class RayTransport:
             strategy: Strategy for applying weights to the model.
 
         Returns:
-            Tuple of (model_id, weights) if weights were received, None if
-            timeout expires before weights are received.
+            The received weights, or None if timeout expires.
         """
         from torchrl.collectors.utils import _cast
 
@@ -303,7 +302,7 @@ class RayTransport:
             weights_buffer.to_module(model)
 
         torchrl_logger.debug("RayTransport: Weights applied to model")
-        return (self._model_id or "policy", weights_buffer)
+        return weights_buffer
 
     # ========================================================================
     # Connection Setup

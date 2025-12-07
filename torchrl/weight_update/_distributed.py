@@ -285,7 +285,7 @@ class DistributedTransport:
         weights: Any = None,
         model: Any = None,
         strategy: WeightStrategy | None = None,
-    ) -> tuple[str, Any] | None:
+    ) -> Any | None:
         r"""Receive weights via torch.distributed and apply them to the model.
 
         The surrounding collector loop is responsible for checking the TCPStore
@@ -301,8 +301,7 @@ class DistributedTransport:
             strategy: Strategy for applying weights to the model.
 
         Returns:
-            Tuple of (model_id, weights) where model_id is currently always
-            \"policy\", or None if timeout expires before weights are received.
+            The received weights, or None if timeout expires.
         """
         if self._store is None or self._rank is None:
             return None
@@ -339,7 +338,7 @@ class DistributedTransport:
         if model is not None and strategy is not None:
             strategy.apply_weights(model, weights_buffer)
 
-        return ("policy", weights_buffer)
+        return weights_buffer
 
     def send_ack(self, message: str = "updated") -> None:
         """Send acknowledgment back to sender via TCPStore.

@@ -322,7 +322,7 @@ class VLLMCollectiveTransport:
         weights: Any = None,
         model: Any = None,
         strategy: Any = None,
-    ) -> tuple[str, Any] | None:
+    ) -> Any | None:
         """Receive weights from broadcaster.
 
         This should only be called from worker ranks (rank > 0).
