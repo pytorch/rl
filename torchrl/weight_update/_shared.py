@@ -568,22 +568,88 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # If no shared transport, just return the fresh weights
         return fresh_weights
 
+    def send(
+        self,
+        weights: Any = None,
+        worker_ids: int | list[int] | None = None,
+    ) -> None:
+        """Send weights via shared memory (in-place update).
+
+        For SharedMemWeightSyncScheme, prepare_weights() already updates the
+        shared memory buffer in-place. Workers will see the update when they
+        call receive() to apply the current shared buffer to their model.
+
+        Args:
+            weights: Weights to send (can be None to extract from model).
+            worker_ids: Ignored for shared memory (all workers share the same buffer).
+        """
+        if not self.initialized_on_sender:
+            raise RuntimeError("Must be initialized on sender before sending weights")
+        if not self.synchronized_on_sender:
+            raise RuntimeError("Must be synchronized on sender before sending weights")
+
+        # prepare_weights updates the shared buffer in-place
+        self.prepare_weights(
+            weights=weights,
+            model_id=self._model_id,
+            strategy=self._strategy,
+            context=self.context,
+        )
+        # No transport iteration needed - shared memory is already updated
+
+    def receive(self, timeout: float | None = None) -> TensorDictBase | None:
+        """Apply current shared memory weights to the model.
+
+        For SharedMemWeightSyncScheme, the shared memory buffer is updated in-place
+        by the sender. This method reads the current shared memory weights and
+        applies them to the local model.
+
+        Note: Unlike the base class which returns None when there's no receiver_transport,
+        SharedMemWeightSyncScheme needs to actively apply weights because the model's
+        parameters are copies of the shared memory buffer, not the same objects.
+
+        Args:
+            timeout: Ignored (shared memory access is instant).
+
+        Returns:
+            The applied weights, or None if no weights/model are available.
+        """
+        if not self.initialized_on_receiver:
+            raise RuntimeError(
+                "Must be initialized on receiver before receiving weights"
+            )
+
+        # Get current weights from shared memory buffer (stored during connect())
+        weights = self.weights
+        if weights is None:
+            return None
+
+        # Apply weights to the model
+        if self.model is not None:
+            self._strategy.apply_weights(self.model, weights, inplace=True)
+
+        return weights
+
     @property
     def weights(self) -> Any | None:
         """Get the current weights from shared memory.
 
-        For SharedMemWeightSyncScheme, weights are stored in the transport's
-        _unique_weights after init_on_sender() is called with params_map.
+        For SharedMemWeightSyncScheme:
+        - On sender side: weights are in transport's _unique_weights
+        - On receiver side: weights are in _receiver_shared_weights (stored during connect())
 
         Returns:
             The weights TensorDict if available, None otherwise.
         """
-        # First, try to get from the shared transport (works for params_map initialization)
-        if self._shared_transport is not None:
-            # Return the first unique weight (all workers share the same logical weights)
+        # On receiver side, use the stored shared buffer reference
+        if hasattr(self, "_receiver_shared_weights") and self._receiver_shared_weights is not None:
+            return self._receiver_shared_weights
+
+        # On sender side, get from the shared transport
+        if self._shared_transport is not None and self.shared_transport.unique_weights:
             return self.shared_transport.unique_weights[0]
 
-        # Fall back to parent implementation (works for context-based initialization)
+        # Fall back to parent implementation
         return super().weights
 
     def _setup_connection_and_weights_on_receiver_impl(
@@ -620,6 +686,10 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         weights = self._shared_transport.setup_connection_and_weights_on_receiver(
             worker_idx=worker_idx
         )
+
+        # Store the shared buffer reference for later receive() calls
+        # This is the actual shared memory buffer that the sender updates
+        self._receiver_shared_weights = weights
 
         # Apply weights to model
         if weights is not None and self.model is not None:
