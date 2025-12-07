@@ -11,7 +11,7 @@ used in both instances. From there, anything can happen:
 
 - In multiprocessed or distributed settings, several copies of the policy can be held by the inference workers (named
   `DataCollectors` in TorchRL). When synchronizing the weights, each worker needs to receive a new copy of the weights
-  for his instance of the policy.
+  for their instance of the policy.
 - In some cases, the environment or the postprocessing hooks can rely on the usage of a model which itself needs
   synchronization. This means that there can be multiple ends in the data transfer API and one needs to think beyond
   policy-to-policy weight synchronization strategies.
@@ -23,7 +23,7 @@ used in both instances. From there, anything can happen:
   asks for new weights, or must it only be the trainer who pushes its weights to the workers? An intermediate approach
   is to store the weights on some intermediary server and let the workers fetch them when necessary.
 
-TorchRL tries to account for each of these problems in a flexible manner. We individuate three basic components in a weight
+TorchRL tries to account for each of these problems in a flexible manner. We identify three basic components in a weight
 transfer:
 
 - A **Scheme** class that orchestrates the entire weight synchronization lifecycle, including initialization,
@@ -40,6 +40,22 @@ Each of these classes is detailed below.
     with the ``weight_sync_schemes`` argument, the collector handles all initialization, connection,
     and synchronization calls internally. You simply call ``collector.update_policy_weights_()`` and
     the weights are propagated to all workers.
+
+    The ``update_policy_weights_`` method supports multiple calling conventions::
+
+        # No arguments - uses registered policy
+        collector.update_policy_weights_()
+
+        # Positional argument - policy module or TensorDict
+        collector.update_policy_weights_(policy_module)
+        collector.update_policy_weights_(weights_tensordict)
+
+        # Keyword arguments for clarity
+        collector.update_policy_weights_(policy=actor_module)
+        collector.update_policy_weights_(weights=weights_td, model_id="actor")
+
+        # Multiple models atomically
+        collector.update_policy_weights_(weights_dict={"actor": actor_td, "critic": critic_td})
 
     The detailed lifecycle documentation below is primarily intended for developers who want to:
 
@@ -199,7 +215,7 @@ MultiProcessWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Sends weight copies through multiprocessing queues. More flexible than shared memory but requires
-explicit data transfer for each update.
+explicit data transfer for each update. Supports timeout for non-blocking receives.
 
 .. list-table::
    :header-rows: 1
@@ -214,18 +230,19 @@ explicit data transfer for each update.
      - None
    * - ``connect``
      - Sends weights via queue
-     - Reads from queue, applies to model
+     - Reads from queue, applies to model via strategy
      - mp.Queue (blocking)
    * - ``send``
      - Puts weights into queues
-     - Must call ``receive()``
-     - mp.Queue
+     - Must call ``receive()``, transport applies weights
+     - mp.Queue (supports timeout)
 
 DistributedWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Uses ``torch.distributed`` primitives with a TCPStore for signaling. Suitable for distributed
-training scenarios where processes are already part of a process group.
+training scenarios where processes are already part of a process group. Supports timeout via
+``irecv(return_premature=True)`` for non-blocking receives.
 
 .. list-table::
    :header-rows: 1
@@ -240,18 +257,19 @@ training scenarios where processes are already part of a process group.
      - None
    * - ``connect``
      - Sends initial weights via ``torch.distributed.send()``
-     - Receives initial weights via ``torch.distributed.recv()``, applies to model
+     - Receives initial weights via ``torch.distributed.recv()``, applies via strategy
      - **Rendez-vous**: torch.distributed send/recv
    * - ``send``
      - Sets TCPStore flag + ``torch.distributed.send()``
-     - Must poll TCPStore, then call ``receive()``
-     - TCPStore + torch.distributed
+     - Must poll TCPStore, then call ``receive()``, transport applies weights
+     - TCPStore + torch.distributed (supports timeout)
 
 RPCWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~
 
 Uses ``torch.distributed.rpc`` for signaling with ``torch.distributed`` for data transfer.
 The sender's ``send()`` triggers the receiver via RPC, so no explicit receiver polling is needed.
+Supports timeout via ``irecv(return_premature=True)`` for non-blocking receives.
 
 .. list-table::
    :header-rows: 1
@@ -270,14 +288,15 @@ The sender's ``send()`` triggers the receiver via RPC, so no explicit receiver p
      - None
    * - ``send``
      - **RPC call** triggers receiver + ``send()``
-     - Triggered by RPC, does ``recv()``
-     - RPC + torch.distributed
+     - Triggered by RPC, does ``recv()``, transport applies weights
+     - RPC + torch.distributed (supports timeout)
 
 RayWeightSyncScheme
 ~~~~~~~~~~~~~~~~~~~
 
 Uses Ray actors for coordination with ``torch.distributed`` for efficient weight transfer.
-Suitable for Ray-based distributed RL setups.
+Suitable for Ray-based distributed RL setups. Supports timeout via ``irecv(return_premature=True)``
+for non-blocking receives.
 
 .. list-table::
    :header-rows: 1
@@ -292,12 +311,12 @@ Suitable for Ray-based distributed RL setups.
      - None
    * - ``connect``
      - Creates ConnectionInfo Ray actor, ``init_process_group(rank=0)``, sends initial weights
-     - Waits for ConnectionInfo, ``init_process_group(rank=N)``, receives weights
+     - Waits for ConnectionInfo, ``init_process_group(rank=N)``, receives weights via strategy
      - **Rendez-vous**: Ray actor + torch.distributed
    * - ``send``
      - **Ray remote call** triggers receiver + ``isend()``
-     - Triggered by Ray, does ``irecv()``
-     - Ray + torch.distributed
+     - Triggered by Ray, does ``irecv()``, transport applies weights
+     - Ray + torch.distributed (supports timeout)
 
 RayModuleTransformScheme
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -377,9 +396,20 @@ Weight sync schemes integrate seamlessly with TorchRL collectors. The collector 
     for i, data in enumerate(collector):
         # ... training step ...
         
-        # Update weights - workers see updates via shared memory
+        # Update weights - multiple calling conventions supported:
         if i % 10 == 0:
+            # Option 1: No arguments (uses registered policy)
             collector.update_policy_weights_()
+            
+            # Option 2: Pass policy module (positional)
+            collector.update_policy_weights_(policy)
+            
+            # Option 3: Pass weights TensorDict (positional)
+            # collector.update_policy_weights_(weights_tensordict)
+            
+            # Option 4: Use keyword arguments for clarity
+            # collector.update_policy_weights_(policy=policy)
+            # collector.update_policy_weights_(weights=weights_td, model_id="policy")
 
     collector.shutdown()
 
@@ -458,6 +488,64 @@ Transports
 
 Transports handle the low-level communication between sender and receiver. Each scheme creates
 appropriate transport instances for its workers.
+
+Transport Interface
+~~~~~~~~~~~~~~~~~~~
+
+All transports implement the ``TransportBackend`` protocol with a stateless design. The key methods
+accept ``weights``, ``model``, and ``strategy`` as keyword arguments rather than storing them as
+instance attributes:
+
+.. code-block:: python
+
+    # Transport methods accept model/weights/strategy as kwargs
+    transport.receive_weights(
+        timeout=None,      # Optional timeout in seconds (None = blocking)
+        weights=buffer,    # Pre-allocated weight buffer
+        model=policy,      # Model to apply weights to
+        strategy=strategy, # WeightStrategy for weight application
+    )
+
+    transport.setup_connection_and_weights_on_receiver(
+        worker_idx=0,
+        weights=buffer,
+        model=policy,
+        strategy=strategy,
+    )
+
+Timeout Support
+~~~~~~~~~~~~~~~
+
+Transports support timeout for non-blocking weight reception:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Transport
+     - Timeout Support
+     - Notes
+   * - ``MPTransport``
+     - ✅ Yes
+     - Uses ``queue.get(timeout=...)``
+   * - ``RPCTransport``
+     - ✅ Yes
+     - Uses ``irecv(return_premature=True)`` with polling
+   * - ``RayTransport``
+     - ✅ Yes
+     - Uses ``irecv(return_premature=True)`` with polling
+   * - ``DistributedTransport``
+     - ✅ Yes
+     - Uses ``irecv(return_premature=True)`` with polling
+   * - ``SharedMemTransport``
+     - N/A
+     - Shared memory is instant (no waiting)
+
+When ``timeout=None`` (default), the receive operation blocks until weights arrive.
+When a timeout is specified, the method returns ``None`` if the timeout expires before
+weights are received.
+
+Available Transports
+~~~~~~~~~~~~~~~~~~~~
 
 .. autosummary::
     :toctree: generated/
