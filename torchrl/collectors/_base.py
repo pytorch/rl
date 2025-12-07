@@ -484,6 +484,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 weights_dict = {model_id: policy_or_weights}
             elif weights_dict is None:
                 weights_dict = {model_id: policy_or_weights}
+            torchrl_logger.debug(f"Calling weight update with {model_id=} and {weights_dict.keys()=}")
             for target_model_id, weights in weights_dict.items():
                 if target_model_id not in self._weight_sync_schemes:
                     raise KeyError(
@@ -512,6 +513,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             raise RuntimeError
         else:
             # No weight updater configured, passing.
+            torchrl_logger.debug("No weight update configures, skipping.")
             pass
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
