@@ -2361,6 +2361,7 @@ class TestAutoWrap:
                         p.data.zero_()
                         assert p.device == torch.device("cpu")
                     # Debug: updating policy weights
+                    torchrl_logger.debug("Calling update_policy_weights_")
                     collector.update_policy_weights_()
                     # Debug: updated policy weights
                 elif i == 4:
