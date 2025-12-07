@@ -574,11 +574,13 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
         # Update the shared memory buffer in-place so workers see the change
         if self._shared_transport is not None and self.shared_transport.unique_weights:
+            torchrl_logger.debug("Updating shared memory buffer in-place")
             shared_weights = self.shared_transport.unique_weights[0]
             # In-place update of shared memory buffer with fresh weights
             shared_weights.data.update_(fresh_weights.data)
             return shared_weights
 
+        torchrl_logger.debug("No shared transport, returning fresh weights")
         # If no shared transport, just return the fresh weights
         return fresh_weights
 
@@ -603,6 +605,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             raise RuntimeError("Must be synchronized on sender before sending weights")
 
         # prepare_weights updates the shared buffer in-place
+        torchrl_logger.debug("Sending weights via shared memory -- calling prepare_weights()")
         self.prepare_weights(
             weights=weights,
             model_id=self._model_id,
