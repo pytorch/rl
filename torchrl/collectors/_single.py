@@ -470,7 +470,7 @@ class SyncDataCollector(DataCollectorBase):
         env: EnvBase,
         trust_policy: bool | None,
     ) -> TensorDictModule | Callable:
-        """Initialize and configure the policy."""
+        """Initialize and configure the policy before device placement / wrapping."""
         if policy is None:
             if policy_factory is not None:
                 policy = policy_factory()
@@ -478,10 +478,6 @@ class SyncDataCollector(DataCollectorBase):
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
-
-        # If the underlying policy has a state_dict, keep a reference to it
-        if hasattr(policy, "state_dict"):
-            self._policy_w_state_dict = policy
 
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
@@ -604,8 +600,6 @@ class SyncDataCollector(DataCollectorBase):
 
     def _setup_policy_and_weights(self, policy: TensorDictModule | Callable) -> None:
         """Set up policy, wrapped policy, and extract weights."""
-        self._original_policy = policy
-
         # Check if policy has meta-device parameters (sent from weight sync schemes)
         # In that case, skip device placement - weights will come from the receiver
         has_meta_params = False
@@ -636,6 +630,11 @@ class SyncDataCollector(DataCollectorBase):
             else:
                 self.policy = self._wrapped_policy = policy
 
+            # For meta-parameter policies, keep the internal (worker-side) policy
+            # as the reference for collector state_dict / load_state_dict.
+            if isinstance(self.policy, nn.Module):
+                self._policy_w_state_dict = self.policy
+
             # Don't extract weights yet - they're on meta device (empty)
             self.policy_weights = TensorDict()
             self.get_weights_fn = None
@@ -660,8 +659,13 @@ class SyncDataCollector(DataCollectorBase):
             else:
                 self.policy = self._wrapped_policy = policy
 
-            # Extract policy weights from the uncompiled policy
-            # Access _wrapped_policy_uncompiled directly to avoid triggering compilation
+            # Use the internal, unwrapped policy (cast to the correct device) as the
+            # reference for state_dict / load_state_dict and legacy weight extractors.
+            if isinstance(self.policy, nn.Module):
+                self._policy_w_state_dict = self.policy
+
+            # Extract policy weights from the uncompiled wrapped policy
+            # Access _wrapped_policy_uncompiled directly to avoid triggering compilation.
             if isinstance(self._wrapped_policy_uncompiled, nn.Module):
                 self.policy_weights = TensorDict.from_module(
                     self._wrapped_policy_uncompiled, as_module=True
@@ -853,17 +857,17 @@ class SyncDataCollector(DataCollectorBase):
     def _make_shuttle(self):
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
         with torch.no_grad():
-            self._shuttle = self.env.reset()
+            self._carrier = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
             self._shuttle_has_no_device = True
-            self._shuttle.clear_device_()
+            self._carrier.clear_device_()
         else:
             self._shuttle_has_no_device = False
 
         traj_ids = self._traj_pool.get_traj_and_increment(
             self.n_env, device=self.storing_device
         ).view(self.env.batch_size)
-        self._shuttle.set(
+        self._carrier.set(
             ("collector", "traj_ids"),
             traj_ids,
         )
@@ -980,9 +984,9 @@ class SyncDataCollector(DataCollectorBase):
                 # This is the safest thing to do if the spec has None fields or if there is
                 # no spec at all.
                 # See #505 for additional context.
-                self._final_rollout.update(self._shuttle.copy())
+                self._final_rollout.update(self._carrier.copy())
             with torch.no_grad():
-                policy_input = self._shuttle.copy()
+                policy_input = self._carrier.copy()
                 if self.policy_device:
                     policy_input = policy_input.to(self.policy_device)
                 # we cast to policy device, we'll deal with the device later
@@ -1372,7 +1376,7 @@ class SyncDataCollector(DataCollectorBase):
         if traj_sop.any():
             device = self.storing_device
 
-            traj_ids = self._shuttle.get(("collector", "traj_ids"))
+            traj_ids = self._carrier.get(("collector", "traj_ids"))
             if device is not None:
                 traj_ids = traj_ids.to(device)
                 traj_sop = traj_sop.to(device)
@@ -1384,7 +1388,7 @@ class SyncDataCollector(DataCollectorBase):
                 traj_sop.sum(), device=traj_sop.device
             )
             traj_ids = traj_ids.masked_scatter(traj_sop, new_traj)
-            self._shuttle.set(("collector", "traj_ids"), traj_ids)
+            self._carrier.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -1395,7 +1399,7 @@ class SyncDataCollector(DataCollectorBase):
 
         """
         if self.reset_at_each_iter:
-            self._shuttle.update(self.env.reset())
+            self._carrier.update(self.env.reset())
 
         # self._shuttle.fill_(("collector", "step_count"), 0)
         if self._use_buffers:
@@ -1409,19 +1413,19 @@ class SyncDataCollector(DataCollectorBase):
                     self.init_random_frames is not None
                     and self._frames < self.init_random_frames
                 ):
-                    self.env.rand_action(self._shuttle)
+                    self.env.rand_action(self._carrier)
                     if (
                         self.policy_device is not None
                         and self.policy_device != self.env_device
                     ):
                         # TODO: This may break with exclusive / ragged lazy stacks
-                        self._shuttle.apply(
+                        self._carrier.apply(
                             lambda name, val: val.to(
                                 device=self.policy_device, non_blocking=True
                             )
                             if name in self._policy_output_keys
                             else val,
-                            out=self._shuttle,
+                            out=self._carrier,
                             named=True,
                             nested_keys=True,
                         )
@@ -1433,7 +1437,7 @@ class SyncDataCollector(DataCollectorBase):
                                 not self.no_cuda_sync
                                 or self.policy_device.type == "cuda"
                             )
-                            policy_input = self._shuttle.to(
+                            policy_input = self._carrier.to(
                                 self.policy_device,
                                 non_blocking=non_blocking,
                             )
@@ -1443,18 +1447,18 @@ class SyncDataCollector(DataCollectorBase):
                             # we know the tensordict has a device otherwise we would not be here
                             # we can pass this, clear_device_ must have been called earlier
                             # policy_input = self._shuttle.clear_device_()
-                            policy_input = self._shuttle
+                            policy_input = self._carrier
                     else:
-                        policy_input = self._shuttle
+                        policy_input = self._carrier
                     # we still do the assignment for security
                     if self.compiled_policy:
                         cudagraph_mark_step_begin()
                     policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
                         policy_output = policy_output.clone()
-                    if self._shuttle is not policy_output:
+                    if self._carrier is not policy_output:
                         # ad-hoc update shuttle
-                        self._shuttle.update(
+                        self._carrier.update(
                             policy_output, keys_to_update=self._policy_output_keys
                         )
 
@@ -1463,7 +1467,7 @@ class SyncDataCollector(DataCollectorBase):
                         non_blocking = (
                             not self.no_cuda_sync or self.env_device.type == "cuda"
                         )
-                        env_input = self._shuttle.to(
+                        env_input = self._carrier.to(
                             self.env_device, non_blocking=non_blocking
                         )
                         if not self.no_cuda_sync:
@@ -1472,18 +1476,18 @@ class SyncDataCollector(DataCollectorBase):
                         # we know the tensordict has a device otherwise we would not be here
                         # we can pass this, clear_device_ must have been called earlier
                         # env_input = self._shuttle.clear_device_()
-                        env_input = self._shuttle
+                        env_input = self._carrier
                 else:
-                    env_input = self._shuttle
+                    env_input = self._carrier
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
-                if self._shuttle is not env_output:
+                if self._carrier is not env_output:
                     # ad-hoc update shuttle
                     next_data = env_output.get("next")
                     if self._shuttle_has_no_device:
                         # Make sure
                         next_data.clear_device_()
-                    self._shuttle.set("next", next_data)
+                    self._carrier.set("next", next_data)
 
                 torchrl_logger.debug(
                     f"Collector: Rollout step completed {self._iter=}, {self._worker_idx=}."
@@ -1496,8 +1500,8 @@ class SyncDataCollector(DataCollectorBase):
                     torchrl_logger.debug(
                         f"Collector: Adding {env_output.numel()} frames to replay buffer using add()."
                     )
-                    self.replay_buffer.add(self._shuttle)
-                    if self._increment_frames(self._shuttle.numel()):
+                    self.replay_buffer.add(self._carrier)
+                    if self._increment_frames(self._carrier.numel()):
                         return
                 else:
                     if self.storing_device is not None:
@@ -1508,7 +1512,7 @@ class SyncDataCollector(DataCollectorBase):
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
                         tensordicts.append(
-                            self._shuttle.to(
+                            self._carrier.to(
                                 self.storing_device, non_blocking=non_blocking
                             )
                         )
@@ -1516,14 +1520,14 @@ class SyncDataCollector(DataCollectorBase):
                             self._sync_storage()
                     else:
                         torchrl_logger.debug("Collector: Adding to queue (no device).")
-                        tensordicts.append(self._shuttle)
+                        tensordicts.append(self._carrier)
 
                 # carry over collector data without messing up devices
-                collector_data = self._shuttle.get("collector").copy()
-                self._shuttle = env_next_output
+                collector_data = self._carrier.get("collector").copy()
+                self._carrier = env_next_output
                 if self._shuttle_has_no_device:
-                    self._shuttle.clear_device_()
-                self._shuttle.set("collector", collector_data)
+                    self._carrier.clear_device_()
+                self._carrier.set("collector", collector_data)
                 self._update_traj_ids(env_output)
 
                 if (
@@ -1604,7 +1608,7 @@ class SyncDataCollector(DataCollectorBase):
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
-        collector_metadata = self._shuttle.get("collector").clone()
+        collector_metadata = self._carrier.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -1618,16 +1622,16 @@ class SyncDataCollector(DataCollectorBase):
                     device=self.env.device,
                 )
                 _reset[index] = 1
-                self._shuttle.set(reset_key, _reset)
+                self._carrier.set(reset_key, _reset)
         else:
             _reset = None
-            self._shuttle.zero_()
+            self._carrier.zero_()
 
-        self._shuttle.update(self.env.reset(**kwargs), inplace=True)
+        self._carrier.update(self.env.reset(**kwargs), inplace=True)
         collector_metadata["traj_ids"] = (
             collector_metadata["traj_ids"] - collector_metadata["traj_ids"].min()
         )
-        self._shuttle["collector"] = collector_metadata
+        self._carrier["collector"] = collector_metadata
 
     def shutdown(
         self,
@@ -1646,7 +1650,7 @@ class SyncDataCollector(DataCollectorBase):
         try:
             if not self.closed:
                 self.closed = True
-                del self._shuttle
+                del self._carrier
                 if self._use_buffers:
                     del self._final_rollout
                 if close_env and not self.env.is_closed:

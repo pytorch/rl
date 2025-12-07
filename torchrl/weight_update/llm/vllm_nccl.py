@@ -71,8 +71,6 @@ To add a new RPC backend (e.g., torch.distributed.rpc):
 
 **Current Implementation (Ray Backend)**
 
-The test suite in ``test_weightsync.py`` demonstrates the Ray-based RPC:
-
 .. code-block:: python
 
     # Trainer actor (provides RPC endpoint)

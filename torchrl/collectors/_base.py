@@ -511,7 +511,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             # unreachable
             raise RuntimeError
         else:
-            return self.receive_weights(policy_or_weights)
+            # No weight updater configured, passing.
+            pass
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights
@@ -658,21 +659,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             # Apply to local policy
             if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
                 strategy.apply_weights(self.policy, weights)
-        elif (
-            hasattr(self, "_original_policy")
-            and isinstance(self._original_policy, nn.Module)
-            and hasattr(self, "policy")
-            and isinstance(self.policy, nn.Module)
-        ):
-            # If no weights were provided, mirror weights from the original (trainer) policy
-            from torchrl.weight_update.weight_sync_schemes import WeightStrategy
-
-            strategy = WeightStrategy(extract_as="tensordict")
-            weights = strategy.extract_weights(self._original_policy)
-            # Cast weights to the policy device before applying
-            if self.policy_device is not None:
-                weights = weights.to(self.policy_device)
-            strategy.apply_weights(self.policy, weights)
         # Otherwise, no action needed - policy is local and changes are immediately visible
 
     def register_scheme_receiver(

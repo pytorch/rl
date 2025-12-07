@@ -294,25 +294,11 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         torchrl_logger.debug(f"Initializing weight sync scheme for {model_id=}")
         scheme.init_on_receiver(model_id=model_id, context=self)
         torchrl_logger.debug(f"Setup weight sync scheme for {model_id=}")
-        scheme._setup_connection_and_weights_on_receiver_impl()
+        scheme.connect()
         self._weight_sync_scheme = scheme
 
     def _receive_weights_scheme(self):
         self._weight_sync_scheme.receive()
-
-    def _debug_scheme(self) -> dict:
-        """Debug method to inspect scheme state on the receiver."""
-        if not hasattr(self, "_weight_sync_scheme") or self._weight_sync_scheme is None:
-            return {"error": "No scheme"}
-        s = self._weight_sync_scheme
-        return {
-            "initialized_on_receiver": getattr(s, "_initialized_on_receiver", False),
-            "initialized_on_sender": getattr(s, "_initialized_on_sender", False),
-            "synchronized_on_receiver": getattr(s, "synchronized_on_receiver", False),
-            "synchronized_on_sender": getattr(s, "synchronized_on_sender", False),
-            "dist_initialized": getattr(s, "_dist_initialized", False),
-            "has_model": s.model is not None if hasattr(s, "model") else False,
-        }
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if self.observation_spec_transform is not None:
