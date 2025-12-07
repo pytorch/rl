@@ -1789,6 +1789,23 @@ class TestWeightUpdaterConfigs:
         assert cfg.vllm_tp_size == 2
 
 
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
+class TestTransformConfigs:
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_init_tracker_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.transforms import InitTrackerConfig
+
+        cfg = InitTrackerConfig(init_key="is_test_init")
+        assert cfg.init_key == "is_test_init"
+        instantiate(cfg)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
