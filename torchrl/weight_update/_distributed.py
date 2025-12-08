@@ -63,6 +63,25 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         self._background_thread = None
         self._stop_event = None
 
+    def __getstate__(self):
+        """Custom serialization - exclude non-picklable objects."""
+        state = super().__getstate__()
+        # TCPStore cannot be pickled - remove it but keep _store_info
+        state["_store"] = None
+        state["_provided_store"] = None
+        # Thread and Event cannot be pickled
+        state["_background_thread"] = None
+        state["_stop_event"] = None
+        # Transports contain references to store/groups - exclude them
+        # The receiver will create its own transport in init_on_receiver
+        state["_sender_transports"] = {}
+        state["_receiver_transport"] = None
+        return state
+
+    def __setstate__(self, state):
+        """Custom deserialization."""
+        super().__setstate__(state)
+
     def _init_on_sender_impl(
         self,
         *,
