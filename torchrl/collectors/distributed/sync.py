@@ -59,6 +59,7 @@ def _distributed_init_collection_node(
     collector_kwargs,
     update_interval,
     total_frames,
+    weight_sync_schemes=None,
     verbose=VERBOSE,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
@@ -77,16 +78,10 @@ def _distributed_init_collection_node(
                 "SyncDataCollector and subclasses can only support a single environment."
             )
 
-    if isinstance(policy, nn.Module):
-        policy_weights = TensorDict.from_module(policy)
-        policy_weights = policy_weights.data.lock_()
-    else:
-        if collector_kwargs.get("weight_updater") is None and (
-            policy_factory is None
-            or (isinstance(policy_factory, Sequence) and not any(policy_factory))
-        ):
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
-        policy_weights = TensorDict(lock=True)
+    # Pass weight_recv_schemes to the collector - it will handle init_on_receiver and connect
+    if weight_sync_schemes is not None:
+        collector_kwargs["weight_recv_schemes"] = weight_sync_schemes
+        collector_kwargs["worker_idx"] = rank
 
     # When policy_factory is provided, the child collector should use it
     # instead of the policy (which is only used as a weight source for the parent)
@@ -108,24 +103,19 @@ def _distributed_init_collection_node(
         rank=rank,
         world_size=world_size,
         timeout=timedelta(MAX_TIME_TO_CONNECT),
-        # init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
-    if verbose:
-        torchrl_logger.debug(f"node with rank {rank} -- creating store")
+
     if verbose:
         torchrl_logger.debug(f"node with rank {rank} -- loop")
-    policy_weights.irecv(0)
-    frames = 0
+
+    # Collection loop - weight updates are handled by the background thread in the scheme
     for i, data in enumerate(collector):
         data.isend(dst=0)
-        frames += data.numel()
-        if (
-            frames < total_frames
-            and (i + 1) % update_interval == 0
-            and not policy_weights.is_empty()
-        ):
-            policy_weights.irecv(0)
 
+    # Cleanup
+    if weight_sync_schemes is not None:
+        for scheme in weight_sync_schemes.values():
+            scheme.shutdown()
     if not collector.closed:
         collector.shutdown()
     del collector
@@ -403,6 +393,28 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
         self.backend = backend
 
+        # Create weight sync schemes for distributed weight updates
+        # The scheme creates its own TCPStore for coordination
+        self._weight_sync_schemes = None
+        if isinstance(policy, nn.Module):
+            from torchrl.weight_update import DistributedWeightSyncScheme
+
+            self._weight_sync_schemes = {
+                "policy": DistributedWeightSyncScheme(backend=backend, sync=False)
+            }
+            # Initialize schemes on sender BEFORE starting workers so the store
+            # exists when workers try to connect
+            for model_id, scheme in self._weight_sync_schemes.items():
+                torchrl_logger.debug(
+                    f"DistributedSyncDataCollector: Initializing scheme for '{model_id}' on sender"
+                )
+                scheme.init_on_sender(
+                    model_id=model_id,
+                    context=self,
+                    num_workers=self.num_workers,
+                    model=policy,
+                )
+
         # os.environ['TP_SOCKET_IFNAME'] = 'lo'
 
         self._init_workers()
@@ -522,6 +534,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             collector_kwargs=self.collector_kwargs[i],
             update_interval=self.update_interval,
             total_frames=self.total_frames_per_collector,
+            weight_sync_schemes=self._weight_sync_schemes,
             verbose=VERBOSE,
         )
         return job
@@ -548,6 +561,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 collector_kwargs=self.collector_kwargs[i],
                 update_interval=self.update_interval,
                 total_frames=self.total_frames_per_collector,
+                weight_sync_schemes=self._weight_sync_schemes,
                 verbose=VERBOSE,
             ),
         )
@@ -585,6 +599,15 @@ class DistributedSyncDataCollector(DataCollectorBase):
             self.jobs.append(job)
         self._init_master_dist(self.num_workers + 1, self.backend)
 
+        # Send initial weights to workers (schemes were already initialized on sender)
+        if self._weight_sync_schemes is not None:
+            for model_id, scheme in self._weight_sync_schemes.items():
+                torchrl_logger.debug(
+                    f"DistributedSyncDataCollector: Sending initial weights for '{model_id}'"
+                )
+                scheme.connect()
+            torchrl_logger.debug("DistributedSyncDataCollector: Initial weight sync completed")
+
     def iterator(self):
         yield from self._iterator_dist()
 
@@ -594,10 +617,11 @@ class DistributedSyncDataCollector(DataCollectorBase):
         j = -1
         while total_frames < self.total_frames:
             j += 1
-            if j % self.update_interval == 0 and not self.policy_weights.is_empty():
-                for i in range(self.num_workers):
-                    rank = i + 1
-                    self.policy_weights.isend(rank)
+            if j % self.update_interval == 0 and self._weight_sync_schemes is not None:
+                # Send weight updates via the schemes
+                # Each scheme handles extracting weights from the policy and sending
+                for scheme in self._weight_sync_schemes.values():
+                    scheme.send()
 
             trackers = []
             for i in range(self.num_workers):
@@ -642,4 +666,8 @@ class DistributedSyncDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def shutdown(self, timeout: float | None = None) -> None:
-        pass
+        # Clean up weight sync schemes
+        if self._weight_sync_schemes is not None:
+            for scheme in self._weight_sync_schemes.values():
+                scheme.shutdown()
+            self._weight_sync_schemes = None
