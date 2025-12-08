@@ -1166,7 +1166,7 @@ class SyncDataCollector(DataCollectorBase):
 
         # Apply to internal policy
         if hasattr(self, "_policy_w_state_dict") and self._policy_w_state_dict is not None:
-            weights.to_module(self._policy_w_state_dict)
+            TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
