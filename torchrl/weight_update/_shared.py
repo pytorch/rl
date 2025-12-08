@@ -503,10 +503,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
         self.create_transport()
 
-        # Set _receiver_transport so the parent receive() method works
-        # This points to the shared transport which handles shared memory
-        self._receiver_transport = self._shared_transport
-
     def get_weight_queues(self):
         """Get the per-worker weight initialization queues.
 

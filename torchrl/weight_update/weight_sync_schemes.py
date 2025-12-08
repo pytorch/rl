@@ -1012,14 +1012,18 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
                 "Must be synchronized on receiver before receiving weights"
             )
 
-        if self._receiver_transport is None:
+        # Determine which transport to use
+        if self._receiver_transport is not None:
+            transport = self._receiver_transport
+        elif self._shared_transport is not None:
+            # Use shared transport directly (e.g., SharedMemWeightSyncScheme)
+            transport = self._shared_transport
+        else:
             return None
 
         # Try to receive weights - transport handles receiving and applying
-        torchrl_logger.debug(
-            f"Calling receive_weights on transport {self.receiver_transport}"
-        )
-        result = self.receiver_transport.receive_weights(
+        torchrl_logger.debug(f"Calling receive_weights on transport {transport}")
+        result = transport.receive_weights(
             timeout=timeout,
             weights=self.weights,
             model=self.model,
@@ -1042,9 +1046,9 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             )
 
         # Send acknowledgment if transport supports it
-        if hasattr(self.receiver_transport, "send_ack"):
+        if hasattr(transport, "send_ack"):
             torchrl_logger.debug(f"Sending acknowledgement on {model_id=}")
-            self.receiver_transport.send_ack("updated")
+            transport.send_ack("updated")
 
         return weights
 
