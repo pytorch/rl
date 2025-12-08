@@ -88,9 +88,11 @@ def _distributed_init_collection_node(
             warnings.warn(_NON_NN_POLICY_WEIGHTS)
         policy_weights = TensorDict(lock=True)
 
+    # When policy_factory is provided, the child collector should use it
+    # instead of the policy (which is only used as a weight source for the parent)
     collector = collector_class(
         env_make,
-        policy,
+        policy if policy_factory is None else None,
         frames_per_batch=frames_per_batch,
         split_trajs=False,
         total_frames=total_frames,
