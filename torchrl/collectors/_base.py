@@ -484,7 +484,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 weights_dict = {model_id: policy_or_weights}
             elif weights_dict is None:
                 weights_dict = {model_id: policy_or_weights}
-            torchrl_logger.debug(f"Calling weight update with {model_id=} and {weights_dict.keys()=}")
+            torchrl_logger.debug(
+                f"Calling weight update with {model_id=} and {weights_dict.keys()=}"
+            )
             for target_model_id, weights in weights_dict.items():
                 if target_model_id not in self._weight_sync_schemes:
                     raise KeyError(
@@ -527,7 +529,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         Override in subclasses to provide custom fallback behavior.
         By default, this is a no-op.
         """
-        pass
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights

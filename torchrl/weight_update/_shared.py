@@ -181,10 +181,14 @@ class SharedMemTransport:
         """
         # Apply weights to model if provided (same pattern as other transports)
         if model is not None and strategy is not None and weights is not None:
-            torchrl_logger.debug(f"Applying shared memory weights {type(weights)=} to model {model} with {strategy=}.")
+            torchrl_logger.debug(
+                f"Applying shared memory weights {type(weights)=} to model {model} with {strategy=}."
+            )
             strategy.apply_weights(model, weights)
             return weights
-        torchrl_logger.debug(f"Not applying shared memory weights {type(weights)=} to model {model} with {strategy=}.")
+        torchrl_logger.debug(
+            f"Not applying shared memory weights {type(weights)=} to model {model} with {strategy=}."
+        )
         return None
 
     def send_ack(self, message: str = "updated") -> None:
@@ -601,7 +605,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             raise RuntimeError("Must be synchronized on sender before sending weights")
 
         # prepare_weights updates the shared buffer in-place
-        torchrl_logger.debug("Sending weights via shared memory -- calling prepare_weights()")
+        torchrl_logger.debug(
+            "Sending weights via shared memory -- calling prepare_weights()"
+        )
         self.prepare_weights(
             weights=weights,
             model_id=self._model_id,
