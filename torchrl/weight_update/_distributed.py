@@ -162,9 +162,9 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             store = torch.distributed.TCPStore(
                 host_name=host,
                 port=self._store_port,
-                world_size=num_workers + 1,  # workers + master
                 is_master=True,
                 timeout=timedelta(seconds=self._timeout),
+                wait_for_workers=False,  # Don't block - workers may not be started yet
             )
             self._store_info = {"host": host, "port": self._store_port}
         else:
@@ -237,10 +237,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
         # Store worker_idx for synchronize_weights
         self._worker_idx = rank
-
-        # For async mode, start background thread that monitors store for weight updates
-        if not self.sync:
-            self._start_background_receiver()
+        # Note: Background thread for async mode is started in connect() after init_process_group
 
     def _start_background_receiver(self):
         """Start daemon thread that monitors store for weight updates."""
@@ -311,6 +308,20 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         Note: This uses direct torch.distributed send/recv without TCPStore
         signaling to avoid interfering with the main collection loop.
         """
+        # Initialize torch.distributed process group if not already done
+        # This is a collective operation - all workers must call it
+        if not torch.distributed.is_initialized():
+            torchrl_logger.debug(
+                f"DistributedWeightSyncScheme: Initializing process group on sender "
+                f"(world_size={self._num_workers + 1})"
+            )
+            torch.distributed.init_process_group(
+                backend=self.backend,
+                rank=0,  # Sender is always rank 0
+                world_size=self._num_workers + 1,
+                timeout=timedelta(seconds=self._timeout),
+            )
+
         # Check if we have weights to send
         if weights is None and getattr(self, "model", None) is None:
             torchrl_logger.debug(
@@ -346,6 +357,28 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         The receiver always has a model that needs weights, so we block
         waiting for the initial weights from the sender.
         """
+        # Use stored worker_idx if not provided
+        if worker_idx is None:
+            worker_idx = self._worker_idx
+
+        # Initialize torch.distributed process group if not already done
+        # This is a collective operation - sender and all workers must call it
+        if not torch.distributed.is_initialized():
+            torchrl_logger.debug(
+                f"DistributedWeightSyncScheme: Initializing process group on worker {worker_idx} "
+                f"(world_size={self._num_workers + 1})"
+            )
+            torch.distributed.init_process_group(
+                backend=self.backend,
+                rank=worker_idx,
+                world_size=self._num_workers + 1,
+                timeout=timedelta(seconds=self._timeout),
+            )
+
+        # Start background receiver thread for async mode (now that process group is initialized)
+        if not self.sync and self._background_thread is None:
+            self._start_background_receiver()
+
         if self._receiver_transport is None:
             return
         stateless_model = self.receiver_transport._store.get("STATELESS_MODEL")
@@ -356,10 +389,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                 "DistributedWeightSyncScheme: Skipping initial weight sync on receiver because of stateless model."
             )
             return
-
-        # Use stored worker_idx if not provided
-        if worker_idx is None:
-            worker_idx = self._worker_idx
 
         torchrl_logger.debug(
             f"DistributedWeightSyncScheme: Worker {worker_idx} waiting for initial weights"

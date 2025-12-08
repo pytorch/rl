@@ -78,10 +78,23 @@ def _distributed_init_collection_node(
                 "SyncDataCollector and subclasses can only support a single environment."
             )
 
+    torchrl_logger.debug(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
+
     # Pass weight_recv_schemes to the collector - it will handle init_on_receiver and connect
+    # The scheme's connect() will call init_process_group as a collective operation
     if weight_sync_schemes is not None:
         collector_kwargs["weight_recv_schemes"] = weight_sync_schemes
         collector_kwargs["worker_idx"] = rank
+    else:
+        # No schemes - init process group manually for data.isend to work
+        if verbose:
+            torchrl_logger.debug(f"node with rank {rank} -- launching distributed (no weight schemes)")
+        torch.distributed.init_process_group(
+            backend,
+            rank=rank,
+            world_size=world_size,
+            timeout=timedelta(MAX_TIME_TO_CONNECT),
+        )
 
     # When policy_factory is provided, the child collector should use it
     # instead of the policy (which is only used as a weight source for the parent)
@@ -93,16 +106,6 @@ def _distributed_init_collection_node(
         total_frames=total_frames,
         policy_factory=policy_factory,
         **collector_kwargs,
-    )
-
-    torchrl_logger.debug(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
-    if verbose:
-        torchrl_logger.debug(f"node with rank {rank} -- launching distributed")
-    torch.distributed.init_process_group(
-        backend,
-        rank=rank,
-        world_size=world_size,
-        timeout=timedelta(MAX_TIME_TO_CONNECT),
     )
 
     if verbose:
@@ -597,16 +600,20 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 )
                 torchrl_logger.debug("job launched")
             self.jobs.append(job)
-        self._init_master_dist(self.num_workers + 1, self.backend)
 
-        # Send initial weights to workers (schemes were already initialized on sender)
+        # Initialize process group and weight sync
+        # If we have schemes, they handle init_process_group in connect()
+        # Otherwise, we need to init manually for data.irecv to work
         if self._weight_sync_schemes is not None:
             for model_id, scheme in self._weight_sync_schemes.items():
                 torchrl_logger.debug(
-                    f"DistributedSyncDataCollector: Sending initial weights for '{model_id}'"
+                    f"DistributedSyncDataCollector: Connecting scheme '{model_id}' (will init process group)"
                 )
                 scheme.connect()
             torchrl_logger.debug("DistributedSyncDataCollector: Initial weight sync completed")
+        else:
+            # No schemes - init process group manually
+            self._init_master_dist(self.num_workers + 1, self.backend)
 
     def iterator(self):
         yield from self._iterator_dist()
