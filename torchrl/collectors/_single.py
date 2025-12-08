@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import threading
 import warnings
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from textwrap import indent
@@ -600,6 +601,13 @@ class SyncDataCollector(DataCollectorBase):
 
     def _setup_policy_and_weights(self, policy: TensorDictModule | Callable) -> None:
         """Set up policy, wrapped policy, and extract weights."""
+        # Store weak reference to original policy before any transformations
+        # This allows update_policy_weights_ to sync from the original when no scheme is configured
+        if isinstance(policy, nn.Module):
+            self._orig_policy_ref = weakref.ref(policy)
+        else:
+            self._orig_policy_ref = None
+
         # Check if policy has meta-device parameters (sent from weight sync schemes)
         # In that case, skip device placement - weights will come from the receiver
         has_meta_params = False
@@ -707,6 +715,13 @@ class SyncDataCollector(DataCollectorBase):
                     self._wrapped_policy_maybe_compiled
                 ) = self._wrapped_policy_uncompiled
         return policy
+
+    @property
+    def _orig_policy(self):
+        """Returns the original policy passed to the collector, if still alive."""
+        if self._orig_policy_ref is not None:
+            return self._orig_policy_ref()
+        return None
 
     @_wrapped_policy.setter
     def _wrapped_policy(self, value):
@@ -1130,6 +1145,28 @@ class SyncDataCollector(DataCollectorBase):
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
+
+    def _maybe_fallback_update(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        *,
+        model_id: str | None = None,
+    ) -> None:
+        """Copy weights from original policy to internal policy when no scheme configured."""
+        if model_id is not None and model_id != "policy":
+            return
+
+        # Get source weights - either from argument or from original policy
+        if policy_or_weights is not None:
+            weights = self._extract_weights_if_needed(policy_or_weights, "policy")
+        elif self._orig_policy is not None:
+            weights = TensorDict.from_module(self._orig_policy)
+        else:
+            return
+
+        # Apply to internal policy
+        if hasattr(self, "_policy_w_state_dict") and self._policy_w_state_dict is not None:
+            weights.to_module(self._policy_w_state_dict)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.

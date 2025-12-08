@@ -512,9 +512,22 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             # unreachable
             raise RuntimeError
         else:
-            # No weight updater configured, passing.
-            torchrl_logger.debug("No weight update configures, skipping.")
-            pass
+            # No weight updater configured, try fallback
+            torchrl_logger.debug("No weight update configured, trying fallback.")
+            self._maybe_fallback_update(policy_or_weights, model_id=model_id)
+
+    def _maybe_fallback_update(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        *,
+        model_id: str | None = None,
+    ) -> None:
+        """Fallback weight update when no scheme is configured.
+
+        Override in subclasses to provide custom fallback behavior.
+        By default, this is a no-op.
+        """
+        pass
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights
