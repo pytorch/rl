@@ -900,6 +900,58 @@ class TestModuleConfigs:
         instantiate(cfg)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tensordict_sequential_config(self):
+        """Test TensorDictSequentialConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TensorDictModuleConfig,
+            TensorDictSequentialConfig,
+        )
+
+        cfg = TensorDictSequentialConfig(
+            modules=[
+                TensorDictModuleConfig(
+                    module=MLPConfig(
+                        in_features=10, out_features=10, depth=2, num_cells=32
+                    ),
+                    in_keys=["observation"],
+                    out_keys=["hidden"],
+                ),
+                TensorDictModuleConfig(
+                    module=MLPConfig(
+                        in_features=10, out_features=5, depth=2, num_cells=32
+                    ),
+                    in_keys=["hidden"],
+                    out_keys=["action"],
+                ),
+            ],
+            partial_tolerant=False,
+            selected_out_keys=None,
+            inplace=None,
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential"
+        )
+        assert cfg.modules is not None
+        assert len(cfg.modules) == 2
+        assert cfg.partial_tolerant is False
+        assert cfg.selected_out_keys is None
+        assert cfg.inplace is None
+
+        seq = instantiate(cfg)
+        from tensordict.nn import TensorDictSequential
+
+        assert isinstance(seq, TensorDictSequential)
+        assert len(seq.module) == 2
+        from tensordict.nn import TensorDictModule
+
+        assert all(isinstance(m, TensorDictModule) for m in seq.module)
+        assert seq.in_keys == ["observation"]
+        assert "action" in seq.out_keys
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_value_model_config(self):
         """Test ValueModelConfig."""
         from hydra.utils import instantiate
