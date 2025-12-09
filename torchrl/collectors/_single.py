@@ -438,6 +438,7 @@ class SyncDataCollector(DataCollectorBase):
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
+            assert self.worker_idx is not None
             self.register_scheme_receiver(weight_recv_schemes)
 
     def _init_env(
@@ -1529,9 +1530,6 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._carrier.set("next", next_data)
 
-                torchrl_logger.debug(
-                    f"Collector: Rollout step completed {self._iter=}, {self._worker_idx=}."
-                )
                 if (
                     self.replay_buffer is not None
                     and not self._ignore_rb
@@ -1559,7 +1557,6 @@ class SyncDataCollector(DataCollectorBase):
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
-                        torchrl_logger.debug("Collector: Adding to queue (no device).")
                         tensordicts.append(self._carrier)
 
                 # carry over collector data without messing up devices

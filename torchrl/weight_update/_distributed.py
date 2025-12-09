@@ -3,12 +3,14 @@ from __future__ import annotations
 import socket
 import threading
 import time
+import weakref
 from datetime import timedelta
 from typing import Any
 
 import torch
 from tensordict import TensorDictBase
 
+from torchrl.weight_update.utils import _resolve_model
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.weight_update.weight_sync_schemes import (
@@ -58,10 +60,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         self._store = None
         self._store_info = None
         self._num_workers = None
-
-        # Background thread state (for async mode on receiver)
-        self._background_thread = None
-        self._stop_event = None
 
     def __getstate__(self):
         """Custom serialization - exclude non-picklable objects."""
@@ -209,7 +207,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         context: Any = None,
         store: torch.distributed.Store = None,
         store_info: dict | None = None,
-        rank: int = None,
+        worker_idx: int | None = None,
         **kwargs,
     ) -> None:
         """Initialize scheme on the worker (receiver) side.
@@ -226,6 +224,8 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                 "DistributedWeightSyncScheme.init_on_receiver requires a 'context' "
                 "providing access to the model to be synchronized."
             )
+        if worker_idx is None:
+            raise RuntimeError("rank was not provided.")
 
         # Store model_id and context on scheme
         self.model_id = model_id
@@ -251,25 +251,12 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         else:
             raise RuntimeError("Couldn't find weights")
         self._receiver_transport = self.create_transport(
-            store=self._store, rank=rank, weights_buffer=weights_buffer, sync=self.sync
+            store=self._store, rank=worker_idx, weights_buffer=weights_buffer, sync=self.sync
         )
 
         # Store worker_idx for synchronize_weights
-        self._worker_idx = rank
+        self._worker_idx = worker_idx
         # Note: Background thread for async mode is started in connect() after init_process_group
-
-    def _start_background_receiver(self):
-        """Start daemon thread that monitors store for weight updates."""
-        self._stop_event = threading.Event()
-        self._background_thread = threading.Thread(
-            target=self._background_receive_loop,
-            daemon=True,
-            name=f"WeightReceiver-{self._worker_idx}",
-        )
-        self._background_thread.start()
-        torchrl_logger.debug(
-            f"DistributedWeightSyncScheme: Started background receiver thread for worker {self._worker_idx}"
-        )
 
     def _background_receive_loop(self):
         """Monitor store for 'update_weights' instruction, receive and apply."""
@@ -434,6 +421,43 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         self._background_thread = None
         self._stop_event = None
 
+    @property
+    def model(self) -> Any | None:
+        """Get the model associated with this scheme.
+
+        Returns:
+            The model if set, None otherwise.
+        """
+        if self._model_ref is not None:
+            return self._model_ref()
+        if self._model_id is not None:
+            model = _resolve_model(self.context, self._model_id)
+            if model is None:
+                if self._model_id == "policy":
+                    torchrl_logger.debug(
+                        f"Creating policy from factory and setting in collector {type(self.context)}"
+                    )
+                    model = self.context.policy_factory[0]()
+                    self.context.policy = model
+                    torchrl_logger.debug(f"{self.context.policy=}")
+                else:
+                    raise AttributeError(
+                        f"Model {self._model_id} was `None` in context {self.context}"
+                    )
+            self._model_ref = weakref.ref(model)
+            return model
+
+    @model.setter
+    def model(self, value: Any):
+        """Set the model for this scheme.
+
+        Args:
+            value: The model to set. If None, the setter is a no-op.
+        """
+        if value is None:
+            return
+        self._model_ref = weakref.ref(value)
+
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create distributed transport for a specific worker."""
         return DistributedTransport(**kwargs)
@@ -452,7 +476,7 @@ class DistributedTransport:
         *,
         weights_buffer: TensorDictBase,
         store: torch.distributed.Store = None,
-        rank: int = None,
+        rank: int | None = None,
         sync: bool = True,
     ):
         """Initialize the DistributedTransport.
@@ -478,7 +502,7 @@ class DistributedTransport:
         self._store.set(f"NODE_{self._rank}_in", b"update_weights")
 
         # Send weights via torch.distributed
-        torchrl_logger.debug(f"RANK 0 -- Send {weights=} to rank {self._rank}")
+        torchrl_logger.debug(f"RANK 0 -- Send {type(weights)=} to rank {self._rank}")
         if self._sync:
             weights.send(self._rank)
         else:
@@ -507,7 +531,7 @@ class DistributedTransport:
 
         # Send weights via torch.distributed
         torchrl_logger.debug(
-            f"RANK 0 -- Send {weights=} to rank {self._rank} with sync={self._sync}"
+            f"RANK 0 -- Send {type(weights)=} to rank {self._rank} with sync={self._sync}"
         )
         if self._sync:
             weights.send(self._rank)
@@ -560,11 +584,14 @@ class DistributedTransport:
         if self._sync or timeout is None:
             # Blocking receive - no timeout support
             if self._sync:
+                torchrl_logger.debug(f"Rank {self._rank} -- calling recv")
                 weights_buffer.recv(src=0)
             else:
+                torchrl_logger.debug(f"Rank {self._rank} -- calling irecv")
                 weights_buffer.irecv(src=0)
         else:
             # Non-blocking receive with timeout support
+            torchrl_logger.debug(f"Rank {self._rank} -- calling irecv with premature return")
             futures = weights_buffer.irecv(src=0, return_premature=True)
             if futures:
                 start_time = time.monotonic()
@@ -585,6 +612,7 @@ class DistributedTransport:
         if model is not None and strategy is not None:
             strategy.apply_weights(model, weights_buffer)
 
+        torchrl_logger.debug(f"Rank {self._rank} -- closing receive_weights")
         return weights_buffer
 
     def send_ack(self, message: str = "updated") -> None:
@@ -614,6 +642,7 @@ class DistributedTransport:
         torchrl_logger.debug(
             f"DistributedTransport: Sending initial weights to rank {self._rank}"
         )
+        self._store.set(f"NODE_{self._rank}_in", b"update_weights")
         if self._sync:
             weights.send(self._rank)
         else:

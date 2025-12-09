@@ -56,7 +56,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         self._weight_updater = value
 
     @property
-    def worker_idx(self) -> int:
+    def worker_idx(self) -> int | None:
         """Get the worker index for this collector.
 
         Returns:
@@ -65,7 +65,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         Raises:
             RuntimeError: If worker_idx has not been set.
         """
-        if not hasattr(self, "_worker_idx") or self._worker_idx is None:
+        if not hasattr(self, "_worker_idx"):
             raise RuntimeError(
                 "worker_idx has not been set. This collector may not have been "
                 "initialized as a worker in a distributed setup."
@@ -715,7 +715,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 scheme.init_on_receiver(
                     model_id=model_id,
                     context=self,
-                    worker_idx=getattr(self, "_worker_idx", None),
+                    worker_idx=self.worker_idx,
                 )
 
             # Store the scheme for later use in receive_weights()
@@ -728,7 +728,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     torchrl_logger.debug(
                         f"Synchronizing weights for scheme {type(scheme).__name__} for model '{model_id}'"
                     )
-                    scheme.connect(worker_idx=getattr(self, "_worker_idx", None))
+                    scheme.connect(worker_idx=self.worker_idx)
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:

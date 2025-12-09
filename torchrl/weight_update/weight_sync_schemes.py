@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import threading
 import warnings
 import weakref
 from collections import defaultdict
@@ -291,6 +292,10 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
 
     # Worker index (for receiver side)
     _worker_idx: int | None
+
+    # Background thread
+    _background_thread = None
+    _stop_event = None
 
     def __init__(self, strategy: Literal["state_dict", "tensordict"] = "tensordict"):
         self.strategy_str = strategy
@@ -920,17 +925,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         self._pending_async = False
         self._pending_transports = None
 
-    def update_weights(self, weights: Any) -> None:
-        """Send weights to ALL workers for this model.
-
-        Args:
-            weights: Weights to send (can be None, nn.Module, TensorDict, etc.).
-
-        Note:
-            Convenience method that calls send(weights=weights).
-        """
-        self.send(weights=weights)
-
     def prepare_weights(
         self,
         weights: Any,
@@ -1236,6 +1230,25 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
                 "either a context (collector), model, or params_map."
             ) from e
 
+
+    def _start_background_receiver(self):
+        """Start daemon thread that monitors store for weight updates."""
+        if not self.initialized_on_receiver:
+            raise RuntimeError("_start_background_receiver must be called on the receiver side.")
+        self._stop_event = threading.Event()
+        self._background_thread = threading.Thread(
+            target=self._background_receive_loop,
+            daemon=True,
+            name=f"WeightReceiver-{self._worker_idx}",
+        )
+        self._background_thread.start()
+        torchrl_logger.debug(
+            f"DistributedWeightSyncScheme: Started background receiver thread for worker {self._worker_idx}"
+        )
+
+    def _background_receive_loop(self):
+        raise NotImplementedError
+
     def __getstate__(self):
         """Prepare the scheme for pickling by excluding non-serializable runtime state."""
         state = self.__dict__.copy()
@@ -1251,6 +1264,9 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
 
         state["_pending_async"] = False
         state["_pending_transports"] = None
+
+        state["_background_thread"] = None
+        state["_stop_event"] = None
 
         return state
 

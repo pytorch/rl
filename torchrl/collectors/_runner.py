@@ -154,9 +154,13 @@ def _main_async_collector(
         _timeout = _TIMEOUT if not has_timed_out else 1e-3
         if not run_free and pipe_child.poll(_timeout):
             counter = 0
-            data_in, msg = pipe_child.recv()
-            if verbose:
-                torchrl_logger.debug(f"worker {idx} received {msg}")
+            try:
+                data_in, msg = pipe_child.recv()
+                if verbose:
+                    torchrl_logger.debug(f"mp worker {idx} received {msg}")
+            except EOFError:
+                torchrl_logger.debug(f"Failed to receive data. Last message received: {msg}")
+                raise
         elif not run_free:
             if verbose:
                 torchrl_logger.debug(f"poll failed, j={j}, worker={idx}")
@@ -179,7 +183,7 @@ def _main_async_collector(
 
                 counter += _timeout
                 if verbose:
-                    torchrl_logger.debug(f"worker {idx} has counter {counter}")
+                    torchrl_logger.debug(f"mp worker {idx} has counter {counter}")
                 if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
                     raise RuntimeError(
                         f"This process waited for {counter} seconds "
@@ -193,7 +197,7 @@ def _main_async_collector(
         else:
             # placeholder, will be checked after
             if msg != "continue":
-                torchrl_logger.debug(f"worker {idx} will reset {msg} to 'continue'")
+                torchrl_logger.debug(f"mp worker {idx} will reset {msg} to 'continue'")
             msg = "continue"
         if msg == "run_free":
             run_free = True
@@ -202,7 +206,7 @@ def _main_async_collector(
             # Capture shutdown / update / seed signal, but continue should not be expected
             if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
-                torchrl_logger.debug(f"worker {idx} received {msg} while running free")
+                torchrl_logger.debug(f"mp worker {idx} received {msg} while running free")
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
@@ -223,7 +227,7 @@ def _main_async_collector(
 
         if msg == "update":
             # Legacy - weight updater
-            torchrl_logger.debug(f"worker {idx} updating the params...")
+            torchrl_logger.debug(f"mp worker {idx} updating the params...")
             inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
             has_timed_out = False
@@ -233,7 +237,7 @@ def _main_async_collector(
             # Weight update protocol: let the collector handle everything via receive_weights()
             if verbose:
                 torchrl_logger.debug(
-                    f"worker {idx} received weight update via new protocol"
+                    f"mp worker {idx} received weight update via new protocol"
                 )
 
             # receive_weights() will get weights from the registered receiver schemes
@@ -274,13 +278,13 @@ def _main_async_collector(
                 try:
                     queue_out.put((idx, j), timeout=_TIMEOUT)
                     if verbose:
-                        torchrl_logger.debug(f"worker {idx} successfully sent data")
+                        torchrl_logger.debug(f"mp worker {idx} successfully sent data")
                     j += 1
                     has_timed_out = False
                     continue
                 except queue.Full:
                     if verbose:
-                        torchrl_logger.debug(f"worker {idx} has timed out")
+                        torchrl_logger.debug(f"mp worker {idx} has timed out")
                     has_timed_out = True
                     continue
 
@@ -333,13 +337,13 @@ def _main_async_collector(
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
-                    torchrl_logger.debug(f"worker {idx} successfully sent data")
+                    torchrl_logger.debug(f"mp worker {idx} successfully sent data")
                 j += 1
                 has_timed_out = False
                 continue
             except queue.Full:
                 if verbose:
-                    torchrl_logger.debug(f"worker {idx} has timed out")
+                    torchrl_logger.debug(f"mp worker {idx} has timed out")
                 has_timed_out = True
                 continue
 

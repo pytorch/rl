@@ -84,7 +84,6 @@ def _distributed_init_collection_node(
     # The scheme's connect() will call init_process_group as a collective operation
     if weight_sync_schemes is not None:
         collector_kwargs["weight_recv_schemes"] = weight_sync_schemes
-        collector_kwargs["worker_idx"] = rank
     else:
         # No schemes - init process group manually for data.isend to work
         if verbose:
@@ -105,6 +104,7 @@ def _distributed_init_collection_node(
         split_trajs=False,
         total_frames=total_frames,
         policy_factory=policy_factory,
+        worker_idx=rank,
         **collector_kwargs,
     )
 
@@ -113,7 +113,9 @@ def _distributed_init_collection_node(
 
     # Collection loop - weight updates are handled by the background thread in the scheme
     for i, data in enumerate(collector):
+        torchrl_logger.debug(f"Sending batch {i} from sync distributed collector on rank {rank}")
         data.isend(dst=0)
+        torchrl_logger.debug(f"Sent batch {i} from distributed collector on rank {rank}")
 
     # Cleanup
     if weight_sync_schemes is not None:
@@ -633,9 +635,11 @@ class DistributedSyncDataCollector(DataCollectorBase):
             trackers = []
             for i in range(self.num_workers):
                 rank = i + 1
+                torchrl_logger.debug(f"Receiving from rank {rank} on main")
                 trackers.append(
                     self._single_tds[i].irecv(src=rank, return_premature=True)
                 )
+                torchrl_logger.debug(f"Received from rank {rank} on main")
             for tracker in trackers:
                 for _tracker in tracker:
                     _tracker.wait()

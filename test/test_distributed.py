@@ -489,7 +489,7 @@ class TestSyncCollector(DistributedCollectorBase):
         ],
     )
     @pytest.mark.parametrize("update_interval", [1])
-    @pytest.mark.parametrize("pfactory", [True, False])
+    @pytest.mark.parametrize("pfactory", [False, True])
     def test_distributed_collector_updatepolicy(
         self, collector_class, update_interval, pfactory
     ):
