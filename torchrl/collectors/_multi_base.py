@@ -16,8 +16,13 @@ from tensordict.nn import CudaGraphModule, TensorDictModule
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp, nn
 from torchrl import logger as torchrl_logger
-from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, RL_WARNINGS
-
+from torchrl._utils import (
+    _check_for_faulty_process,
+    _get_mp_ctx,
+    _ProcessNoWarn,
+    _set_mp_start_method_if_unset,
+    RL_WARNINGS,
+)
 from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     _InterruptorManager,
@@ -937,13 +942,17 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
         # Set up for worker processes
         torch.set_num_threads(self.num_threads)
-        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
+        ctx = _get_mp_ctx()
+        # Best-effort global init (only if unset) to keep other mp users consistent.
+        _set_mp_start_method_if_unset(ctx.get_start_method())
+
+        queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
-        self._traj_pool = _TrajectoryPool(lock=True)
+        self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
 
         # Create all pipes upfront (needed for weight sync scheme initialization)
         # Store as list of (parent, child) tuples for use in worker creation
-        pipe_pairs = [mp.Pipe() for _ in range(self.num_workers)]
+        pipe_pairs = [ctx.Pipe() for _ in range(self.num_workers)]
         # Extract parent pipes for external use (e.g., polling, receiving messages)
         self.pipes = [pipe_parent for pipe_parent, _ in pipe_pairs]
 
@@ -1066,6 +1075,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
                     num_threads=self.num_sub_threads,
+                    _start_method=ctx.get_start_method(),
                     kwargs=kwargs,
                 )
                 # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1083,6 +1093,37 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                             "This is not supported in multiprocessed data collectors.\n- For ReplayBuffer transforms, use a `transform_factory` instead with `delayed_init=True`.\n"
                             "- Make sure your environment constructor does not reference tensors already instantiated on the main process.\n"
                             "- Since no gradient can be propagated through the Collector pipes, the backward graph is never needed. Consider using detached tensors instead."
+                        ) from err
+                    elif "_share_fd_: only available on CPU" in str(
+                        err
+                    ) or "_share_filename_: only available on CPU" in str(err):
+                        # This is a common failure mode on older PyTorch versions when using the
+                        # "spawn" multiprocessing start method: the process object contains a
+                        # CUDA/MPS tensor (or a module/buffer on a non-CPU device), which must be
+                        # pickled when spawning workers.
+                        #
+                        # See: https://github.com/pytorch/pytorch/issues/87688#issuecomment-1968901877
+                        start_method = None
+                        try:
+                            start_method = mp.get_start_method(allow_none=True)
+                        except Exception:
+                            # Best effort: some environments may disallow querying here.
+                            start_method = None
+                        raise RuntimeError(
+                            "Failed to start a collector worker process because a non-CPU tensor "
+                            "was captured in the worker process arguments and had to be serialized "
+                            "(pickled) at process start.\n\n"
+                            f"Detected multiprocessing start method: {start_method!r}.\n\n"
+                            "Workarounds:\n"
+                            "- Keep any tensors/modules referenced by your collector constructor "
+                            "(policy, replay buffer, postprocs, env factory captures, etc.) on CPU "
+                            "when using a spawning start method (common on macOS/Windows).\n"
+                            "- Or set the multiprocessing start method to 'fork' *before* creating "
+                            "the collector (Unix only). Example:\n\n"
+                            "    import torch.multiprocessing as mp\n"
+                            "    if __name__ == '__main__':\n"
+                            "        mp.set_start_method('fork', force=True)\n\n"
+                            "Upstream context: https://github.com/pytorch/pytorch/issues/87688#issuecomment-1968901877"
                         ) from err
                     else:
                         raise err
