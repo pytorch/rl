@@ -20,6 +20,7 @@ TensorDictModules and SafeModules
     SafeModule
     SafeSequential
     TanhModule
+    RandomPolicy
 
 Probabilistic actors
 --------------------

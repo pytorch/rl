@@ -48,17 +48,12 @@ class SharedMemWeightSyncSchemeConfig(ConfigBase):
 
     Weight synchronization using shared memory for in-place weight updates.
     Workers automatically see weight updates without explicit message passing.
-
-    By default, uses lazy registration (auto_register=True) which makes it seamless
-    to use with Hydra configs - models are automatically registered on first weight send.
     """
 
     _target_: str = "torchrl.weight_update.SharedMemWeightSyncScheme"
     _partial_: bool = False
 
-    policy_weights: Any = None  # dict[str, TensorDictBase] | None
     strategy: str = "tensordict"  # "tensordict" or "state_dict"
-    auto_register: bool = True  # Enable lazy registration by default
 
     def __post_init__(self) -> None:
         """Post-initialization hook for shared memory weight sync scheme configurations."""

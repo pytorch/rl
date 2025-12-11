@@ -92,6 +92,7 @@ from .tensordict_module import (
     VmapModule,
     WorldModelWrapper,
 )
+from .tensordict_module.exploration import RandomPolicy
 from .utils import get_primers_from_module
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
 
@@ -183,4 +184,5 @@ __all__ = [
     "recurrent_mode",
     "reset_noise",
     "set_recurrent_mode",
+    "RandomPolicy",
 ]

@@ -3,15 +3,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from torchrl.envs.utils import RandomPolicy
 
-from .collectors import (
-    aSyncDataCollector,
-    DataCollectorBase,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.modules.tensordict_module.exploration import RandomPolicy
+
+from ._base import DataCollectorBase
+
+from ._multi_async import MultiaSyncDataCollector
+from ._multi_sync import MultiSyncDataCollector
+from ._single import SyncDataCollector
+
+from ._single_async import aSyncDataCollector
 from .weight_update import (
     MultiProcessedWeightUpdater,
     RayWeightUpdater,
@@ -21,9 +22,9 @@ from .weight_update import (
 )
 
 __all__ = [
-    "RandomPolicy",
     "WeightUpdaterBase",
     "VanillaWeightUpdater",
+    "RandomPolicy",
     "RayWeightUpdater",
     "RemoteModuleWeightUpdater",
     "MultiProcessedWeightUpdater",

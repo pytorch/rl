@@ -29,6 +29,7 @@ from torchrl.modules.tensordict_module.exploration import (
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
+    RandomPolicy,
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -70,6 +71,7 @@ __all__ = [
     "AdditiveGaussianWrapper",
     "EGreedyModule",
     "EGreedyWrapper",
+    "RandomPolicy",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
     "SafeProbabilisticModule",

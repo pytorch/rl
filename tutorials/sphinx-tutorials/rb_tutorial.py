@@ -637,7 +637,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 env = TransformedEnv(
     GymEnv("CartPole-v1", from_pixels=True),

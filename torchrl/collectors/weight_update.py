@@ -578,7 +578,7 @@ class RayWeightUpdater(WeightUpdaterBase):
         return server_weights
 
     def _sync_weights_with_worker(self, worker_id: int, server_weights: Any) -> Any:
-        torchrl_logger.info(f"syncing weights with worker {worker_id}")
+        torchrl_logger.debug(f"syncing weights with worker {worker_id}")
         c = self.remote_collectors[worker_id]
         c.update_policy_weights_.remote(policy_weights=server_weights)
         self._batches_since_weight_update[worker_id] = 0

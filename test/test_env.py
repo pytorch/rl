@@ -78,10 +78,16 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     make_composite_from_td,
     MarlGroupMapType,
-    RandomPolicy,
     step_mdp,
 )
-from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
+from torchrl.modules import (
+    Actor,
+    ActorCriticOperator,
+    MLP,
+    RandomPolicy,
+    SafeModule,
+    ValueOperator,
+)
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
 pytestmark = [

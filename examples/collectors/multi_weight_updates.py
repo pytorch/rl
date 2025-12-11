@@ -25,7 +25,7 @@ from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms.module import ModuleTransform
-from torchrl.weight_update.weight_sync_schemes import MultiProcessWeightSyncScheme
+from torchrl.weight_update import MultiProcessWeightSyncScheme
 
 
 def make_module():

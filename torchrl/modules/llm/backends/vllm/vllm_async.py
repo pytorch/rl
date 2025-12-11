@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import time
 import uuid
 from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -1257,8 +1258,6 @@ class AsyncVLLM(RLvLLMEngine):
         Args:
             weights_dict: Dictionary of parameter names to weight tensors
         """
-        import time
-
         if not hasattr(self, "_nccl_master_group") or self._nccl_master_group is None:
             raise RuntimeError(
                 "NCCL master group not initialized. This is a bug in the setup process."

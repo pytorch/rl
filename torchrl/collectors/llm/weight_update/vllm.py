@@ -17,7 +17,7 @@ from tensordict.nn import TensorDictModuleBase
 
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors import WeightUpdaterBase
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.modules.llm.backends import stateless_init_process_group
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -103,7 +103,7 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         model_metadata: dict[str, tuple[torch.dtype, torch.Size]] | None = None,
         vllm_tp_size: int | None = None,
     ):
-        torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
+        torchrl_logger.debug(f"=> in {type(self).__name__}.__init__")
         self.master_address = master_address
         self.master_port = master_port
         self.model_metadata = model_metadata
@@ -171,23 +171,23 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
     def _init_group(self):
         import ray
 
-        torchrl_logger.info(f"=> in {type(self).__name__}._init_group")
+        torchrl_logger.debug(f"=> in {type(self).__name__}._init_group")
         weight_sync_world_size = self.vllm_tp_size + 1
-        torchrl_logger.info(f"initializing group with {weight_sync_world_size=}...")
-        torchrl_logger.info(f"vllm_tp_size={self.vllm_tp_size}")
+        torchrl_logger.debug(f"initializing group with {weight_sync_world_size=}...")
+        torchrl_logger.debug(f"vllm_tp_size={self.vllm_tp_size}")
 
         model_ref = self._get_model_ref()
 
-        torchrl_logger.info(f"model_ref: {model_ref}")
+        torchrl_logger.debug(f"model_ref: {model_ref}")
         # Initialize the weight update group
-        torchrl_logger.info("Calling init_weight_update_group...")
+        torchrl_logger.debug("Calling init_weight_update_group...")
         init_weight_update_group_getter = model_ref.collective_rpc.remote(
             "init_weight_update_group",
             args=(self.master_address, self.master_port, 1, weight_sync_world_size),
         )
-        torchrl_logger.info("init_weight_update_group remote call succeeded")
+        torchrl_logger.debug("init_weight_update_group remote call succeeded")
 
-        torchrl_logger.info("Calling stateless_init_process_group within updater...")
+        torchrl_logger.debug("Calling stateless_init_process_group within updater...")
         self.vllm_comm_group = stateless_init_process_group(
             self.master_address,
             self.master_port,
@@ -197,9 +197,9 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         )
 
         ray.get(init_weight_update_group_getter)
-        torchrl_logger.info("init_weight_update_group getter succeeded")
+        torchrl_logger.debug("init_weight_update_group getter succeeded")
 
-        torchrl_logger.info("group initialized")
+        torchrl_logger.debug("group initialized")
         self.initialized_group = True
 
     def maybe_init_group(self):
@@ -239,7 +239,7 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         model_ref = self._get_model_ref()
 
         # First broadcast metadata
-        torchrl_logger.info("broadcasting with update_weight_broadcast")
+        torchrl_logger.debug("broadcasting with update_weight_broadcast")
         remotes = []
         for k, (dtype, shape) in self.model_metadata.items():
             remotes.append(
@@ -257,7 +257,7 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         # # ray.get(remotes)
 
         # if self.vllm_comm_group is not True:
-        torchrl_logger.info("broadcasting...")
+        torchrl_logger.debug("broadcasting...")
         for k in self.model_metadata:
             val = server_weights[k].to(torch.device("cuda:0"))
             self.vllm_comm_group.broadcast(
@@ -269,7 +269,7 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         import ray
 
         ray.get(remotes)
-        torchrl_logger.info("done broadcasting")
+        torchrl_logger.debug("done broadcasting")
         torch.cuda.synchronize()
 
     def _get_server_weights(self) -> TensorDictBase | None:
