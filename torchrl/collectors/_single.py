@@ -438,7 +438,6 @@ class SyncDataCollector(DataCollectorBase):
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
-            assert self.worker_idx is not None
             self.register_scheme_receiver(weight_recv_schemes)
 
     def _init_env(

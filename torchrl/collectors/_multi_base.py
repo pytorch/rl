@@ -1530,8 +1530,18 @@ also that the state dict is synchronised across processes if needed."""
         weights_dict: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
-        """Override to send signal through pipes after scheme.send() puts weights in queue."""
-        # Call parent implementation which calls scheme.send() to put weights in the queue
+        """Update weights on workers.
+
+        Weight sync schemes now use background threads on the receiver side.
+        The scheme's send() method:
+        1. Puts weights in the queue (or updates shared memory)
+        2. Sends a "receive" instruction to the worker's background thread
+        3. Waits for acknowledgment (if sync=True)
+
+        No pipe signaling is needed - the scheme handles everything internally.
+        """
+        # Call parent implementation which calls scheme.send()
+        # The scheme handles instruction delivery and acknowledgments
         super()._weight_update_impl(
             policy_or_weights=policy_or_weights,
             worker_ids=worker_ids,
@@ -1539,13 +1549,6 @@ also that the state dict is synchronised across processes if needed."""
             weights_dict=weights_dict,
             **kwargs,
         )
-
-        # For MultiProcessWeightSyncScheme, we need to signal workers through the pipes
-        # so they know to call receive_weights() to get weights from the queue
-        if self._weight_sync_schemes:
-            _check_for_faulty_process(self.procs)
-            for pipe in self.pipes:
-                pipe.send((None, "update_weights"))
 
     # for RPC
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):

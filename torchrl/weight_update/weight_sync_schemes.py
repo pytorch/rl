@@ -62,10 +62,6 @@ class TransportBackend(Protocol):
         """
         ...
 
-    def check_connection(self) -> bool:
-        """Check if the connection is still alive."""
-        ...
-
     def setup_connection_and_weights_on_sender(self) -> None:
         """Synchronize weights on sender side before collection starts.
 
@@ -286,10 +282,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     # Strategy
     _strategy: WeightStrategy
 
-    # Async state
-    _pending_async: bool
-    _pending_transports: list[TransportBackend] | None
-
     # Worker index (for receiver side)
     _worker_idx: int | None
 
@@ -311,10 +303,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         # Context and model references
         self._context_ref = None
         self._model_ref = None
-
-        # Async state
-        self._pending_async = False
-        self._pending_transports = None
 
         # Worker index
         self._worker_idx = None
@@ -507,22 +495,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     # ========================================================================
     # Context and Model Management
     # ========================================================================
-
-    def _set_context(self, context: Any) -> None:
-        """Set the context object (collector) for model resolution (internal).
-
-        Args:
-            context: The collector instance.
-        """
-        self._context_ref = weakref.ref(context)
-
-    def _set_model(self, model: Any) -> None:
-        """Set the model object for applying weights (internal).
-
-        Args:
-            model: The model object to apply weights to.
-        """
-        self._model_ref = weakref.ref(model)
 
     @property
     def context(self) -> Any | None:
@@ -813,11 +785,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         if not self.synchronized_on_sender:
             raise RuntimeError("Must be synchronized on sender before sending weights")
 
-        if self._pending_async:
-            raise RuntimeError(
-                "Cannot call send() while an async send is pending. Call wait_async() first."
-            )
-
         context = self.context
 
         # Let the scheme prepare the weights
@@ -854,76 +821,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         for transport in transports:
             if hasattr(transport, "wait_ack"):
                 transport.wait_ack()
-
-    def send_async(
-        self,
-        weights: Any = None,
-        worker_ids: int | list[int] | None = None,
-    ) -> None:
-        """Send weights asynchronously to workers (non-blocking).
-
-        This initiates the send but returns immediately without waiting
-        for workers to acknowledge. You must call wait_async() before
-        the next send_async() or send() call.
-
-        Args:
-            weights: Same as send()
-            worker_ids: Same as send()
-
-        Raises:
-            RuntimeError: If a previous send_async() is still pending
-        """
-        if not self.initialized_on_sender:
-            raise RuntimeError("Must be initialized on sender before sending weights")
-
-        if self._pending_async:
-            raise RuntimeError(
-                "Cannot call send_async() again while a previous send is pending. Call wait_async() first."
-            )
-
-        context = self.context
-
-        # Let the scheme prepare the weights
-        prepared_weights = self.prepare_weights(
-            weights=weights,
-            model_id=self._model_id,
-            strategy=self._strategy,
-            context=context,
-        )
-
-        # Store transports for wait_async
-        self._pending_transports = list(self._iterate_transports(worker_ids))
-
-        # Send to all workers (non-blocking)
-        for transport in self._pending_transports:
-            if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(prepared_weights)
-            else:
-                raise RuntimeError(
-                    f"transport of type {type(transport)} does not support async send."
-                )
-
-        self._pending_async = True
-
-    def wait_async(self) -> None:
-        """Wait for a pending async send to complete.
-
-        Blocks until all workers have acknowledged the previous send_async().
-        This must be called after send_async() before any subsequent sends.
-
-        Raises:
-            RuntimeError: If no async send is pending
-        """
-        if not self._pending_async:
-            raise RuntimeError("No async send is pending. Call send_async() first.")
-
-        # Wait for all acknowledgments
-        for transport in self._pending_transports:
-            if hasattr(transport, "wait_ack"):
-                transport.wait_ack()
-
-        self._pending_async = False
-        self._pending_transports = None
 
     def prepare_weights(
         self,
@@ -1076,14 +973,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     # Synchronization
     # ========================================================================
 
-    def is_sender(self):
-        """Check if the current worker is the sender."""
-        return self.initialized_on_sender
-
-    def is_receiver(self):
-        """Check if the current worker is the receiver."""
-        return self.initialized_on_receiver
-
     @overload
     def connect(self, *, worker_idx: int | None = None) -> None:
         ...
@@ -1208,33 +1097,20 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         self._synchronized_on_receiver = value
 
     # ========================================================================
-    # Utility Methods
+    # Background Receiver
     # ========================================================================
 
-    def check_weight_access(self) -> None:
-        """Check if the weights are accessible.
-
-        Raises:
-            RuntimeError: If the scheme is not initialized or weights cannot be accessed.
-        """
-        try:
-            weights = self.weights
-            if weights is None:
-                raise RuntimeError(
-                    "Weights are not accessible. The scheme may not have been properly "
-                    "initialized with a model or context that provides weights."
-                )
-        except Exception as e:
-            raise RuntimeError(
-                f"Cannot access weights: {e}. Ensure the scheme was initialized with "
-                "either a context (collector), model, or params_map."
-            ) from e
-
-
     def _start_background_receiver(self):
-        """Start daemon thread that monitors store for weight updates."""
+        """Start daemon thread that monitors for weight update instructions.
+
+        The background thread runs _background_receive_loop() which waits for
+        instructions via _wait_for_instruction() and calls receive() when
+        an instruction arrives.
+        """
         if not self.initialized_on_receiver:
-            raise RuntimeError("_start_background_receiver must be called on the receiver side.")
+            raise RuntimeError(
+                "_start_background_receiver must be called on the receiver side."
+            )
         self._stop_event = threading.Event()
         self._background_thread = threading.Thread(
             target=self._background_receive_loop,
@@ -1243,11 +1119,96 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         )
         self._background_thread.start()
         torchrl_logger.debug(
-            f"DistributedWeightSyncScheme: Started background receiver thread for worker {self._worker_idx}"
+            f"{type(self).__name__}: Started background receiver thread for worker {self._worker_idx}"
         )
 
     def _background_receive_loop(self):
-        raise NotImplementedError
+        """Background thread loop that waits for instructions and receives weights.
+
+        Default implementation uses _wait_for_instruction() and receive().
+        Subclasses may override for custom behavior.
+        """
+        while not self._stop_event.is_set():
+            try:
+                instruction = self._wait_for_instruction()
+                if instruction is None:
+                    # Stop signal received
+                    break
+                if instruction == "receive":
+                    self.receive()
+                elif instruction == "stop":
+                    break
+                else:
+                    torchrl_logger.warning(f"Unknown instruction: {instruction}")
+            except Exception as e:
+                if not self._stop_event.is_set():
+                    torchrl_logger.warning(f"Background receiver error: {e}")
+
+    def _wait_for_instruction(self, timeout: float | None = None) -> str | None:
+        """Block until an instruction arrives from the sender.
+
+        This method should be overridden by subclasses to implement
+        scheme-specific instruction waiting (e.g., queue.get(), store polling).
+
+        Args:
+            timeout: Maximum time to wait for instruction (seconds).
+                None means block indefinitely.
+
+        Returns:
+            The instruction string (e.g., "receive", "stop"), or None if
+            stop event is set or timeout expires.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement _wait_for_instruction()"
+        )
+
+    def _send_instruction(
+        self,
+        instruction: str = "receive",
+        worker_ids: int | list[int] | None = None,
+    ) -> None:
+        """Send instruction to receiver(s) to trigger weight reception.
+
+        This method should be overridden by subclasses to implement
+        scheme-specific instruction sending (e.g., queue.put(), store.set()).
+
+        Args:
+            instruction: The instruction to send (default: "receive").
+            worker_ids: Which workers to send to (None = all workers).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement _send_instruction()"
+        )
+
+    def _send_ack(self, message: str = "updated") -> None:
+        """Send acknowledgment back to sender after receiving weights.
+
+        Called by the background receiver after successfully applying weights.
+        Subclasses should override to implement scheme-specific acknowledgment.
+
+        Args:
+            message: The acknowledgment message (default: "updated").
+        """
+        # Default: use transport's send_ack if available
+        transport = self._receiver_transport or self._shared_transport
+        if transport is not None and hasattr(transport, "send_ack"):
+            transport.send_ack(message)
+
+    def _wait_for_ack(  # noqa: B027
+        self,
+        worker_ids: int | list[int] | None = None,
+        timeout: float | None = None,
+    ) -> None:
+        """Wait for acknowledgment from receiver(s).
+
+        Called by send() in synchronous mode to block until receivers confirm.
+        Subclasses should override to implement scheme-specific waiting.
+
+        Args:
+            worker_ids: Which workers to wait for (None = all workers).
+            timeout: Maximum time to wait (seconds). None means block indefinitely.
+        """
+        # Default: no-op (subclasses implement scheme-specific waiting)
 
     def __getstate__(self):
         """Prepare the scheme for pickling by excluding non-serializable runtime state."""
@@ -1261,9 +1222,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
 
         state["_synchronized_on_sender"] = False
         state["_synchronized_on_receiver"] = False
-
-        state["_pending_async"] = False
-        state["_pending_transports"] = None
 
         state["_background_thread"] = None
         state["_stop_event"] = None

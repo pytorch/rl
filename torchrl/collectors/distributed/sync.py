@@ -87,7 +87,9 @@ def _distributed_init_collection_node(
     else:
         # No schemes - init process group manually for data.isend to work
         if verbose:
-            torchrl_logger.debug(f"node with rank {rank} -- launching distributed (no weight schemes)")
+            torchrl_logger.debug(
+                f"node with rank {rank} -- launching distributed (no weight schemes)"
+            )
         torch.distributed.init_process_group(
             backend,
             rank=rank,
@@ -113,9 +115,13 @@ def _distributed_init_collection_node(
 
     # Collection loop - weight updates are handled by the background thread in the scheme
     for i, data in enumerate(collector):
-        torchrl_logger.debug(f"Sending batch {i} from sync distributed collector on rank {rank}")
+        torchrl_logger.debug(
+            f"Sending batch {i} from sync distributed collector on rank {rank}"
+        )
         data.isend(dst=0)
-        torchrl_logger.debug(f"Sent batch {i} from distributed collector on rank {rank}")
+        torchrl_logger.debug(
+            f"Sent batch {i} from distributed collector on rank {rank}"
+        )
 
     # Cleanup
     if weight_sync_schemes is not None:
@@ -335,6 +341,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory
+        self._policy_to_send = policy if not any(policy_factory) else None
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
@@ -533,7 +540,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             collector_class=self.collector_class,
             num_workers=self.num_workers_per_collector,
             env_make=env_make,
-            policy=self.policy,
+            policy=self._policy_to_send,
             policy_factory=self.policy_factory[i],
             frames_per_batch=self._frames_per_batch_corrected,
             collector_kwargs=self.collector_kwargs[i],
@@ -560,7 +567,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 collector_class=self.collector_class,
                 num_workers=self.num_workers_per_collector,
                 env_make=env_make,
-                policy=self.policy,
+                policy=self._policy_to_send,
                 policy_factory=self.policy_factory[i],
                 frames_per_batch=self._frames_per_batch_corrected,
                 collector_kwargs=self.collector_kwargs[i],
@@ -612,7 +619,9 @@ class DistributedSyncDataCollector(DataCollectorBase):
                     f"DistributedSyncDataCollector: Connecting scheme '{model_id}' (will init process group)"
                 )
                 scheme.connect()
-            torchrl_logger.debug("DistributedSyncDataCollector: Initial weight sync completed")
+            torchrl_logger.debug(
+                "DistributedSyncDataCollector: Initial weight sync completed"
+            )
         else:
             # No schemes - init process group manually
             self._init_master_dist(self.num_workers + 1, self.backend)

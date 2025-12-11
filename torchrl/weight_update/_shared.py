@@ -194,13 +194,6 @@ class SharedMemTransport:
     def send_ack(self, message: str = "updated") -> None:
         """No-op for shared memory - no acknowledgment needed."""
 
-    def check_ack(self, message: str = "updated") -> None:
-        """No-op for shared memory - no acknowledgment needed."""
-
-    def check_connection(self) -> bool:
-        """Shared memory is always 'connected'."""
-        return True
-
 
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
@@ -208,8 +201,14 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
     This scheme uses shared memory for in-place weight updates. Workers
     automatically see weight updates without explicit message passing.
 
+    A background thread on the receiver side listens for "receive" instructions
+    from the sender. When an instruction arrives, the thread applies the current
+    shared memory weights to the model and sends an acknowledgment.
+
     Args:
         strategy: The weight transmission strategy (default: "tensordict").
+        sync: If True (default), send() blocks until receiver acknowledges.
+            If False, send() returns immediately (use send_async/wait_async).
 
     Example:
         >>> # Basic usage
@@ -220,16 +219,26 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
     def __init__(
         self,
         strategy: str = "tensordict",
+        sync: bool = True,
     ):
         super().__init__(strategy)
+        self.sync = sync
         # Create a single shared transport for all workers
         self.shared_transport = SharedMemTransport()
 
         # Create per-worker queues to avoid race conditions
         # Each worker gets its own queue for weight initialization
         self._weight_init_queues = {}  # worker_idx -> Queue
-        # General message queue for coordination (if needed in future)
-        self._message_queue = mp.Queue()
+
+        # Instruction queues: sender puts "receive" instruction, receiver's background thread reads
+        self._instruction_queues: dict[int, mp.Queue] = {}  # worker_idx -> Queue
+
+        # Acknowledgment queues: receiver puts "updated" ack, sender reads for sync mode
+        self._ack_queues: dict[int, mp.Queue] = {}  # worker_idx -> Queue
+
+        # Receiver's instruction queue reference (set during init_on_receiver)
+        self._receiver_instruction_queue: mp.Queue | None = None
+        self._receiver_ack_queue: mp.Queue | None = None
 
     def _init_on_sender_impl(
         self,
@@ -335,6 +344,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         for worker_idx in all_workers:
             if worker_idx not in self._weight_init_queues:
                 self._weight_init_queues[worker_idx] = mp.Queue()
+            # Create instruction queues for background receiver
+            if worker_idx not in self._instruction_queues:
+                self._instruction_queues[worker_idx] = mp.Queue()
+            # Create ack queues for synchronous mode
+            if worker_idx not in self._ack_queues:
+                self._ack_queues[worker_idx] = mp.Queue()
 
         # Set worker info in transport
         self.shared_transport.register_weights(params_map, self._weight_init_queues)
@@ -505,28 +520,122 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Store worker_idx for synchronize_weights
         self.worker_idx = worker_idx
 
+        # Store references to instruction and ack queues for this worker
+        # These are created by init_on_sender and passed via pickle
+        if worker_idx is not None:
+            if worker_idx in self._instruction_queues:
+                self._receiver_instruction_queue = self._instruction_queues[worker_idx]
+            if worker_idx in self._ack_queues:
+                self._receiver_ack_queue = self._ack_queues[worker_idx]
+
         self.create_transport()
 
-    def get_weight_queues(self):
-        """Get the per-worker weight initialization queues.
+    def _wait_for_instruction(self, timeout: float | None = None) -> str | None:
+        """Block until an instruction arrives from the sender.
+
+        Args:
+            timeout: Maximum time to wait for instruction (seconds).
+                None means block indefinitely.
 
         Returns:
-            Dict mapping worker_idx to Queue for receiving shared weight references.
-
-        Raises:
-            RuntimeError: If init_on_sender() hasn't been called yet.
+            The instruction string (e.g., "receive", "stop"), or None if
+            stop event is set or timeout expires.
         """
-        if not self._weight_init_queues:
-            raise RuntimeError("Queues not created. Call init_on_sender() first.")
-        return self._weight_init_queues
+        if self._receiver_instruction_queue is None:
+            raise RuntimeError(
+                "Instruction queue not set. init_on_receiver() must be called first."
+            )
 
-    def get_message_queue(self):
-        """Get the general message queue for coordination.
+        try:
+            # Check stop event periodically while waiting
+            while True:
+                if self._stop_event is not None and self._stop_event.is_set():
+                    return None
+                try:
+                    # Use short timeout to allow checking stop event
+                    instruction = self._receiver_instruction_queue.get(timeout=0.1)
+                    return instruction
+                except Exception:
+                    # Queue.Empty - continue waiting
+                    if timeout is not None:
+                        timeout -= 0.1
+                        if timeout <= 0:
+                            return None
+        except Exception as e:
+            torchrl_logger.warning(f"Error waiting for instruction: {e}")
+            return None
 
-        Returns:
-            The message queue for general coordination messages.
+    def _send_instruction(
+        self,
+        instruction: str = "receive",
+        worker_ids: int | list[int] | None = None,
+    ) -> None:
+        """Send instruction to receiver(s) to trigger weight reception.
+
+        Args:
+            instruction: The instruction to send (default: "receive").
+            worker_ids: Which workers to send to (None = all workers).
         """
-        return self._message_queue
+        if not self._instruction_queues:
+            raise RuntimeError(
+                "Instruction queues not created. init_on_sender() must be called first."
+            )
+
+        if worker_ids is None:
+            target_workers = list(self._instruction_queues.keys())
+        elif isinstance(worker_ids, int):
+            target_workers = [worker_ids]
+        else:
+            target_workers = list(worker_ids)
+
+        for worker_idx in target_workers:
+            if worker_idx not in self._instruction_queues:
+                raise ValueError(f"Worker {worker_idx} not registered")
+            self._instruction_queues[worker_idx].put(instruction)
+
+    def _send_ack(self, message: str = "updated") -> None:
+        """Send acknowledgment back to sender after receiving weights.
+
+        Args:
+            message: The acknowledgment message (default: "updated").
+        """
+        if self._receiver_ack_queue is not None:
+            self._receiver_ack_queue.put(message)
+
+    def _wait_for_ack(
+        self,
+        worker_ids: int | list[int] | None = None,
+        timeout: float | None = None,
+    ) -> None:
+        """Wait for acknowledgment from receiver(s).
+
+        Args:
+            worker_ids: Which workers to wait for (None = all workers).
+            timeout: Maximum time to wait (seconds). None means block indefinitely.
+        """
+        if not self._ack_queues:
+            return  # No ack queues, nothing to wait for
+
+        if worker_ids is None:
+            target_workers = list(self._ack_queues.keys())
+        elif isinstance(worker_ids, int):
+            target_workers = [worker_ids]
+        else:
+            target_workers = list(worker_ids)
+
+        for worker_idx in target_workers:
+            if worker_idx not in self._ack_queues:
+                raise ValueError(f"Worker {worker_idx} not registered")
+            try:
+                ack = self._ack_queues[worker_idx].get(timeout=timeout)
+                if ack != "updated":
+                    torchrl_logger.warning(
+                        f"Unexpected ack from worker {worker_idx}: {ack}"
+                    )
+            except Exception as e:
+                torchrl_logger.warning(
+                    f"Timeout waiting for ack from worker {worker_idx}: {e}"
+                )
 
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create shared memory transport.
@@ -591,13 +700,14 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
     ) -> None:
         """Send weights via shared memory (in-place update).
 
-        For SharedMemWeightSyncScheme, prepare_weights() already updates the
-        shared memory buffer in-place. Workers will see the update when they
-        call receive() to apply the current shared buffer to their model.
+        For SharedMemWeightSyncScheme:
+        1. prepare_weights() updates the shared memory buffer in-place
+        2. _send_instruction() tells workers to apply the new weights
+        3. If sync=True, waits for acknowledgments from all workers
 
         Args:
             weights: Weights to send (can be None to extract from model).
-            worker_ids: Ignored for shared memory (all workers share the same buffer).
+            worker_ids: Which workers to notify (None = all workers).
         """
         if not self.initialized_on_sender:
             raise RuntimeError("Must be initialized on sender before sending weights")
@@ -614,7 +724,15 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             strategy=self._strategy,
             context=self.context,
         )
-        # No transport iteration needed - shared memory is already updated
+
+        # Send instruction to workers' background threads to apply the weights
+        torchrl_logger.debug("Sending 'receive' instruction to workers")
+        self._send_instruction(instruction="receive", worker_ids=worker_ids)
+
+        # Wait for acknowledgments if in synchronous mode
+        if self.sync:
+            torchrl_logger.debug("Waiting for acknowledgments from workers")
+            self._wait_for_ack(worker_ids=worker_ids)
 
     @property
     def weights(self) -> Any | None:
@@ -647,6 +765,9 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         """Synchronize weights on receiver side for shared memory.
 
         Reads the shared memory buffer from the queue and applies it to the model.
+        Then starts a background thread that listens for "receive" instructions
+        from the sender and applies weights when instructed.
+
         If a receiver_transport is set (e.g., for MultiProcessWeightSyncScheme),
         defers to the base class implementation.
         """
@@ -683,3 +804,104 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Apply weights to model
         if weights is not None and self.model is not None:
             self._strategy.apply_weights(self.model, weights, inplace=False)
+
+        # Start background receiver thread that listens for instructions
+        self._start_background_receiver()
+
+    def _background_receive_loop(self):
+        """Background thread loop that waits for instructions and applies weights.
+
+        This loop:
+        1. Waits for a "receive" instruction from the sender
+        2. Applies the current shared memory weights to the model
+        3. Sends an acknowledgment back to the sender
+        4. Repeats until stop event is set or "stop" instruction received
+        """
+        torchrl_logger.debug(
+            f"SharedMemWeightSyncScheme: Background receiver started for worker {self._worker_idx}"
+        )
+        while not self._stop_event.is_set():
+            try:
+                instruction = self._wait_for_instruction()
+                if instruction is None:
+                    # Stop event was set or timeout
+                    continue
+                if instruction == "receive":
+                    torchrl_logger.debug(
+                        f"SharedMemWeightSyncScheme: Worker {self._worker_idx} received 'receive' instruction"
+                    )
+                    # Apply the current shared memory weights to the model
+                    # The weights are already updated in shared memory by the sender
+                    if (
+                        self._receiver_shared_weights is not None
+                        and self.model is not None
+                    ):
+                        self._strategy.apply_weights(
+                            self.model, self._receiver_shared_weights, inplace=True
+                        )
+                        torchrl_logger.debug(
+                            f"SharedMemWeightSyncScheme: Worker {self._worker_idx} applied weights"
+                        )
+
+                    # Cascade weight update to sub-collectors if context supports it
+                    model_id = self._model_id or "policy"
+                    if self.context is not None and hasattr(
+                        self.context, "update_policy_weights_"
+                    ):
+                        torchrl_logger.debug(
+                            f"SharedMemWeightSyncScheme: Cascading weight update to sub-collectors for {model_id=}"
+                        )
+                        self.context.update_policy_weights_(
+                            model_id=model_id,
+                            policy_or_weights=self._receiver_shared_weights,
+                        )
+
+                    # Send acknowledgment
+                    self._send_ack("updated")
+                elif instruction == "stop":
+                    torchrl_logger.debug(
+                        f"SharedMemWeightSyncScheme: Worker {self._worker_idx} received 'stop' instruction"
+                    )
+                    break
+                else:
+                    torchrl_logger.warning(
+                        f"SharedMemWeightSyncScheme: Unknown instruction: {instruction}"
+                    )
+            except Exception as e:
+                if not self._stop_event.is_set():
+                    torchrl_logger.warning(
+                        f"SharedMemWeightSyncScheme: Background receiver error: {e}"
+                    )
+
+        torchrl_logger.debug(
+            f"SharedMemWeightSyncScheme: Background receiver stopped for worker {self._worker_idx}"
+        )
+
+    def __getstate__(self):
+        """Prepare the scheme for pickling."""
+        state = super().__getstate__()
+        # mp.Queue objects can be pickled and shared across processes
+        # Keep them in state so workers have access
+        return state
+
+    def shutdown(self) -> None:
+        """Stop the background receiver thread and clean up."""
+        # Signal all workers to stop
+        if self._instruction_queues:
+            for worker_idx in self._instruction_queues:
+                try:
+                    self._instruction_queues[worker_idx].put("stop")
+                except Exception:
+                    pass
+
+        # Stop local background thread if running
+        if self._stop_event is not None:
+            self._stop_event.set()
+        if self._background_thread is not None:
+            self._background_thread.join(timeout=5.0)
+            if self._background_thread.is_alive():
+                torchrl_logger.warning(
+                    "SharedMemWeightSyncScheme: Background thread did not stop gracefully"
+                )
+        self._background_thread = None
+        self._stop_event = None

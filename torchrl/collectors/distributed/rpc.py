@@ -646,6 +646,7 @@ class RPCDataCollector(DataCollectorBase):
                     "total_frames": -1,
                     "split_trajs": False,
                     "weight_recv_schemes": self._weight_sync_schemes,
+                    "worker_idx": i,
                     **collector_kwargs[i],
                 },
             )

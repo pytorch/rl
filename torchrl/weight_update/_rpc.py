@@ -272,17 +272,6 @@ class RPCTransport:
 
         return weights
 
-    def check_connection(self) -> bool:
-        """Check if both RPC and torch.distributed are initialized."""
-        import torch.distributed
-        from torch.distributed import rpc
-
-        rpc_initialized = (
-            rpc.is_initialized() if hasattr(rpc, "is_initialized") else True
-        )
-        dist_initialized = torch.distributed.is_initialized()
-        return rpc_initialized and dist_initialized
-
     def setup_connection_and_weights_on_sender(self) -> None:
         """No-op for RPCTransport - weights are sent via send_weights()."""
 

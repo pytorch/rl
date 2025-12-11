@@ -137,14 +137,6 @@ class RayTransport:
         """
         self._model = model
 
-    def set_stateful_model(self, stateful: bool) -> None:
-        """Set whether the model has weights.
-
-        Args:
-            stateful: True if the model has weights to sync.
-        """
-        self._stateful_model = stateful
-
     # ========================================================================
     # Sending Weights (Sender Side)
     # ========================================================================
@@ -308,15 +300,6 @@ class RayTransport:
     # Connection Setup
     # ========================================================================
 
-    def check_connection(self) -> bool:
-        """Check if Ray and torch.distributed are initialized.
-
-        Returns:
-            bool: True if both Ray and torch.distributed are initialized,
-                False otherwise.
-        """
-        return self.ray.is_initialized() and torch.distributed.is_initialized()
-
     def setup_connection_and_weights_on_sender(self) -> None:
         """Initialize torch.distributed on sender side for this worker's rank.
 
@@ -411,10 +394,7 @@ class RayTransport:
 
         # Receive initial weights if model is stateful
         if self._stateful_model:
-            result = self.receive_weights(
-                model=model, weights=weights, strategy=strategy
-            )
-            return result[1] if result else None
+            return self.receive_weights(model=model, weights=weights, strategy=strategy)
         return None
 
 
@@ -824,51 +804,6 @@ class RayWeightSyncScheme(WeightSyncScheme):
             port = s.getsockname()[1]
         return port
 
-    def _set_dist_connection_info(self, connection_info, worker_idx: int) -> None:
-        """Set torch.distributed connection info and join the process group.
-
-        This method is called remotely via cascade_execute to share connection info
-        (master_addr, master_port, world_size) with this scheme instance. The worker
-        joins the torch.distributed process group here so that the sender's
-        init_process_group call can complete (it's a collective operation).
-
-        Args:
-            connection_info: Connection info dict (Ray auto-resolves ObjectRefs when
-                passing to remote methods, so this is already a dict)
-            worker_idx: The worker index for this scheme
-        """
-        # Store worker_idx
-        self._worker_idx = worker_idx
-
-        # connection_info is already a dict (Ray auto-resolves ObjectRefs)
-        master_addr = connection_info["master_addr"]
-        master_port = connection_info["master_port"]
-        world_size = connection_info["world_size"]
-
-        rank = worker_idx + 1  # Sender is rank 0, workers are 1-indexed
-
-        torchrl_logger.debug(
-            f"RayWeightSyncScheme: Worker {worker_idx} joining process group with "
-            f"rank={rank}, master_addr={master_addr}, master_port={master_port}, world_size={world_size}"
-        )
-
-        # Set environment variables for torch.distributed
-        os.environ["MASTER_ADDR"] = master_addr
-        os.environ["MASTER_PORT"] = str(master_port)
-
-        # Join the process group (rendezvous with sender)
-        torch.distributed.init_process_group(
-            backend=self._backend,
-            rank=rank,
-            world_size=world_size,
-            timeout=_DIST_TIMEOUT,
-        )
-        self._dist_initialized = True
-
-        torchrl_logger.debug(
-            f"RayWeightSyncScheme: Worker {worker_idx} joined process group as rank {rank}"
-        )
-
 
 class RayModuleTransformScheme(RayWeightSyncScheme):
     """Weight synchronization for RayModuleTransform.
@@ -1167,8 +1102,3 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
         futures = weights.isend(dst=1, return_early=True)
         for future in futures:
             future.wait()
-
-
-# Backwards compatibility alias
-RayModuleTransformTransport = RayTransport
-RayActorTransport = RayTransport

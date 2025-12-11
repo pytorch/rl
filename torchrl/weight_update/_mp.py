@@ -19,6 +19,10 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
     Unlike the parent SharedMemWeightSyncScheme which uses shared memory for in-place
     updates, this scheme sends actual weight copies through queues to workers.
 
+    A background thread on the receiver side listens for "receive" instructions
+    from the sender. When an instruction arrives, the thread receives the weights
+    from the weight queue and applies them to the model.
+
     It follows the same two-phase pattern as SharedMemWeightSyncScheme:
 
     1. **init_on_sender()**: Stores the recipe for creating device-specific weights
@@ -39,6 +43,8 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
     Args:
         strategy: The weight transmission strategy (default: "tensordict").
             Can be "tensordict" or "state_dict".
+        sync: If True (default), send() blocks until receiver acknowledges.
+            If False, send() returns immediately (use send_async/wait_async).
 
     Example:
         >>> # Basic usage with collector
@@ -60,13 +66,14 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         is large.
     """
 
-    def __init__(self, strategy: str = "tensordict"):
+    def __init__(self, strategy: str = "tensordict", sync: bool = True):
         """Initialize the MultiProcessWeightSyncScheme.
 
         Args:
             strategy: The weight transmission strategy (default: "tensordict").
+            sync: If True (default), send() blocks until receiver acknowledges.
         """
-        super().__init__(strategy)
+        super().__init__(strategy, sync=sync)
         # Override parent's shared transport - we don't use shared memory
         self._shared_transport = None
 
@@ -182,6 +189,12 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         for worker_idx in all_workers:
             if worker_idx not in self._weight_init_queues:
                 self._weight_init_queues[worker_idx] = mp.Queue()
+            # Create instruction queues for background receiver
+            if worker_idx not in self._instruction_queues:
+                self._instruction_queues[worker_idx] = mp.Queue()
+            # Create ack queues for synchronous mode
+            if worker_idx not in self._ack_queues:
+                self._ack_queues[worker_idx] = mp.Queue()
 
         # Store model_id and context on scheme
         self.model_id = model_id
@@ -191,8 +204,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         # Register workers with their queues
         for worker_idx in all_workers:
             queue = self._weight_init_queues[worker_idx]
-            # Create MPTransport for this worker
-            transport = MPTransport(weight_queue=queue, ack_queue=None)
+            ack_queue = self._ack_queues[worker_idx]
+            # Create MPTransport for this worker with ack queue
+            transport = MPTransport(weight_queue=queue, ack_queue=ack_queue)
             self._register_worker_sender(worker_idx=worker_idx, transport=transport)
 
     def _init_on_receiver_impl(
@@ -230,14 +244,21 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             )
 
         queue = self._weight_init_queues[worker_idx]
+        ack_queue = self._ack_queues.get(worker_idx)
 
         # Store on scheme directly
         self.model_id = model_id
         if context is not None:
             self.context = context
 
-        # Create transport with the worker's queue
-        transport = MPTransport(weight_queue=queue, ack_queue=None)
+        # Store instruction and ack queue references for this worker
+        if worker_idx in self._instruction_queues:
+            self._receiver_instruction_queue = self._instruction_queues[worker_idx]
+        if worker_idx in self._ack_queues:
+            self._receiver_ack_queue = self._ack_queues[worker_idx]
+
+        # Create transport with the worker's queue and ack queue
+        transport = MPTransport(weight_queue=queue, ack_queue=ack_queue)
         self._register_transport_receiver(transport=transport)
 
         if model is not None:
@@ -255,9 +276,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
 
         This method:
         1. Prepares weights (extracts from model if weights=None)
-        2. Sends to specified workers (or all if worker_ids=None)
-        3. Waits for acknowledgments from those workers
-        4. Returns when workers have applied the weights
+        2. Sends weights to the weight queue
+        3. Sends "receive" instruction to workers' background threads
+        4. If sync=True, waits for acknowledgments from those workers
 
         Args:
             weights: Weights to send. Can be:
@@ -270,16 +291,15 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                 - int: Send to single worker
                 - list[int]: Send to specific workers
 
-        Note: This is a blocking call that ensures specified workers are updated
-        before returning.
+        Note: If sync=True (default), this is a blocking call that ensures
+        specified workers are updated before returning.
         """
+        from torchrl._utils import logger as torchrl_logger
+
         if not self.initialized_on_sender:
             raise RuntimeError("Must be initialized on sender before sending weights")
-
-        if self._pending_async:
-            raise RuntimeError(
-                "Cannot call send() while an async send is pending. Call wait_async() first."
-            )
+        if not self.synchronized_on_sender:
+            raise RuntimeError("Must be synchronized on sender before sending weights")
 
         model_id = self.model_id
         context = self.context
@@ -294,7 +314,8 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
 
         transports = list(self._iterate_transports(worker_ids))
 
-        # Send to all workers first (non-blocking if transport supports it)
+        # Send weights to all workers first via queue (non-blocking)
+        torchrl_logger.debug("Sending weights to queues")
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
                 # For MPTransport, pass model_id; other transports don't need it
@@ -303,60 +324,14 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                 # Fallback for transports that don't support async send
                 transport.send_weights(prepared_weights)
 
-        # Wait for all acknowledgments
-        for transport in transports:
-            if hasattr(transport, "wait_ack"):
-                transport.wait_ack()
+        # Send instruction to workers' background threads to receive the weights
+        torchrl_logger.debug("Sending 'receive' instruction to workers")
+        self._send_instruction(instruction="receive", worker_ids=worker_ids)
 
-    def send_async(
-        self,
-        weights: Any = None,
-        worker_ids: int | list[int] | None = None,
-    ) -> None:
-        """Send weights asynchronously to workers (non-blocking).
-
-        This initiates the send but returns immediately without waiting
-        for workers to acknowledge. You must call wait_async() before
-        the next send_async() or send() call.
-
-        Args:
-            weights: Same as send()
-            worker_ids: Same as send()
-
-        Raises:
-            RuntimeError: If a previous send_async() is still pending
-        """
-        if not self.initialized_on_sender:
-            raise RuntimeError("Must be initialized on sender before sending weights")
-
-        if self._pending_async:
-            raise RuntimeError(
-                "Cannot call send_async() again while a previous send is pending. Call wait_async() first."
-            )
-
-        context = self.context
-
-        # Let the scheme prepare the weights
-        prepared_weights = self.prepare_weights(
-            weights=weights,
-            model_id=self.model_id,
-            strategy=self._strategy,
-            context=context,
-        )
-
-        # Store transports for wait_async
-        self._pending_transports = list(self._iterate_transports(worker_ids))
-
-        # Send to all workers (non-blocking)
-        for transport in self._pending_transports:
-            if hasattr(transport, "send_weights_async"):
-                transport.send_weights_async(prepared_weights, model_id=self._model_id)
-            else:
-                raise RuntimeError(
-                    f"transport of type {type(transport)} does not support async send."
-                )
-
-        self._pending_async = True
+        # Wait for all acknowledgments if in synchronous mode
+        if self.sync:
+            torchrl_logger.debug("Waiting for acknowledgments from workers")
+            self._wait_for_ack(worker_ids=worker_ids)
 
     def _setup_connection_and_weights_on_sender_impl(
         self,
@@ -427,6 +402,127 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         # Clean up the mapping info after synchronization
         delattr(self, "_device_mapping_info")
 
+    def _setup_connection_and_weights_on_receiver_impl(
+        self, *, worker_idx: int | None = None
+    ) -> None:
+        """Receive initial weights and start background receiver thread.
+
+        This method:
+        1. Receives initial weights from the sender via queue
+        2. Applies them to the model
+        3. Starts a background thread that listens for "receive" instructions
+
+        Args:
+            worker_idx: The worker index.
+        """
+        from torchrl._utils import logger as torchrl_logger
+
+        # Use stored worker_idx if not provided
+        if worker_idx is None:
+            worker_idx = self._worker_idx
+
+        if worker_idx is None:
+            raise RuntimeError(
+                "worker_idx must be provided for _setup_connection_and_weights_on_receiver_impl."
+            )
+
+        # Receive initial weights from queue via transport
+        if self._receiver_transport is None:
+            raise RuntimeError("Receiver transport not set.")
+
+        weights = self._receiver_transport.setup_connection_and_weights_on_receiver(
+            worker_idx=worker_idx,
+            weights=self.weights,
+            model=self.model,
+            strategy=self._strategy,
+        )
+
+        # Store received weights for later use
+        if weights is not None:
+            self._receiver_weights = weights
+
+        # Apply weights to model
+        if weights is not None and self.model is not None:
+            self._strategy.apply_weights(self.model, weights, inplace=False)
+            torchrl_logger.debug(
+                f"MultiProcessWeightSyncScheme: Worker {worker_idx} applied initial weights"
+            )
+
+        # Start background receiver thread
+        self._start_background_receiver()
+
+    def _background_receive_loop(self):
+        """Background thread loop that waits for instructions and receives weights.
+
+        This loop:
+        1. Waits for a "receive" instruction from the sender
+        2. Receives weights from the weight queue
+        3. Applies them to the model
+        4. Sends an acknowledgment back to the sender
+        5. Repeats until stop event is set or "stop" instruction received
+        """
+        from torchrl._utils import logger as torchrl_logger
+
+        torchrl_logger.debug(
+            f"MultiProcessWeightSyncScheme: Background receiver started for worker {self._worker_idx}"
+        )
+        while not self._stop_event.is_set():
+            try:
+                instruction = self._wait_for_instruction()
+                if instruction is None:
+                    # Stop event was set or timeout
+                    continue
+                if instruction == "receive":
+                    torchrl_logger.debug(
+                        f"MultiProcessWeightSyncScheme: Worker {self._worker_idx} received 'receive' instruction"
+                    )
+
+                    # Receive weights from transport (blocking)
+                    if self._receiver_transport is not None:
+                        weights = self._receiver_transport.receive_weights(
+                            model=self.model,
+                            strategy=self._strategy,
+                        )
+
+                        if weights is not None:
+                            torchrl_logger.debug(
+                                f"MultiProcessWeightSyncScheme: Worker {self._worker_idx} received and applied weights"
+                            )
+
+                            # Cascade weight update to sub-collectors if context supports it
+                            model_id = self._model_id or "policy"
+                            if self.context is not None and hasattr(
+                                self.context, "update_policy_weights_"
+                            ):
+                                torchrl_logger.debug(
+                                    f"MultiProcessWeightSyncScheme: Cascading weight update to sub-collectors for {model_id=}"
+                                )
+                                self.context.update_policy_weights_(
+                                    model_id=model_id, policy_or_weights=weights
+                                )
+
+                    # Send acknowledgment
+                    self._send_ack("updated")
+
+                elif instruction == "stop":
+                    torchrl_logger.debug(
+                        f"MultiProcessWeightSyncScheme: Worker {self._worker_idx} received 'stop' instruction"
+                    )
+                    break
+                else:
+                    torchrl_logger.warning(
+                        f"MultiProcessWeightSyncScheme: Unknown instruction: {instruction}"
+                    )
+            except Exception as e:
+                if not self._stop_event.is_set():
+                    torchrl_logger.warning(
+                        f"MultiProcessWeightSyncScheme: Background receiver error: {e}"
+                    )
+
+        torchrl_logger.debug(
+            f"MultiProcessWeightSyncScheme: Background receiver stopped for worker {self._worker_idx}"
+        )
+
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create an MPTransport using the provided queue.
 
@@ -460,14 +556,6 @@ class MPTransport:
         self.weight_queue = weight_queue
         self.ack_queue = ack_queue
 
-    def send_weights(self, weights: Any) -> None:
-        """Send weights through the queue.
-
-        Sends weights and waits for acknowledgment to ensure delivery.
-        """
-        self.send_weights_async(weights)
-        self.wait_ack()
-
     def send_weights_async(self, weights: Any, model_id: str = "policy") -> None:
         """Send weights through the queue without waiting for acknowledgment.
 
@@ -475,11 +563,6 @@ class MPTransport:
         """
         # Send in format expected by worker loop: ((model_id, weights), "update_weights")
         self.weight_queue.put(((model_id, weights), "update_weights"))
-
-    def wait_ack(self) -> None:
-        """Wait for acknowledgment from worker."""
-        if self.ack_queue is not None:
-            self.check_ack("updated")
 
     def receive_weights(
         self,
@@ -520,22 +603,6 @@ class MPTransport:
             return received_weights
         else:
             raise ValueError(f"Expected 'update_weights' but got {msg}")
-
-    def send_ack(self, message: str = "updated") -> None:
-        """Send acknowledgment back to sender."""
-        if self.ack_queue is not None:
-            self.ack_queue.put((None, message))
-
-    def check_ack(self, message: str = "updated") -> None:
-        """Check for acknowledgment."""
-        if self.ack_queue is not None:
-            _, msg = self.ack_queue.get(timeout=self.timeout)
-            if msg != message:
-                raise RuntimeError(f"Expected acknowledgment '{message}', got '{msg}'")
-
-    def check_connection(self) -> bool:
-        # Queues don't have a 'closed' attribute, so we assume they're always open
-        return True
 
     def setup_connection_and_weights_on_sender(self) -> None:
         """No-op for MPTransport - weights are sent via scheme's synchronize_weights().

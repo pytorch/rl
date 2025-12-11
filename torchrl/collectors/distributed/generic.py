@@ -232,8 +232,8 @@ def _run_collector(
             scheme.init_on_receiver(
                 model_id=model_id,
                 context=collector,
-                store=_store,
-                rank=rank,
+                # store=_store,
+                worker_idx=rank,
             )
             torchrl_logger.debug(f"RANK {rank} -- initial weight sync (if any)")
             scheme.connect()
@@ -573,7 +573,6 @@ class DistributedDataCollector(DataCollectorBase):
             collector_class = SyncDataCollector
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
-        self.policy = policy
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory for _ in range(len(self.env_constructors))]
         self.policy_factory = policy_factory
@@ -586,6 +585,8 @@ class DistributedDataCollector(DataCollectorBase):
             if not any(policy_factory):
                 warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
+        self.policy = policy
+        self._policy_to_send = policy if not any(policy_factory) else None
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
@@ -687,7 +688,6 @@ class DistributedDataCollector(DataCollectorBase):
             self.weight_updater = weight_updater
             self._weight_sync_schemes = None
 
-        self._init_workers()
         if self._weight_sync_schemes is not None:
             # Initialize schemes on the sender (main process) side now that
             # worker processes and the store have been created.
@@ -695,6 +695,8 @@ class DistributedDataCollector(DataCollectorBase):
                 scheme.init_on_sender(
                     num_workers=self.num_workers, context=self, model_id=model_id
                 )
+
+        self._init_workers()
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
@@ -809,7 +811,7 @@ class DistributedDataCollector(DataCollectorBase):
         kwargs["return_same_td"] = True
         pseudo_collector = SyncDataCollector(
             env_constructor,
-            policy=self.policy,
+            policy=self.policy if not self.policy_factory[0] else None,
             policy_factory=self.policy_factory[0],
             frames_per_batch=self._frames_per_batch_corrected,
             total_frames=-1,
@@ -858,7 +860,7 @@ class DistributedDataCollector(DataCollectorBase):
             collector_class=self.collector_class,
             num_workers=self.num_workers_per_collector,
             env_make=env_make,
-            policy=self.policy,
+            policy=self._policy_to_send,
             policy_factory=self.policy_factory[i],
             frames_per_batch=self._frames_per_batch_corrected,
             weight_sync_schemes=self._weight_sync_schemes,
@@ -908,7 +910,7 @@ class DistributedDataCollector(DataCollectorBase):
                 collector_class=self.collector_class,
                 num_workers=self.num_workers_per_collector,
                 env_make=env_make,
-                policy=self.policy,
+                policy=self._policy_to_send,
                 policy_factory=self.policy_factory[i],
                 frames_per_batch=self._frames_per_batch_corrected,
                 collector_kwargs=self.collector_kwargs[i],

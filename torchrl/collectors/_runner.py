@@ -159,7 +159,9 @@ def _main_async_collector(
                 if verbose:
                     torchrl_logger.debug(f"mp worker {idx} received {msg}")
             except EOFError:
-                torchrl_logger.debug(f"Failed to receive data. Last message received: {msg}")
+                torchrl_logger.debug(
+                    f"Failed to receive data. Last message received: {msg}"
+                )
                 raise
         elif not run_free:
             if verbose:
@@ -206,7 +208,9 @@ def _main_async_collector(
             # Capture shutdown / update / seed signal, but continue should not be expected
             if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
-                torchrl_logger.debug(f"mp worker {idx} received {msg} while running free")
+                torchrl_logger.debug(
+                    f"mp worker {idx} received {msg} while running free"
+                )
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
@@ -222,8 +226,8 @@ def _main_async_collector(
                 data_in = None
                 # TODO: this does not work with random frames
                 msg = "continue"
-        # Note: The "continue" message handling has been moved below after update_weights handling
-        # to allow falling through from update_weights to continue
+        # Note: Weight updates are handled by background threads in weight sync schemes.
+        # The scheme's background receiver thread listens for "receive" instructions.
 
         if msg == "update":
             # Legacy - weight updater
@@ -233,32 +237,15 @@ def _main_async_collector(
             has_timed_out = False
             continue
 
-        if msg == "update_weights":
-            # Weight update protocol: let the collector handle everything via receive_weights()
-            if verbose:
-                torchrl_logger.debug(
-                    f"mp worker {idx} received weight update via new protocol"
-                )
-
-            # receive_weights() will get weights from the registered receiver schemes
-            inner_collector.receive_weights()
-
-            # After applying weights, we continue collecting immediately
-            has_timed_out = False
-            msg = "continue"
+        # Note: Weight updates are now handled by background threads in the weight sync schemes.
+        # The scheme's background receiver thread listens for "receive" instructions and
+        # applies weights automatically. No explicit message handling needed here.
 
         if msg in ("continue", "continue_random"):
-            # This block handles both explicit continue messages and implicit ones after weight updates
             if msg == "continue_random":
                 inner_collector.init_random_frames = float("inf")
             else:
                 inner_collector.init_random_frames = -1
-
-            # Note: For MultiProcessWeightSyncScheme, weight updates are handled by the
-            # main message loop above (msg == "update_weights" case). The receiver.receive()
-            # pattern is only used for schemes with separate communication channels like
-            # SharedMemWeightSyncScheme (shared memory) or DistributedWeightSyncScheme (TCPStore).
-            # Calling receiver.receive() here would interfere with the pipe-based message protocol.
 
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
