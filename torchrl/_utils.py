@@ -1047,9 +1047,13 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
 
     """
     default_runtime_env = get_ray_default_runtime_env()
-    runtime_env = ray_init_config.setdefault("runtime_env", {})
+    runtime_env = ray_init_config.get("runtime_env")
 
-    if not isinstance(runtime_env, dict):
+    # Handle None or missing runtime_env
+    if runtime_env is None:
+        runtime_env = {}
+        ray_init_config["runtime_env"] = runtime_env
+    elif not isinstance(runtime_env, dict):
         runtime_env = dict(runtime_env)
         ray_init_config["runtime_env"] = runtime_env
 
