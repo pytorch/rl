@@ -10,35 +10,22 @@ from __future__ import annotations
 
 import abc
 import argparse
+import importlib
 import os
+import socket
 import sys
 import time
+import traceback
 from functools import partial
 
 import pytest
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import logger as torchrl_logger
-from torchrl.data import (
-    LazyTensorStorage,
-    RandomSampler,
-    RayReplayBuffer,
-    RoundRobinWriter,
-    SamplerWithoutReplacement,
-)
-
-try:
-    import ray
-
-    _has_ray = True
-    RAY_ERR = None
-except ModuleNotFoundError as err:
-    _has_ray = False
-    RAY_ERR = err
 
 import torch
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import multiprocessing as mp, nn
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors import (
     MultiaSyncDataCollector,
@@ -52,7 +39,16 @@ from torchrl.collectors.distributed import (
     RPCDataCollector,
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
-from torchrl.envs.utils import RandomPolicy
+from torchrl.data import (
+    LazyTensorStorage,
+    RandomSampler,
+    RayReplayBuffer,
+    RoundRobinWriter,
+    SamplerWithoutReplacement,
+)
+from torchrl.modules import RandomPolicy
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
@@ -115,16 +111,17 @@ class DistributedCollectorBase:
                 **cls.distributed_kwargs(),
             )
             total = 0
-            torchrl_logger.info("getting data...")
             for data in collector:
                 total += data.numel()
                 assert data.numel() == frames_per_batch
             assert data.names[-1] == "time"
-            collector.shutdown()
             assert total == 1000
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize("frames_per_batch", [50, 100])
     def test_distributed_collector_basic(self, frames_per_batch):
@@ -136,8 +133,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -163,9 +161,10 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
             collector.shutdown()
             assert total == -frames_per_batch * (1000 // -frames_per_batch)
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {e}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     def test_distributed_collector_mult(self, frames_per_batch=200):
         """Testing multiple nodes."""
@@ -177,8 +176,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -205,9 +205,10 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
             collector.shutdown()
             assert total == 200
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize("sync", [False, True])
     def test_distributed_collector_sync(self, sync):
@@ -219,8 +220,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -247,9 +249,10 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
             collector.shutdown()
             assert total == 200
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -268,8 +271,9 @@ class DistributedCollectorBase:
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -277,21 +281,36 @@ class DistributedCollectorBase:
             queue.close()
 
     @classmethod
-    def _test_distributed_collector_updatepolicy(cls, queue, collector_class, sync):
+    def _test_distributed_collector_updatepolicy(
+        cls, queue, collector_class, sync, pfactory
+    ):
         try:
             frames_per_batch = 50
             total_frames = 300
             env = CountingEnv
-            policy = CountingPolicy()
+            if pfactory:
+                policy_factory = CountingPolicy
+                policy = None
+            else:
+                policy = CountingPolicy()
+                policy_factory = None
             if collector_class is MultiaSyncDataCollector:
                 # otherwise we may collect data from a collector that has not yet been
                 # updated
                 n_collectors = 1
             else:
                 n_collectors = 2
-            collector = cls.distributed_class()(
+            weights = None
+            if policy is None and policy_factory is not None:
+                policy_stateful = policy_factory()
+                weights = TensorDict.from_module(policy_stateful).lock_()
+            dcls = cls.distributed_class()
+            torchrl_logger.info(f"Using distributed collector {dcls}")
+            collector = None
+            collector = dcls(
                 [env] * n_collectors,
                 policy,
+                policy_factory=policy_factory,
                 collector_class=collector_class,
                 total_frames=total_frames,
                 frames_per_batch=frames_per_batch,
@@ -306,17 +325,23 @@ class DistributedCollectorBase:
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
-                    collector.update_policy_weights_()
+                    if policy is not None:
+                        policy.weight.data += 1
+                    else:
+                        weights.data += 1
+                    torchrl_logger.info("TEST -- Calling update_policy_weights_()")
+                    collector.update_policy_weights_(weights)
+                    torchrl_logger.info("TEST -- Done calling update_policy_weights_()")
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
             assert (first_batch["action"] == 1).all(), first_batch["action"]
             assert (last_batch["action"] == 2).all(), last_batch["action"]
             collector.shutdown()
             assert total == total_frames
-            queue.put("passed")
+            queue.put(("passed", None))
         except Exception as e:
-            queue.put(f"not passed: {str(e)}")
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -327,18 +352,20 @@ class DistributedCollectorBase:
         ],
     )
     @pytest.mark.parametrize("sync", [False, True])
-    def test_distributed_collector_updatepolicy(self, collector_class, sync):
+    @pytest.mark.parametrize("pfactory", [False, True])
+    def test_distributed_collector_updatepolicy(self, collector_class, sync, pfactory):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)
 
         proc = mp.Process(
             target=self._test_distributed_collector_updatepolicy,
-            args=(queue, collector_class, sync),
+            args=(queue, collector_class, sync, pfactory),
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -353,7 +380,13 @@ class TestDistributedCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "4324"}
+        # Pick an ephemeral free TCP port on localhost for each test process to
+        # avoid address-in-use errors when tests are run repeatedly or in quick
+        # succession.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        return {"launcher": "mp", "tcp_port": str(port)}
 
     @classmethod
     def _start_worker(cls):
@@ -367,7 +400,10 @@ class TestRPCCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "4324"}
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        return {"launcher": "mp", "tcp_port": str(port)}
 
     @classmethod
     def _start_worker(cls):
@@ -381,7 +417,10 @@ class TestSyncCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        return {"launcher": "mp", "tcp_port": "4324"}
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("localhost", 0))
+            port = s.getsockname()[1]
+        return {"launcher": "mp", "tcp_port": str(port)}
 
     @classmethod
     def _start_worker(cls):
@@ -392,15 +431,24 @@ class TestSyncCollector(DistributedCollectorBase):
 
     @classmethod
     def _test_distributed_collector_updatepolicy(
-        cls, queue, collector_class, update_interval
+        cls,
+        queue,
+        collector_class,
+        update_interval,
+        pfactory,
     ):
         frames_per_batch = 50
         total_frames = 300
         env = CountingEnv
+        if pfactory:
+            policy_factory = CountingPolicy
+        else:
+            policy_factory = None
         policy = CountingPolicy()
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
+            policy_factory=policy_factory,
             collector_class=collector_class,
             total_frames=total_frames,
             frames_per_batch=frames_per_batch,
@@ -408,7 +456,6 @@ class TestSyncCollector(DistributedCollectorBase):
             **cls.distributed_kwargs(),
         )
         try:
-
             total = 0
             first_batch = None
             last_batch = None
@@ -426,10 +473,12 @@ class TestSyncCollector(DistributedCollectorBase):
             else:
                 assert (last_batch["action"] == 1).all(), last_batch["action"]
             assert total == total_frames
-            queue.put("passed")
+            queue.put(("passed", None))
+        except Exception as e:
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
         finally:
             collector.shutdown()
-            queue.put("not passed")
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -440,18 +489,22 @@ class TestSyncCollector(DistributedCollectorBase):
         ],
     )
     @pytest.mark.parametrize("update_interval", [1])
-    def test_distributed_collector_updatepolicy(self, collector_class, update_interval):
+    @pytest.mark.parametrize("pfactory", [False, True])
+    def test_distributed_collector_updatepolicy(
+        self, collector_class, update_interval, pfactory
+    ):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)
 
         proc = mp.Process(
             target=self._test_distributed_collector_updatepolicy,
-            args=(queue, collector_class, update_interval),
+            args=(queue, collector_class, update_interval, pfactory),
         )
         proc.start()
         try:
-            out = queue.get(timeout=TIMEOUT)
-            assert out == "passed"
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
         finally:
             proc.join(10)
             if proc.is_alive():
@@ -459,7 +512,9 @@ class TestSyncCollector(DistributedCollectorBase):
             queue.close()
 
 
-@pytest.mark.skipif(not _has_ray, reason=f"Ray not found (error: {RAY_ERR})")
+@pytest.mark.skipif(
+    not _has_ray, reason="Ray not found. Ray may be badly configured or not installed."
+)
 class TestRayCollector(DistributedCollectorBase):
     """A testing distributed data collector class that runs tests without using a Queue,
     to avoid potential deadlocks when combining Ray and multiprocessing.
@@ -467,6 +522,7 @@ class TestRayCollector(DistributedCollectorBase):
 
     @pytest.fixture(autouse=True, scope="class")
     def start_ray(self):
+        import ray
         from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
         ray.init(**DEFAULT_RAY_INIT_CONFIG)
@@ -474,12 +530,24 @@ class TestRayCollector(DistributedCollectorBase):
         yield
         ray.shutdown()
 
+    @pytest.fixture(autouse=True, scope="function")
+    def reset_process_group(self):
+        import torch.distributed as dist
+
+        try:
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        yield
+
     @classmethod
     def distributed_class(cls) -> type:
         return RayCollector
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
+        import ray
+
         ray.shutdown()  # make sure ray is not running
         ray_init_config = DEFAULT_RAY_INIT_CONFIG
         ray_init_config["runtime_env"] = {
@@ -557,20 +625,31 @@ class TestRayCollector(DistributedCollectorBase):
         ],
     )
     @pytest.mark.parametrize("sync", [False, True])
-    def test_distributed_collector_updatepolicy(self, collector_class, sync):
+    @pytest.mark.parametrize("pfactory", [False, True])
+    def test_distributed_collector_updatepolicy(self, collector_class, sync, pfactory):
         frames_per_batch = 50
         total_frames = 300
         env = CountingEnv
-        policy = CountingPolicy()
+        if pfactory:
+            policy_factory = CountingPolicy
+            policy = None
+        else:
+            policy = CountingPolicy()
+            policy_factory = None
         if collector_class is MultiaSyncDataCollector:
             # otherwise we may collect data from a collector that has not yet been
             # updated
             n_collectors = 1
         else:
             n_collectors = 2
+        weights = None
+        if policy is None and policy_factory is not None:
+            policy_stateful = policy_factory()
+            weights = TensorDict.from_module(policy_stateful)
         collector = self.distributed_class()(
             [env] * n_collectors,
             policy,
+            policy_factory=policy_factory,
             collector_class=collector_class,
             total_frames=total_frames,
             frames_per_batch=frames_per_batch,
@@ -586,8 +665,11 @@ class TestRayCollector(DistributedCollectorBase):
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
-                    collector.update_policy_weights_()
+                    if policy is not None:
+                        policy.weight.data += 1
+                    else:
+                        weights.data += 1
+                    collector.update_policy_weights_(weights)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
             assert (first_batch["action"] == 1).all(), first_batch["action"]
@@ -631,7 +713,19 @@ class TestRayCollector(DistributedCollectorBase):
         env = CountingEnv
 
         def policy_constructor():
-            return lambda td: td.set("action", torch.full(td.shape, 2))
+            return TensorDictSequential(
+                TensorDictModule(
+                    lambda x: x.float(),
+                    in_keys=["observation"],
+                    out_keys=["_obs_float"],
+                ),
+                TensorDictModule(
+                    nn.Linear(1, 1), out_keys=["action"], in_keys=["_obs_float"]
+                ),
+                TensorDictModule(
+                    lambda x: x.int(), in_keys=["action"], out_keys=["action"]
+                ),
+            )
 
         collector = self.distributed_class()(
             [env] * n_collectors,
@@ -641,9 +735,16 @@ class TestRayCollector(DistributedCollectorBase):
             frames_per_batch=frames_per_batch,
             **self.distributed_kwargs(),
         )
+        p = policy_constructor()
+        # p(env().reset())
+        weights = TensorDict.from_module(p)
+        weights["module", "1", "module", "weight"].data.fill_(0)
+        weights["module", "1", "module", "bias"].data.fill_(2)
+        collector.update_policy_weights_(weights)
         try:
             for data in collector:
                 assert (data["action"] == 2).all()
+                collector.update_policy_weights_(weights)
         finally:
             collector.shutdown()
 

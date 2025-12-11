@@ -90,7 +90,7 @@ def example_multi_collector_shared_memory():
     env.close()
 
     # Shared memory is more efficient for frequent updates
-    scheme = SharedMemWeightSyncScheme(strategy="tensordict", auto_register=True)
+    scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
     print("Creating multi-collector with shared memory...")
     collector = MultiSyncDataCollector(

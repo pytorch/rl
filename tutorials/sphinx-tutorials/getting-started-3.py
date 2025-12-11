@@ -60,7 +60,7 @@ import torch
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.envs import GymEnv
-from torchrl.envs.utils import RandomPolicy
+from torchrl.modules import RandomPolicy
 
 torch.manual_seed(0)
 

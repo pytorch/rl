@@ -12,7 +12,7 @@ from collections.abc import Iterator
 import torch
 from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import WeightUpdaterBase
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.modules.llm.backends.vllm import RLvLLMEngine
 
 try:
@@ -44,7 +44,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
                 f"vllm_engine must implement RLvLLMEngine interface, got {type(vllm_engine)}"
             )
 
-        torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
+        torchrl_logger.debug(f"=> in {type(self).__name__}.__init__")
         self.vllm_engine = vllm_engine
         self.initialized_group = None
 
@@ -54,7 +54,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         self.master_port = vllm_engine.get_master_port()
         self.model_metadata = vllm_engine.get_model_metadata()
 
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Initialized vLLMUpdaterV2 with tp_size={self.vllm_tp_size}"
         )
 
@@ -76,7 +76,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         # Initialize the engine's weight update group
         self.vllm_engine.init_weight_update_group()
         self.initialized_group = True
-        torchrl_logger.info("Weight update group initialized")
+        torchrl_logger.debug("Weight update group initialized")
 
     def push_weights(
         self, weights: Iterator[tuple[str, torch.Tensor]] | TensorDictBase
@@ -94,12 +94,12 @@ class vLLMUpdaterV2(WeightUpdaterBase):
 
         # Delegate to the engine's update_weights method
         self.vllm_engine.update_weights(weights)
-        torchrl_logger.info("Weight update completed")
+        torchrl_logger.debug("Weight update completed")
 
         # Call post-hooks to increment policy version
-        torchrl_logger.info("Calling post-hooks...")
+        torchrl_logger.debug("Calling post-hooks...")
         self._call_post_hooks()
-        torchrl_logger.info("Post-hooks completed")
+        torchrl_logger.debug("Post-hooks completed")
 
     def push_weights_from_transformers(self, transformers_model):
         """Push weights from a transformers model.
@@ -134,11 +134,11 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             )
 
         t1 = time.time()
-        torchrl_logger.info(f"Time to extract state_dict: {t1 - t0}")
+        torchrl_logger.debug(f"Time to extract state_dict: {t1 - t0}")
         # Convert to iterator for memory efficiency
         weights_iter = iter(state_dict.items())
         self.push_weights(weights_iter)
-        torchrl_logger.info(f"Time to push weights: {time.time() - t1}")
+        torchrl_logger.debug(f"Time to push weights: {time.time() - t1}")
 
     def push_weights_from_transformers_optimized(
         self, transformers_model, batch_size=50
@@ -181,7 +181,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             )
 
         t1 = time.time()
-        torchrl_logger.info(f"Time to extract state_dict: {t1 - t0:.3f}s")
+        torchrl_logger.debug(f"Time to extract state_dict: {t1 - t0:.3f}s")
 
         # Pre-load all weights to GPU for faster transfer
         gpu_weights = {}
@@ -195,7 +195,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         # Synchronize to ensure all transfers are complete
         torch.cuda.synchronize()
         t2 = time.time()
-        torchrl_logger.info(f"Time to move weights to GPU: {t2 - t1:.3f}s")
+        torchrl_logger.debug(f"Time to move weights to GPU: {t2 - t1:.3f}s")
 
         # Transfer weights (optionally in batches)
         if batch_size > 0:
@@ -203,7 +203,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             for i in range(0, len(weight_items), batch_size):
                 batch = weight_items[i : i + batch_size]
                 self.push_weights(iter(batch))
-                torchrl_logger.info(
+                torchrl_logger.debug(
                     f"Transferred batch {i // batch_size + 1}/{(len(weight_items) + batch_size - 1) // batch_size}"
                 )
         else:
@@ -211,7 +211,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
             self.push_weights(iter(gpu_weights.items()))
 
         t3 = time.time()
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Time to push weights: {t3 - t2:.3f}s, total time: {t3 - t0:.3f}s"
         )
 
@@ -252,14 +252,14 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         # This avoids N^2 complexity where each weight update calls increment_version
         # on all collectors N times (once per registered collector)
         if len(self.post_hooks) == 0:
-            torchrl_logger.info("Registering policy version increment post-hook")
+            torchrl_logger.debug("Registering policy version increment post-hook")
             self.register_post_hook(self._increment_all_collector_versions)
 
         return result
 
     def _increment_all_collector_versions(self):
         """Increment version for all registered collectors efficiently."""
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Incrementing policy version for {len(self.collectors)} collectors..."
         )
         for i, collector in enumerate(self.collectors):
@@ -272,7 +272,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
                 torchrl_logger.warning(
                     f"Failed to increment version for collector {i + 1}: {e}"
                 )
-        torchrl_logger.info("All collector versions incremented")
+        torchrl_logger.debug("All collector versions incremented")
 
     @classmethod
     def get_model_metadata(cls, model) -> dict[str, tuple[torch.dtype, torch.Size]]:

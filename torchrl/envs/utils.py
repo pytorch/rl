@@ -47,6 +47,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
+from torchrl.modules.tensordict_module.exploration import RandomPolicy  # noqa
 
 __all__ = [
     "exploration_type",
@@ -58,7 +59,6 @@ __all__ = [
     "MarlGroupMapType",
     "check_marl_grouping",
 ]
-
 
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output. "
@@ -1670,34 +1670,6 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
         "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
         "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
     )
-
-
-class RandomPolicy:
-    """A random policy for data collectors.
-
-    This is a wrapper around the action_spec.rand method.
-
-    Args:
-        action_spec: TensorSpec object describing the action specs
-
-    Examples:
-        >>> from tensordict import TensorDict
-        >>> from torchrl.data.tensor_specs import Bounded
-        >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
-        >>> actor = RandomPolicy(action_spec=action_spec)
-        >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
-    """
-
-    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
-        super().__init__()
-        self.action_spec = action_spec.clone()
-        self.action_key = action_key
-
-    def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        if isinstance(self.action_spec, Composite):
-            return td.update(self.action_spec.rand())
-        else:
-            return td.set(self.action_key, self.action_spec.rand())
 
 
 class _PolicyMetaClass(abc.ABCMeta):

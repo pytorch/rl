@@ -52,6 +52,16 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
+# Verify we have CPython, not PyPy
+python_impl=$(python -c "import platform; print(platform.python_implementation())")
+if [ "$python_impl" != "CPython" ]; then
+    echo "ERROR: Expected CPython but got $python_impl"
+    echo "Python executable: $(which python)"
+    echo "Python version: $(python --version)"
+    exit 1
+fi
+printf "* Verified Python implementation: %s\n" "$python_impl"
+
 # 3. Install mujoco
 printf "* Installing mujoco and related\n"
 mkdir -p $root_dir/.mujoco
@@ -64,7 +74,10 @@ cd "${root_dir}"
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+# Add python version to environment.yml if not already present (idempotent)
+if ! grep -q "python=${PYTHON_VERSION}" "${this_dir}/environment.yml"; then
+    echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+fi
 cat "${this_dir}/environment.yml"
 
 export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
@@ -100,11 +113,27 @@ pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
 
 # TODO: move this down -- will break torchrl installation
 conda install -y -c conda-forge libstdcxx-ng=12
-## find libstdc
-STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
-conda env config vars set \
-  MAX_IDLE_COUNT=1000 \
-  LD_PRELOAD=${root_dir}/$STDC_LOC TOKENIZERS_PARALLELISM=true
+## find libstdc - search in the env's lib directory first, then fall back to conda packages
+STDC_LOC=$(find "${env_dir}/lib" -name "libstdc++.so.6" 2>/dev/null | head -1)
+if [ -z "$STDC_LOC" ]; then
+    # Fall back to searching in conda packages for libstdcxx-ng specifically
+    STDC_LOC=$(find conda/pkgs -path "*libstdcxx*" -name "libstdc++.so.6" 2>/dev/null | head -1)
+fi
+if [ -z "$STDC_LOC" ]; then
+    echo "WARNING: Could not find libstdc++.so.6, skipping LD_PRELOAD"
+    conda env config vars set \
+      MAX_IDLE_COUNT=1000 \
+      TOKENIZERS_PARALLELISM=true
+else
+    echo "Found libstdc++ at: $STDC_LOC"
+    conda env config vars set \
+      MAX_IDLE_COUNT=1000 \
+      LD_PRELOAD=${STDC_LOC} TOKENIZERS_PARALLELISM=true
+fi
+
+# Reactivate environment to apply the new env vars
+conda deactivate
+conda activate "${env_dir}"
 
 # compile mujoco-py (bc it's done at runtime for whatever reason someone thought it was a good idea)
 python -c """import gym;import d4rl"""

@@ -3,43 +3,26 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .weight_sync_schemes import (
-    DistributedTransport,
-    DistributedWeightSyncScheme,
-    MPTransport,
-    MultiProcessWeightSyncScheme,
-    NoWeightSyncScheme,
-    RayActorTransport,
-    RayModuleTransformReceiver,
-    RayModuleTransformScheme,
-    RayModuleTransformSender,
-    RayTransport,
-    RayWeightSyncScheme,
-    RPCTransport,
-    RPCWeightSyncScheme,
-    SharedMemTransport,
-    SharedMemWeightSyncScheme,
-    TransportBackend,
-    WeightReceiver,
-    WeightSender,
-    WeightStrategy,
-    WeightSyncScheme,
-)
+from ._distributed import DistributedTransport, DistributedWeightSyncScheme
+from ._mp import MPTransport, MultiProcessWeightSyncScheme
+from ._noupdate import NoWeightSyncScheme
+from ._ray import RayModuleTransformScheme, RayTransport, RayWeightSyncScheme
+from ._rpc import RPCTransport, RPCWeightSyncScheme
+from ._shared import SharedMemTransport, SharedMemWeightSyncScheme
+from .weight_sync_schemes import TransportBackend, WeightStrategy, WeightSyncScheme
 
 __all__ = [
+    # Base classes
     "TransportBackend",
+    "WeightStrategy",
+    "WeightSyncScheme",
+    # Transports
     "MPTransport",
     "SharedMemTransport",
     "RayTransport",
-    "RayActorTransport",
     "RPCTransport",
     "DistributedTransport",
-    "WeightStrategy",
-    "WeightSender",
-    "WeightReceiver",
-    "RayModuleTransformSender",
-    "RayModuleTransformReceiver",
-    "WeightSyncScheme",
+    # Schemes
     "MultiProcessWeightSyncScheme",
     "SharedMemWeightSyncScheme",
     "NoWeightSyncScheme",

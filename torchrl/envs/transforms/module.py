@@ -6,16 +6,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import nullcontext
-from typing import overload
+from typing import overload, TYPE_CHECKING
 
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
 from torchrl.envs.transforms.transforms import Transform
 
+if TYPE_CHECKING:
+    from torchrl.weight_update import WeightSyncScheme
 
 __all__ = ["ModuleTransform", "RayModuleTransform"]
 
@@ -25,7 +28,45 @@ class RayModuleTransform(RayTransform):
 
     This transform creates a Ray actor that wraps a ModuleTransform,
     allowing module execution in a separate Ray worker process.
+
+    Args:
+        weight_sync_scheme: Optional weight synchronization scheme for updating
+            the module's weights from a parent collector. When provided, the scheme
+            is initialized on the receiver side (the Ray actor) and can receive
+            weight updates via torch.distributed.
+        **kwargs: Additional arguments passed to RayTransform and ModuleTransform.
+
+    Example:
+        >>> from torchrl.weight_update import RayModuleTransformScheme
+        >>> scheme = RayModuleTransformScheme()
+        >>> transform = RayModuleTransform(module=my_module, weight_sync_scheme=scheme)
+        >>> # The scheme can then be registered with a collector for weight updates
     """
+
+    def __init__(self, *, weight_sync_scheme=None, **kwargs):
+        self._weight_sync_scheme = weight_sync_scheme
+        super().__init__(**kwargs)
+
+        # After actor is created, initialize the scheme on the receiver side
+        if weight_sync_scheme is not None:
+            # Store transform reference in the scheme for sender initialization
+            weight_sync_scheme._set_transform(self)
+
+            weight_sync_scheme.init_on_sender()
+
+            # Initialize receiver in the actor
+            torchrl_logger.debug(
+                "Setting up weight sync scheme on sender -- sender will do the remote call"
+            )
+            weight_sync_scheme.connect()
+
+    @property
+    def in_keys(self):
+        return self._ray.get(self._actor._getattr.remote("in_keys"))
+
+    @property
+    def out_keys(self):
+        return self._ray.get(self._actor._getattr.remote("out_keys"))
 
     def _create_actor(self, **kwargs):
         import ray
@@ -239,6 +280,25 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
 
     def _update_weights_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
         self.module.load_state_dict(state_dict)
+
+    def _init_weight_sync_scheme(self, scheme: WeightSyncScheme, model_id: str) -> None:
+        """Initialize weight sync scheme on the receiver side (called in Ray actor).
+
+        This method is called by RayModuleTransform after the actor is created
+        to set up the receiver side of the weight synchronization scheme.
+
+        Args:
+            scheme: The weight sync scheme instance (e.g., RayModuleTransformScheme).
+            model_id: Identifier for the model being synchronized.
+        """
+        torchrl_logger.debug(f"Initializing weight sync scheme for {model_id=}")
+        scheme.init_on_receiver(model_id=model_id, context=self)
+        torchrl_logger.debug(f"Setup weight sync scheme for {model_id=}")
+        scheme.connect()
+        self._weight_sync_scheme = scheme
+
+    def _receive_weights_scheme(self):
+        self._weight_sync_scheme.receive()
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if self.observation_spec_transform is not None:

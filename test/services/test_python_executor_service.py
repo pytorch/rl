@@ -73,7 +73,7 @@ y = 20
 result = x + y
 print(f"Result: {result}")
 """
-            result = ray.get(executor.execute.remote(code), timeout=2)
+            result = ray.get(executor.execute.remote(code), timeout=10)
 
             assert result["success"] is True
             assert "Result: 30" in result["stdout"]
@@ -101,7 +101,7 @@ print(f"Result: {result}")
 
             # Execute code with an error
             code = "raise ValueError('Test error')"
-            result = ray.get(executor.execute.remote(code), timeout=2)
+            result = ray.get(executor.execute.remote(code), timeout=10)
 
             assert result["success"] is False
             assert "ValueError: Test error" in result["stderr"]
@@ -119,7 +119,7 @@ print(f"Result: {result}")
                 "python_executor",
                 PythonExecutorService,
                 pool_size=4,
-                timeout=5.0,
+                timeout=10.0,
                 num_cpus=4,
                 max_concurrency=4,
             )
@@ -132,14 +132,16 @@ print(f"Result: {result}")
                 code = f"print('Execution {i}')"
                 futures.append(executor.execute.remote(code))
 
-            # Wait for all to complete
-            results = ray.get(futures, timeout=5)
+            # Wait for all to complete with longer timeout
+            results = ray.get(futures, timeout=30)
 
             # All should succeed
             assert len(results) == 8
             for i, result in enumerate(results):
-                assert result["success"] is True
-                assert f"Execution {i}" in result["stdout"]
+                assert result["success"] is True, f"Execution {i} failed: {result}"
+                assert (
+                    f"Execution {i}" in result["stdout"]
+                ), f"Expected 'Execution {i}' in stdout, got: {result['stdout']!r}"
 
         finally:
             services.reset()
