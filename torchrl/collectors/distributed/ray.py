@@ -550,26 +550,18 @@ class RayCollector(DataCollectorBase):
             self._weight_sync_schemes = weight_sync_schemes
             self._weight_senders = {}
 
-            # Set up weight senders now that remote collectors exist
+            # Set up weight senders using the new simplified API
             for model_id, scheme in self._weight_sync_schemes.items():
-                sender = scheme.create_sender()
-                sender._model_id = model_id
+                # Initialize the scheme on the sender (main process) side
+                # Pass remote collectors as the "workers" for Ray schemes
+                scheme.init_on_sender(
+                    model_id=model_id,
+                    remote_collectors=self.remote_collectors,
+                    source_model=self.policy if model_id == "policy" else None,
+                )
 
-                # Register each remote collector as a separate worker
-                # This follows the same pattern as multiprocess collectors
-                for worker_idx, remote_collector in enumerate(self.remote_collectors):
-                    # Create a transport for this specific collector
-                    # Pass the collector as context so the transport knows which one to talk to
-                    sender.register_worker(worker_idx, remote_collector)
-
-                # Set context and register model
-                if hasattr(sender, "set_context"):
-                    sender.set_context(self, model_id)
-
-                # Store reference to source model for automatic extraction
-                if model_id == "policy":
-                    sender._source_model = self.policy
-
+                # Get the configured sender from the scheme
+                sender = scheme.get_sender()
                 self._weight_senders[model_id] = sender
 
             self.weight_updater = None  # Don't use legacy system

@@ -617,7 +617,10 @@ def _pseudo_vmap(  # noqa: F811
 
 
 def _reduce(
-    tensor: torch.Tensor, reduction: str, mask: torch.Tensor | None = None
+    tensor: torch.Tensor,
+    reduction: str,
+    mask: torch.Tensor | None = None,
+    weights: torch.Tensor | None = None,
 ) -> float | torch.Tensor:
     """Reduces a tensor given the reduction method.
 
@@ -625,19 +628,56 @@ def _reduce(
         tensor (torch.Tensor): The tensor to reduce.
         reduction (str): The reduction method.
         mask (torch.Tensor, optional): A mask to apply to the tensor before reducing.
+        weights (torch.Tensor, optional): Importance sampling weights for weighted reduction.
+            When provided with reduction="mean", computes: (tensor * weights).sum() / weights.sum()
+            When provided with reduction="sum", computes: (tensor * weights).sum()
+            This is used for proper bias correction with prioritized replay buffers.
 
     Returns:
         float | torch.Tensor: The reduced tensor.
     """
     if reduction == "none":
-        result = tensor
+        if weights is None:
+            result = tensor
+            if mask is not None:
+                result = result[mask]
+        elif mask is not None:
+            masked_weight = weights[mask]
+            masked_tensor = tensor[mask]
+            result = masked_tensor * masked_weight
+        else:
+            result = tensor * weights
     elif reduction == "mean":
-        if mask is not None:
+        if weights is not None:
+            # Weighted average: (tensor * weights).sum() / weights.sum()
+            if mask is not None:
+                masked_weight = weights[mask]
+                masked_tensor = tensor[mask]
+                result = (masked_tensor * masked_weight).sum() / masked_weight.sum()
+            else:
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                result = (tensor * weights).sum() / weights.sum()
+        elif mask is not None:
             result = tensor[mask].mean()
         else:
             result = tensor.mean()
     elif reduction == "sum":
-        if mask is not None:
+        if weights is not None:
+            # Weighted sum: (tensor * weights).sum()
+            if mask is not None:
+                masked_weight = weights[mask]
+                masked_tensor = tensor[mask]
+                result = (masked_tensor * masked_weight).sum()
+            else:
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                result = (tensor * weights).sum()
+        elif mask is not None:
             result = tensor[mask].sum()
         else:
             result = tensor.sum()

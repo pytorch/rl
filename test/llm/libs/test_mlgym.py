@@ -16,6 +16,8 @@ from torchrl.envs import SerialEnv
 from torchrl.envs.llm import make_mlgym
 from torchrl.modules.llm import TransformersWrapper
 
+pytest.importorskip("mlgym")
+
 
 class TestMLGYM:
     def test_mlgym_specs(self):

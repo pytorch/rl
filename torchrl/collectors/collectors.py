@@ -47,7 +47,7 @@ from torchrl._utils import (
     compile_with_warmup,
     logger as torchrl_logger,
     prod,
-    RL_WARNINGS,
+    rl_warnings,
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
@@ -66,6 +66,7 @@ from torchrl.envs.utils import (
     RandomPolicy,
     set_exploration_type,
 )
+from torchrl.weight_update import SharedMemWeightSyncScheme
 from torchrl.weight_update.weight_sync_schemes import (
     _resolve_model,
     MultiProcessWeightSyncScheme,
@@ -295,6 +296,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def _extract_weights_if_needed(self, weights: Any, model_id: str) -> Any:
         """Extract weights from a model if needed.
 
+        For the new weight sync scheme system, weight preparation is handled
+        by the scheme's prepare_weights() method. This method now only handles
+        legacy weight updater cases.
+
         Args:
             weights: Either already-extracted weights or a model to extract from.
             model_id: The model identifier for resolving string paths.
@@ -302,25 +307,24 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         Returns:
             Extracted weights in the appropriate format.
         """
-        scheme = (
-            self._weight_sync_schemes.get(model_id)
-            if self._weight_sync_schemes
-            else None
-        )
+        # New weight sync schemes handle preparation themselves
+        if self._weight_sync_schemes:
+            # Just pass through - WeightSender will call scheme.prepare_weights()
+            return weights
 
-        # If no weights were provided and a sync scheme exists, extract the latest
-        # weights from the current model using the scheme strategy (state_dict or tensordict).
-        # This ensures we don't return stale cached weights.
-        if weights is None and scheme is not None:
-            from torchrl.weight_update.weight_sync_schemes import (
-                _resolve_model,
-                WeightStrategy,
-            )
+        # Legacy weight updater path
+        return self._legacy_extract_weights(weights, model_id)
 
-            strategy = WeightStrategy(extract_as=scheme.strategy)
-            model = _resolve_model(self, model_id)
-            return strategy.extract_weights(model)
+    def _legacy_extract_weights(self, weights: Any, model_id: str) -> Any:
+        """Legacy weight extraction for old weight updater system.
 
+        Args:
+            weights: Either already-extracted weights or a model to extract from.
+            model_id: The model identifier.
+
+        Returns:
+            Extracted weights.
+        """
         if weights is None:
             if model_id == "policy" and hasattr(self, "policy_weights"):
                 return self.policy_weights
@@ -333,23 +337,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 return self._policy_weights_dict.get(policy_device)
             return None
 
-        if scheme is None:
-            return weights
+        return weights
 
-        from torchrl.weight_update.weight_sync_schemes import (
-            _resolve_model,
-            WeightStrategy,
-        )
-
-        strategy = WeightStrategy(extract_as=scheme.strategy)
-
-        if isinstance(weights, nn.Module):
-            return strategy.extract_weights(weights)
-        elif isinstance(weights, str):
-            model = _resolve_model(self, weights)
-            return strategy.extract_weights(model)
-        else:
-            return weights
+    @property
+    def _legacy_weight_updater(self) -> bool:
+        return self._weight_updater is not None
 
     def update_policy_weights_(
         self,
@@ -393,6 +385,50 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
+        if self._legacy_weight_updater:
+            return self._legacy_weight_update_impl(
+                policy_or_weights=policy_or_weights,
+                worker_ids=worker_ids,
+                model_id=model_id,
+                weights_dict=weights_dict,
+                **kwargs,
+            )
+        else:
+            return self._weight_update_impl(
+                policy_or_weights=policy_or_weights,
+                worker_ids=worker_ids,
+                model_id=model_id,
+                weights_dict=weights_dict,
+                **kwargs,
+            )
+
+    def _legacy_weight_update_impl(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
+        if weights_dict is not None:
+            raise ValueError("weights_dict is not supported with legacy weight updater")
+        if model_id is not None:
+            raise ValueError("model_id is not supported with legacy weight updater")
+        # Fall back to old weight updater system
+        self.weight_updater(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+        )
+
+    def _weight_update_impl(
+        self,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        model_id: str | None = None,
+        weights_dict: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
         if "policy_weights" in kwargs:
             warnings.warn(
                 "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
@@ -408,90 +444,77 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 "Cannot specify both 'weights_dict' and 'policy_or_weights'"
             )
 
+        if policy_or_weights is not None:
+            weights_dict = {"policy": policy_or_weights}
+
         # Priority: new weight sync schemes > old weight updater system
         if self._weight_senders:
-            if weights_dict is not None:
-                for target_model_id, weights in weights_dict.items():
-                    if target_model_id not in self._weight_senders:
-                        raise KeyError(
-                            f"Model '{target_model_id}' not found in registered weight senders. "
-                            f"Available models: {list(self._weight_senders.keys())}"
-                        )
-                    processed_weights = self._extract_weights_if_needed(
-                        weights, target_model_id
+            if model_id is not None:
+                # Compose weight_dict
+                weights_dict = {model_id: policy_or_weights}
+            if weights_dict is None:
+                if "policy" in self._weight_senders:
+                    weights_dict = {"policy": policy_or_weights}
+                elif len(self._weight_senders) == 1:
+                    single_model_id = next(iter(self._weight_senders.keys()))
+                    weights_dict = {single_model_id: policy_or_weights}
+                else:
+                    raise ValueError(
+                        "Cannot determine the model to update. Please provide a weights_dict."
                     )
-                    self._weight_senders[target_model_id].update_weights(
-                        processed_weights
-                    )
-            elif model_id is not None:
-                if model_id not in self._weight_senders:
+            for target_model_id, weights in weights_dict.items():
+                if target_model_id not in self._weight_senders:
                     raise KeyError(
-                        f"Model '{model_id}' not found in registered weight senders. "
+                        f"Model '{target_model_id}' not found in registered weight senders. "
                         f"Available models: {list(self._weight_senders.keys())}"
                     )
                 processed_weights = self._extract_weights_if_needed(
-                    policy_or_weights, model_id
+                    weights, target_model_id
                 )
-                self._weight_senders[model_id].update_weights(processed_weights)
-            else:
-                if "policy" in self._weight_senders:
-                    processed_weights = self._extract_weights_if_needed(
-                        policy_or_weights, "policy"
-                    )
-                    self._weight_senders["policy"].update_weights(processed_weights)
-                elif len(self._weight_senders) == 1:
-                    single_model_id = next(iter(self._weight_senders.keys()))
-                    single_sender = self._weight_senders[single_model_id]
-                    processed_weights = self._extract_weights_if_needed(
-                        policy_or_weights, single_model_id
-                    )
-                    single_sender.update_weights(processed_weights)
-                else:
-                    for target_model_id, sender in self._weight_senders.items():
-                        processed_weights = self._extract_weights_if_needed(
-                            policy_or_weights, target_model_id
-                        )
-                        sender.update_weights(processed_weights)
-
+                # Use new send() API with worker_ids support
+                self._weight_senders[target_model_id].send(
+                    weights=processed_weights, worker_ids=worker_ids
+                )
         elif self._weight_updater is not None:
-            # Fall back to old weight updater system
-            self.weight_updater(
-                policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
-            )
+            # unreachable
+            raise RuntimeError
         else:
-            # No weight updater configured
-            # For single-process collectors, apply weights locally if explicitly provided
-            if policy_or_weights is not None:
-                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+            return self.receive_weights(policy_or_weights)
 
-                # Use WeightStrategy to apply weights properly
-                strategy = WeightStrategy(extract_as="tensordict")
+    def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
+        # No weight updater configured
+        # For single-process collectors, apply weights locally if explicitly provided
+        if policy_or_weights is not None:
+            from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
-                # Extract weights if needed
-                if isinstance(policy_or_weights, nn.Module):
-                    weights = strategy.extract_weights(policy_or_weights)
-                else:
-                    weights = policy_or_weights
+            # Use WeightStrategy to apply weights properly
+            strategy = WeightStrategy(extract_as="tensordict")
 
-                # Apply to local policy
-                if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
-                    strategy.apply_weights(self.policy, weights)
-            elif (
-                hasattr(self, "_original_policy")
-                and isinstance(self._original_policy, nn.Module)
-                and hasattr(self, "policy")
-                and isinstance(self.policy, nn.Module)
-            ):
-                # If no weights were provided, mirror weights from the original (trainer) policy
-                from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+            # Extract weights if needed
+            if isinstance(policy_or_weights, nn.Module):
+                weights = strategy.extract_weights(policy_or_weights)
+            else:
+                weights = policy_or_weights
 
-                strategy = WeightStrategy(extract_as="tensordict")
-                weights = strategy.extract_weights(self._original_policy)
-                # Cast weights to the policy device before applying
-                if self.policy_device is not None:
-                    weights = weights.to(self.policy_device)
+            # Apply to local policy
+            if hasattr(self, "policy") and isinstance(self.policy, nn.Module):
                 strategy.apply_weights(self.policy, weights)
-            # Otherwise, no action needed - policy is local and changes are immediately visible
+        elif (
+            hasattr(self, "_original_policy")
+            and isinstance(self._original_policy, nn.Module)
+            and hasattr(self, "policy")
+            and isinstance(self.policy, nn.Module)
+        ):
+            # If no weights were provided, mirror weights from the original (trainer) policy
+            from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+            strategy = WeightStrategy(extract_as="tensordict")
+            weights = strategy.extract_weights(self._original_policy)
+            # Cast weights to the policy device before applying
+            if self.policy_device is not None:
+                weights = weights.to(self.policy_device)
+            strategy.apply_weights(self.policy, weights)
+        # Otherwise, no action needed - policy is local and changes are immediately visible
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -513,7 +536,12 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return None
 
     @abc.abstractmethod
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -838,11 +866,121 @@ class SyncDataCollector(DataCollectorBase):
         track_policy_version: bool = False,
         **kwargs,
     ):
+        self.closed = True
+
+        # Initialize environment
+        env = self._init_env(create_env_fn, create_env_kwargs)
+
+        # Initialize policy
+        policy = self._init_policy(policy, policy_factory, env, trust_policy)
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+
+        # Handle trajectory pool and validate kwargs
+        self._traj_pool_val = kwargs.pop("traj_pool", None)
+        if kwargs:
+            raise TypeError(
+                f"Keys {list(kwargs.keys())} are unknown to {type(self).__name__}."
+            )
+
+        # Set up devices and synchronization
+        self._setup_devices(
+            device=device,
+            storing_device=storing_device,
+            policy_device=policy_device,
+            env_device=env_device,
+            no_cuda_sync=no_cuda_sync,
+        )
+
+        self.env: EnvBase = env
+        del env
+
+        # Set up policy version tracking
+        self._setup_policy_version_tracking(track_policy_version)
+
+        # Set up replay buffer
+        self._setup_replay_buffer(
+            replay_buffer=replay_buffer,
+            extend_buffer=extend_buffer,
+            local_init_rb=local_init_rb,
+            postproc=postproc,
+            split_trajs=split_trajs,
+            return_same_td=return_same_td,
+            use_buffers=use_buffers,
+        )
+
+        self.closed = False
+
+        # Validate reset_when_done
+        if not reset_when_done:
+            raise ValueError("reset_when_done is deprecated.")
+        self.reset_when_done = reset_when_done
+        self.n_env = self.env.batch_size.numel()
+
+        # Register collector with policy and env
+        if hasattr(policy, "register_collector"):
+            policy.register_collector(self)
+        if hasattr(self.env, "register_collector"):
+            self.env.register_collector(self)
+
+        # Set up policy and weights
+        self._setup_policy_and_weights(policy)
+
+        # Apply environment device
+        self._apply_env_device()
+
+        # Set up max frames per trajectory
+        self._setup_max_frames_per_traj(max_frames_per_traj)
+
+        # Validate and set total frames
+        self.reset_at_each_iter = reset_at_each_iter
+        self._setup_total_frames(total_frames, frames_per_batch)
+
+        # Set up init random frames
+        self._setup_init_random_frames(init_random_frames, frames_per_batch)
+
+        # Set up postproc
+        self._setup_postproc(postproc)
+
+        # Calculate frames per batch
+        self._setup_frames_per_batch(frames_per_batch)
+
+        # Set exploration and other options
+        self.exploration_type = (
+            exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
+        )
+        self.return_same_td = return_same_td
+        self.set_truncated = set_truncated
+
+        # Create shuttle and rollout buffers
+        self._make_shuttle()
+        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
+        self._set_truncated_keys()
+
+        # Set split trajectories option
+        if split_trajs is None:
+            split_trajs = False
+        self.split_trajs = split_trajs
+        self._exclude_private_keys = True
+
+        # Set up interruptor and frame tracking
+        self.interruptor = interruptor
+        self._frames = 0
+        self._iter = -1
+
+        # Set up weight synchronization
+        self._setup_weight_sync(weight_updater, weight_sync_schemes)
+
+    def _init_env(
+        self,
+        create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],
+        create_env_kwargs: dict[str, Any] | None,
+    ) -> EnvBase:
+        """Initialize and configure the environment."""
         from torchrl.envs.batched_envs import BatchedEnvBase
 
-        self.closed = True
         if create_env_kwargs is None:
             create_env_kwargs = {}
+
         if not isinstance(create_env_fn, EnvBase):
             env = create_env_fn(**create_env_kwargs)
         else:
@@ -854,7 +992,16 @@ class SyncDataCollector(DataCollectorBase):
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
+        return env
 
+    def _init_policy(
+        self,
+        policy: TensorDictModule | Callable | None,
+        policy_factory: Callable[[], Callable] | None,
+        env: EnvBase,
+        trust_policy: bool | None,
+    ) -> TensorDictModule | Callable:
+        """Initialize and configure the policy."""
         if policy is None:
             if policy_factory is not None:
                 policy = policy_factory()
@@ -862,33 +1009,26 @@ class SyncDataCollector(DataCollectorBase):
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
-        # If the underlying policy has a state_dict, we keep a reference to the policy and
-        # do all policy weight saving/loading through it
+
+        # If the underlying policy has a state_dict, keep a reference to it
         if hasattr(policy, "state_dict"):
             self._policy_w_state_dict = policy
 
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
-        self._read_compile_kwargs(compile_policy, cudagraph_policy)
 
-        ##########################
-        # Trajectory pool
-        self._traj_pool_val = kwargs.pop("traj_pool", None)
-        if kwargs:
-            raise TypeError(
-                f"Keys {list(kwargs.keys())} are unknown to {type(self).__name__}."
-            )
+        return policy
 
-        ##########################
-        # Setting devices:
-        # The rule is the following:
-        # - If no device is passed, all devices are assumed to work OOB.
-        #   The tensordict used for output is not on any device (ie, actions and observations
-        #   can be on a different device).
-        # - If the ``device`` is passed, it is used for all devices (storing, env and policy)
-        #   unless overridden by another kwarg.
-        # - The rest of the kwargs control the respective device.
+    def _setup_devices(
+        self,
+        device: DEVICE_TYPING | None,
+        storing_device: DEVICE_TYPING | None,
+        policy_device: DEVICE_TYPING | None,
+        env_device: DEVICE_TYPING | None,
+        no_cuda_sync: bool,
+    ) -> None:
+        """Set up devices and synchronization functions."""
         storing_device, policy_device, env_device = self._get_devices(
             storing_device=storing_device,
             policy_device=policy_device,
@@ -897,65 +1037,39 @@ class SyncDataCollector(DataCollectorBase):
         )
 
         self.storing_device = storing_device
-        if self.storing_device is not None and self.storing_device.type != "cuda":
-            # Cuda handles sync
-            if torch.cuda.is_available():
-                self._sync_storage = torch.cuda.synchronize
-            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
-                # Will break for older PT versions which don't have torch.mps
-                self._sync_storage = torch.mps.synchronize
-            elif hasattr(torch, "npu") and torch.npu.is_available():
-                self._sync_storage = torch.npu.synchronize
-            elif self.storing_device.type == "cpu":
-                self._sync_storage = _do_nothing
-            else:
-                raise RuntimeError("Non supported device")
-        else:
-            self._sync_storage = _do_nothing
+        self._sync_storage = self._get_sync_fn(storing_device)
 
         self.env_device = env_device
-        if self.env_device is not None and self.env_device.type != "cuda":
-            # Cuda handles sync
-            if torch.cuda.is_available():
-                self._sync_env = torch.cuda.synchronize
-            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
-                self._sync_env = torch.mps.synchronize
-            elif hasattr(torch, "npu") and torch.npu.is_available():
-                self._sync_env = torch.npu.synchronize
-            elif self.env_device.type == "cpu":
-                self._sync_env = _do_nothing
-            else:
-                raise RuntimeError("Non supported device")
-        else:
-            self._sync_env = _do_nothing
+        self._sync_env = self._get_sync_fn(env_device)
+
         self.policy_device = policy_device
-        if self.policy_device is not None and self.policy_device.type != "cuda":
-            # Cuda handles sync
-            if torch.cuda.is_available():
-                self._sync_policy = torch.cuda.synchronize
-            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
-                self._sync_policy = torch.mps.synchronize
-            elif hasattr(torch, "npu") and torch.npu.is_available():
-                self._sync_policy = torch.npu.synchronize
-            elif self.policy_device.type == "cpu":
-                self._sync_policy = _do_nothing
-            else:
-                raise RuntimeError("Non supported device")
-        else:
-            self._sync_policy = _do_nothing
+        self._sync_policy = self._get_sync_fn(policy_device)
+
         self.device = device
         self.no_cuda_sync = no_cuda_sync
-        # Check if we need to cast things from device to device
-        # If the policy has a None device and the env too, no need to cast (we don't know
-        # and assume the user knows what she's doing).
-        # If the devices match we're happy too.
-        # Only if the values differ we need to cast
         self._cast_to_policy_device = self.policy_device != self.env_device
 
-        self.env: EnvBase = env
-        del env
+    def _get_sync_fn(self, device: torch.device | None) -> Callable:
+        """Get the appropriate synchronization function for a device."""
+        if device is not None and device.type != "cuda":
+            # Cuda handles sync
+            if torch.cuda.is_available():
+                return torch.cuda.synchronize
+            elif torch.backends.mps.is_available() and hasattr(torch, "mps"):
+                return torch.mps.synchronize
+            elif hasattr(torch, "npu") and torch.npu.is_available():
+                return torch.npu.synchronize
+            elif device.type == "cpu":
+                return _do_nothing
+            else:
+                raise RuntimeError("Non supported device")
+        else:
+            return _do_nothing
 
-        # Policy version tracking setup
+    def _setup_policy_version_tracking(
+        self, track_policy_version: bool | PolicyVersion
+    ) -> None:
+        """Set up policy version tracking if requested."""
         self.policy_version_tracker = track_policy_version
         if isinstance(track_policy_version, bool) and track_policy_version:
             from torchrl.envs.batched_envs import BatchedEnvBase
@@ -967,19 +1081,29 @@ class SyncDataCollector(DataCollectorBase):
                 )
             self.policy_version_tracker = PolicyVersion()
             self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
-        elif hasattr(
-            track_policy_version, "increment_version"
-        ):  # Check if it's a PolicyVersion instance
+        elif hasattr(track_policy_version, "increment_version"):
             self.policy_version_tracker = track_policy_version
             self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
         else:
             self.policy_version_tracker = None
+
+    def _setup_replay_buffer(
+        self,
+        replay_buffer: ReplayBuffer | None,
+        extend_buffer: bool,
+        local_init_rb: bool | None,
+        postproc: Callable | None,
+        split_trajs: bool | None,
+        return_same_td: bool,
+        use_buffers: bool | None,
+    ) -> None:
+        """Set up replay buffer configuration and validate compatibility."""
         self.replay_buffer = replay_buffer
         self.extend_buffer = extend_buffer
 
-        # Handle local_init_rb deprecation for SyncDataCollector
+        # Handle local_init_rb deprecation
         if local_init_rb is None:
-            local_init_rb = False  # Default for SyncDataCollector
+            local_init_rb = False
             if replay_buffer is not None and not local_init_rb:
                 warnings.warn(
                     "local_init_rb=False is deprecated and will be removed in v0.12. "
@@ -988,6 +1112,7 @@ class SyncDataCollector(DataCollectorBase):
                 )
         self.local_init_rb = local_init_rb
 
+        # Validate replay buffer compatibility
         if self.replay_buffer is not None and not self._ignore_rb:
             if postproc is not None and not self.extend_buffer:
                 raise TypeError(
@@ -1003,27 +1128,15 @@ class SyncDataCollector(DataCollectorBase):
                 )
             if use_buffers:
                 raise TypeError("replay_buffer is exclusive with use_buffers.")
+
         if use_buffers is None:
             use_buffers = not self.env._has_dynamic_specs and self.replay_buffer is None
         self._use_buffers = use_buffers
-        self.replay_buffer = replay_buffer
 
-        self.closed = False
-
-        if not reset_when_done:
-            raise ValueError("reset_when_done is deprecated.")
-        self.reset_when_done = reset_when_done
-        self.n_env = self.env.batch_size.numel()
-
-        if hasattr(policy, "register_collector"):
-            policy.register_collector(self)
-        if hasattr(self.env, "register_collector"):
-            self.env.register_collector(self)
-
+    def _setup_policy_and_weights(self, policy: TensorDictModule | Callable) -> None:
+        """Set up policy, wrapped policy, and extract weights."""
         self._original_policy = policy
-        (policy, self.get_weights_fn,) = self._get_policy_and_device(
-            policy=policy,
-        )
+        policy, self.get_weights_fn = self._get_policy_and_device(policy=policy)
 
         if not self.trust_policy:
             self.policy = policy
@@ -1042,6 +1155,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy = self._wrapped_policy = policy
 
+        # Extract policy weights
         if isinstance(self._wrapped_policy, nn.Module):
             self.policy_weights = TensorDict.from_module(
                 self._wrapped_policy, as_module=True
@@ -1049,6 +1163,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy_weights = TensorDict()
 
+        # Apply compilation/cudagraph
         if self.compiled_policy:
             self._wrapped_policy = compile_with_warmup(
                 self._wrapped_policy, **self.compiled_policy_kwargs
@@ -1062,24 +1177,26 @@ class SyncDataCollector(DataCollectorBase):
                 **self.cudagraphed_policy_kwargs,
             )
 
+    def _apply_env_device(self) -> None:
+        """Apply device to environment if specified."""
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
         elif self.env.device is not None:
-            # we did not receive an env device, we use the device of the env
+            # Use the device of the env if none was provided
             self.env_device = self.env.device
 
-        # If the storing device is not the same as the policy device, we have
-        # no guarantee that the "next" entry from the policy will be on the
-        # same device as the collector metadata.
+        # Check if we need to cast to env device
         self._cast_to_env_device = self._cast_to_policy_device or (
             self.env.device != self.storing_device
         )
 
+    def _setup_max_frames_per_traj(self, max_frames_per_traj: int | None) -> None:
+        """Set up maximum frames per trajectory and add StepCounter if needed."""
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
         if self.max_frames_per_traj is not None and self.max_frames_per_traj > 0:
-            # let's check that there is no StepCounter yet
+            # Check that there is no StepCounter yet
             for key in self.env.output_spec.keys(True, True):
                 if isinstance(key, str):
                     key = (key,)
@@ -1095,11 +1212,13 @@ class SyncDataCollector(DataCollectorBase):
                 self.env, StepCounter(max_steps=self.max_frames_per_traj)
             )
 
+    def _setup_total_frames(self, total_frames: int, frames_per_batch: int) -> None:
+        """Validate and set total frames."""
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
             remainder = total_frames % frames_per_batch
-            if remainder != 0 and RL_WARNINGS:
+            if remainder != 0 and rl_warnings():
                 warnings.warn(
                     f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
                     f"This means {frames_per_batch - remainder} additional frames will be collected."
@@ -1108,14 +1227,18 @@ class SyncDataCollector(DataCollectorBase):
         self.total_frames = (
             int(total_frames) if total_frames != float("inf") else total_frames
         )
-        self.reset_at_each_iter = reset_at_each_iter
+
+    def _setup_init_random_frames(
+        self, init_random_frames: int | None, frames_per_batch: int
+    ) -> None:
+        """Set up initial random frames."""
         self.init_random_frames = (
             int(init_random_frames) if init_random_frames not in (None, -1) else 0
         )
         if (
             init_random_frames not in (-1, None, 0)
             and init_random_frames % frames_per_batch != 0
-            and RL_WARNINGS
+            and rl_warnings()
         ):
             warnings.warn(
                 f"init_random_frames ({init_random_frames}) is not exactly a multiple of frames_per_batch ({frames_per_batch}), "
@@ -1124,6 +1247,8 @@ class SyncDataCollector(DataCollectorBase):
                 "To silence this message, set the environment variable RL_WARNINGS to False."
             )
 
+    def _setup_postproc(self, postproc: Callable | None) -> None:
+        """Set up post-processing transform."""
         self.postproc = postproc
         if (
             self.postproc is not None
@@ -1134,7 +1259,9 @@ class SyncDataCollector(DataCollectorBase):
             if postproc is not self.postproc and postproc is not None:
                 self.postproc = postproc
 
-        if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
+    def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
+        """Calculate and validate frames per batch."""
+        if frames_per_batch % self.n_env != 0 and rl_warnings():
             warnings.warn(
                 f"frames_per_batch ({frames_per_batch}) is not exactly divisible by the number of batched environments ({self.n_env}), "
                 f" this results in more frames_per_batch per iteration that requested"
@@ -1143,37 +1270,20 @@ class SyncDataCollector(DataCollectorBase):
             )
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.requested_frames_per_batch = self.frames_per_batch * self.n_env
-        self.exploration_type = (
-            exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
-        )
-        self.return_same_td = return_same_td
-        self.set_truncated = set_truncated
 
-        self._make_shuttle()
-        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
-        self._set_truncated_keys()
-
-        if split_trajs is None:
-            split_trajs = False
-        self.split_trajs = split_trajs
-        self._exclude_private_keys = True
-
-        self.interruptor = interruptor
-        self._frames = 0
-        self._iter = -1
-
-        # Set up weight synchronization - prefer new schemes over legacy updater
-        # For single-process SyncDataCollector, no weight sync is needed (policy is local)
-        # Weight sync schemes are only needed for multi-process/distributed collectors
+    def _setup_weight_sync(
+        self,
+        weight_updater: WeightUpdaterBase | Callable | None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up weight synchronization system."""
         if weight_sync_schemes is not None:
             # Use new simplified weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
             self._weight_senders = {}
-
             # For single-process collectors, we don't need senders/receivers
             # The policy is local and changes are immediately visible
             # Senders will be set up in multiprocess collectors during _run_processes
-
             self.weight_updater = None  # Don't use legacy system
         elif weight_updater is not None:
             # Use legacy weight updater system if explicitly provided
@@ -1184,7 +1294,6 @@ class SyncDataCollector(DataCollectorBase):
                     raise TypeError(
                         f"weight_updater must be a subclass of WeightUpdaterBase. Got {type(weight_updater)} instead."
                     )
-
             warnings.warn(
                 "Using WeightUpdaterBase is deprecated. Please use weight_sync_schemes instead. "
                 "This will be removed in a future version.",
@@ -1196,7 +1305,6 @@ class SyncDataCollector(DataCollectorBase):
             self._weight_senders = {}
         else:
             # No weight sync needed for single-process collectors
-            # The policy is local and changes are immediately visible
             self.weight_updater = None
             self._weight_sync_schemes = None
             self._weight_senders = {}
@@ -1941,23 +2049,35 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._shuttle["collector"] = collector_metadata
 
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         """Shuts down all workers and/or closes the local environment.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
                 No effect for this class.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+            raise_on_error (bool, optional): Whether to raise an error if the shutdown fails. Defaults to `True`.
         """
-        if not self.closed:
-            self.closed = True
-            del self._shuttle
-            if self._use_buffers:
-                del self._final_rollout
-            if close_env and not self.env.is_closed:
-                self.env.close()
-            del self.env
-        return
+        try:
+            if not self.closed:
+                self.closed = True
+                del self._shuttle
+                if self._use_buffers:
+                    del self._final_rollout
+                if close_env and not self.env.is_closed:
+                    self.env.close(raise_if_closed=raise_on_error)
+                del self.env
+            return
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     def __del__(self):
         try:
@@ -2025,9 +2145,10 @@ class SyncDataCollector(DataCollectorBase):
         try:
             env_str = indent(f"env={self.env}", 4 * " ")
             policy_str = indent(f"policy={self._wrapped_policy}", 4 * " ")
-            td_out_str = indent(
-                f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
-            )
+            td_out_str = repr(getattr(self, "_final_rollout", None))
+            if len(td_out_str) > 50:
+                td_out_str = td_out_str[:50] + "..."
+            td_out_str = indent(f"td_out={td_out_str}", 4 * " ")
             string = (
                 f"{self.__class__.__name__}("
                 f"\n{env_str},"
@@ -2080,6 +2201,34 @@ class SyncDataCollector(DataCollectorBase):
         """Get an attribute from the replay buffer."""
         # send command to rb to return the attr
         return getattr(self.replay_buffer, attr)
+
+    def get_model(self, model_id: str):
+        """Get model instance by ID (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier (e.g., "policy", "value_net")
+
+        Returns:
+            The model instance
+
+        Raises:
+            ValueError: If model_id is not recognized
+        """
+        if model_id == "policy":
+            # Return the unwrapped policy instance for weight synchronization
+            # The unwrapped policy has the same parameter structure as what's
+            # extracted in the main process, avoiding key mismatches when
+            # the policy is auto-wrapped (e.g., WrappablePolicy -> TensorDictModule)
+            if hasattr(self, "policy") and self.policy is not None:
+                return self.policy
+            else:
+                raise ValueError(f"No policy found for model_id '{model_id}'")
+        else:
+            # Try to resolve via attribute access
+            if hasattr(self, model_id):
+                return getattr(self, model_id)
+            else:
+                raise ValueError(f"Unknown model_id: {model_id}")
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -2332,6 +2481,122 @@ class _MultiDataCollector(DataCollectorBase):
         track_policy_version: bool = False,
     ):
         self.closed = True
+
+        # Set up workers and environment functions
+        create_env_fn, total_frames_per_batch = self._setup_workers_and_env_fns(
+            create_env_fn, num_workers, frames_per_batch
+        )
+
+        # Set up basic configuration
+        self.set_truncated = set_truncated
+        self.num_sub_threads = num_sub_threads
+        self.num_threads = num_threads
+        self.create_env_fn = create_env_fn
+        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+
+        # Set up environment kwargs
+        self.create_env_kwargs = self._setup_env_kwargs(create_env_kwargs)
+
+        # Set up devices
+        storing_devices, policy_devices, env_devices = self._get_devices(
+            storing_device=storing_device,
+            env_device=env_device,
+            policy_device=policy_device,
+            device=device,
+        )
+        self.storing_device = storing_devices
+        self.policy_device = policy_devices
+        self.env_device = env_devices
+        self.collector_class = collector_class
+        del storing_device, env_device, policy_device, device
+        self.no_cuda_sync = no_cuda_sync
+
+        # Set up replay buffer
+        self._use_buffers = use_buffers
+        self.replay_buffer = replay_buffer
+        self._setup_multi_replay_buffer(
+            local_init_rb, replay_buffer, replay_buffer_chunk, extend_buffer
+        )
+
+        # Set up policy and weights
+        if trust_policy is None:
+            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
+        self.trust_policy = trust_policy
+
+        policy_factory = self._setup_policy_factory(policy_factory)
+
+        # Set up weight synchronization
+        if (
+            not any(policy_factory)
+            and not weight_sync_schemes
+            and weight_updater is None
+        ):
+            weight_sync_schemes = {"policy": SharedMemWeightSyncScheme()}
+
+        self._setup_multi_policy_and_weights(
+            policy, policy_factory, weight_updater, weight_sync_schemes
+        )
+
+        self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
+
+        # Set up policy version tracking
+        self._setup_multi_policy_version_tracking(track_policy_version)
+
+        # Store policy and policy_factory
+        self.policy = policy
+        self.policy_factory = policy_factory
+
+        # Set up fallback policy for weight extraction
+        self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
+
+        # Set up total frames and other parameters
+        self._setup_multi_total_frames(
+            total_frames, total_frames_per_batch, frames_per_batch
+        )
+        self.reset_at_each_iter = reset_at_each_iter
+        self.postprocs = postproc
+        self.max_frames_per_traj = (
+            int(max_frames_per_traj) if max_frames_per_traj is not None else 0
+        )
+
+        # Set up split trajectories
+        self.requested_frames_per_batch = total_frames_per_batch
+        self.reset_when_done = reset_when_done
+        self._setup_split_trajs(split_trajs, reset_when_done)
+
+        # Set up other parameters
+        self.init_random_frames = (
+            int(init_random_frames) if init_random_frames is not None else 0
+        )
+        self.update_at_each_batch = update_at_each_batch
+        self.exploration_type = exploration_type
+        self.frames_per_worker = np.inf
+
+        # Set up preemptive threshold
+        self._setup_preemptive_threshold(preemptive_threshold)
+
+        # Run worker processes
+        try:
+            self._run_processes()
+        except Exception as e:
+            self.shutdown(raise_on_error=False)
+            raise e
+
+        # Set up frame tracking and other options
+        self._exclude_private_keys = True
+        self._frames = 0
+        self._iter = -1
+
+        # Validate cat_results
+        self._validate_cat_results(cat_results)
+
+    def _setup_workers_and_env_fns(
+        self,
+        create_env_fn: Sequence[Callable] | Callable,
+        num_workers: int | None,
+        frames_per_batch: int | Sequence[int],
+    ) -> tuple[list[Callable], int]:
+        """Set up workers and environment functions."""
         if isinstance(create_env_fn, Sequence):
             self.num_workers = len(create_env_fn)
         else:
@@ -2354,11 +2619,12 @@ class _MultiDataCollector(DataCollectorBase):
             else frames_per_batch
         )
 
-        self.set_truncated = set_truncated
-        self.num_sub_threads = num_sub_threads
-        self.num_threads = num_threads
-        self.create_env_fn = create_env_fn
-        self._read_compile_kwargs(compile_policy, cudagraph_policy)
+        return create_env_fn, total_frames_per_batch
+
+    def _setup_env_kwargs(
+        self, create_env_kwargs: Sequence[dict] | dict | None
+    ) -> list[dict]:
+        """Set up environment kwargs for each worker."""
         if isinstance(create_env_kwargs, Mapping):
             create_env_kwargs = [create_env_kwargs] * self.num_workers
         elif create_env_kwargs is None:
@@ -2369,53 +2635,29 @@ class _MultiDataCollector(DataCollectorBase):
                 raise ValueError(
                     f"len(create_env_kwargs) must be equal to num_workers, got {len(create_env_kwargs)=} and {self.num_workers=}"
                 )
-        self.create_env_kwargs = create_env_kwargs
-        # Preparing devices:
-        # We want the user to be able to choose, for each worker, on which
-        # device will the policy live and which device will be used to store
-        # data. Those devices may or may not match.
-        # One caveat is that, if there is only one device for the policy, and
-        # if there are multiple workers, sending the same device and policy
-        # to be copied to each worker will result in multiple copies of the
-        # same policy on the same device.
-        # To go around this, we do the copies of the policy in the server
-        # (this object) to each possible device, and send to all the
-        # processes their copy of the policy.
+        return create_env_kwargs
 
-        storing_devices, policy_devices, env_devices = self._get_devices(
-            storing_device=storing_device,
-            env_device=env_device,
-            policy_device=policy_device,
-            device=device,
-        )
-
-        # to avoid confusion
-        self.storing_device = storing_devices
-        self.policy_device = policy_devices
-        self.env_device = env_devices
-        self.collector_class = collector_class
-
-        del storing_device, env_device, policy_device, device
-        self.no_cuda_sync = no_cuda_sync
-
-        self._use_buffers = use_buffers
-        self.replay_buffer = replay_buffer
-
+    def _setup_multi_replay_buffer(
+        self,
+        local_init_rb: bool | None,
+        replay_buffer: ReplayBuffer | None,
+        replay_buffer_chunk: bool | None,
+        extend_buffer: bool,
+    ) -> None:
+        """Set up replay buffer for multi-process collector."""
         # Handle local_init_rb deprecation
         if local_init_rb is None:
-            # v0.11: Default to False (current behavior), show deprecation warning
-            # v0.12: Default to True (new behavior)
-            local_init_rb = False  # Will become True in 0.12
+            local_init_rb = False
             if replay_buffer is not None and not local_init_rb:
                 warnings.warn(
                     "local_init_rb=False is deprecated and will be removed in v0.12. "
                     "The new storage-level initialization provides better performance.",
                     FutureWarning,
                 )
-
         self.local_init_rb = local_init_rb
 
         self._check_replay_buffer_init()
+
         if replay_buffer_chunk is not None:
             if extend_buffer is None:
                 replay_buffer_chunk = extend_buffer
@@ -2428,6 +2670,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "conflicting values for replay_buffer_chunk and extend_buffer."
                 )
         self.extend_buffer = extend_buffer
+
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -2436,21 +2679,32 @@ class _MultiDataCollector(DataCollectorBase):
             torchrl_logger.warning("Replay buffer is not shared. Sharing it.")
             replay_buffer.share()
 
-        self._policy_weights_dict = {}
-
-        if trust_policy is None:
-            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
-        self.trust_policy = trust_policy
-
+    def _setup_policy_factory(
+        self, policy_factory: Callable | list[Callable] | None
+    ) -> list[Callable | None]:
+        """Set up policy factory for each worker."""
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * self.num_workers
+        return policy_factory
+
+    def _setup_multi_policy_and_weights(
+        self,
+        policy: TensorDictModule | Callable | None,
+        policy_factory: list[Callable | None],
+        weight_updater: WeightUpdaterBase | Callable | None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up policy and extract weights for each device."""
+        self._policy_weights_dict = {}
+        self._fallback_policy = None  # Policy to use for weight extraction fallback
+
         if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
         elif not any(policy_factory):
             for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
-                (policy_new_device, get_weights_fn,) = self._get_policy_and_device(
+                policy_new_device, get_weights_fn = self._get_policy_and_device(
                     policy=policy,
                     policy_device=policy_device,
                     env_maker=env_maker,
@@ -2463,16 +2717,18 @@ class _MultiDataCollector(DataCollectorBase):
                     if isinstance(policy_new_device, nn.Module)
                     else TensorDict()
                 )
+                # For multi-process collectors, ensure weights are in shared memory
+                if policy_device and policy_device.type == "cpu":
+                    weights = weights.share_memory_()
                 self._policy_weights_dict[policy_device] = weights
+                # Store the first policy instance for fallback weight extraction
+                if self._fallback_policy is None:
+                    self._fallback_policy = policy_new_device
             self._get_weights_fn = get_weights_fn
             if weight_updater is None:
                 # For multiprocessed collectors, use MultiProcessWeightSyncScheme by default
                 if weight_sync_schemes is None:
                     weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
-                # Don't create legacy weight updater if we have schemes
-            else:
-                # Legacy weight updater was explicitly provided
-                pass
         elif weight_updater is None:
             warnings.warn(
                 "weight_updater is None, but policy_factory is provided. This means that the server will "
@@ -2483,7 +2739,12 @@ class _MultiDataCollector(DataCollectorBase):
                 "This will work whenever your inference and training policies are nn.Module instances with similar structures."
             )
 
-        # Set up weight synchronization - prefer new schemes over legacy updater
+    def _setup_multi_weight_sync(
+        self,
+        weight_updater: WeightUpdaterBase | Callable | None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up weight synchronization for multi-process collector."""
         if weight_sync_schemes is not None:
             # Use new simplified weight synchronization system
             self._weight_sync_schemes = weight_sync_schemes
@@ -2496,14 +2757,15 @@ class _MultiDataCollector(DataCollectorBase):
             self._weight_sync_schemes = None
             self._weight_senders = {}
 
-        # Policy version tracking setup
+    def _setup_multi_policy_version_tracking(
+        self, track_policy_version: bool | PolicyVersion
+    ) -> None:
+        """Set up policy version tracking for multi-process collector."""
         self.policy_version_tracker = track_policy_version
         if PolicyVersion is not None:
             if isinstance(track_policy_version, bool) and track_policy_version:
                 self.policy_version_tracker = PolicyVersion()
-            elif hasattr(
-                track_policy_version, "increment_version"
-            ):  # Check if it's a PolicyVersion instance
+            elif hasattr(track_policy_version, "increment_version"):
                 self.policy_version_tracker = track_policy_version
             else:
                 self.policy_version_tracker = None
@@ -2514,15 +2776,40 @@ class _MultiDataCollector(DataCollectorBase):
                 )
             self.policy_version_tracker = None
 
-        self.policy = policy
-        self.policy_factory = policy_factory
+    def _setup_fallback_policy(
+        self,
+        policy: TensorDictModule | Callable | None,
+        policy_factory: list[Callable | None],
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None,
+    ) -> None:
+        """Set up fallback policy for weight extraction when using policy_factory."""
+        # _fallback_policy is already set in _setup_multi_policy_and_weights if a policy was provided
+        # If policy_factory was used, create a policy instance to use as fallback
+        if policy is None and any(policy_factory) and weight_sync_schemes is not None:
+            if not hasattr(self, "_fallback_policy") or self._fallback_policy is None:
+                first_factory = (
+                    policy_factory[0]
+                    if isinstance(policy_factory, list)
+                    else policy_factory
+                )
+                if first_factory is not None:
+                    # Create a policy instance for weight extraction
+                    # This will be a reference to a policy with the same structure
+                    # For shared memory, modifications to any policy will be visible here
+                    self._fallback_policy = first_factory()
 
-        remainder = 0
+    def _setup_multi_total_frames(
+        self,
+        total_frames: int,
+        total_frames_per_batch: int,
+        frames_per_batch: int | Sequence[int],
+    ) -> None:
+        """Validate and set total frames for multi-process collector."""
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
             remainder = total_frames % total_frames_per_batch
-            if remainder != 0 and RL_WARNINGS:
+            if remainder != 0 and rl_warnings():
                 warnings.warn(
                     f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({total_frames_per_batch}). "
                     f"This means {total_frames_per_batch - remainder} additional frames will be collected. "
@@ -2531,27 +2818,21 @@ class _MultiDataCollector(DataCollectorBase):
         self.total_frames = (
             int(total_frames) if total_frames != float("inf") else total_frames
         )
-        self.reset_at_each_iter = reset_at_each_iter
-        self.postprocs = postproc
-        self.max_frames_per_traj = (
-            int(max_frames_per_traj) if max_frames_per_traj is not None else 0
-        )
 
-        self.requested_frames_per_batch = total_frames_per_batch
-        self.reset_when_done = reset_when_done
+    def _setup_split_trajs(
+        self, split_trajs: bool | None, reset_when_done: bool
+    ) -> None:
+        """Set up split trajectories option."""
         if split_trajs is None:
             split_trajs = False
-        elif not self.reset_when_done and split_trajs:
+        elif not reset_when_done and split_trajs:
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
             )
         self.split_trajs = split_trajs
-        self.init_random_frames = (
-            int(init_random_frames) if init_random_frames is not None else 0
-        )
-        self.update_at_each_batch = update_at_each_batch
-        self.exploration_type = exploration_type
-        self.frames_per_worker = np.inf
+
+    def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
+        """Set up preemptive threshold for early stopping."""
         if preemptive_threshold is not None:
             if _is_osx:
                 raise NotImplementedError(
@@ -2564,10 +2845,9 @@ class _MultiDataCollector(DataCollectorBase):
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None
-        self._run_processes()
-        self._exclude_private_keys = True
-        self._frames = 0
-        self._iter = -1
+
+    def _validate_cat_results(self, cat_results: str | int | None) -> None:
+        """Validate cat_results parameter."""
         if cat_results is not None and (
             not isinstance(cat_results, (int, str))
             or (isinstance(cat_results, str) and cat_results != "stack")
@@ -2690,15 +2970,7 @@ class _MultiDataCollector(DataCollectorBase):
                 1, torch.get_num_threads() - total_workers
             )  # 1 more thread for this proc
 
-        # Initialize weight senders for multiprocess collectors
-        if self._weight_sync_schemes:
-            # Create one sender per model using scheme's factory method
-            for model_id, scheme in self._weight_sync_schemes.items():
-                sender = scheme.create_sender()
-                sender._model_id = model_id
-                if hasattr(sender, "set_context"):
-                    sender.set_context(self, model_id)
-                self._weight_senders[model_id] = sender
+        # Weight senders will be initialized after workers are ready (via init_on_sender)
         torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
@@ -2810,11 +3082,7 @@ also that the state dict is synchronised across processes if needed."""
                 self.procs.append(proc)
                 self.pipes.append(pipe_parent)
 
-                # Register worker with senders
-                if self._weight_senders:
-                    for _, sender in self._weight_senders.items():
-                        sender.register_worker(i, pipe_parent)
-
+        # Worker registration now handled by init_on_sender() after workers are ready
         for i, pipe_parent in enumerate(self.pipes):
             pipe_parent.poll(timeout=INSTANTIATE_TIMEOUT)
             try:
@@ -2865,6 +3133,21 @@ also that the state dict is synchronised across processes if needed."""
                 else:
                     # Legacy string error message
                     raise RuntimeError(msg)
+
+        # Initialize all weight sync schemes now that workers are ready
+        # This calls init_on_sender() for each scheme which:
+        # 1. Creates transports for all workers
+        # 2. Creates and configures the sender
+        # 3. For SharedMemWeightSyncScheme, distributes buffer references to avoid deadlock
+        if self._weight_sync_schemes:
+            for model_id, scheme in self._weight_sync_schemes.items():
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_sender"):
+                    scheme.init_on_sender(model_id=model_id, context=self)
+                    # Get the initialized sender
+                    self._weight_senders[model_id] = scheme.get_sender()
+                # else: keep using legacy _weight_senders initialization from before
+
         self.queue_out = queue_out
         self.closed = False
 
@@ -2978,18 +3261,30 @@ also that the state dict is synchronised across processes if needed."""
             # __del__ will not affect the program.
             pass
 
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         """Shuts down all processes. This operation is irreversible.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+            raise_on_error (bool, optional): Whether to raise an error if the shutdown fails. Defaults to `True`.
         """
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
             )
-        self._shutdown_main(timeout)
+        try:
+            self._shutdown_main(timeout)
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     def _shutdown_main(self, timeout: float | None = None) -> None:
         if timeout is None:
@@ -3225,6 +3520,52 @@ also that the state dict is synchronised across processes if needed."""
         """Get an attribute from the replay buffer."""
         return getattr(self.replay_buffer, attr)
 
+    def get_model(self, model_id: str):
+        """Get model instance by ID (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier (e.g., "policy", "value_net")
+
+        Returns:
+            The model instance
+
+        Raises:
+            ValueError: If model_id is not recognized
+        """
+        if model_id == "policy":
+            # Return the fallback policy instance
+            if hasattr(self, "_fallback_policy") and self._fallback_policy is not None:
+                return self._fallback_policy
+            elif hasattr(self, "policy") and self.policy is not None:
+                return self.policy
+            else:
+                raise ValueError(f"No policy found for model_id '{model_id}'")
+        else:
+            # Try to resolve via attribute access
+            if hasattr(self, model_id):
+                return getattr(self, model_id)
+            else:
+                raise ValueError(f"Unknown model_id: {model_id}")
+
+    def get_cached_weights(self, model_id: str):
+        """Get cached shared memory weights if available (for weight sync schemes).
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            Cached TensorDict weights or None if not available
+        """
+        if model_id == "policy" and hasattr(self, "_policy_weights_dict"):
+            # Get the policy device (first device if list)
+            policy_device = self.policy_device
+            if isinstance(policy_device, (list, tuple)):
+                policy_device = policy_device[0] if len(policy_device) > 0 else None
+
+            # Return cached weights for this device
+            return self._policy_weights_dict.get(policy_device)
+        return None
+
 
 @accept_remote_rref_udf_invocation
 class MultiSyncDataCollector(_MultiDataCollector):
@@ -3344,7 +3685,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
@@ -3353,7 +3699,13 @@ class MultiSyncDataCollector(_MultiDataCollector):
             del self.out_buffer
         if hasattr(self, "buffers"):
             del self.buffers
-        return super().shutdown(timeout=timeout)
+        try:
+            return super().shutdown(timeout=timeout)
+        except Exception as e:
+            if raise_on_error:
+                raise e
+            else:
+                pass
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -3389,7 +3741,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def frames_per_batch_worker(self, worker_idx: int | None) -> int:
         if worker_idx is not None and isinstance(self._frames_per_batch, Sequence):
             return self._frames_per_batch[worker_idx]
-        if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
+        if self.requested_frames_per_batch % self.num_workers != 0 and rl_warnings():
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
                 f" this results in more frames_per_batch per iteration that requested."
@@ -3745,14 +4097,19 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
         if not close_env:
             raise RuntimeError(
                 f"Cannot shutdown {type(self).__name__} collector without environment being closed."
             )
-        return super().shutdown(timeout=timeout)
+        return super().shutdown(timeout=timeout, raise_on_error=raise_on_error)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4107,8 +4464,15 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
-        return super().shutdown(timeout=timeout, close_env=close_env)
+    def shutdown(
+        self,
+        timeout: float | None = None,
+        close_env: bool = True,
+        raise_on_error: bool = True,
+    ) -> None:
+        return super().shutdown(
+            timeout=timeout, close_env=close_env, raise_on_error=raise_on_error
+        )
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -4196,13 +4560,20 @@ def _main_async_collector(
         # Set up weight receivers for worker process
         if weight_sync_schemes:
             inner_collector._weight_receivers = {}
+            inner_collector.pipe = pipe_child  # Add pipe attribute for context
             for model_id, scheme in weight_sync_schemes.items():
-                receiver = scheme.create_receiver()
-                receiver.set_context(inner_collector)
-                receiver.register_worker_transport(pipe_child)
+                # Check if scheme has new API or legacy API
+                if hasattr(scheme, "init_on_worker"):
+                    scheme.init_on_worker(model_id=model_id, context=inner_collector)
+                    receiver = scheme.get_receiver()
+                else:
+                    # Legacy API
+                    receiver = scheme.create_receiver()
+                    receiver.set_context(inner_collector)
+                    receiver.register_worker_transport(pipe_child)
 
-                model = _resolve_model(inner_collector, model_id)
-                receiver.register_model(model)
+                    model = _resolve_model(inner_collector, model_id)
+                    receiver.register_model(model)
 
                 inner_collector._weight_receivers[model_id] = receiver
         else:
@@ -4335,7 +4706,24 @@ def _main_async_collector(
                     receiver._shared_weights[model_id] = shared_buffer
 
                 # Apply the buffer to the model immediately
-                receiver.apply_weights(shared_buffer)
+                # Only apply if the model is an nn.Module (has learnable parameters)
+                try:
+                    model = receiver._resolve_model_ref()
+                except (ValueError, AttributeError) as e:
+                    # Model not registered or reference is invalid
+                    if verbose:
+                        torchrl_logger.warning(
+                            f"worker {idx} could not resolve model '{model_id}': {e}"
+                        )
+                    continue
+
+                if isinstance(model, nn.Module):
+                    receiver.apply_weights(shared_buffer)
+                else:
+                    if verbose:
+                        torchrl_logger.info(
+                            f"worker {idx} skipping weight application for non-nn.Module model '{model_id}'"
+                        )
 
                 if verbose:
                     torchrl_logger.info(
@@ -4383,6 +4771,13 @@ def _main_async_collector(
                 inner_collector.init_random_frames = float("inf")
             else:
                 inner_collector.init_random_frames = -1
+
+            # Note: For MultiProcessWeightSyncScheme, weight updates are handled by the
+            # main message loop above (msg == "update_weights" case). The receiver.receive()
+            # pattern is only used for schemes with separate communication channels like
+            # SharedMemWeightSyncScheme (shared memory) or DistributedWeightSyncScheme (TCPStore).
+            # Calling receiver.receive() here would interfere with the pipe-based message protocol.
+
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.

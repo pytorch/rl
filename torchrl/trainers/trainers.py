@@ -28,7 +28,7 @@ from torchrl._utils import (
     _CKPT_BACKEND,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
-    RL_WARNINGS,
+    rl_warnings,
     timeit,
     VERBOSE,
 )
@@ -2043,7 +2043,7 @@ class UTDRHook(TrainerHookBase):
             batch_size = self.trainer.collector.getattr_rb("batch_size")
         if not write_count:
             return {}
-        if batch_size is None and RL_WARNINGS:
+        if batch_size is None and rl_warnings():
             warnings.warn("Batch size is not set. Using 1.")
             batch_size = 1
         update_count = self.trainer._optim_count
