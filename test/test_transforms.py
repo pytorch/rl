@@ -15030,12 +15030,16 @@ class TestRayModuleTransform:
     @pytest.fixture(autouse=True, scope="function")
     def start_ray(self):
         import ray
+        from torchrl import merge_ray_runtime_env
         from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
         if ray.is_initialized():
             ray.shutdown()
 
-        ray.init(**DEFAULT_RAY_INIT_CONFIG)
+        # Use merge_ray_runtime_env to exclude large directories from the runtime environment
+        # This prevents issues with Ray's working_dir size limits and GCS package expiration
+        ray_init_config = merge_ray_runtime_env(dict(DEFAULT_RAY_INIT_CONFIG))
+        ray.init(**ray_init_config)
 
         yield
         ray.shutdown()

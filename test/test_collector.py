@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-
 import contextlib
 import functools
 import gc
@@ -13,6 +12,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 from contextlib import nullcontext
 from unittest.mock import patch
 
@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 
+import torchrl.collectors._multi_base
 import torchrl.collectors._runner
 from packaging import version
 from tensordict import (
@@ -3267,84 +3268,164 @@ class TestAggregateReset:
             )
 
 
+def _subprocess_test_worker(func, error_queue):
+    """Worker function that runs a test function and reports errors via queue."""
+    try:
+        func()
+    except Exception as e:
+        error_queue.put((type(e).__name__, str(e), traceback.format_exc()))
+    else:
+        error_queue.put(None)
+
+
+def _run_test_in_subprocess(func, timeout=120):
+    """Run a test function in a fresh subprocess to avoid thread pool initialization issues.
+
+    This is necessary because torch.set_num_threads() may not work correctly
+    if the thread pool has already been initialized in the parent process.
+    Running in a fresh subprocess ensures a clean PyTorch state.
+
+    Args:
+        func: The test function to run. Must be picklable (module-level function).
+        timeout: Timeout in seconds for the subprocess.
+
+    Raises:
+        AssertionError: If the test function raises an exception in the subprocess.
+    """
+    ctx = torch.multiprocessing.get_context("spawn")
+    error_queue = ctx.Queue()
+
+    proc = ctx.Process(target=_subprocess_test_worker, args=(func, error_queue))
+    proc.start()
+    proc.join(timeout=timeout)
+
+    if proc.is_alive():
+        proc.terminate()
+        proc.join()
+        raise AssertionError(f"Test timed out after {timeout} seconds")
+
+    if proc.exitcode != 0:
+        try:
+            result = error_queue.get_nowait()
+        except Exception:
+            result = None
+
+        if result is not None:
+            exc_type, exc_msg, tb = result
+            raise AssertionError(f"Test failed with {exc_type}: {exc_msg}\n{tb}")
+        else:
+            raise AssertionError(f"Test subprocess exited with code {proc.exitcode}")
+
+    # Check if there was an exception even with exitcode 0
+    try:
+        result = error_queue.get_nowait()
+        if result is not None:
+            exc_type, exc_msg, tb = result
+            raise AssertionError(f"Test failed with {exc_type}: {exc_msg}\n{tb}")
+    except Exception:
+        pass
+
+
+def _test_num_threads_impl():
+    """Implementation of test_num_threads that runs in a subprocess."""
+    env = ContinuousActionVecMockEnv()
+    _main_async_collector_saved = torchrl.collectors._multi_base._main_async_collector
+    torchrl.collectors._multi_base._main_async_collector = decorate_thread_sub_func(
+        torchrl.collectors._multi_base._main_async_collector, num_threads=3
+    )
+    num_threads = torch.get_num_threads()
+    try:
+        c = MultiSyncDataCollector(
+            [env],
+            policy=RandomPolicy(env.action_spec),
+            num_threads=7,
+            num_sub_threads=3,
+            total_frames=200,
+            frames_per_batch=200,
+            cat_results="stack",
+        )
+        assert (
+            torch.get_num_threads() == 7
+        ), f"Expected 7 threads, got {torch.get_num_threads()}"
+        for _ in c:
+            pass
+    finally:
+        try:
+            c.shutdown()
+            del c
+        except Exception:
+            pass
+        torchrl.collectors._multi_base._main_async_collector = (
+            _main_async_collector_saved
+        )
+        torch.set_num_threads(num_threads)
+
+
+def _test_auto_num_threads_impl():
+    """Implementation of test_auto_num_threads that runs in a subprocess."""
+    init_threads = torch.get_num_threads()
+
+    # Test 1: Single env
+    try:
+        collector = MultiSyncDataCollector(
+            [ContinuousActionVecMockEnv],
+            RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
+            frames_per_batch=3,
+            cat_results="stack",
+        )
+        for _ in collector:
+            current = torch.get_num_threads()
+            expected = init_threads - 1
+            assert current == expected, f"Expected {expected} threads, got {current}"
+            break
+        collector.shutdown()
+        current = torch.get_num_threads()
+        assert (
+            current == init_threads
+        ), f"After shutdown: expected {init_threads} threads, got {current}"
+        del collector
+        gc.collect()
+    finally:
+        torch.set_num_threads(init_threads)
+
+    # Test 2: ParallelEnv with 2 workers
+    try:
+        collector = MultiSyncDataCollector(
+            [ParallelEnv(2, ContinuousActionVecMockEnv)],
+            RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
+            frames_per_batch=3,
+            cat_results="stack",
+        )
+        for _ in collector:
+            current = torch.get_num_threads()
+            expected = init_threads - 2
+            assert current == expected, f"Expected {expected} threads, got {current}"
+            break
+        collector.shutdown()
+        current = torch.get_num_threads()
+        assert (
+            current == init_threads
+        ), f"After shutdown: expected {init_threads} threads, got {current}"
+        del collector
+        gc.collect()
+    finally:
+        torch.set_num_threads(init_threads)
+
+
 class TestLibThreading:
     @pytest.mark.skipif(
         IS_OSX,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_num_threads(self):
-        pass
-
-        _main_async_collector_saved = torchrl.collectors._runner._main_async_collector
-        torchrl.collectors._runner._main_async_collector = decorate_thread_sub_func(
-            torchrl.collectors._runner._main_async_collector, num_threads=3
-        )
-        num_threads = torch.get_num_threads()
-        try:
-            env = ContinuousActionVecMockEnv()
-            c = MultiSyncDataCollector(
-                [env],
-                policy=RandomPolicy(env.action_spec),
-                num_threads=7,
-                num_sub_threads=3,
-                total_frames=200,
-                frames_per_batch=200,
-                cat_results="stack",
-            )
-            assert torch.get_num_threads() == 7
-            for _ in c:
-                pass
-        finally:
-            try:
-                c.shutdown()
-                del c
-            except Exception:
-                torchrl_logger.info("Failed to shut down collector")
-            # reset vals
-            torchrl.collectors._runner._main_async_collector = (
-                _main_async_collector_saved
-            )
-            torch.set_num_threads(num_threads)
+        _run_test_in_subprocess(_test_num_threads_impl)
 
     @pytest.mark.skipif(
         IS_OSX or IS_WINDOWS,
         reason="setting different threads across workers can randomly fail on OSX.",
     )
     def test_auto_num_threads(self):
-        init_threads = torch.get_num_threads()
-        try:
-            collector = MultiSyncDataCollector(
-                [ContinuousActionVecMockEnv],
-                RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
-                frames_per_batch=3,
-                cat_results="stack",
-            )
-            for _ in collector:
-                assert torch.get_num_threads() == init_threads - 1
-                break
-            collector.shutdown()
-            assert torch.get_num_threads() == init_threads
-            del collector
-            gc.collect()
-        finally:
-            torch.set_num_threads(init_threads)
-
-        try:
-            collector = MultiSyncDataCollector(
-                [ParallelEnv(2, ContinuousActionVecMockEnv)],
-                RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
-                frames_per_batch=3,
-                cat_results="stack",
-            )
-            for _ in collector:
-                assert torch.get_num_threads() == init_threads - 2
-                break
-            collector.shutdown()
-            assert torch.get_num_threads() == init_threads
-            del collector
-            gc.collect()
-        finally:
-            torch.set_num_threads(init_threads)
+        _run_test_in_subprocess(_test_auto_num_threads_impl)
 
 
 class TestUniqueTraj:

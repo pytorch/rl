@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import socket
 import time
 import weakref
@@ -133,6 +134,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         num_workers: int | None = None,
         store_info: dict | None = None,
         base_tcp_port: int | str | None = None,
+        max_retries: int = 10,
     ) -> torch.distributed.TCPStore:
         """Create a TCPStore for weight synchronization.
 
@@ -144,6 +146,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             base_tcp_port: Base TCP port from the collector. If provided, the store
                 will use base_tcp_port + 2 to avoid conflicts with the collector's
                 stores (which use base_tcp_port and base_tcp_port + 1).
+            max_retries: Maximum number of retry attempts for handling port conflicts.
 
         Returns:
             The created TCPStore.
@@ -160,28 +163,56 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
             # Use base_tcp_port + 2 if available (to avoid conflicts with collector's
             # tcp_port and tcp_port + 1), otherwise find a free port dynamically.
-            if base_tcp_port is not None:
-                self._store_port = int(base_tcp_port) + 2
-            else:
-                # Find a free port
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind(("", 0))
-                    socketname = s.getsockname()
-                    self._store_port = socketname[1]
+            initial_port = int(base_tcp_port) + 2 if base_tcp_port is not None else None
 
-            torchrl_logger.debug(
-                f"DistributedWeightSyncScheme: Creating TCPStore on {host}:{self._store_port}"
-            )
-            store = torch.distributed.TCPStore(
-                host_name=host,
-                port=self._store_port,
-                is_master=True,
-                timeout=timedelta(seconds=self._timeout),
-                wait_for_workers=False,  # Don't block - workers may not be started yet
-            )
-            self._store_info = {"host": host, "port": self._store_port}
-            torchrl_logger.debug(
-                f"DistributedWeightSyncScheme: TCPStore info: {self._store_info}"
+            last_error = None
+            for attempt in range(max_retries):
+                if initial_port is None or attempt > 0:
+                    # Find a free port dynamically
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        s.bind(("", 0))
+                        self._store_port = s.getsockname()[1]
+                else:
+                    self._store_port = initial_port
+
+                try:
+                    torchrl_logger.debug(
+                        f"DistributedWeightSyncScheme: Creating TCPStore on {host}:{self._store_port} "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    store = torch.distributed.TCPStore(
+                        host_name=host,
+                        port=self._store_port,
+                        is_master=True,
+                        timeout=timedelta(seconds=self._timeout),
+                        wait_for_workers=False,  # Don't block - workers may not be started yet
+                    )
+                    self._store_info = {"host": host, "port": self._store_port}
+                    torchrl_logger.debug(
+                        f"DistributedWeightSyncScheme: TCPStore created successfully: {self._store_info}"
+                    )
+                    return store
+                except (RuntimeError, OSError) as e:
+                    error_msg = str(e).lower()
+                    if (
+                        "address already in use" in error_msg
+                        or "eaddrinuse" in error_msg
+                    ):
+                        torchrl_logger.debug(
+                            f"DistributedWeightSyncScheme: Port {self._store_port} already in use, "
+                            f"retrying ({attempt + 1}/{max_retries})..."
+                        )
+                        last_error = e
+                        # Add small random delay to reduce collision probability
+                        time.sleep(random.uniform(0.01, 0.1))
+                        continue
+                    # For other errors, re-raise immediately
+                    raise
+
+            raise RuntimeError(
+                f"DistributedWeightSyncScheme: Failed to create TCPStore after {max_retries} attempts. "
+                f"Last error: {last_error}"
             )
         else:
             # Connect as client
@@ -197,7 +228,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                 is_master=False,
                 timeout=timedelta(seconds=self._timeout),
             )
-        return store
+            return store
 
     def _init_on_receiver_impl(
         self,

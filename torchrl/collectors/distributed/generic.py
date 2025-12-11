@@ -27,6 +27,7 @@ from torchrl.collectors._multi_base import _MultiDataCollector
 from torchrl.collectors._multi_sync import MultiSyncDataCollector
 from torchrl.collectors._single import SyncDataCollector
 from torchrl.collectors.distributed.default_configs import (
+    _create_tcpstore_with_retry,
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
     TCP_PORT,
@@ -69,10 +70,20 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     )
     if verbose:
         torchrl_logger.debug(f"Connected!\nRANK {rank} -- creating store")
+
+    # Receive actual store port from master via broadcast (master may have used retry)
+    store_port_tensor = torch.zeros(1, dtype=torch.int64)
+    torch.distributed.broadcast(store_port_tensor, src=0)
+    actual_store_port = int(store_port_tensor.item())
+    if verbose:
+        torchrl_logger.debug(
+            f"RANK {rank} -- received store port {actual_store_port} from master"
+        )
+
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
-        port=tcpport + 1,
+        port=actual_store_port,
         world_size=world_size,
         is_master=False,
         timeout=timedelta(10),
@@ -788,13 +799,21 @@ class DistributedDataCollector(DataCollectorBase):
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
         torchrl_logger.debug("RANK 0 -- main initiated! Launching store...")
-        self._store = torch.distributed.TCPStore(
+        # Use retry logic to handle port conflicts
+        self._store, self._store_port = _create_tcpstore_with_retry(
             host_name=self.IPAddr,
             port=int(TCP_PORT) + 1,
             world_size=self.num_workers + 1,
             is_master=True,
-            timeout=timedelta(10),
+            timeout=10.0,
+            wait_for_workers=False,  # Don't wait - we need to broadcast port first
         )
+        torchrl_logger.debug(
+            f"RANK 0 -- store created on port {self._store_port}. Broadcasting to workers..."
+        )
+        # Broadcast actual store port to all workers
+        store_port_tensor = torch.tensor([self._store_port], dtype=torch.int64)
+        torch.distributed.broadcast(store_port_tensor, src=0)
         torchrl_logger.debug("RANK 0 -- done. Setting status to 'alive'")
         self._store.set("TRAINER_status", b"alive")
 
