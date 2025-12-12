@@ -27,7 +27,6 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
 
 cd "${root_dir}"
 
@@ -63,14 +62,6 @@ fi
 printf "* Verified Python implementation: %s\n" "$python_impl"
 
 # 3. Install mujoco
-printf "* Installing mujoco and related\n"
-mkdir -p $root_dir/.mujoco
-cd $root_dir/.mujoco/
-#wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
-#tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
-wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-tar -xf mujoco210-linux-x86_64.tar.gz
-cd "${root_dir}"
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
@@ -80,9 +71,6 @@ if ! grep -q "python=${PYTHON_VERSION}" "${this_dir}/environment.yml"; then
 fi
 cat "${this_dir}/environment.yml"
 
-export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
-#export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
 export SDL_VIDEODRIVER=dummy
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
@@ -91,9 +79,7 @@ export COMPOSITE_LP_AGGREGATE=0
 
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
-  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=:99 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
   PYOPENGL_PLATFORM=egl \
@@ -106,10 +92,6 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 conda deactivate
 conda activate "${env_dir}"
-
-# install d4rl
-pip install free-mujoco-py
-pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
 
 # TODO: move this down -- will break torchrl installation
 conda install -y -c conda-forge libstdcxx-ng=12
@@ -135,9 +117,6 @@ fi
 conda deactivate
 conda activate "${env_dir}"
 
-# compile mujoco-py (bc it's done at runtime for whatever reason someone thought it was a good idea)
-python -c """import gym;import d4rl"""
-
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
 # rename them
 
@@ -151,13 +130,11 @@ elif [[ ${#CU_VERSION} -eq 5 ]]; then
     CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
 fi
 echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
-
 # submodules
 git submodule sync && git submodule update --init --recursive
 
 pip3 install ale-py -U
-pip3 install "gym[atari,accept-rom-license]" "gymnasium>=1.1.0" -U
+pip3 install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
