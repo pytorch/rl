@@ -29,8 +29,8 @@ from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
 from torchrl.collectors.distributed.default_configs import (
+    DEFAULT_SLURM_CONF,
     DEFAULT_TENSORPIPE_OPTIONS,
     IDLE_TIMEOUT,
     TCP_PORT,
