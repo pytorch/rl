@@ -718,7 +718,7 @@ class DAPO(GRPOLoss):
         return coeff * kl_penalty, kl_penalty
 
 
-class CISPO(GRPOLoss):
+class CISPOLoss(GRPOLoss):
     """CISPO (Clipped Importance Sampling Policy Optimization).
 
     Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but
