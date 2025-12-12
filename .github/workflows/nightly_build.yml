@@ -42,11 +42,11 @@ jobs:
       matrix:
         os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
         python_version: [
-          ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -88,11 +88,11 @@ jobs:
       matrix:
         os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
         python_version: [
-          ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -162,11 +162,11 @@ jobs:
       matrix:
         os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
         python_version: [
-          ["3.9", "cp39-cp39"],
           ["3.10", "cp310-cp310"],
           ["3.11", "cp311-cp311"],
           ["3.12", "cp312-cp312"],
           ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
@@ -204,11 +204,11 @@ jobs:
     strategy:
       matrix:
         python_version: [
-          ["3.9", "3.9"],
           ["3.10", "3.10.3"],
           ["3.11", "3.11"],
           ["3.12", "3.12"],
           ["3.13", "3.13"],
+          ["3.14", "3.14"],
         ]
     steps:
       - name: Setup Python
@@ -244,11 +244,11 @@ jobs:
     strategy:
       matrix:
         python_version: [
-          ["3.9", "3.9"],
           ["3.10", "3.10.3"],
           ["3.11", "3.11"],
           ["3.12", "3.12"],
           ["3.13", "3.13"],
+          ["3.14", "3.14"],
         ]
     steps:
       - name: Setup Python
@@ -314,11 +314,11 @@ jobs:
     strategy:
       matrix:
         python_version: [
-          ["3.9", "3.9"],
           ["3.10", "3.10.3"],
           ["3.11", "3.11"],
           ["3.12", "3.12"],
           ["3.13", "3.13"],
+          ["3.14", "3.14"],
         ]
     steps:
       - name: Checkout torchrl
