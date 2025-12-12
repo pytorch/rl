@@ -133,14 +133,14 @@ fi
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
-  uv pip install "mujoco<3.3.6"
+  uv pip install "mujoco>=3.3.7"
 fi
 
 # Install gymnasium
 echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.14" ]]; then
-  # Python 3.14: no mujoco wheels available
-  uv pip install "gymnasium[atari]>=1.1"
+  # Python 3.14: no mujoco wheels available, ale_py also failing
+  uv pip install "gymnasium>=1.1"
 elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
   uv pip install ale-py sympy
   uv pip install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]"
