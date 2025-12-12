@@ -56,19 +56,13 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+    # Force CPython from the main conda channels (avoid GraalPy).
+    conda create --override-channels -c defaults -c pytorch --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
 
-# Verify we have CPython, not PyPy
-python_impl=$(python -c "import platform; print(platform.python_implementation())")
-if [ "$python_impl" != "CPython" ]; then
-    echo "ERROR: Expected CPython but got $python_impl"
-    echo "Python executable: $(which python)"
-    echo "Python version: $(python --version)"
-    exit 1
-fi
-printf "* Verified Python implementation: %s\n" "$python_impl"
+# Verify we're running CPython (wheels won't work on GraalPy)
+python -c "import sys; assert sys.implementation.name == 'cpython', f'Expected CPython, got {sys.implementation.name}'"
 
 # 3. Install mujoco
 
@@ -140,9 +134,8 @@ echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-# Install ale-py from pre-built wheel (no source build needed)
-python -m pip install ale-py -U
-python -m pip install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
+# Gymnasium Atari support pulls ale-py (+ ROMs) as needed.
+python -m pip install -U "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0"
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
