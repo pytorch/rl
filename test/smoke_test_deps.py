@@ -6,11 +6,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import tempfile
 
 import pytest
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
 def test_dm_control():
     import dm_control  # noqa: F401
     import dm_env  # noqa: F401
@@ -23,9 +28,13 @@ def test_dm_control():
     env.reset()
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
 @pytest.mark.skip(reason="Not implemented yet")
 def test_dm_control_pixels():
-    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+    from torchrl.envs.libs.dm_control import DMControlEnv
 
     env = DMControlEnv("cheetah", "run", from_pixels=True)
     env.reset()

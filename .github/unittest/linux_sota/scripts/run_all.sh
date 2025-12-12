@@ -142,21 +142,21 @@ echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-pip3 install ale-py -U
-pip3 install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
+pip install ale-py -U
+pip install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip3 install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      pip install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/cpu
+      pip install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/$CU_VERSION
+      pip install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -171,9 +171,9 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  pip install tensordict
 fi
 
 printf "* Installing torchrl\n"
