@@ -233,6 +233,36 @@ class TensorDictModuleConfig(ModelConfig):
 
 
 @dataclass
+class TensorDictSequentialConfig(ModelConfig):
+    """A class to configure a TensorDictSequential.
+
+    Example:
+        >>> cfg = TensorDictSequentialConfig(
+        ...     modules=[
+        ...         TensorDictModuleConfig(module=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32), in_keys=["observation"], out_keys=["hidden"]),
+        ...         TensorDictModuleConfig(module=MLPConfig(in_features=10, out_features=5, depth=2, num_cells=32), in_keys=["hidden"], out_keys=["action"])
+        ...     ]
+        ... )
+        >>> seq = instantiate(cfg)
+        >>> assert isinstance(seq, TensorDictSequential)
+
+    .. seealso:: :class:`tensordict.nn.TensorDictSequential`
+    """
+
+    modules: Any | None = None
+    partial_tolerant: bool = False
+    selected_out_keys: Any | None = None
+    inplace: bool | str | None = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential"
+    )
+    _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        return super().__post_init__()
+
+
+@dataclass
 class TanhNormalModelConfig(ModelConfig):
     """A class to configure a TanhNormal model.
 
@@ -316,6 +346,50 @@ def _make_tensordict_module(*args, **kwargs):
         tensordict_module = tensordict_module.share_memory()
 
     return tensordict_module
+
+
+def _make_tensordict_sequential(*args, **kwargs):
+    """Helper function to create a TensorDictSequential."""
+    from hydra.utils import instantiate
+    from omegaconf import DictConfig, ListConfig
+    from tensordict.nn import TensorDictSequential
+
+    modules = kwargs.pop("modules")
+    shared = kwargs.pop("shared", False)
+    partial_tolerant = kwargs.pop("partial_tolerant", False)
+    selected_out_keys = kwargs.pop("selected_out_keys", None)
+    inplace = kwargs.pop("inplace", None)
+
+    def _instantiate_module(module):
+        if hasattr(module, "_target_"):
+            return instantiate(module)
+        elif callable(module) and hasattr(module, "func"):
+            return module()
+        else:
+            return module
+
+    if isinstance(modules, (dict, DictConfig)):
+        instantiated_modules = {
+            key: _instantiate_module(module) for key, module in modules.items()
+        }
+    elif isinstance(modules, (list, ListConfig)):
+        instantiated_modules = [_instantiate_module(module) for module in modules]
+    else:
+        raise ValueError(
+            f"modules must be a dict or list, got {type(modules).__name__}"
+        )
+
+    tensordict_sequential = TensorDictSequential(
+        instantiated_modules,
+        partial_tolerant=partial_tolerant,
+        selected_out_keys=selected_out_keys,
+        inplace=inplace,
+    )
+
+    if shared:
+        tensordict_sequential = tensordict_sequential.share_memory()
+
+    return tensordict_sequential
 
 
 def _make_tanh_normal_model(*args, **kwargs):

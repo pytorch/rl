@@ -82,6 +82,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     ModelConfig,
     TanhNormalModelConfig,
     TensorDictModuleConfig,
+    TensorDictSequentialConfig,
     ValueModelConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import (
@@ -256,6 +257,7 @@ __all__ = [
     "ModelConfig",
     "TanhNormalModelConfig",
     "TensorDictModuleConfig",
+    "TensorDictSequentialConfig",
     "ValueModelConfig",
     # Transforms - Core
     "ActionDiscretizerConfig",
@@ -427,6 +429,9 @@ def _register_configs():
 
     # Model configs
     cs.store(group="network", name="tensordict_module", node=TensorDictModuleConfig)
+    cs.store(
+        group="network", name="tensordict_sequential", node=TensorDictSequentialConfig
+    )
     cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
     cs.store(group="model", name="value", node=ValueModelConfig)
 
