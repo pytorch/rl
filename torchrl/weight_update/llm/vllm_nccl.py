@@ -109,12 +109,7 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.modules.llm.backends import stateless_init_process_group
-from torchrl.weight_update.weight_sync_schemes import (
-    WeightReceiver,
-    WeightSender,
-    WeightStrategy,
-    WeightSyncScheme,
-)
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 # ============================================================================
 # vLLM Transport using Collective Communication
@@ -490,7 +485,7 @@ class VLLMWeightSyncScheme(WeightSyncScheme):
         return VLLMWeightReceiver(self, vllm_engine)
 
 
-class VLLMWeightSender(WeightSender):
+class VLLMWeightSender:
     """Sends weights to vLLM workers using collective communication.
 
     **RPC + Collective Implementation**
@@ -590,7 +585,7 @@ class VLLMWeightSender(WeightSender):
         self._transport.send_weights("vllm_model", weights)
 
 
-class VLLMWeightReceiver(WeightReceiver):
+class VLLMWeightReceiver:
     """Receives weights in a vLLM worker using collective communication.
 
     **RPC + Collective Implementation**

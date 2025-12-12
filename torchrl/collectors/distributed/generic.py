@@ -19,7 +19,12 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn
-from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
+from torchrl._utils import (
+    _get_mp_ctx,
+    _ProcessNoWarn,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
@@ -919,6 +924,7 @@ class DistributedCollector(BaseCollector):
         TCP_PORT = self.tcp_port
         job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
+            _start_method=_get_mp_ctx().get_start_method(),
             kwargs=dict(  # noqa: C408
                 rank=i + 1,
                 rank0_ip=self.IPAddr,
