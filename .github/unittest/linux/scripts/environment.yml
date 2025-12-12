@@ -30,7 +30,6 @@ dependencies:
     - mlflow
     - av
     - coverage
-    - ray
     - transformers
     - ninja
     - timm

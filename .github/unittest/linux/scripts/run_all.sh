@@ -119,6 +119,12 @@ if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
   pip3 install dm_control
 fi
 
+# Install ray for Python < 3.14 (ray doesn't support Python 3.14 yet)
+if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing ray"
+  pip3 install ray
+fi
+
 echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.12" ]]; then
   pip3 install ale-py
