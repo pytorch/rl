@@ -26,7 +26,9 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   # add-apt-repository universe
   # apt-get update
 
-  # apt-get install -y libsdl2-dev libsdl2-2.0-0
+  # SDL2 and freetype needed for building pygame from source (Python 3.14+)
+  apt-get install -y libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev
+  apt-get install -y libfreetype6-dev pkg-config
 
   apt-get install -y libglfw3 libosmesa6 libglew-dev
   apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb
@@ -109,6 +111,20 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda deactivate
 conda activate "${env_dir}"
 
+# Install dm_control
+# For Python 3.13+, labmaze doesn't have pre-built wheels, so we need to build from source
+if [[ "$PYTHON_VERSION" == "3.13" || "$PYTHON_VERSION" == "3.14" ]]; then
+  echo "installing bazel for labmaze build"
+  apt-get install -y apt-transport-https curl gnupg
+  curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/bazel.gpg
+  echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" > /etc/apt/sources.list.d/bazel.list
+  apt-get update && apt-get install -y bazel
+  echo "installing labmaze from source"
+  pip3 install git+https://github.com/google-deepmind/labmaze.git
+fi
+echo "installing dm_control"
+pip3 install dm_control
+
 echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.12" ]]; then
   pip3 install ale-py
@@ -118,7 +134,7 @@ else
   pip3 install "gymnasium[atari,mujoco]>=1.1" mo-gymnasium[mujoco]
 fi
 
-# sanity check: remove?
+# sanity check
 python -c """
 import dm_control
 from dm_control import composer
