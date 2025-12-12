@@ -286,6 +286,7 @@ commands = {
   collector.frames_per_batch=200 \
   env.n_parallel_envs=1 \
   optimization.optim_steps_per_batch=1 \
+  optimization.compile=False \
   logger.video=False \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
