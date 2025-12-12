@@ -7,7 +7,16 @@ set -v
 # ================================ Init ============================================== #
 
 
-apt-get update && apt-get upgrade -y
+export DEBIAN_FRONTEND=noninteractive
+export TZ="${TZ:-Etc/UTC}"
+ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime || true
+echo "${TZ}" > /etc/timezone || true
+
+apt-get update
+apt-get install -y --no-install-recommends tzdata
+dpkg-reconfigure -f noninteractive tzdata || true
+
+apt-get upgrade -y
 apt-get install -y vim git wget cmake
 
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libosmesa6-dev
