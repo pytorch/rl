@@ -19,7 +19,12 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn
-from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
+from torchrl._utils import (
+    _get_mp_ctx,
+    _ProcessNoWarn,
+    logger as torchrl_logger,
+    VERBOSE,
+)
 from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
