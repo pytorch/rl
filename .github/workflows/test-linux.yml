@@ -173,7 +173,7 @@ jobs:
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
