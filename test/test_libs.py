@@ -65,7 +65,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Unbounded,
-    UnboundedDiscreteTensorSpec,
+    UnboundedDiscrete,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -316,7 +316,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            # g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            # g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -331,7 +331,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -346,7 +346,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -361,7 +361,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )

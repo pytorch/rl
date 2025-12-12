@@ -13,13 +13,12 @@ TensorSpec classes define the shape, dtype, and domain of tensors in TorchRL.
     Bounded
     Categorical
     Composite
-    DiscreteTensorSpec
-    LazyStackedCompositeSpec
     MultiCategorical
-    MultiDiscreteTensorSpec
     MultiOneHot
     NonTensor
     OneHot
+    Stacked
+    StackedComposite
     TensorSpec
     Unbounded
     UnboundedContinuous

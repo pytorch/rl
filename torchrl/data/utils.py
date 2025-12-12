@@ -146,12 +146,12 @@ def _empty_like_spec(specs: list[TensorSpec], shape):
             )
     spec = specs[0]
     if isinstance(spec, (Composite, StackedComposite)):
-        # the exclusive key has values which are CompositeSpecs ->
+        # the exclusive key has values which are Composite specs ->
         # we create an empty composite spec with same batch size
         return spec.empty()
     elif isinstance(spec, Stacked):
-        # the exclusive key has values which are LazyStackedTensorSpecs ->
-        # we create a LazyStackedTensorSpec with the same shape (aka same -1s) as the first in the list.
+        # the exclusive key has values which are Stacked specs ->
+        # we create a Stacked spec with the same shape (aka same -1s) as the first in the list.
         # this will not add any new -1s when they are stacked
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
         return Stacked(

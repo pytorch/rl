@@ -852,7 +852,7 @@ def check_env_specs(
     ):
         if not check_no_exclusive_keys(spec):
             raise AssertionError(
-                "It appears you are using some LazyStackedCompositeSpecs with exclusive keys "
+                "It appears you are using some StackedComposite specs with exclusive keys "
                 "(keys present in some but not all of the stacked specs). To use such heterogeneous specs, "
                 "you will need to first pass your stack through `torchrl.data.consolidate_spec`."
             )
