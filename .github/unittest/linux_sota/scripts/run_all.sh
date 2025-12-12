@@ -126,9 +126,6 @@ fi
 conda deactivate
 conda activate "${env_dir}"
 
-# install ale-py: manylinux names are broken for CentOS so we need to manually download and
-# rename them
-
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
 
@@ -142,6 +139,10 @@ echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 # submodules
 git submodule sync && git submodule update --init --recursive
 
+# Install jax with CUDA support before ale-py to satisfy its build dependency
+# (ale-py source builds require jax/jaxlib which needs CUDA-compatible wheels)
+# See: https://docs.jax.dev/en/latest/installation.html
+pip install --upgrade "jax[cuda13-local]"
 pip install ale-py -U
 pip install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
 
