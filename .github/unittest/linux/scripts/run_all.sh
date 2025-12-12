@@ -8,7 +8,17 @@ set -v
 
 
 if [[ $OSTYPE != 'darwin'* ]]; then
-  apt-get update && apt-get upgrade -y
+  # Prevent interactive prompts (notably tzdata) in CI.
+  export DEBIAN_FRONTEND=noninteractive
+  export TZ="${TZ:-Etc/UTC}"
+  ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime || true
+  echo "${TZ}" > /etc/timezone || true
+
+  apt-get update
+  apt-get install -y --no-install-recommends tzdata
+  dpkg-reconfigure -f noninteractive tzdata || true
+
+  apt-get upgrade -y
   apt-get install -y vim git wget cmake
 
   # Enable universe repository
