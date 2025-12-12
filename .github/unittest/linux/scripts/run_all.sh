@@ -28,8 +28,8 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 
   # apt-get install -y libsdl2-dev libsdl2-2.0-0
 
-  apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
+  apt-get install -y libglfw3 libosmesa6 libglew-dev
+  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     # solves version `GLIBCXX_3.4.29' not found for tensorboard
