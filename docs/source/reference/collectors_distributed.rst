@@ -4,8 +4,8 @@ Distributed Collectors
 ======================
 
 TorchRL provides a set of distributed data collectors. These tools support
-multiple backends (``'gloo'``, ``'nccl'``, ``'mpi'`` with the :class:`~.DistributedDataCollector`
-or PyTorch RPC with :class:`~.RPCDataCollector`) and launchers (``'ray'``,
+multiple backends (``'gloo'``, ``'nccl'``, ``'mpi'`` with the :class:`~.DistributedCollector`
+or PyTorch RPC with :class:`~.RPCCollector`) and launchers (``'ray'``,
 ``submitit`` or ``torch.multiprocessing``).
 They can be efficiently used in synchronous or asynchronous mode, on a single
 node or across multiple nodes.
@@ -15,7 +15,7 @@ node or across multiple nodes.
 
 .. note::
   *Choosing the sub-collector*: All distributed collectors support the various single machine collectors.
-  One may wonder why using a :class:`MultiSyncDataCollector` or a :class:`~torchrl.envs.ParallelEnv`
+  One may wonder why using a :class:`~torchrl.collectors.MultiSyncCollector` or a :class:`~torchrl.envs.ParallelEnv`
   instead. In general, multiprocessed collectors have a lower IO footprint than
   parallel environments which need to communicate at each step. Yet, the model specs
   play a role in the opposite direction, since using parallel environments will
@@ -42,8 +42,20 @@ node or across multiple nodes.
     :toctree: generated/
     :template: rl_template.rst
 
+    DistributedCollector
+    RPCCollector
+    DistributedSyncCollector
     DistributedDataCollector
     RPCDataCollector
     DistributedSyncDataCollector
     submitit_delayed_launcher
     RayCollector
+
+Legacy names
+------------
+
+The following names are kept for backward compatibility:
+
+- ``DistributedDataCollector`` → ``DistributedCollector``
+- ``RPCDataCollector`` → ``RPCCollector``
+- ``DistributedSyncDataCollector`` → ``DistributedSyncCollector``

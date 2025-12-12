@@ -14,7 +14,7 @@ from tensordict import lazy_stack, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
 
-from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.llm.utils import _QueueAsRB
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -23,8 +23,8 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.llm.transforms.policy_version import PolicyVersion
 
 
-class LLMCollector(SyncDataCollector):
-    """A simplified version of SyncDataCollector for LLM inference.
+class LLMCollector(Collector):
+    """A simplified version of Collector for LLM inference.
 
     Args:
         env (EnvBase or EnvBase constructor): the environment to be used for data collection.
@@ -72,7 +72,7 @@ class LLMCollector(SyncDataCollector):
             Defaults to `True` when `replay_buffer` is provided, `False` otherwise.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
-            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
+            This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.

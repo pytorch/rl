@@ -49,7 +49,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
     Example:
         >>> # Basic usage with collector
         >>> scheme = MultiProcessWeightSyncScheme()
-        >>> collector = MultiSyncDataCollector(
+        >>> collector = MultiSyncCollector(
         ...     create_env_fn=[lambda: GymEnv("CartPole-v1")] * 3,
         ...     policy=policy,
         ...     frames_per_batch=100,
@@ -125,7 +125,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             Simple usage with collector context (most common):
 
             >>> scheme = MultiProcessWeightSyncScheme()
-            >>> collector = MultiSyncDataCollector(
+            >>> collector = MultiSyncCollector(
             ...     create_env_fn=[lambda: GymEnv("CartPole-v1")] * 3,
             ...     policy=policy,
             ...     frames_per_batch=100,

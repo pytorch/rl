@@ -27,16 +27,11 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequ
 from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.collectors import (
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.collectors.distributed import (
-    DistributedDataCollector,
-    DistributedSyncDataCollector,
+    DistributedCollector,
     RayCollector,
-    RPCDataCollector,
+    RPCCollector,
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 from torchrl.data import (
@@ -257,9 +252,9 @@ class DistributedCollectorBase:
     @pytest.mark.parametrize(
         "collector_class",
         [
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
-            SyncDataCollector,
+            MultiSyncCollector,
+            MultiAsyncCollector,
+            Collector,
         ],
     )
     def test_distributed_collector_class(self, collector_class):
@@ -294,7 +289,7 @@ class DistributedCollectorBase:
             else:
                 policy = CountingPolicy()
                 policy_factory = None
-            if collector_class is MultiaSyncDataCollector:
+            if collector_class is MultiAsyncCollector:
                 # otherwise we may collect data from a collector that has not yet been
                 # updated
                 n_collectors = 1
@@ -346,9 +341,9 @@ class DistributedCollectorBase:
     @pytest.mark.parametrize(
         "collector_class",
         [
-            SyncDataCollector,
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
+            Collector,
+            MultiSyncCollector,
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize("sync", [False, True])
@@ -376,7 +371,7 @@ class DistributedCollectorBase:
 class TestDistributedCollector(DistributedCollectorBase):
     @classmethod
     def distributed_class(cls) -> type:
-        return DistributedDataCollector
+        return DistributedCollector
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
@@ -396,7 +391,7 @@ class TestDistributedCollector(DistributedCollectorBase):
 class TestRPCCollector(DistributedCollectorBase):
     @classmethod
     def distributed_class(cls) -> type:
-        return RPCDataCollector
+        return RPCCollector
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
@@ -413,7 +408,7 @@ class TestRPCCollector(DistributedCollectorBase):
 class TestSyncCollector(DistributedCollectorBase):
     @classmethod
     def distributed_class(cls) -> type:
-        return DistributedSyncDataCollector
+        return DistributedCollector
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
@@ -483,9 +478,9 @@ class TestSyncCollector(DistributedCollectorBase):
     @pytest.mark.parametrize(
         "collector_class",
         [
-            SyncDataCollector,
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
+            Collector,
+            MultiSyncCollector,
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize("update_interval", [1])
@@ -590,9 +585,9 @@ class TestRayCollector(DistributedCollectorBase):
     @pytest.mark.parametrize(
         "collector_class",
         [
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
-            SyncDataCollector,
+            MultiSyncCollector,
+            MultiAsyncCollector,
+            Collector,
         ],
     )
     def test_distributed_collector_class(self, collector_class):
@@ -619,9 +614,9 @@ class TestRayCollector(DistributedCollectorBase):
     @pytest.mark.parametrize(
         "collector_class",
         [
-            SyncDataCollector,
-            MultiSyncDataCollector,
-            MultiaSyncDataCollector,
+            Collector,
+            MultiSyncCollector,
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize("sync", [False, True])
@@ -636,7 +631,7 @@ class TestRayCollector(DistributedCollectorBase):
         else:
             policy = CountingPolicy()
             policy_factory = None
-        if collector_class is MultiaSyncDataCollector:
+        if collector_class is MultiAsyncCollector:
             # otherwise we may collect data from a collector that has not yet been
             # updated
             n_collectors = 1
@@ -701,7 +696,7 @@ class TestRayCollector(DistributedCollectorBase):
             if sampler is SamplerWithoutReplacement:
                 assert sample["a"].unique().numel() == sample.numel()
 
-    # class CustomCollectorCls(SyncDataCollector):
+    # class CustomCollectorCls(Collector):
     #     def __init__(self, create_env_fn, **kwargs):
     #         policy = lambda td: td.set("action", torch.full(td.shape, 2))
     #         super().__init__(create_env_fn, policy, **kwargs)
@@ -729,7 +724,7 @@ class TestRayCollector(DistributedCollectorBase):
 
         collector = self.distributed_class()(
             [env] * n_collectors,
-            collector_class=SyncDataCollector,
+            collector_class=Collector,
             policy_factory=policy_constructor,
             total_frames=total_frames,
             frames_per_batch=frames_per_batch,
