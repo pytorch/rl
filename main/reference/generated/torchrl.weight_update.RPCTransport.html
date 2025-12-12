@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="DistributedTransport" href="torchrl.weight_update.DistributedTransport.html" />
-    <link rel="prev" title="RayActorTransport" href="torchrl.weight_update.RayActorTransport.html" />
+    <link rel="prev" title="RayTransport" href="torchrl.weight_update.RayTransport.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -434,43 +434,71 @@
 <h1>RPCTransport<a class="headerlink" href="#rpctransport" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">RPCTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector_info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collector_rref</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collector_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RPCTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">RPCTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector_info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collector_rref</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collector_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_rank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport" title="Permalink to this definition">¶</a></dt>
 <dd><p>RPC transport for communicating with a single RPC remote collector.</p>
 <p>This transport handles weight updates for ONE specific remote collector via
-torch.distributed.rpc. Multiple transports are created for multiple collectors,
-following the same pattern as multiprocess collectors.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.check_connection">
-<span class="sig-name descname"><span class="pre">check_connection</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RPCTransport.check_connection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.check_connection" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check if RPC is initialized.</p>
-</dd></dl>
-
+torch.distributed primitives (send/recv) with RPC used for signaling.
+Multiple transports are created for multiple collectors, following the same
+pattern as the DistributedDataCollector.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.receive_weights">
-<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RPCTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>RPC workers typically don’t receive weights through this transport.</p>
+<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">torchrl.weight_update.weight_sync_schemes.WeightStrategy</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Receive weights from sender using torch.distributed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>timeout</strong> – Maximum time to wait for weights (seconds). If None,
+blocks until weights are received.</p></li>
+<li><p><strong>weights</strong> – Pre-allocated weight buffer to receive into.</p></li>
+<li><p><strong>model</strong> – The model to apply weights to.</p></li>
+<li><p><strong>strategy</strong> – Strategy for applying weights to the model.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The received weights, or None if timeout expires.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.send_weights">
-<span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RPCTransport.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.send_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights to the remote collector via RPC.</p>
-<p>Note: We don’t pass model_id to the remote collector because remote
-collectors don’t have weight senders - they apply weights directly to
-their local policy.</p>
+<span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.send_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights to the remote collector using torch.distributed.</p>
+<p>Uses torch.distributed.send() for the actual weight transfer and RPC
+for signaling the remote collector to receive.</p>
+<p>Order is critical to avoid deadlock:
+1. Signal receiver via RPC to start recv() (non-blocking)
+2. Send weights via torch.distributed (blocking until recv completes)</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.send_weights_async">
-<span class="sig-name descname"><span class="pre">send_weights_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RPCTransport.send_weights_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.send_weights_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights to remote collector without waiting for completion.</p>
-<p>Use wait_ack() to wait for completion after sending to all workers.</p>
+<span class="sig-name descname"><span class="pre">send_weights_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport.send_weights_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.send_weights_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights to remote collector asynchronously.</p>
+<p>Uses torch.distributed.isend() for the actual weight transfer and RPC
+for signaling. Use wait_ack() to wait for completion.</p>
+<p>Order is critical to avoid deadlock:
+1. Signal receiver via RPC to start recv() (non-blocking)
+2. Send weights via torch.distributed.isend() (non-blocking)
+3. wait_ack() waits for both to complete</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.setup_connection_and_weights_on_receiver">
+<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_receiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">torchrl.weight_update.weight_sync_schemes.WeightStrategy</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport.setup_connection_and_weights_on_receiver"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.setup_connection_and_weights_on_receiver" title="Permalink to this definition">¶</a></dt>
+<dd><p>No-op for RPCTransport - weights are received via receive().</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.setup_connection_and_weights_on_sender">
+<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport.setup_connection_and_weights_on_sender"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.setup_connection_and_weights_on_sender" title="Permalink to this definition">¶</a></dt>
+<dd><p>No-op for RPCTransport - weights are sent via send_weights().</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RPCTransport.wait_ack">
-<span class="sig-name descname"><span class="pre">wait_ack</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RPCTransport.wait_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.wait_ack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Wait for the RPC call to complete.</p>
+<span class="sig-name descname"><span class="pre">wait_ack</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_rpc.html#RPCTransport.wait_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RPCTransport.wait_ack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for both the RPC call and the distributed send to complete.</p>
 </dd></dl>
 
 </dd></dl>
@@ -488,7 +516,7 @@ their local policy.</p>
         <a href="torchrl.weight_update.DistributedTransport.html" class="btn btn-neutral float-right" title="DistributedTransport" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.weight_update.RayActorTransport.html" class="btn btn-neutral" title="RayActorTransport" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.weight_update.RayTransport.html" class="btn btn-neutral" title="RayTransport" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

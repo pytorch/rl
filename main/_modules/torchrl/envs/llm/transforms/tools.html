@@ -1328,9 +1328,9 @@
                     <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
                         <span class="k">pass</span>
 
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">start_found</span><span class="p">:</span>
-                        <span class="n">timeout_val</span> <span class="o">-=</span> <span class="mf">0.1</span>
-                        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+                    <span class="c1"># Always sleep a bit to avoid busy-waiting and give subprocess time</span>
+                    <span class="n">timeout_val</span> <span class="o">-=</span> <span class="mf">0.01</span>
+                    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
 
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="k">return</span> <span class="p">{</span>
@@ -1429,8 +1429,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">processes</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">PersistentPythonProcess</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">pool_size</span><span class="p">)</span>
         <span class="p">]</span>
+        <span class="c1"># Create a lock for each process to prevent concurrent access</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">process_locks</span> <span class="o">=</span> <span class="p">[</span><span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">pool_size</span><span class="p">)]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">next_idx</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_selection_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
 
 <div class="viewcode-block" id="PythonExecutorService.execute"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService.execute">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">code</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute Python code using next available process (round-robin).</span>
@@ -1441,12 +1443,14 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            dict: Execution result with keys &#39;success&#39;, &#39;stdout&#39;, &#39;stderr&#39;, &#39;returncode&#39;.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Simple round-robin - Ray handles the queuing via max_concurrency</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
-            <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">processes</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">next_idx</span><span class="p">]</span>
+        <span class="c1"># Select a process using round-robin</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selection_lock</span><span class="p">:</span>
+            <span class="n">process_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_idx</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">next_idx</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">pool_size</span>
 
-        <span class="k">return</span> <span class="n">process</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">code</span><span class="p">)</span></div>
+        <span class="c1"># Lock the selected process for the duration of execution</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_locks</span><span class="p">[</span><span class="n">process_idx</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">processes</span><span class="p">[</span><span class="n">process_idx</span><span class="p">]</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">code</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="PythonExecutorService.cleanup"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService.cleanup">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup all processes in the pool.&quot;&quot;&quot;</span>

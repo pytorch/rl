@@ -1140,7 +1140,7 @@
         <span class="k">return</span> <span class="n">coeff</span> <span class="o">*</span> <span class="n">kl_penalty</span><span class="p">,</span> <span class="n">kl_penalty</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">CISPO</span><span class="p">(</span><span class="n">GRPOLoss</span><span class="p">):</span>
+<div class="viewcode-block" id="CISPOLoss"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.CISPOLoss.html#torchrl.objectives.llm.CISPOLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">CISPOLoss</span><span class="p">(</span><span class="n">GRPOLoss</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;CISPO (Clipped Importance Sampling Policy Optimization).</span>
 
 <span class="sd">    Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but</span>
@@ -1160,7 +1160,7 @@
         <span class="n">clip_fraction</span> <span class="o">=</span> <span class="p">(</span><span class="n">log_weight_clip</span> <span class="o">!=</span> <span class="n">log_weight</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">log_weight</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
         <span class="n">ratio</span> <span class="o">=</span> <span class="n">log_weight_clip</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
         <span class="n">gain</span> <span class="o">=</span> <span class="n">ratio</span> <span class="o">*</span> <span class="n">advantage</span>
-        <span class="k">return</span> <span class="o">-</span><span class="n">gain</span><span class="p">,</span> <span class="n">clip_fraction</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">gain</span><span class="p">,</span> <span class="n">clip_fraction</span></div>
 
 
 <div class="viewcode-block" id="MCAdvantage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MCAdvantage</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>

@@ -491,12 +491,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">WeightReceiver</span><span class="p">,</span>
-    <span class="n">WeightSender</span><span class="p">,</span>
-    <span class="n">WeightStrategy</span><span class="p">,</span>
-    <span class="n">WeightSyncScheme</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightStrategy</span><span class="p">,</span> <span class="n">WeightSyncScheme</span>
 
 
 <div class="viewcode-block" id="VLLMDoubleBufferTransport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMDoubleBufferTransport</span><span class="p">:</span>
@@ -539,20 +534,31 @@
         <span class="n">weights</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weights written successfully to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="VLLMDoubleBufferTransport.receive_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.receive_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">receive_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
+<div class="viewcode-block" id="VLLMDoubleBufferTransport.receive_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.receive_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Reads the weights from the shared directory.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            timeout: Not used for file-based transport (kept for API compatibility).</span>
+<span class="sd">            timeout: Ignored (file-based transport is instant).</span>
+<span class="sd">            weights: Ignored.</span>
+<span class="sd">            model: Ignored.</span>
+<span class="sd">            strategy: Ignored.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            TensorDict with flattened keys containing the weights.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Timeout is ignored since file-based transport doesn&#39;t involve waiting</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reading weights from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="p">)</span>
-        <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+        <span class="n">received_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="p">)</span>
+        <span class="n">received_weights</span> <span class="o">=</span> <span class="n">received_weights</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weights read successfully from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">weights</span></div>
+        <span class="k">return</span> <span class="n">received_weights</span></div>
 
 <div class="viewcode-block" id="VLLMDoubleBufferTransport.check_connection"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.check_connection">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">check_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the transport is ready.</span>
@@ -609,13 +615,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">strategy_name</span> <span class="o">=</span> <span class="n">strategy</span>
 
-<div class="viewcode-block" id="VLLMDoubleBufferSyncScheme.create_transport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">pipe_or_context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMDoubleBufferTransport</span><span class="p">:</span>
+<div class="viewcode-block" id="VLLMDoubleBufferSyncScheme.create_transport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMDoubleBufferTransport</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create transport for double-buffered storage.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            pipe_or_context: Not used for file-based transport (kept for API compatibility).</span>
+<span class="sd">            **kwargs: Not used for file-based transport (kept for API compatibility).</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            A VLLMDoubleBufferTransport instance.</span>
@@ -639,7 +643,7 @@
         <span class="k">return</span> <span class="n">VLLMDoubleBufferWeightReceiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="VLLMDoubleBufferWeightSender"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMDoubleBufferWeightSender</span><span class="p">(</span><span class="n">WeightSender</span><span class="p">):</span>
+<div class="viewcode-block" id="VLLMDoubleBufferWeightSender"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMDoubleBufferWeightSender</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sends weights to vLLM workers using double-buffered storage.</span>
 
 <span class="sd">    This sender extracts weights from a training model and writes them to</span>
@@ -700,7 +704,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;vllm_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMDoubleBufferWeightReceiver</span><span class="p">(</span><span class="n">WeightReceiver</span><span class="p">):</span>
+<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMDoubleBufferWeightReceiver</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Receives weights in a vLLM worker using double-buffered storage.</span>
 
 <span class="sd">    This receiver reads weights from a shared directory and loads them into</span>
@@ -723,7 +727,7 @@
             <span class="sa">f</span><span class="s2">&quot;Initialized double-buffer receiver reading from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">local_addr</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver.apply_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.apply_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver.apply_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.apply_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply weights to vLLM engine using RPC.</span>
 
 <span class="sd">        This method uses RPC to tell all vLLM workers to load weights from</span>
@@ -732,7 +736,10 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            weights: TensorDict with flattened keys containing weights.</span>
+<span class="sd">            inplace: Whether to apply weights in place. Default is `True`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot apply weights out of place for vLLM double-buffer&quot;</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Applying weights to vLLM engine via RPC&quot;</span><span class="p">)</span>
 
         <span class="c1"># Convert TensorDict to list of (name, tensor) tuples</span>
@@ -779,7 +786,8 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            True if weights were successfully read and applied, False otherwise.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="c1"># timeout is not used by file-based transport but kept for API compatibility</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span></div></div>
 </pre></div>

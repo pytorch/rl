@@ -436,6 +436,11 @@
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.DistributedWeightUpdater">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.distributed.</span></span><span class="sig-name descname"><span class="pre">DistributedWeightUpdater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">store</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sync</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/generic.html#DistributedWeightUpdater"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.DistributedWeightUpdater" title="Permalink to this definition">¶</a></dt>
 <dd><p>A remote weight updater for synchronizing policy weights across distributed workers.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This class has been deprecated in favor of the <a class="reference internal" href="torchrl.weight_update.DistributedWeightSyncScheme.html#torchrl.weight_update.DistributedWeightSyncScheme" title="torchrl.weight_update.DistributedWeightSyncScheme"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedWeightSyncScheme</span></code></a>
+API.</p>
+</div>
 <p>The <cite>DistributedWeightUpdater</cite> class provides a mechanism for updating the weights
 of a policy across distributed inference workers. It is designed to work with the
 <a class="reference internal" href="torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector" title="torchrl.collectors.distributed.DistributedDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedDataCollector</span></code></a> to ensure that each worker receives the latest policy weights.
@@ -606,7 +611,7 @@ By default, this is a no-op.</p>
 <p>Once registered, the updater will not accept another collector.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><em>DataCollectorBase</em></a>) – The collector to register.</p>
+<dd class="field-odd"><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector" title="torchrl.collectors.BaseCollector"><em>BaseCollector</em></a>) – The collector to register.</p>
 </dd>
 </dl>
 </dd></dl>

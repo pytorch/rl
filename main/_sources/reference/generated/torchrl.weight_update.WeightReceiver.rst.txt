@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-WeightReceiver
-==============
-
-.. autoclass:: WeightReceiver
-    :members:
-    :inherited-members:

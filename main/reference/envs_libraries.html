@@ -614,7 +614,7 @@ action in the environment) are actually the first observations of a new episode,
 current episode.</p>
 <p>To handle these cases, torchrl provides a <code class="xref py py-class docutils literal notranslate"><span class="pre">AutoResetTransform</span></code> that will copy the observations
 that result from the call to <cite>step</cite> to the next <cite>reset</cite> and skip the calls to <cite>reset</cite> during rollouts (in both
-<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> and <a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a> iterations).
+<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a> and <code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code> iterations).
 This transform class also provides a fine-grained control over the behavior to be adopted for the invalid observations,
 which can be masked with <cite>“nan”</cite> or any other values, or not masked at all.</p>
 <p>To tell torchrl that an environment is auto-resetting, it is sufficient to provide an <code class="docutils literal notranslate"><span class="pre">auto_reset</span></code> argument

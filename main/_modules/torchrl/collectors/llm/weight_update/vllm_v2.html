@@ -434,7 +434,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends.vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">RLvLLMEngine</span>
 
 <span class="k">try</span><span class="p">:</span>
@@ -466,7 +466,7 @@
                 <span class="sa">f</span><span class="s2">&quot;vllm_engine must implement RLvLLMEngine interface, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">vllm_engine</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="o">=</span> <span class="n">vllm_engine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized_group</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -476,7 +476,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">vllm_engine</span><span class="o">.</span><span class="n">get_master_port</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span> <span class="o">=</span> <span class="n">vllm_engine</span><span class="o">.</span><span class="n">get_model_metadata</span><span class="p">()</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Initialized vLLMUpdaterV2 with tp_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
 
@@ -498,7 +498,7 @@
         <span class="c1"># Initialize the engine&#39;s weight update group</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">init_weight_update_group</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized_group</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Weight update group initialized&quot;</span><span class="p">)</span></div>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Weight update group initialized&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="vLLMUpdaterV2.push_weights"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdaterV2.html#torchrl.collectors.llm.vLLMUpdaterV2.push_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">push_weights</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">|</span> <span class="n">TensorDictBase</span>
@@ -516,12 +516,12 @@
 
         <span class="c1"># Delegate to the engine&#39;s update_weights method</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Weight update completed&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Weight update completed&quot;</span><span class="p">)</span>
 
         <span class="c1"># Call post-hooks to increment policy version</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Calling post-hooks...&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Calling post-hooks...&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_call_post_hooks</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Post-hooks completed&quot;</span><span class="p">)</span></div>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Post-hooks completed&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="vLLMUpdaterV2.push_weights_from_transformers"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdaterV2.html#torchrl.collectors.llm.vLLMUpdaterV2.push_weights_from_transformers">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">push_weights_from_transformers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">transformers_model</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Push weights from a transformers model.</span>
@@ -556,11 +556,11 @@
             <span class="p">)</span>
 
         <span class="n">t1</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to extract state_dict: </span><span class="si">{</span><span class="n">t1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to extract state_dict: </span><span class="si">{</span><span class="n">t1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="c1"># Convert to iterator for memory efficiency</span>
         <span class="n">weights_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">state_dict</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">push_weights</span><span class="p">(</span><span class="n">weights_iter</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to push weights: </span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to push weights: </span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="vLLMUpdaterV2.push_weights_from_transformers_optimized"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdaterV2.html#torchrl.collectors.llm.vLLMUpdaterV2.push_weights_from_transformers_optimized">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">push_weights_from_transformers_optimized</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">transformers_model</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">50</span>
@@ -603,7 +603,7 @@
             <span class="p">)</span>
 
         <span class="n">t1</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to extract state_dict: </span><span class="si">{</span><span class="n">t1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to extract state_dict: </span><span class="si">{</span><span class="n">t1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
 
         <span class="c1"># Pre-load all weights to GPU for faster transfer</span>
         <span class="n">gpu_weights</span> <span class="o">=</span> <span class="p">{}</span>
@@ -617,7 +617,7 @@
         <span class="c1"># Synchronize to ensure all transfers are complete</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
         <span class="n">t2</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to move weights to GPU: </span><span class="si">{</span><span class="n">t2</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t1</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time to move weights to GPU: </span><span class="si">{</span><span class="n">t2</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t1</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
 
         <span class="c1"># Transfer weights (optionally in batches)</span>
         <span class="k">if</span> <span class="n">batch_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -625,7 +625,7 @@
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">weight_items</span><span class="p">),</span> <span class="n">batch_size</span><span class="p">):</span>
                 <span class="n">batch</span> <span class="o">=</span> <span class="n">weight_items</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">push_weights</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">batch</span><span class="p">))</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Transferred batch </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">weight_items</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">batch_size</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -633,7 +633,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">push_weights</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">gpu_weights</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
 
         <span class="n">t3</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Time to push weights: </span><span class="si">{</span><span class="n">t3</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t2</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s, total time: </span><span class="si">{</span><span class="n">t3</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span>
         <span class="p">)</span></div>
 
@@ -666,7 +666,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector and set up policy version increment post-hook.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            collector: The collector to register (DataCollectorBase)</span>
+<span class="sd">            collector: The collector to register (BaseCollector)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span>
 
@@ -674,14 +674,14 @@
         <span class="c1"># This avoids N^2 complexity where each weight update calls increment_version</span>
         <span class="c1"># on all collectors N times (once per registered collector)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">post_hooks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Registering policy version increment post-hook&quot;</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Registering policy version increment post-hook&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_post_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_increment_all_collector_versions</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">result</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_increment_all_collector_versions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment version for all registered collectors efficiently.&quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Incrementing policy version for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collectors</span><span class="p">)</span><span class="si">}</span><span class="s2"> collectors...&quot;</span>
         <span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">collector</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collectors</span><span class="p">):</span>
@@ -694,7 +694,7 @@
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Failed to increment version for collector </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;All collector versions incremented&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;All collector versions incremented&quot;</span><span class="p">)</span>
 
 <div class="viewcode-block" id="vLLMUpdaterV2.get_model_metadata"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdaterV2.html#torchrl.collectors.llm.vLLMUpdaterV2.get_model_metadata">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">get_model_metadata</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]:</span>

@@ -428,16 +428,19 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">nullcontext</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">overload</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">overload</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.ray_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">_RayServiceMetaClass</span><span class="p">,</span> <span class="n">RayTransform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
 
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ModuleTransform&quot;</span><span class="p">,</span> <span class="s2">&quot;RayModuleTransform&quot;</span><span class="p">]</span>
 
@@ -447,7 +450,45 @@
 
 <span class="sd">    This transform creates a Ray actor that wraps a ModuleTransform,</span>
 <span class="sd">    allowing module execution in a separate Ray worker process.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        weight_sync_scheme: Optional weight synchronization scheme for updating</span>
+<span class="sd">            the module&#39;s weights from a parent collector. When provided, the scheme</span>
+<span class="sd">            is initialized on the receiver side (the Ray actor) and can receive</span>
+<span class="sd">            weight updates via torch.distributed.</span>
+<span class="sd">        **kwargs: Additional arguments passed to RayTransform and ModuleTransform.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.weight_update import RayModuleTransformScheme</span>
+<span class="sd">        &gt;&gt;&gt; scheme = RayModuleTransformScheme()</span>
+<span class="sd">        &gt;&gt;&gt; transform = RayModuleTransform(module=my_module, weight_sync_scheme=scheme)</span>
+<span class="sd">        &gt;&gt;&gt; # The scheme can then be registered with a collector for weight updates</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">weight_sync_scheme</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_scheme</span> <span class="o">=</span> <span class="n">weight_sync_scheme</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># After actor is created, initialize the scheme on the receiver side</span>
+        <span class="k">if</span> <span class="n">weight_sync_scheme</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Store transform reference in the scheme for sender initialization</span>
+            <span class="n">weight_sync_scheme</span><span class="o">.</span><span class="n">_set_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+            <span class="n">weight_sync_scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">()</span>
+
+            <span class="c1"># Initialize receiver in the actor</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s2">&quot;Setting up weight sync scheme on sender -- sender will do the remote call&quot;</span>
+            <span class="p">)</span>
+            <span class="n">weight_sync_scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">_getattr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;in_keys&quot;</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">_getattr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;out_keys&quot;</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_create_actor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
@@ -661,6 +702,25 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_update_weights_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_weight_sync_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scheme</span><span class="p">:</span> <span class="n">WeightSyncScheme</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize weight sync scheme on the receiver side (called in Ray actor).</span>
+
+<span class="sd">        This method is called by RayModuleTransform after the actor is created</span>
+<span class="sd">        to set up the receiver side of the weight synchronization scheme.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            scheme: The weight sync scheme instance (e.g., RayModuleTransformScheme).</span>
+<span class="sd">            model_id: Identifier for the model being synchronized.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initializing weight sync scheme for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_receiver</span><span class="p">(</span><span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Setup weight sync scheme for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_scheme</span> <span class="o">=</span> <span class="n">scheme</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_receive_weights_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_scheme</span><span class="o">.</span><span class="n">receive</span><span class="p">()</span>
 
 <div class="viewcode-block" id="ModuleTransform.transform_observation_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ModuleTransform.html#torchrl.envs.transforms.ModuleTransform.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

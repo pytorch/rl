@@ -1,0 +1,1461 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.weight_update._mp &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.0.0+unknown) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.weight_update._mp</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.weight_update._mp</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span><span class="p">,</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update._shared</span><span class="w"> </span><span class="kn">import</span> <span class="n">SharedMemWeightSyncScheme</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_model</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransportBackend</span>
+
+
+<div class="viewcode-block" id="MultiProcessWeightSyncScheme"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiProcessWeightSyncScheme</span><span class="p">(</span><span class="n">SharedMemWeightSyncScheme</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Weight synchronization for multiprocess operations using queues.</span>
+
+<span class="sd">    This scheme creates transports that communicate via multiprocessing queues.</span>
+<span class="sd">    Unlike the parent SharedMemWeightSyncScheme which uses shared memory for in-place</span>
+<span class="sd">    updates, this scheme sends actual weight copies through queues to workers.</span>
+
+<span class="sd">    A background thread on the receiver side listens for &quot;receive&quot; instructions</span>
+<span class="sd">    from the sender. When an instruction arrives, the thread receives the weights</span>
+<span class="sd">    from the weight queue and applies them to the model.</span>
+
+<span class="sd">    It follows the same two-phase pattern as SharedMemWeightSyncScheme:</span>
+
+<span class="sd">    1. **init_on_sender()**: Stores the recipe for creating device-specific weights</span>
+<span class="sd">       (model reference, devices, mapping functions) without creating actual copies</span>
+<span class="sd">    2. **synchronize_weights()**: Creates device-specific weight copies on-demand,</span>
+<span class="sd">       sends them sequentially to workers via queues, allowing garbage collection</span>
+<span class="sd">       between workers to minimize memory usage</span>
+
+<span class="sd">    This approach avoids holding multiple weight copies in memory simultaneously,</span>
+<span class="sd">    which is especially beneficial for large models with many workers.</span>
+
+<span class="sd">    Synchronization flow:</span>
+<span class="sd">    - **init_on_sender()**: Store configuration and register worker queues</span>
+<span class="sd">    - **synchronize_weights()**: Create and send initial weights on-demand</span>
+<span class="sd">    - **init_on_receiver()**: Create receiver that reads from queue</span>
+<span class="sd">    - **send()**: Extract and send weight updates, wait for acknowledgments</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        strategy: The weight transmission strategy (default: &quot;tensordict&quot;).</span>
+<span class="sd">            Can be &quot;tensordict&quot; or &quot;state_dict&quot;.</span>
+<span class="sd">        sync: If True (default), send() blocks until receiver acknowledges.</span>
+<span class="sd">            If False, send() returns immediately (use send_async/wait_async).</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # Basic usage with collector</span>
+<span class="sd">        &gt;&gt;&gt; scheme = MultiProcessWeightSyncScheme()</span>
+<span class="sd">        &gt;&gt;&gt; collector = MultiSyncCollector(</span>
+<span class="sd">        ...     create_env_fn=[lambda: GymEnv(&quot;CartPole-v1&quot;)] * 3,</span>
+<span class="sd">        ...     policy=policy,</span>
+<span class="sd">        ...     frames_per_batch=100,</span>
+<span class="sd">        ...     total_frames=1000,</span>
+<span class="sd">        ...     weight_sync_schemes={&quot;policy&quot;: scheme},</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; # scheme.collect() is called automatically by collector</span>
+<span class="sd">        &gt;&gt;&gt; # Weights are created on-demand and sent to workers efficiently</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The on-demand weight creation means that synchronize_weights() will be</span>
+<span class="sd">        slower than if weights were pre-computed, but memory usage is significantly</span>
+<span class="sd">        reduced, especially when workers use different devices or when the model</span>
+<span class="sd">        is large.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">,</span> <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the MultiProcessWeightSyncScheme.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            strategy: The weight transmission strategy (default: &quot;tensordict&quot;).</span>
+<span class="sd">            sync: If True (default), send() blocks until receiver acknowledges.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">strategy</span><span class="p">,</span> <span class="n">sync</span><span class="o">=</span><span class="n">sync</span><span class="p">)</span>
+        <span class="c1"># Override parent&#39;s shared transport - we don&#39;t use shared memory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_on_sender_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">params_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device_map_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize on the main process (sender side).</span>
+
+<span class="sd">        This method stores the configuration needed to create device-specific weight</span>
+<span class="sd">        copies during synchronization. Weight copies are created on-demand during</span>
+<span class="sd">        `synchronize_weights()` to reduce memory usage.</span>
+
+<span class="sd">        Similar to `SharedMemWeightSyncScheme`, this follows a two-phase pattern:</span>
+<span class="sd">        1. `init_on_sender()`: Store the recipe for creating weights</span>
+<span class="sd">        2. `synchronize_weights()`: Create and send weights on-demand</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_id: Identifier for the model being synchronized (e.g., &quot;policy&quot;).</span>
+<span class="sd">                Required when using context.</span>
+<span class="sd">            context: Optional context object (e.g., collector) providing:</span>
+<span class="sd">                - num_workers: Number of worker processes</span>
+<span class="sd">                - policy_device: List of devices for each worker</span>
+<span class="sd">                When provided, model_id is used to resolve the model from context.</span>
+<span class="sd">            weights: Pre-extracted weights as TensorDict. Mutually exclusive with</span>
+<span class="sd">                model and context. Used when weights are already available.</span>
+<span class="sd">            model: Model to extract weights from. Mutually exclusive with weights</span>
+<span class="sd">                and context.</span>
+<span class="sd">            params_map: Pre-computed mapping of worker_idx to device-specific weights.</span>
+<span class="sd">                Most explicit option. When provided, all other parameters must be None.</span>
+<span class="sd">            devices: List of devices for each worker. Used with weights or model to</span>
+<span class="sd">                automatically create device-specific copies. Length must equal num_workers.</span>
+<span class="sd">            device_map_fn: Custom function (worker_idx, weights) -&gt; device_weights.</span>
+<span class="sd">                Allows full control over device mapping. Requires num_workers.</span>
+<span class="sd">            num_workers: Number of workers. Required with device_map_fn, inferred</span>
+<span class="sd">                from devices length otherwise.</span>
+<span class="sd">            **kwargs: Reserved for future use.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            Simple usage with collector context (most common):</span>
+
+<span class="sd">            &gt;&gt;&gt; scheme = MultiProcessWeightSyncScheme()</span>
+<span class="sd">            &gt;&gt;&gt; collector = MultiSyncCollector(</span>
+<span class="sd">            ...     create_env_fn=[lambda: GymEnv(&quot;CartPole-v1&quot;)] * 3,</span>
+<span class="sd">            ...     policy=policy,</span>
+<span class="sd">            ...     frames_per_batch=100,</span>
+<span class="sd">            ...     weight_sync_schemes={&quot;policy&quot;: scheme},</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; # scheme.init_on_sender() is called automatically by collector</span>
+
+<span class="sd">            Direct initialization with explicit devices:</span>
+
+<span class="sd">            &gt;&gt;&gt; scheme = MultiProcessWeightSyncScheme()</span>
+<span class="sd">            &gt;&gt;&gt; weights = TensorDict.from_module(policy)</span>
+<span class="sd">            &gt;&gt;&gt; scheme.init_on_sender(</span>
+<span class="sd">            ...     weights=weights,</span>
+<span class="sd">            ...     devices=[torch.device(&quot;cpu&quot;), torch.device(&quot;cuda:0&quot;)],</span>
+<span class="sd">            ...     num_workers=2,</span>
+<span class="sd">            ... )</span>
+
+<span class="sd">            Advanced: Pre-computed params_map:</span>
+
+<span class="sd">            &gt;&gt;&gt; weights_cpu = TensorDict.from_module(policy)</span>
+<span class="sd">            &gt;&gt;&gt; weights_cuda = weights_cpu.to(&quot;cuda&quot;)</span>
+<span class="sd">            &gt;&gt;&gt; scheme.init_on_sender(</span>
+<span class="sd">            ...     params_map={0: weights_cpu, 1: weights_cuda, 2: weights_cuda},</span>
+<span class="sd">            ...     num_workers=3,</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Get params_map from parent class logic</span>
+        <span class="n">params_map_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_params_map</span><span class="p">(</span>
+            <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">params_map</span><span class="o">=</span><span class="n">params_map</span><span class="p">,</span>
+            <span class="n">devices</span><span class="o">=</span><span class="n">devices</span><span class="p">,</span>
+            <span class="n">device_map_fn</span><span class="o">=</span><span class="n">device_map_fn</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Store the mapping recipe for later use in synchronize_weights</span>
+        <span class="c1"># Don&#39;t store params_map directly to save memory - we&#39;ll recompute on demand</span>
+        <span class="c1"># Note: We don&#39;t store context directly to avoid pickle issues -</span>
+        <span class="c1"># it&#39;s available via _context_ref</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_device_mapping_info</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;model_id&quot;</span><span class="p">:</span> <span class="n">model_id</span><span class="p">,</span>
+            <span class="s2">&quot;weights&quot;</span><span class="p">:</span> <span class="n">weights</span><span class="p">,</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">model</span><span class="p">,</span>
+            <span class="s2">&quot;params_map&quot;</span><span class="p">:</span> <span class="n">params_map</span><span class="p">,</span>
+            <span class="s2">&quot;devices&quot;</span><span class="p">:</span> <span class="n">devices</span><span class="p">,</span>
+            <span class="s2">&quot;device_map_fn&quot;</span><span class="p">:</span> <span class="n">device_map_fn</span><span class="p">,</span>
+            <span class="s2">&quot;num_workers&quot;</span><span class="p">:</span> <span class="n">num_workers</span>
+            <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">params_map_result</span><span class="p">),</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Create per-worker queues for weight distribution</span>
+        <span class="c1"># Each worker gets its own queue for receiving weights</span>
+        <span class="n">all_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params_map_result</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_weight_init_queues&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">all_workers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+            <span class="c1"># Create instruction queues for background receiver</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+            <span class="c1"># Create ack queues for synchronous mode</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+
+        <span class="c1"># Store model_id and context on scheme</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span>
+
+        <span class="c1"># Register workers with their queues</span>
+        <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">all_workers</span><span class="p">:</span>
+            <span class="n">queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+            <span class="n">ack_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+            <span class="c1"># Create MPTransport for this worker with ack queue</span>
+            <span class="n">transport</span> <span class="o">=</span> <span class="n">MPTransport</span><span class="p">(</span><span class="n">weight_queue</span><span class="o">=</span><span class="n">queue</span><span class="p">,</span> <span class="n">ack_queue</span><span class="o">=</span><span class="n">ack_queue</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_register_worker_sender</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">,</span> <span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_on_receiver_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize on worker process (receiver side).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_id: Identifier for the model being synchronized</span>
+<span class="sd">            context: Optional context object providing worker_idx and model</span>
+<span class="sd">            **kwargs: Alternative to context (worker_idx, model, etc.)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Extract parameters from context or kwargs</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">worker_idx</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;worker_idx&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;get_model&quot;</span><span class="p">):</span>
+                <span class="n">model</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get_model</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">worker_idx</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;worker_idx&quot;</span><span class="p">)</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;worker_idx must be provided via context or kwargs&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Get the queue for this worker</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> not registered. init_on_sender() must be called first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+        <span class="n">ack_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">)</span>
+
+        <span class="c1"># Store on scheme directly</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span>
+
+        <span class="c1"># Store instruction and ack queue references for this worker</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_instruction_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_ack_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
+
+        <span class="c1"># Create transport with the worker&#39;s queue and ack queue</span>
+        <span class="n">transport</span> <span class="o">=</span> <span class="n">MPTransport</span><span class="p">(</span><span class="n">weight_queue</span><span class="o">=</span><span class="n">queue</span><span class="p">,</span> <span class="n">ack_queue</span><span class="o">=</span><span class="n">ack_queue</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_transport_receiver</span><span class="p">(</span><span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+
+        <span class="c1"># Store worker_idx for synchronize_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
+
+<div class="viewcode-block" id="MultiProcessWeightSyncScheme.send"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme.send">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send weights synchronously to workers.</span>
+
+<span class="sd">        This method:</span>
+<span class="sd">        1. Prepares weights (extracts from model if weights=None)</span>
+<span class="sd">        2. Sends weights to the weight queue</span>
+<span class="sd">        3. Sends &quot;receive&quot; instruction to workers&#39; background threads</span>
+<span class="sd">        4. If sync=True, waits for acknowledgments from those workers</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Weights to send. Can be:</span>
+<span class="sd">                - None: Extract from model via context.get_model(model_id)</span>
+<span class="sd">                - nn.Module: Extract weights from module</span>
+<span class="sd">                - TensorDict: Use directly</span>
+<span class="sd">                - dict: Convert to TensorDict</span>
+<span class="sd">            worker_ids: Which workers to send to:</span>
+<span class="sd">                - None: Send to all workers (default)</span>
+<span class="sd">                - int: Send to single worker</span>
+<span class="sd">                - list[int]: Send to specific workers</span>
+
+<span class="sd">        Note: If sync=True (default), this is a blocking call that ensures</span>
+<span class="sd">        specified workers are updated before returning.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be initialized on sender before sending weights&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_sender</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be synchronized on sender before sending weights&quot;</span><span class="p">)</span>
+
+        <span class="n">model_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span>
+
+        <span class="c1"># Let the scheme prepare the weights</span>
+        <span class="n">prepared_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
+            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">,</span>
+            <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">transports</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterate_transports</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">))</span>
+
+        <span class="c1"># Send weights to all workers first via queue (non-blocking)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Sending weights to queues&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">transport</span> <span class="ow">in</span> <span class="n">transports</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;send_weights_async&quot;</span><span class="p">):</span>
+                <span class="c1"># For MPTransport, pass model_id; other transports don&#39;t need it</span>
+                <span class="n">transport</span><span class="o">.</span><span class="n">send_weights_async</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback for transports that don&#39;t support async send</span>
+                <span class="n">transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">)</span>
+
+        <span class="c1"># Send instruction to workers&#39; background threads to receive the weights</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Sending &#39;receive&#39; instruction to workers&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
+
+        <span class="c1"># Wait for all acknowledgments if in synchronous mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Waiting for acknowledgments from workers&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_ack</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_connection_and_weights_on_sender_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Synchronize weights with workers before collection starts.</span>
+
+<span class="sd">        Computes device-specific weight copies on-demand and sends them to workers</span>
+<span class="sd">        sequentially via queues. This is called once after workers are initialized</span>
+<span class="sd">        but before they start collecting data.</span>
+
+<span class="sd">        Unlike send(), this does not wait for acknowledgments since workers are still</span>
+<span class="sd">        in their initialization phase.</span>
+
+<span class="sd">        This approach creates weight copies on-demand and sends them sequentially,</span>
+<span class="sd">        allowing garbage collection between workers to reduce memory usage.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If init_on_sender() was not called first.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Get the device mapping info stored during init_on_sender</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_device_mapping_info&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;synchronize_weights() requires init_on_sender() to be called first&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">mapping_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device_mapping_info</span>
+
+        <span class="c1"># Get context from weakref</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span>
+
+        <span class="c1"># Compute params_map on-demand</span>
+        <span class="c1"># Extract with explicit type casting for type checker</span>
+        <span class="n">model_id</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;model_id&quot;</span><span class="p">]</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;weights&quot;</span><span class="p">]</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">]</span>
+        <span class="n">params_map_arg</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;params_map&quot;</span><span class="p">]</span>
+        <span class="n">devices</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;devices&quot;</span><span class="p">]</span>
+        <span class="n">device_map_fn</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;device_map_fn&quot;</span><span class="p">]</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="n">mapping_info</span><span class="p">[</span><span class="s2">&quot;num_workers&quot;</span><span class="p">]</span>
+
+        <span class="n">params_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_params_map</span><span class="p">(</span>
+            <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+            <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">params_map</span><span class="o">=</span><span class="n">params_map_arg</span><span class="p">,</span>
+            <span class="n">devices</span><span class="o">=</span><span class="n">devices</span><span class="p">,</span>
+            <span class="n">device_map_fn</span><span class="o">=</span><span class="n">device_map_fn</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Send to workers sequentially via queues (no ACK - workers are still initializing)</span>
+        <span class="c1"># This allows GC to clean up each worker&#39;s weights before creating the next</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">transport</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterate_transports</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">!=</span> <span class="n">worker_idx</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">worker_weights</span> <span class="o">=</span> <span class="n">params_map</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;send_weights_async&quot;</span><span class="p">):</span>
+                <span class="n">transport</span><span class="o">.</span><span class="n">send_weights_async</span><span class="p">(</span><span class="n">worker_weights</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Transport </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">transport</span><span class="p">)</span><span class="si">}</span><span class="s2"> does not support async send for synchronization&quot;</span>
+                <span class="p">)</span>
+
+        <span class="c1"># Clean up the mapping info after synchronization</span>
+        <span class="nb">delattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_device_mapping_info&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_connection_and_weights_on_receiver_impl</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive initial weights and start background receiver thread.</span>
+
+<span class="sd">        This method:</span>
+<span class="sd">        1. Receives initial weights from the sender via queue</span>
+<span class="sd">        2. Applies them to the model</span>
+<span class="sd">        3. Starts a background thread that listens for &quot;receive&quot; instructions</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+        <span class="c1"># Use stored worker_idx if not provided</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">worker_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span>
+
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;worker_idx must be provided for _setup_connection_and_weights_on_receiver_impl.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Receive initial weights from queue via transport</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Receiver transport not set.&quot;</span><span class="p">)</span>
+
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span><span class="o">.</span><span class="n">setup_connection_and_weights_on_receiver</span><span class="p">(</span>
+            <span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">,</span>
+            <span class="n">weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Store received weights for later use</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_weights</span> <span class="o">=</span> <span class="n">weights</span>
+
+        <span class="c1"># Apply weights to model</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> applied initial weights&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Start background receiver thread</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_background_receiver</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_background_receive_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Background thread loop that waits for instructions and receives weights.</span>
+
+<span class="sd">        This loop:</span>
+<span class="sd">        1. Waits for a &quot;receive&quot; instruction from the sender</span>
+<span class="sd">        2. Receives weights from the weight queue</span>
+<span class="sd">        3. Applies them to the model</span>
+<span class="sd">        4. Sends an acknowledgment back to the sender</span>
+<span class="sd">        5. Repeats until stop event is set or &quot;stop&quot; instruction received</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Background receiver started for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">instruction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_instruction</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">instruction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Stop event was set or timeout</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;receive&quot;</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;receive&#39; instruction&quot;</span>
+                    <span class="p">)</span>
+
+                    <span class="c1"># Receive weights from transport (blocking)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span>
+                            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+                            <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="p">,</span>
+                        <span class="p">)</span>
+
+                        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received and applied weights&quot;</span>
+                            <span class="p">)</span>
+
+                            <span class="c1"># Cascade weight update to sub-collectors if context supports it</span>
+                            <span class="n">model_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="ow">or</span> <span class="s2">&quot;policy&quot;</span>
+                            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;update_policy_weights_&quot;</span>
+                            <span class="p">):</span>
+                                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                                    <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Cascading weight update to sub-collectors for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span>
+                                <span class="p">)</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
+                                    <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">weights</span>
+                                <span class="p">)</span>
+
+                    <span class="c1"># Send acknowledgment</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_send_ack</span><span class="p">(</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
+
+                <span class="k">elif</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;stop&#39; instruction&quot;</span>
+                    <span class="p">)</span>
+                    <span class="k">break</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Unknown instruction: </span><span class="si">{</span><span class="n">instruction</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Background receiver error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Background receiver stopped for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="MultiProcessWeightSyncScheme.create_transport"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransportBackend</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an MPTransport using the provided queue.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            This is used internally by init_on_sender/init_on_receiver.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">queue</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;queue&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">MPTransport</span><span class="p">(</span><span class="n">weight_queue</span><span class="o">=</span><span class="n">queue</span><span class="p">,</span> <span class="n">ack_queue</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MPTransport"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MPTransport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Multiprocessing transport using queues.</span>
+
+<span class="sd">    This transport uses queues for weight distribution and synchronization.</span>
+<span class="sd">    Similar to SharedMemTransport&#39;s queue-based approach, MPTransport uses</span>
+<span class="sd">    queues to send initial weights to workers during synchronization.</span>
+
+<span class="sd">    Initialization flow:</span>
+<span class="sd">    - synchronize_weights() extracts weights and sends to all workers via queues</span>
+<span class="sd">    - Workers receive the initial weights via setup_connection_and_weights_on_receiver()</span>
+<span class="sd">    - Subsequent updates use send_weights_async() followed by acknowledgments</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        weight_queue (mp.Queue): The queue to use for sending weights.</span>
+<span class="sd">        ack_queue (mp.Queue): The queue to use for receiving acknowledgments.</span>
+<span class="sd">        timeout (float): The timeout for waiting for acknowledgment. Default is 10 seconds.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight_queue</span><span class="p">,</span> <span class="n">ack_queue</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_queue</span> <span class="o">=</span> <span class="n">weight_queue</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ack_queue</span> <span class="o">=</span> <span class="n">ack_queue</span>
+
+<div class="viewcode-block" id="MPTransport.send_weights_async"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.send_weights_async">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">send_weights_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;policy&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send weights through the queue without waiting for acknowledgment.</span>
+
+<span class="sd">        Use wait_ack() to wait for acknowledgment after sending to all workers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Send in format expected by worker loop: ((model_id, weights), &quot;update_weights&quot;)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(((</span><span class="n">model_id</span><span class="p">,</span> <span class="n">weights</span><span class="p">),</span> <span class="s2">&quot;update_weights&quot;</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="MPTransport.receive_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.receive_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive weights from the queue (used in worker process).</span>
+
+<span class="sd">        This method only handles weight update messages. Other messages</span>
+<span class="sd">        (like &quot;close&quot;, &quot;continue&quot;, etc.) are ignored and should be handled</span>
+<span class="sd">        by the main worker loop.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Maximum time to wait for weights (seconds).</span>
+<span class="sd">                     None means use the transport&#39;s default timeout.</span>
+<span class="sd">            weights: Ignored (weights come from queue).</span>
+<span class="sd">            model: The model to apply weights to.</span>
+<span class="sd">            strategy: Strategy for applying weights to the model.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The received weights, or None if no data available.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Use transport&#39;s default timeout if not specified</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span>
+        <span class="n">data_in</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;update_weights&quot;</span><span class="p">:</span>
+            <span class="c1"># data_in is (model_id, weights) - we ignore model_id, scheme knows it</span>
+            <span class="n">_model_id</span><span class="p">,</span> <span class="n">received_weights</span> <span class="o">=</span> <span class="n">data_in</span>
+
+            <span class="c1"># Apply weights to model if provided</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">received_weights</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">received_weights</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected &#39;update_weights&#39; but got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MPTransport.setup_connection_and_weights_on_sender"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.setup_connection_and_weights_on_sender">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">setup_connection_and_weights_on_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op for MPTransport - weights are sent via scheme&#39;s synchronize_weights().</span>
+
+<span class="sd">        The actual sending happens in MultiProcessWeightSyncScheme._setup_connection_and_weights_on_sender_impl(), which:</span>
+<span class="sd">        1. Extracts weights from the context (e.g., collector.policy)</span>
+<span class="sd">        2. Calls send_weights_async() on all worker transports</span>
+<span class="sd">        3. Sends initial weights through queues to all workers</span>
+
+<span class="sd">        This is similar to SharedMemTransport.setup_connection_and_weights_on_sender() which</span>
+<span class="sd">        sends shared memory buffer references via queues.</span>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+
+<div class="viewcode-block" id="MPTransport.setup_connection_and_weights_on_receiver"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport.setup_connection_and_weights_on_receiver">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">setup_connection_and_weights_on_receiver</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive initial weights from sender during worker initialization.</span>
+
+<span class="sd">        This method blocks waiting for the initial weights to be sent from the main process</span>
+<span class="sd">        via queue. Similar to SharedMemTransport.setup_connection_and_weights_on_receiver() which receives</span>
+<span class="sd">        shared memory buffer references via queues, this receives the actual weights via queues.</span>
+
+<span class="sd">        The received weights are then applied to the worker&#39;s model by the scheme&#39;s synchronize_weights().</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index (used for logging/debugging).</span>
+<span class="sd">            weights: Ignored (weights come from queue).</span>
+<span class="sd">            model: Ignored.</span>
+<span class="sd">            strategy: Ignored.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The received weights if available, None otherwise (weights will come later via receive()).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Wait for initial weights (blocking)</span>
+        <span class="n">data_in</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;update_weights&quot;</span><span class="p">:</span>
+            <span class="c1"># data_in is (model_id, weights), extract just the weights</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">received_weights</span> <span class="o">=</span> <span class="n">data_in</span>
+            <span class="k">return</span> <span class="n">received_weights</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected &#39;update_weights&#39; but got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div></div>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+         <script src="../../../_static/jquery.js"></script>
+         <script src="../../../_static/underscore.js"></script>
+         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../_static/doctools.js"></script>
+         <script src="../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

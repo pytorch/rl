@@ -439,7 +439,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
 
 <span class="n">_has_vllm</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;vllm&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -525,7 +525,7 @@
         <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vllm_tp_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span> <span class="o">=</span> <span class="n">master_address</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">master_port</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span> <span class="o">=</span> <span class="n">model_metadata</span>
@@ -593,23 +593,23 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_init_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">._init_group&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">._init_group&quot;</span><span class="p">)</span>
         <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;initializing group with </span><span class="si">{</span><span class="n">weight_sync_world_size</span><span class="si">=}</span><span class="s2">...&quot;</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;vllm_tp_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;initializing group with </span><span class="si">{</span><span class="n">weight_sync_world_size</span><span class="si">=}</span><span class="s2">...&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;vllm_tp_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="n">model_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model_ref</span><span class="p">()</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;model_ref: </span><span class="si">{</span><span class="n">model_ref</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;model_ref: </span><span class="si">{</span><span class="n">model_ref</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="c1"># Initialize the weight update group</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Calling init_weight_update_group...&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Calling init_weight_update_group...&quot;</span><span class="p">)</span>
         <span class="n">init_weight_update_group_getter</span> <span class="o">=</span> <span class="n">model_ref</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
             <span class="s2">&quot;init_weight_update_group&quot;</span><span class="p">,</span>
             <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">weight_sync_world_size</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group remote call succeeded&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group remote call succeeded&quot;</span><span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Calling stateless_init_process_group within updater...&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Calling stateless_init_process_group within updater...&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
@@ -619,9 +619,9 @@
         <span class="p">)</span>
 
         <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">init_weight_update_group_getter</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group getter succeeded&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group getter succeeded&quot;</span><span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;group initialized&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;group initialized&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized_group</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">maybe_init_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -661,7 +661,7 @@
         <span class="n">model_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model_ref</span><span class="p">()</span>
 
         <span class="c1"># First broadcast metadata</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;broadcasting with update_weight_broadcast&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;broadcasting with update_weight_broadcast&quot;</span><span class="p">)</span>
         <span class="n">remotes</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">remotes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
@@ -679,7 +679,7 @@
         <span class="c1"># # ray.get(remotes)</span>
 
         <span class="c1"># if self.vllm_comm_group is not True:</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;broadcasting...&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;broadcasting...&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span><span class="p">:</span>
             <span class="n">val</span> <span class="o">=</span> <span class="n">server_weights</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
@@ -691,7 +691,7 @@
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
         <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">remotes</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;done broadcasting&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;done broadcasting&quot;</span><span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="vLLMUpdater._get_server_weights"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._get_server_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -756,7 +756,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns [0] since we only have one worker.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
 
-<div class="viewcode-block" id="vLLMUpdater.register_collector"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa: F821</span>
+<div class="viewcode-block" id="vLLMUpdater.register_collector"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">):</span>  <span class="c1"># noqa: F821</span>
         <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_post_hook</span><span class="p">(</span><span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span></div></div>

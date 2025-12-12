@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="RayActorTransport" href="torchrl.weight_update.RayActorTransport.html" />
+    <link rel="next" title="RPCTransport" href="torchrl.weight_update.RPCTransport.html" />
     <link rel="prev" title="SharedMemTransport" href="torchrl.weight_update.SharedMemTransport.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -434,43 +434,133 @@
 <h1>RayTransport<a class="headerlink" href="#raytransport" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.RayTransport">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">RayTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">remote_collector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor_transport</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'object_store'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'nixl'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'object_store'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ray transport for communicating with a single Ray collector actor.</p>
-<p>This transport handles weight updates for ONE specific remote collector.
-Multiple transports are created for multiple collectors, following the
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">RayTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remote_actor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gloo'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connection_info_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'connection_info'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ray transport for communicating with a single Ray actor.</p>
+<p>This transport handles weight updates for ONE specific remote actor
+using torch.distributed for efficient weight transfer. Ray is used for
+signaling/coordination, while the actual weight data is transferred via
+torch.distributed send/recv operations.</p>
+<p>Multiple transports are created for multiple actors, following the
 same pattern as multiprocess collectors.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.check_connection">
-<span class="sig-name descname"><span class="pre">check_connection</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport.check_connection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.check_connection" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check if Ray is initialized.</p>
-</dd></dl>
-
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>remote_actor</strong> – The Ray actor handle for the remote collector/transform.</p></li>
+<li><p><strong>worker_idx</strong> (<em>int</em><em>, </em><em>optional</em>) – The worker index for this remote actor.
+Defaults to 0.</p></li>
+<li><p><strong>backend</strong> (<em>str</em>) – The torch.distributed backend to use (“gloo” or “nccl”).
+Defaults to “gloo”.</p></li>
+<li><p><strong>connection_info_name</strong> (<em>str</em>) – Name of the Ray actor storing connection info.
+Defaults to “connection_info”.</p></li>
+<li><p><strong>model_id</strong> (<em>str</em><em>, </em><em>optional</em>) – The model identifier for weight synchronization.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.receive_weights">
-<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ray workers typically don’t receive weights through this transport.</p>
+<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">torchrl.weight_update.weight_sync_schemes.WeightStrategy</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Receive weights from sender via torch.distributed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>timeout</strong> – Maximum time to wait for weights (seconds). If None,
+blocks until weights are received.</p></li>
+<li><p><strong>weights</strong> – Pre-allocated weight buffer to receive into.</p></li>
+<li><p><strong>model</strong> – The model to apply weights to.</p></li>
+<li><p><strong>strategy</strong> – Strategy for applying weights to the model.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The received weights, or None if timeout expires.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.send_weights">
-<span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.send_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights to the remote collector via Ray.</p>
-<p>Note: We don’t pass model_id to the remote collector because remote
-collectors don’t have weight senders - they apply weights directly to
-their local policy.</p>
+<span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.send_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights to the remote actor via torch.distributed.</p>
+<p>This method:
+1. Signals the remote actor to start receiving via Ray remote call
+2. Sends weights via torch.distributed.isend
+3. Waits for both to complete</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>weights</strong> – The weights to send (typically a TensorDict).</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.send_weights_async">
-<span class="sig-name descname"><span class="pre">send_weights_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport.send_weights_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.send_weights_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights to remote collector without waiting for completion.</p>
-<p>Use wait_ack() to wait for completion after sending to all workers.</p>
+<span class="sig-name descname"><span class="pre">send_weights_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.send_weights_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.send_weights_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights to Ray actor without waiting for completion.</p>
+<p>Use <a class="reference internal" href="#torchrl.weight_update.RayTransport.wait_ack" title="torchrl.weight_update.RayTransport.wait_ack"><code class="xref py py-meth docutils literal notranslate"><span class="pre">wait_ack()</span></code></a> to wait for completion after sending to all actors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>weights</strong> – The weights to send (typically a TensorDict).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.set_model">
+<span class="sig-name descname"><span class="pre">set_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.set_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.set_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the model for receiving weights.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model</strong> – The model to receive weights into.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.setup_connection_and_weights_on_receiver">
+<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_receiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">torchrl.weight_update.weight_sync_schemes.WeightStrategy</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.setup_connection_and_weights_on_receiver"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.setup_connection_and_weights_on_receiver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Join torch.distributed process group and receive initial weights.</p>
+<p>This method:
+1. Retrieves connection info from the shared Ray actor
+2. Initializes torch.distributed process group with rank=worker_idx+1
+3. Receives weights if model is stateful</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>worker_idx</strong> (<em>int</em>) – The worker index for this transport.</p></li>
+<li><p><strong>strategy</strong> (<a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.WeightStrategy"><em>WeightStrategy</em></a><em>, </em><em>optional</em>) – The weight transmission strategy.</p></li>
+<li><p><strong>model</strong> (<em>nn.Module</em><em> or </em><em>compatible</em><em>, </em><em>optional</em>) – The model to receive weights for.</p></li>
+<li><p><strong>weights</strong> (<em>TensorDict</em><em>, </em><em>optional</em>) – Pre-allocated buffer for receiving weights.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The received weights (TensorDict) if model is stateful, None otherwise.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.setup_connection_and_weights_on_sender">
+<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.setup_connection_and_weights_on_sender"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.setup_connection_and_weights_on_sender" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize torch.distributed on sender side for this worker’s rank.</p>
+<p>This is called by the scheme after it has created the connection info
+Ray actor. The actual <code class="docutils literal notranslate"><span class="pre">init_process_group</span></code> happens in the scheme since
+it’s a collective operation that needs to happen for rank 0.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method exists for interface compatibility but the real work
+happens in the scheme’s <code class="xref py py-meth docutils literal notranslate"><span class="pre">_setup_distributed_connection_sender()</span></code>.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.RayTransport.wait_ack">
-<span class="sig-name descname"><span class="pre">wait_ack</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#RayTransport.wait_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.wait_ack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Wait for the remote collector to finish applying weights.</p>
+<span class="sig-name descname"><span class="pre">wait_ack</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_ray.html#RayTransport.wait_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.RayTransport.wait_ack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for Ray actor to finish applying weights.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If no pending future exists (i.e., <a class="reference internal" href="#torchrl.weight_update.RayTransport.send_weights_async" title="torchrl.weight_update.RayTransport.send_weights_async"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send_weights_async()</span></code></a>
+    was not called before this method).</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -485,7 +575,7 @@ their local policy.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.weight_update.RayActorTransport.html" class="btn btn-neutral float-right" title="RayActorTransport" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.weight_update.RPCTransport.html" class="btn btn-neutral float-right" title="RPCTransport" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="torchrl.weight_update.SharedMemTransport.html" class="btn btn-neutral" title="SharedMemTransport" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>

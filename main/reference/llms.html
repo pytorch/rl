@@ -465,11 +465,8 @@ Feedback, issues and PRs are welcome!</p>
 </section>
 <section id="documentation-sections">
 <h2>Documentation Sections<a class="headerlink" href="#documentation-sections" title="Permalink to this heading">¶</a></h2>
-<div class="toctree-wrapper compound">
-</div>
-<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
-Policy Version Tracking
-~~~~~~~~~~~~~~~~~~~~~~~</p>
+<section id="policy-version-tracking">
+<h3>Policy Version Tracking<a class="headerlink" href="#policy-version-tracking" title="Permalink to this heading">¶</a></h3>
 <p>LLM Collectors also allow to track the version of the policy, which is useful for some use cases.
 This is done by adding a <a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform to the environment, which is
 then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
@@ -526,6 +523,7 @@ transform, or a boolean to the collector constructor.</p>
 </tr>
 </tbody>
 </table>
+</section>
 <section id="legacy-weight-updaters-deprecated">
 <h3>Legacy Weight Updaters (Deprecated)<a class="headerlink" href="#legacy-weight-updaters-deprecated" title="Permalink to this heading">¶</a></h3>
 <div class="deprecated">
@@ -545,7 +543,7 @@ Please migrate to the new weight synchronization schemes shown above.</p>
 <td><p>Simplified vLLM weight updater using the RLvLLMEngine interface.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
-<td><p>A simplified version of SyncDataCollector for LLM inference.</p></td>
+<td><p>A simplified version of Collector for LLM inference.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
 <td><p>A lightweight Ray implementation of the LLM Collector that can be extended and sampled remotely.</p></td>
@@ -899,16 +897,19 @@ For example, in the GSM8K reward parser:</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput" title="torchrl.objectives.llm.GRPOLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRPOLossOutput</span></code></a>(loss_objective, ...[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.CISPOLossOutput.html#torchrl.objectives.llm.CISPOLossOutput" title="torchrl.objectives.llm.CISPOLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CISPOLossOutput</span></code></a>(loss_objective, ...[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.CISPOLoss.html#torchrl.objectives.llm.CISPOLoss" title="torchrl.objectives.llm.CISPOLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CISPOLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>CISPO (Clipped Importance Sampling Policy Optimization).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.CISPOLossOutput.html#torchrl.objectives.llm.CISPOLossOutput" title="torchrl.objectives.llm.CISPOLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CISPOLossOutput</span></code></a>(loss_objective, ...[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.DAPO.html#torchrl.objectives.llm.DAPO" title="torchrl.objectives.llm.DAPO"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DAPO</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.DAPO.html#torchrl.objectives.llm.DAPO" title="torchrl.objectives.llm.DAPO"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DAPO</span></code></a>(*args, **kwargs)</p></td>
 <td><p>DAPO (Clip-Higher over GRPO).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.DAPOLossOutput.html#torchrl.objectives.llm.DAPOLossOutput" title="torchrl.objectives.llm.DAPOLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DAPOLossOutput</span></code></a>(loss_objective, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.DAPOLossOutput.html#torchrl.objectives.llm.DAPOLossOutput" title="torchrl.objectives.llm.DAPOLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DAPOLossOutput</span></code></a>(loss_objective, ...[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage" title="torchrl.objectives.llm.MCAdvantage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCAdvantage</span></code></a>(grpo_size[, prompt_key, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage" title="torchrl.objectives.llm.MCAdvantage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCAdvantage</span></code></a>(grpo_size[, prompt_key, ...])</p></td>
 <td><p>Monte-Carlo advantage computation engine.</p></td>
 </tr>
 </tbody>
@@ -930,13 +931,6 @@ For example, in the GSM8K reward parser:</p>
 </tr>
 </tbody>
 </table>
-<blockquote>
-<div><p>llms_envs
-llms_transforms
-llms_collectors
-llms_objectives</p>
-</div></blockquote>
-<p>&gt;&gt;&gt;&gt;&gt;&gt;&gt; 571142f4e ([Doc] Huge doc refactoring)</p>
 </section>
 </section>
 
@@ -989,6 +983,7 @@ llms_objectives</p>
 <li><a class="reference internal" href="#key-components">Key Components</a></li>
 <li><a class="reference internal" href="#quick-example">Quick Example</a></li>
 <li><a class="reference internal" href="#documentation-sections">Documentation Sections</a><ul>
+<li><a class="reference internal" href="#policy-version-tracking">Policy Version Tracking</a></li>
 <li><a class="reference internal" href="#legacy-weight-updaters-deprecated">Legacy Weight Updaters (Deprecated)</a></li>
 </ul>
 </li>

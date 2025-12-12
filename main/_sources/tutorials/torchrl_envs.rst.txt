@@ -95,7 +95,7 @@ Env Specs
 Like other frameworks, TorchRL envs have attributes that indicate what
 space is for the observations, action, done and reward. Because it often happens
 that more than one observation is retrieved, we expect the observation spec
-to be of type ``CompositeSpec``.
+to be of type ``Composite``.
 Reward and action do not have this restriction:
 
 .. GENERATED FROM PYTHON SOURCE LINES 89-94
@@ -155,7 +155,7 @@ these three signals:
 .. GENERATED FROM PYTHON SOURCE LINES 121-136
 
 Envs are also packed with an ``env.state_spec`` attribute of type
-``CompositeSpec`` which contains all the specs that are inputs to the env
+``Composite`` which contains all the specs that are inputs to the env
 but are not the action.
 For stateful
 envs (e.g. gym) this will be void most of the time.

@@ -502,7 +502,7 @@ The key components are:</p>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_list_to_stack</span><span class="p">,</span> <span class="n">TensorDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompositeSpec</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatEnv</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.browser</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrowserTransform</span>
@@ -592,17 +592,17 @@ reaches the desired website, and a reward of 0 otherwise.</p>
             <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.full.html#torch.full" title="torch.full" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full</span></a><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">CompositeSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompositeSpec</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Transform the reward spec to include our custom reward.</span>
 
 <span class="sd">        This method is required to override the reward spec since the environment</span>
 <span class="sd">        is initially reward-agnostic.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            reward_spec (CompositeSpec): The original reward spec from the environment.</span>
+<span class="sd">            reward_spec (Composite): The original reward spec from the environment.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            CompositeSpec: The transformed reward spec with our custom reward definition.</span>
+<span class="sd">            Composite: The transformed reward spec with our custom reward definition.</span>
 <span class="sd">                The reward will have shape (B, 1) where B is the batch size.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>

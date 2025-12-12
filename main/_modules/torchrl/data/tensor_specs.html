@@ -1897,7 +1897,7 @@
         <span class="p">)</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Stacked</span><span class="p">(</span><span class="n">_LazyStackedMixin</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span> <span class="n">TensorSpec</span><span class="p">):</span>
+<div class="viewcode-block" id="Stacked"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Stacked</span><span class="p">(</span><span class="n">_LazyStackedMixin</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">],</span> <span class="n">TensorSpec</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A lazy representation of a stack of tensor specs.</span>
 
 <span class="sd">    Stacks tensor-specs together along one dimension.</span>
@@ -1920,21 +1920,21 @@
             <span class="sa">f</span><span class="s2">&quot;`reshape` is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs.&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span>
+<div class="viewcode-block" id="Stacked.cardinality"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.cardinality">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;`cardinality` is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs.&quot;</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span>
+<div class="viewcode-block" id="Stacked.index"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.index">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">INDEX_TYPING</span><span class="p">,</span> <span class="n">tensor_to_index</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;`index` is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs.&quot;</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Stacked</span><span class="p">):</span>
@@ -1949,15 +1949,15 @@
                 <span class="k">return</span> <span class="kc">False</span>
         <span class="k">return</span> <span class="kc">True</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">use_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="Stacked.enumerate"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.enumerate">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">use_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">enumerate</span><span class="p">(</span><span class="n">use_mask</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stack_dim</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<div class="viewcode-block" id="Stacked.to_numpy"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.to_numpy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">safe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">safe</span> <span class="o">=</span> <span class="n">_CHECK_SPEC_ENCODE</span>
         <span class="k">if</span> <span class="n">safe</span><span class="p">:</span>
@@ -1967,7 +1967,7 @@
                 <span class="p">)</span>
             <span class="k">for</span> <span class="n">spec</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)):</span>
                 <span class="n">spec</span><span class="o">.</span><span class="n">assert_is_in</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">val</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">val</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">shape_str</span> <span class="o">=</span> <span class="s2">&quot;shape=&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
@@ -1986,8 +1986,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">ndim</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">ndimension</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<div class="viewcode-block" id="Stacked.ndimension"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.ndimension">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">ndimension</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -2021,7 +2021,7 @@
         <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">:</span>
             <span class="n">spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">shape_strip</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">):</span>
+<div class="viewcode-block" id="Stacked.expand"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.expand">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">int</span><span class="p">,)):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="n">expand_shape</span> <span class="o">=</span> <span class="n">shape</span><span class="p">[:</span> <span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)]</span>
@@ -2053,13 +2053,13 @@
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
             <span class="n">specs</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">expand_shape</span><span class="p">),</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">type_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="Stacked.type_check"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.type_check">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">type_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">for</span> <span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">):</span>
-            <span class="n">spec</span><span class="o">.</span><span class="n">type_check</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">type_check</span><span class="p">(</span><span class="n">val</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">is_in</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<div class="viewcode-block" id="Stacked.is_in"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Stacked.html#torchrl.data.Stacked.is_in">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">is_in</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;unbind&quot;</span><span class="p">):</span>
             <span class="c1"># We don&#39;t use unbind because value could be a tuple or a nested tensor</span>
             <span class="k">return</span> <span class="nb">all</span><span class="p">(</span>
@@ -2068,7 +2068,7 @@
         <span class="k">return</span> <span class="nb">all</span><span class="p">(</span>
             <span class="n">spec</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
             <span class="k">for</span> <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">space</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -2092,7 +2092,7 @@
                 <span class="n">t</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
             <span class="p">):</span>
                 <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">nested_tensor</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="OneHot"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.OneHot.html#torchrl.data.OneHot">[docs]</a><span class="nd">@dataclass</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -3236,12 +3236,12 @@
         <span class="k">return</span> <span class="n">eq</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_project</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Cannot project a NonTensorSpec.&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Cannot project a NonTensor spec.&quot;</span><span class="p">)</span>
 
 <div class="viewcode-block" id="NonTensor.index"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.index">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">INDEX_TYPING</span><span class="p">,</span> <span class="n">tensor_to_index</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Cannot use index with a NonTensorSpec.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Cannot use index with a NonTensor spec.&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="NonTensor.cardinality"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.cardinality">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Cannot enumerate a NonTensor spec.&quot;</span><span class="p">)</span></div>
@@ -5438,7 +5438,7 @@
 <span class="sd">    Args:</span>
 <span class="sd">        *args: if an unnamed argument is passed, it must be a dictionary with keys</span>
 <span class="sd">            matching the expected keys to be found in the :obj:`Composite` object.</span>
-<span class="sd">            This is useful to build nested CompositeSpecs with tuple indices.</span>
+<span class="sd">            This is useful to build nested Composite specs with tuple indices.</span>
 <span class="sd">        **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs</span>
 <span class="sd">            to be stored. Values can be None, in which case is_in will be assumed</span>
 <span class="sd">            to be ``True`` for the corresponding tensors, and :obj:`project()` will have no</span>
@@ -6849,7 +6849,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_locked</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">StackedComposite</span><span class="p">(</span><span class="n">_LazyStackedMixin</span><span class="p">[</span><span class="n">Composite</span><span class="p">],</span> <span class="n">Composite</span><span class="p">):</span>
+<div class="viewcode-block" id="StackedComposite"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">StackedComposite</span><span class="p">(</span><span class="n">_LazyStackedMixin</span><span class="p">[</span><span class="n">Composite</span><span class="p">],</span> <span class="n">Composite</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A lazy representation of a stack of composite specs.</span>
 
 <span class="sd">    Stacks composite specs together along one dimension.</span>
@@ -6871,21 +6871,21 @@
             <span class="sa">f</span><span class="s2">&quot;`reshape` is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs.&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span>
+<div class="viewcode-block" id="StackedComposite.cardinality"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.cardinality">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;`cardinality` is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs.&quot;</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span>
+<div class="viewcode-block" id="StackedComposite.index"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.index">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">INDEX_TYPING</span><span class="p">,</span> <span class="n">tensor_to_index</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;`index` is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> specs.&quot;</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -6898,11 +6898,11 @@
             <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
         <span class="k">return</span> <span class="bp">self</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">use_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.enumerate"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.enumerate">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">use_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_dim</span>
         <span class="k">return</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">enumerate</span><span class="p">(</span><span class="n">use_mask</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span> <span class="n">dim</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">StackedComposite</span><span class="p">):</span>
@@ -6918,7 +6918,7 @@
                 <span class="k">return</span> <span class="kc">False</span>
         <span class="k">return</span> <span class="kc">True</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.to_numpy"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.to_numpy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">safe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">safe</span> <span class="o">=</span> <span class="n">_CHECK_SPEC_ENCODE</span>
         <span class="k">if</span> <span class="n">safe</span><span class="p">:</span>
@@ -6929,12 +6929,12 @@
                 <span class="p">)</span>
             <span class="k">for</span> <span class="n">spec</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)):</span>
                 <span class="n">spec</span><span class="o">.</span><span class="n">assert_is_in</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">keys</span><span class="p">(</span>
+<div class="viewcode-block" id="StackedComposite.keys"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.keys">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">keys</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">include_nested</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -6948,9 +6948,9 @@
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
             <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">_keys</span><span class="p">()</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">_keys</span><span class="p">()</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">items</span><span class="p">(</span>
+<div class="viewcode-block" id="StackedComposite.items"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.items">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">items</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">include_nested</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -6966,9 +6966,9 @@
                 <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
                 <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">values</span><span class="p">(</span>
+<div class="viewcode-block" id="StackedComposite.values"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.values">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">values</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">include_nested</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -6982,9 +6982,9 @@
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
             <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">_values</span><span class="p">()</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">_values</span><span class="p">()</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.project"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.project">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">vals</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">spec</span><span class="p">,</span> <span class="n">subval</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">,</span> <span class="n">val</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">subval</span><span class="p">):</span>
@@ -6994,9 +6994,9 @@
         <span class="n">res</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">vals</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
             <span class="n">res</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">to_tensordict</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">res</span>
+        <span class="k">return</span> <span class="n">res</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">type_check</span><span class="p">(</span>
+<div class="viewcode-block" id="StackedComposite.type_check"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.type_check">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">type_check</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">,</span>
         <span class="n">selected_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -7014,7 +7014,7 @@
                 <span class="n">selected_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">selected_keys</span><span class="p">]</span>
             <span class="k">for</span> <span class="n">_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="p">[</span><span class="n">_key</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_key</span> <span class="ow">in</span> <span class="n">selected_keys</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="p">[</span><span class="n">_key</span><span class="p">]</span><span class="o">.</span><span class="n">type_check</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="n">_key</span><span class="p">],</span> <span class="n">_key</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="p">[</span><span class="n">_key</span><span class="p">]</span><span class="o">.</span><span class="n">type_check</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="n">_key</span><span class="p">],</span> <span class="n">_key</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">sub_str</span> <span class="o">=</span> <span class="s2">&quot;,</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
@@ -7052,11 +7052,11 @@
 
         <span class="k">return</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;exclusive_fields=</span><span class="se">{{\n</span><span class="si">{</span><span class="n">exclusive_key_str</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">is_in</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.is_in"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.is_in">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">is_in</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">spec</span><span class="p">,</span> <span class="n">subval</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">,</span> <span class="n">value</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">subval</span><span class="p">):</span>
                 <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deletes a key from the stacked composite spec.</span>
@@ -7120,13 +7120,13 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">ndim</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">ndimension</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<div class="viewcode-block" id="StackedComposite.ndimension"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.ndimension">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">ndimension</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StackedComposite</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.set"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.set">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StackedComposite</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">sub_spec</span><span class="p">,</span> <span class="n">sub_item</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)):</span>
             <span class="n">sub_spec</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">sub_item</span>
-        <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -7137,7 +7137,7 @@
         <span class="n">shape</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">_size</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">):</span>
+<div class="viewcode-block" id="StackedComposite.expand"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.expand">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">int</span><span class="p">,)):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="n">expand_shape</span> <span class="o">=</span> <span class="n">shape</span><span class="p">[:</span> <span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)]</span>
@@ -7164,44 +7164,44 @@
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">unstack_shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">expand_shape</span><span class="p">),</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="StackedComposite.empty"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">StackedComposite</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stack_dim</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_encode_eager</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">vals</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">ignore_device</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
         <span class="k">raise</span> <span class="n">NOT_IMPLEMENTED_ERROR</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">zero</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.zero"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.zero">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">zero</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span>
         <span class="k">return</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">zero</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span> <span class="n">dim</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.one"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.one">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span>
         <span class="k">return</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">one</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span> <span class="n">dim</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">rand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="StackedComposite.rand"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.rand">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span>
         <span class="k">return</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
             <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="p">],</span> <span class="n">dim</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div></div>
 
 
 <span class="nd">@TensorSpec</span><span class="o">.</span><span class="n">implements_for_spec</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">)</span>
@@ -7520,147 +7520,6 @@
             <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">shape</span><span class="p">),)</span>
         <span class="k">return</span> <span class="n">_remove_neg_shapes</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_size</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="k">if</span> <span class="n">d</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">shape</span><span class="p">])</span>
-
-
-<span class="c1">##############</span>
-<span class="c1"># Legacy</span>
-<span class="c1">#</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">_LegacySpecMeta</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;The </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has been deprecated and will be removed in v0.8. Please use &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> instead.&quot;</span><span class="p">,</span>
-            <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">type</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UnboundedDiscreteTensorSpec</span><span class="p">,</span> <span class="n">UnboundedDiscrete</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">instance</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="s2">&quot;continuous&quot;</span>
-        <span class="p">):</span>
-            <span class="n">instance</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">UnboundedContinuous</span>
-        <span class="k">elif</span> <span class="p">(</span>
-            <span class="nb">type</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UnboundedContinuousTensorSpec</span><span class="p">,</span> <span class="n">UnboundedContinuous</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">instance</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="s2">&quot;discrete&quot;</span>
-        <span class="p">):</span>
-            <span class="n">instance</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">UnboundedDiscrete</span>
-        <span class="k">return</span> <span class="n">instance</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__instancecheck__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
-        <span class="n">check0</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__instancecheck__</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">check0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">True</span>
-        <span class="n">parent_cls</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">parent_cls</span><span class="p">)</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">CompositeSpec</span><span class="p">(</span><span class="n">Composite</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Composite`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">OneHotDiscreteTensorSpec</span><span class="p">(</span><span class="n">OneHot</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.OneHot`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">MultiOneHotDiscreteTensorSpec</span><span class="p">(</span><span class="n">MultiOneHot</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.MultiOneHot`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">NonTensorSpec</span><span class="p">(</span><span class="n">NonTensor</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.NonTensor`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<div class="viewcode-block" id="MultiDiscreteTensorSpec"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.MultiDiscreteTensorSpec.html#torchrl.data.MultiDiscreteTensorSpec">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiDiscreteTensorSpec</span><span class="p">(</span><span class="n">MultiCategorical</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.MultiCategorical`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span></div>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">LazyStackedTensorSpec</span><span class="p">(</span><span class="n">Stacked</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Stacked`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<div class="viewcode-block" id="LazyStackedCompositeSpec"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LazyStackedCompositeSpec</span><span class="p">(</span><span class="n">StackedComposite</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.StackedComposite`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span></div>
-
-
-<div class="viewcode-block" id="DiscreteTensorSpec"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.DiscreteTensorSpec.html#torchrl.data.DiscreteTensorSpec">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DiscreteTensorSpec</span><span class="p">(</span><span class="n">Categorical</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Categorical`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span></div>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">BinaryDiscreteTensorSpec</span><span class="p">(</span><span class="n">Binary</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacySpecMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Binary`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<span class="n">_BoundedLegacyMeta</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="s2">&quot;_BoundedLegacyMeta&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">_LegacySpecMeta</span><span class="p">,</span> <span class="n">_BoundedMeta</span><span class="p">),</span> <span class="p">{})</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">BoundedTensorSpec</span><span class="p">(</span><span class="n">Bounded</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_BoundedLegacyMeta</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Bounded`.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">_UnboundedContinuousMetaclass</span><span class="p">(</span><span class="n">_UnboundedMeta</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__instancecheck__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">Unbounded</span><span class="p">)</span> <span class="ow">and</span> <span class="n">instance</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="s2">&quot;continuous&quot;</span>
-
-
-<span class="n">_LegacyUnboundedContinuousMetaclass</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span>
-    <span class="s2">&quot;_LegacyUnboundedDiscreteMetaclass&quot;</span><span class="p">,</span>
-    <span class="p">(</span><span class="n">_UnboundedContinuousMetaclass</span><span class="p">,</span> <span class="n">_LegacySpecMeta</span><span class="p">),</span>
-    <span class="p">{},</span>
-<span class="p">)</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">UnboundedContinuousTensorSpec</span><span class="p">(</span>
-    <span class="n">Unbounded</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacyUnboundedContinuousMetaclass</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Unbounded` with continuous space.&quot;&quot;&quot;</span>
-
-    <span class="o">...</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">_UnboundedDiscreteMetaclass</span><span class="p">(</span><span class="n">_UnboundedMeta</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__instancecheck__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">Unbounded</span><span class="p">)</span> <span class="ow">and</span> <span class="n">instance</span><span class="o">.</span><span class="n">domain</span> <span class="o">==</span> <span class="s2">&quot;discrete&quot;</span>
-
-
-<span class="n">_LegacyUnboundedDiscreteMetaclass</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span>
-    <span class="s2">&quot;_LegacyUnboundedDiscreteMetaclass&quot;</span><span class="p">,</span>
-    <span class="p">(</span><span class="n">_UnboundedDiscreteMetaclass</span><span class="p">,</span> <span class="n">_LegacySpecMeta</span><span class="p">),</span>
-    <span class="p">{},</span>
-<span class="p">)</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">UnboundedDiscreteTensorSpec</span><span class="p">(</span>
-    <span class="n">Unbounded</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacyUnboundedDiscreteMetaclass</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`torchrl.data.Unbounded` with discrete space.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">_DEFAULT_SHAPE</span><span class="p">,</span>
-        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">dtype</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_reduce_funcs</span><span class="p">(</span><span class="n">funcs</span><span class="p">):</span>

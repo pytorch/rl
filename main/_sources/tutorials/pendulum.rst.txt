@@ -384,8 +384,8 @@ physical systems for instance).
 
 There are four specs that we must code in our environment:
 
-* :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.CompositeSpec`
-  instance where each key is an observation (a :class:`CompositeSpec` can be
+* :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.Composite`
+  instance where each key is an observation (a :class:`Composite` can be
   viewed as a dictionary of specs).
 * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
   that it corresponds to the ``"action"`` entry in the input ``tensordict``;

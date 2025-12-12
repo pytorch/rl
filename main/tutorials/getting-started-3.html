@@ -484,7 +484,7 @@ these two classes.</p>
 <section id="data-collectors">
 <h2>Data collectors<a class="headerlink" href="#data-collectors" title="Permalink to this heading">¶</a></h2>
 <p id="gs-storage-collector">The primary data collector discussed here is the
-<a class="reference internal" href="../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>, which is the focus of this
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code>, which is the focus of this
 documentation. At a fundamental level, a collector is a straightforward
 class responsible for executing your policy within the environment,
 resetting the environment when necessary, and providing batches of a
@@ -500,7 +500,7 @@ we will use a dummy, random policy in this example.</p>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>
 
 <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
@@ -611,8 +611,8 @@ collector!</p>
 <h2>Next steps<a class="headerlink" href="#next-steps" title="Permalink to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>You can have look at other multiprocessed
-collectors such as <a class="reference internal" href="../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> or
-<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>.</p></li>
+collectors such as <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> or
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>.</p></li>
 <li><p>TorchRL also offers distributed collectors if you have multiple nodes to
 use for inference. Check them out in the
 <a class="reference internal" href="../reference/collectors_basics.html#ref-collectors"><span class="std std-ref">API reference</span></a>.</p></li>

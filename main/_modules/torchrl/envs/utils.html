@@ -469,6 +469,7 @@
     <span class="n">Unbounded</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_no_exclusive_keys</span><span class="p">,</span> <span class="n">CloudpickleWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.exploration</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>  <span class="c1"># noqa</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;exploration_type&quot;</span><span class="p">,</span>
@@ -480,7 +481,6 @@
     <span class="s2">&quot;MarlGroupMapType&quot;</span><span class="p">,</span>
     <span class="s2">&quot;check_marl_grouping&quot;</span><span class="p">,</span>
 <span class="p">]</span>
-
 
 <span class="n">ACTION_MASK_ERROR</span> <span class="o">=</span> <span class="ne">RuntimeError</span><span class="p">(</span>
     <span class="s2">&quot;An out-of-bounds actions has been provided to an env with an &#39;action_mask&#39; output. &quot;</span>
@@ -1274,7 +1274,7 @@
     <span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">check_no_exclusive_keys</span><span class="p">(</span><span class="n">spec</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
-                <span class="s2">&quot;It appears you are using some LazyStackedCompositeSpecs with exclusive keys &quot;</span>
+                <span class="s2">&quot;It appears you are using some StackedComposite specs with exclusive keys &quot;</span>
                 <span class="s2">&quot;(keys present in some but not all of the stacked specs). To use such heterogeneous specs, &quot;</span>
                 <span class="s2">&quot;you will need to first pass your stack through `torchrl.data.consolidate_spec`.&quot;</span>
             <span class="p">)</span>
@@ -2092,34 +2092,6 @@
         <span class="s2">&quot;arbitrarily many tensor inputs and leave in_keys and out_keys undefined and &quot;</span>
         <span class="s2">&quot;TorchRL will attempt to automatically wrap the policy with a TensorDictModule.&quot;</span>
     <span class="p">)</span>
-
-
-<div class="viewcode-block" id="RandomPolicy"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.RandomPolicy.html#torchrl.envs.RandomPolicy">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RandomPolicy</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A random policy for data collectors.</span>
-
-<span class="sd">    This is a wrapper around the action_spec.rand method.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        action_spec: TensorSpec object describing the action specs</span>
-
-<span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.data.tensor_specs import Bounded</span>
-<span class="sd">        &gt;&gt;&gt; action_spec = Bounded(-torch.ones(3), torch.ones(3))</span>
-<span class="sd">        &gt;&gt;&gt; actor = RandomPolicy(action_spec=action_spec)</span>
-<span class="sd">        &gt;&gt;&gt; td = actor(TensorDict()) # selects a random action in the cube [-1; 1]</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span></div>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_PolicyMetaClass</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-DiscreteTensorSpec
-==================
-
-.. autoclass:: DiscreteTensorSpec
-    :members:
-    :inherited-members:

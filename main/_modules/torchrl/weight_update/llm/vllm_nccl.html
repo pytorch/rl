@@ -493,8 +493,6 @@
 
 <span class="sd">**Current Implementation (Ray Backend)**</span>
 
-<span class="sd">The test suite in ``test_weightsync.py`` demonstrates the Ray-based RPC:</span>
-
 <span class="sd">.. code-block:: python</span>
 
 <span class="sd">    # Trainer actor (provides RPC endpoint)</span>
@@ -523,6 +521,8 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -531,12 +531,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">stateless_init_process_group</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">WeightReceiver</span><span class="p">,</span>
-    <span class="n">WeightSender</span><span class="p">,</span>
-    <span class="n">WeightStrategy</span><span class="p">,</span>
-    <span class="n">WeightSyncScheme</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightStrategy</span><span class="p">,</span> <span class="n">WeightSyncScheme</span>
 
 <span class="c1"># ============================================================================</span>
 <span class="c1"># vLLM Transport using Collective Communication</span>
@@ -611,13 +606,13 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="c1"># Trainer side - initialize process group</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Initializing trainer collective group: rank=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="si">}</span><span class="s2">, device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
             <span class="c1"># Ray sets CUDA_VISIBLE_DEVICES, so we always use device 0</span>
             <span class="c1"># Set CUDA device before initializing NCCL to avoid segfaults</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Set CUDA device to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Set CUDA device to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
@@ -626,13 +621,13 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Trainer collective group initialized successfully&quot;</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Trainer collective group initialized successfully&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># vLLM worker side - initialize through engine</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_engine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;vllm_engine must be provided for worker ranks&quot;</span><span class="p">)</span>
 
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="s2">&quot;Initializing vLLM worker collective group through engine&quot;</span>
             <span class="p">)</span>
             <span class="c1"># Call vLLM engine&#39;s init method - it returns futures for all workers</span>
@@ -646,18 +641,17 @@
             <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
             <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;All </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span><span class="si">}</span><span class="s2"> vLLM workers have dispatched NCCL init RPCs&quot;</span>
             <span class="p">)</span>
 
             <span class="c1"># Small delay to ensure worker background threads have entered the NCCL collective</span>
             <span class="c1"># This prevents a race where the trainer starts NCCL before workers are ready</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 
             <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_comm_group</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># Mark as initialized</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="s2">&quot;vLLM workers should now be blocked in NCCL collective, ready for trainer&quot;</span>
             <span class="p">)</span></div>
 
@@ -705,7 +699,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">weights_dict</span> <span class="o">=</span> <span class="n">weights</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Broadcasting </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
         <span class="p">)</span>
 
@@ -736,13 +730,26 @@
             <span class="k">del</span> <span class="n">tensor</span>
 
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcast complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Broadcast complete for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="VLLMCollectiveTransport.receive_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.receive_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">receive_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="VLLMCollectiveTransport.receive_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMCollectiveTransport.html#torchrl.weight_update.llm.VLLMCollectiveTransport.receive_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive weights from broadcaster.</span>
 
 <span class="sd">        This should only be called from worker ranks (rank &gt; 0).</span>
 <span class="sd">        This method is called by vLLM engine internally through collective operations.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Ignored (vLLM handles synchronization internally).</span>
+<span class="sd">            weights: Ignored.</span>
+<span class="sd">            model: Ignored.</span>
+<span class="sd">            strategy: Ignored.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            None - vLLM handles weight application internally via collectives.</span>
@@ -863,7 +870,7 @@
                     <span class="n">s</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
 
-<div class="viewcode-block" id="VLLMWeightSyncScheme.create_transport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pipe_or_context</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMCollectiveTransport</span><span class="p">:</span>
+<div class="viewcode-block" id="VLLMWeightSyncScheme.create_transport"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSyncScheme.html#torchrl.weight_update.llm.VLLMWeightSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMCollectiveTransport</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create transport for collective communication.</span>
 
 <span class="sd">        For vLLM, this creates a transport but requires additional setup via init_all_workers_group().</span>
@@ -871,7 +878,7 @@
 <span class="sd">        is more complex and typically handled by sender/receiver initialization.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            pipe_or_context: Not used for vLLM (kept for API compatibility).</span>
+<span class="sd">            **kwargs: Not used for vLLM (kept for API compatibility).</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            A VLLMCollectiveTransport instance (needs init_all_workers_group() to be called).</span>
@@ -900,7 +907,7 @@
         <span class="k">return</span> <span class="n">VLLMWeightReceiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="VLLMWeightSender"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightSender</span><span class="p">(</span><span class="n">WeightSender</span><span class="p">):</span>
+<div class="viewcode-block" id="VLLMWeightSender"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightSender.html#torchrl.weight_update.llm.VLLMWeightSender">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightSender</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sends weights to vLLM workers using collective communication.</span>
 
 <span class="sd">    **RPC + Collective Implementation**</span>
@@ -968,7 +975,7 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">vllm_engine</span><span class="o">=</span><span class="n">vllm_engine</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Initializing transport from sender with world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">model_metadata</span><span class="p">)</span></div>
@@ -1000,7 +1007,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;vllm_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="VLLMWeightReceiver"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightReceiver</span><span class="p">(</span><span class="n">WeightReceiver</span><span class="p">):</span>
+<div class="viewcode-block" id="VLLMWeightReceiver"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VLLMWeightReceiver</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Receives weights in a vLLM worker using collective communication.</span>
 
 <span class="sd">    **RPC + Collective Implementation**</span>
@@ -1064,13 +1071,17 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">vllm_engine</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Initializing transport from receiver with world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">init_all_workers_group</span><span class="p">(</span><span class="n">model_metadata</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="VLLMWeightReceiver.apply_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="VLLMWeightReceiver.apply_weights"><a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMWeightReceiver.html#torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply weights to vLLM engine.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: The weights to apply.</span>
+<span class="sd">            inplace: Whether to apply weights in place. Default is `True`.</span>
 
 <span class="sd">        Note: For vLLM, weights are applied automatically during the collective</span>
 <span class="sd">        broadcast operation. This method is a no-op but kept for API consistency.</span>

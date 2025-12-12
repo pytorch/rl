@@ -896,7 +896,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_step_reset</span> <span class="o">=</span> <span class="mi">0</span>
 
         <span class="n">num_threads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span>
-        <span class="k">assert</span> <span class="n">num_threads</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">threads</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_threads</span><span class="p">):</span>
             <span class="c1"># thread = threading.Thread(target=_env_exec, kwargs={&quot;i&quot;: i, &quot;env_or_factory&quot;: self.env_maker[i], &quot;input_queue&quot;: self.input_queue[i], &quot;step_queue&quot;: self.step_queue, &quot;reset_queue&quot;: self.reset_queue})</span>
@@ -963,7 +962,6 @@
             <span class="p">)</span>
         <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_one_and_get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">step_queue</span><span class="p">,</span> <span class="n">min_get</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">&gt;=</span> <span class="mi">0</span>
         <span class="n">r</span><span class="p">,</span> <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sort_results</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_busy</span><span class="o">.</span><span class="n">difference_update</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack_func</span><span class="p">(</span><span class="n">r</span><span class="p">)</span></div>

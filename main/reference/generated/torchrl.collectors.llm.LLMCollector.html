@@ -433,7 +433,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.llm.</span></span><span class="sig-name descname"><span class="pre">LLMCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">torchrl.envs.common.EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">torchrl.envs.common.EnvBase</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_factory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dialog_turns_per_batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yield_only_last_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yield_completed_trajectories</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postproc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_dialog_turns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">async_envs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replay_buffer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.replay_buffers.replay_buffers.ReplayBuffer"><span class="pre">torchrl.data.replay_buffers.replay_buffers.ReplayBuffer</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reset_at_each_iter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flatten_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_updater</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.weight_update.WeightUpdaterBase"><span class="pre">torchrl.collectors.weight_update.WeightUpdaterBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">collections.abc.Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.weight_update.WeightUpdaterBase"><span class="pre">torchrl.collectors.weight_update.WeightUpdaterBase</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">track_policy_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.policy_version.PolicyVersion"><span class="pre">torchrl.envs.llm.transforms.policy_version.PolicyVersion</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/base.html#LLMCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector" title="Permalink to this definition">¶</a></dt>
-<dd><p>A simplified version of SyncDataCollector for LLM inference.</p>
+<dd><p>A simplified version of Collector for LLM inference.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>env</strong> (<a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><em>EnvBase</em></a><em> or </em><em>EnvBase constructor</em>) – the environment to be used for data collection.</p>
@@ -488,7 +488,7 @@ and run for <cite>T</cite> steps, <cite>flatten_data=True</cite> will present da
 Defaults to <cite>True</cite> when <cite>replay_buffer</cite> is provided, <cite>False</cite> otherwise.</p></li>
 <li><p><strong>weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><em>WeightUpdaterBase</em></a><em> or </em><em>constructor</em><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a>
 or its subclass, responsible for updating the policy weights on remote inference workers.
-This is typically not used in <a class="reference internal" href="torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a> as it operates in a single-process environment.
+This is typically not used in <a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a> as it operates in a single-process environment.
 Consider using a constructor if the updater needs to be serialized.</p></li>
 <li><p><strong>track_policy_version</strong> (<em>bool</em><em> or </em><a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><em>PolicyVersion</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the collector will track the version of the policy.
 This will be mediated by the <a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.policy_version.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform, which will be added to the environment.
@@ -581,6 +581,36 @@ Defaults to <cite>False</cite>.</p></li>
 <dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.async_shutdown">
 <span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Finishes processes started by ray.init() during async execution.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.cascade_execute">
+<span class="sig-name descname"><span class="pre">cascade_execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">attr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.cascade_execute" title="Permalink to this definition">¶</a></dt>
+<dd><p>Execute a method on a nested attribute of this collector.</p>
+<p>This method allows remote callers to invoke methods on nested attributes
+of the collector without needing to know the full structure. It’s particularly
+useful for calling methods on weight sync schemes from the sender side.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>attr_path</strong> – Full path to the callable, e.g.,
+“_receiver_schemes[‘model_id’]._set_dist_connection_info”</p></li>
+<li><p><strong>*args</strong> – Positional arguments to pass to the method.</p></li>
+<li><p><strong>**kwargs</strong> – Keyword arguments to pass to the method.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The return value of the method call.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">cascade_execute</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="s2">&quot;_receiver_schemes[&#39;policy&#39;]._set_dist_connection_info&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">connection_info_ref</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">worker_idx</span><span class="o">=</span><span class="mi">0</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py property">
@@ -718,6 +748,79 @@ If no weight updater is set, this is a no-op.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.receive_weights">
+<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_or_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensordict.base.TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.nn.common.TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><span class="pre">torch.nn.modules.module.Module</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensordict.base.TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensordict.nn.common.TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.9)"><span class="pre">torch.nn.modules.module.Module</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.receive_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Receive and apply weights to the collector’s policy.</p>
+<p>This method applies weights to the local policy. When receiver schemes are
+registered, it delegates to those schemes. Otherwise, it directly applies
+the provided weights.</p>
+<p>The method accepts weights in multiple forms for convenience:</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Receive from registered schemes (distributed collectors)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Apply weights from a policy module (positional)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span><span class="n">trained_policy</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Apply weights from a TensorDict (positional)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span><span class="n">weights_tensordict</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use keyword arguments for clarity</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">weights_td</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">trained_policy</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>policy_or_weights</strong> – <p>The weights to apply. Can be:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>: A policy module whose weights will be extracted and applied</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>: A TensorDict module whose weights will be extracted</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>: A TensorDict containing weights</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dict</span></code>: A regular dict containing weights</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: Receive from registered schemes or mirror from original policy</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>weights</strong> – Alternative to positional argument. A TensorDict or dict containing
+weights to apply. Cannot be used together with <code class="docutils literal notranslate"><span class="pre">policy_or_weights</span></code> or <code class="docutils literal notranslate"><span class="pre">policy</span></code>.</p></li>
+<li><p><strong>policy</strong> – Alternative to positional argument. An <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>
+whose weights will be extracted. Cannot be used together with <code class="docutils literal notranslate"><span class="pre">policy_or_weights</span></code>
+or <code class="docutils literal notranslate"><span class="pre">weights</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If conflicting parameters are provided or if arguments are passed
+    when receiver schemes are registered.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.register_scheme_receiver">
+<span class="sig-name descname"><span class="pre">register_scheme_receiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weight_recv_schemes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme" title="torchrl.weight_update.weight_sync_schemes.WeightSyncScheme"><span class="pre">torchrl.weight_update.weight_sync_schemes.WeightSyncScheme</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">synchronize_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.register_scheme_receiver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up receiver schemes for this collector to receive weights from parent collectors.</p>
+<p>This method initializes receiver schemes and stores them in _receiver_schemes
+for later use by _receive_weights_scheme() and receive_weights().</p>
+<p>Receiver schemes enable cascading weight updates across collector hierarchies:
+- Parent collector sends weights via its weight_sync_schemes (senders)
+- Child collector receives weights via its weight_recv_schemes (receivers)
+- If child is also a parent (intermediate node), it can propagate to its own children</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>weight_recv_schemes</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme" title="torchrl.weight_update.WeightSyncScheme"><em>WeightSyncScheme</em></a><em>]</em>) – Dictionary of {model_id: WeightSyncScheme} to set up as receivers.
+These schemes will receive weights from parent collectors.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>synchronize_weights</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, synchronize weights immediately after registering the schemes.
+Defaults to <cite>True</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.reset">
 <span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.reset" title="Permalink to this definition">¶</a></dt>
 <dd><p>Resets the environments to a new initial state.</p>
@@ -759,7 +862,7 @@ seed will be incremented for each of these. The resulting seed is the seed of th
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env_fn</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env_fn_parallel</span> <span class="o">=</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="n">env_fn</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="n">env_fn_parallel</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span><span class="n">env_fn_parallel</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">out_seed</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># out_seed = 6</span>
 </pre></div>
 </div>
@@ -793,12 +896,12 @@ collection from training, allowing your training loop to run independently of th
 </dd>
 </dl>
 <p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>            <span class="o">&gt;&gt;&gt;</span>             <span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tqdm</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span><span class="p">,</span> <span class="n">RandomPolicy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collector</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">set_gym_backend</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">ale_py</span>
@@ -815,7 +918,7 @@ collection from training, allowing your training loop to run independently of th
 <span class="gp">... </span>    <span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span> <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">...</span>
 <span class="gp">... </span>    <span class="c1"># Create a synchronous data collector</span>
-<span class="gp">... </span>    <span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
 <span class="gp">... </span>        <span class="n">env</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
 <span class="gp">... </span>        <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
@@ -868,46 +971,89 @@ collection from training, allowing your training loop to run independently of th
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.update_policy_weights_">
 <span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_or_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tensordict.base.TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.nn.common.TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
-<dd><p>Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</p>
-<p>This method ensures that the policy weights used by the data collector are synchronized with the latest
-trained weights. It supports both local and remote weight updates, depending on the configuration of the
-data collector. The local (download) update is performed before the remote (upload) update, such that weights
-can be transferred to the children workers from a server.</p>
+<dd><p>Update policy weights for the data collector.</p>
+<p>This method synchronizes the policy weights used by the collector with the latest
+trained weights. It supports both local and remote weight updates, depending on
+the collector configuration.</p>
+<p>The method accepts weights in multiple forms for convenience:</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pass policy module as positional argument</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_module</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pass TensorDict weights as positional argument</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights_tensordict</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use keyword arguments for clarity</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">weights_td</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;actor&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">actor_module</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;actor&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Update multiple models atomically</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights_dict</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">... </span>    <span class="s2">&quot;actor&quot;</span><span class="p">:</span> <span class="n">actor_weights</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;critic&quot;</span><span class="p">:</span> <span class="n">critic_weights</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">})</span>
+</pre></div>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>policy_or_weights</strong> (<em>TensorDictBase</em><em> | </em><em>TensorDictModuleBase</em><em> | </em><em>dict</em><em> | </em><em>None</em>) – The weights to update with. Can be:
-- TensorDictModuleBase: A policy module whose weights will be extracted
-- TensorDictBase: A TensorDict containing weights
-- dict: A regular dict containing weights
-- None: Will try to get weights from server using _get_server_weights()</p></li>
-<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
-workers that need to be updated. This is relevant when the collector has more than one worker associated
-with it.</p></li>
-<li><p><strong>model_id</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The model identifier to update. If provided, only updates this specific
-model. Cannot be used together with weights_dict.</p></li>
-<li><p><strong>weights_dict</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Dictionary mapping model_id to weights for updating
-multiple models atomically. Keys should match the model_ids registered in weight_sync_schemes.
-Cannot be used together with model_id or policy_or_weights.</p></li>
+<dd class="field-odd"><p><strong>policy_or_weights</strong> – <p>The weights to update with. Can be:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>: A policy module whose weights will be extracted</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>: A TensorDict module whose weights will be extracted</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>: A TensorDict containing weights</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dict</span></code>: A regular dict containing weights</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: Will try to get weights from server using <code class="docutils literal notranslate"><span class="pre">_get_server_weights()</span></code></p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>weights</strong> – Alternative to positional argument. A TensorDict or dict containing
+weights to update. Cannot be used together with <code class="docutils literal notranslate"><span class="pre">policy_or_weights</span></code> or <code class="docutils literal notranslate"><span class="pre">policy</span></code>.</p></li>
+<li><p><strong>policy</strong> – Alternative to positional argument. An <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>
+whose weights will be extracted. Cannot be used together with <code class="docutils literal notranslate"><span class="pre">policy_or_weights</span></code>
+or <code class="docutils literal notranslate"><span class="pre">weights</span></code>.</p></li>
+<li><p><strong>worker_ids</strong> – Identifiers for the workers to update. Relevant when the collector
+has multiple workers. Can be int, list of ints, device, or list of devices.</p></li>
+<li><p><strong>model_id</strong> – The model identifier to update (default: <code class="docutils literal notranslate"><span class="pre">&quot;policy&quot;</span></code>).
+Cannot be used together with <code class="docutils literal notranslate"><span class="pre">weights_dict</span></code>.</p></li>
+<li><p><strong>weights_dict</strong> – Dictionary mapping model_id to weights for updating
+multiple models atomically. Keys should match model_ids registered in
+<code class="docutils literal notranslate"><span class="pre">weight_sync_schemes</span></code>. Cannot be used together with <code class="docutils literal notranslate"><span class="pre">model_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">policy_or_weights</span></code>, <code class="docutils literal notranslate"><span class="pre">weights</span></code>, or <code class="docutils literal notranslate"><span class="pre">policy</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>TypeError</strong> – If <cite>worker_ids</cite> is provided but no <cite>weight_updater</cite> is configured.</p></li>
-<li><p><strong>ValueError</strong> – If conflicting parameters are provided (e.g., both model_id and weights_dict).</p></li>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>TypeError</strong> – If <code class="docutils literal notranslate"><span class="pre">worker_ids</span></code> is provided but no <code class="docutils literal notranslate"><span class="pre">weight_updater</span></code> is configured.</p></li>
+<li><p><strong>ValueError</strong> – If conflicting parameters are provided.</p></li>
 </ul>
 </dd>
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Users should extend the <cite>WeightUpdaterBase</cite> classes to customize
-the weight update logic for specific use cases. This method should not be overwritten.</p>
+<p>Users should extend the <code class="docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code> classes to customize
+the weight update logic for specific use cases.</p>
 </div>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightsUpdaterBase</span></code> and
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">RemoteWeightsUpdaterBase()</span></code>.</p>
 </div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.worker_idx">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_idx</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.worker_idx" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the worker index for this collector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The worker index (0-indexed).</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If worker_idx has not been set.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

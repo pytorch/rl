@@ -454,7 +454,7 @@
     <span class="n">timeit</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCollectorBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">PrioritizedSampler</span><span class="p">,</span>
@@ -597,7 +597,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">,</span>
+        <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -829,11 +829,11 @@
         <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span>
 
     <span class="nd">@collector</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="n">collector</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">register_op</span><span class="p">(</span>
@@ -2214,7 +2214,7 @@
 <span class="sd">    intervals. If the devices match, this will result in a no-op.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        collector (DataCollectorBase): A data collector where the policy weights</span>
+<span class="sd">        collector (BaseCollector): A data collector where the policy weights</span>
 <span class="sd">            must be synced.</span>
 <span class="sd">        update_weights_interval (int): Interval (in terms of number of batches</span>
 <span class="sd">            collected) where the sync must take place.</span>
@@ -2251,7 +2251,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">,</span>
+        <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">,</span>
         <span class="n">update_weights_interval</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">policy_weights_getter</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_update_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2303,7 +2303,7 @@
                 <span class="ow">and</span> <span class="n">destination</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
             <span class="p">):</span>
                 <span class="n">scheme</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">[</span><span class="n">destination</span><span class="p">]</span>
-                <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy</span><span class="p">)</span>
+                <span class="n">strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy_str</span><span class="p">)</span>
                 <span class="n">weights</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">source_module</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Fallback: use TensorDict extraction if no scheme found</span>

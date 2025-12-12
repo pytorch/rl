@@ -1018,7 +1018,7 @@
 <span class="sd">        module.</span>
 
 <span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import Collector</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.envs import TransformedEnv, InitTracker</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.modules import MLP, LSTMModule</span>
@@ -1035,7 +1035,7 @@
 <span class="sd">            &gt;&gt;&gt; policy = Seq(lstm_module, Mod(mlp, in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]))</span>
 <span class="sd">            &gt;&gt;&gt; policy(env.reset())</span>
 <span class="sd">            &gt;&gt;&gt; env = env.append_transform(lstm_module.make_tensordict_primer())</span>
-<span class="sd">            &gt;&gt;&gt; data_collector = SyncDataCollector(</span>
+<span class="sd">            &gt;&gt;&gt; data_collector = Collector(</span>
 <span class="sd">            ...     env,</span>
 <span class="sd">            ...     policy,</span>
 <span class="sd">            ...     frames_per_batch=10</span>
@@ -1815,7 +1815,7 @@
 <span class="sd">        module.</span>
 
 <span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import Collector</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.envs import TransformedEnv, InitTracker</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
 <span class="sd">            &gt;&gt;&gt; from torchrl.modules import MLP, LSTMModule</span>
@@ -1832,7 +1832,7 @@
 <span class="sd">            &gt;&gt;&gt; policy = Seq(gru_module, Mod(mlp, in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]))</span>
 <span class="sd">            &gt;&gt;&gt; policy(env.reset())</span>
 <span class="sd">            &gt;&gt;&gt; env = env.append_transform(gru_module.make_tensordict_primer())</span>
-<span class="sd">            &gt;&gt;&gt; data_collector = SyncDataCollector(</span>
+<span class="sd">            &gt;&gt;&gt; data_collector = Collector(</span>
 <span class="sd">            ...     env,</span>
 <span class="sd">            ...     policy,</span>
 <span class="sd">            ...     frames_per_batch=10</span>

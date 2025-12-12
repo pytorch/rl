@@ -435,7 +435,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim.lr_scheduler</span><span class="w"> </span><span class="kn">import</span> <span class="n">CosineAnnealingLR</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCollectorBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span>
@@ -500,7 +500,7 @@
 
 
 <div class="viewcode-block" id="make_trainer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_trainer.html#torchrl.trainers.helpers.make_trainer">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_trainer</span><span class="p">(</span>
-    <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">,</span>
+    <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">,</span>
     <span class="n">loss_module</span><span class="p">:</span> <span class="n">LossModule</span><span class="p">,</span>
     <span class="n">recorder</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">target_net_updater</span><span class="p">:</span> <span class="n">TargetNetUpdater</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -512,7 +512,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates a Trainer instance given its constituents.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        collector (DataCollectorBase): A data collector to be used to collect data.</span>
+<span class="sd">        collector (BaseCollector): A data collector to be used to collect data.</span>
 <span class="sd">        loss_module (LossModule): A TorchRL loss module</span>
 <span class="sd">        recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without</span>
 <span class="sd">            testing it.</span>
@@ -533,7 +533,7 @@
 <span class="sd">        &gt;&gt;&gt; from torchrl.trainers.loggers import TensorboardLogger</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.trainers import Trainer</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs import EnvCreator</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import Collector</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.data import TensorDictReplayBuffer</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper</span>
@@ -548,7 +548,7 @@
 <span class="sd">        &gt;&gt;&gt; net_value = torch.nn.Linear(env_proof.observation_spec.shape[-1], 1)  # for the purpose of testing</span>
 <span class="sd">        &gt;&gt;&gt; policy = SafeModule(action_spec, net, in_keys=[&quot;observation&quot;], out_keys=[&quot;action&quot;])</span>
 <span class="sd">        &gt;&gt;&gt; value = ValueOperator(net_value, in_keys=[&quot;observation&quot;], out_keys=[&quot;state_action_value&quot;])</span>
-<span class="sd">        &gt;&gt;&gt; collector = SyncDataCollector(env_maker, policy, total_frames=100)</span>
+<span class="sd">        &gt;&gt;&gt; collector = Collector(env_maker, policy, total_frames=100)</span>
 <span class="sd">        &gt;&gt;&gt; loss_module = DDPGLoss(policy, value, gamma=0.99)</span>
 <span class="sd">        &gt;&gt;&gt; recorder = env_proof</span>
 <span class="sd">        &gt;&gt;&gt; target_net_updater = None</span>

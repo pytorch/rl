@@ -663,20 +663,42 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">in_keys_inv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys_inv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span> <span class="o">=</span> <span class="n">in_keys_inv</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span> <span class="o">=</span> <span class="n">out_keys_inv</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
+        <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
+        <span class="k">if</span> <span class="n">in_keys_inv</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span> <span class="o">=</span> <span class="n">in_keys_inv</span>
+        <span class="k">if</span> <span class="n">out_keys_inv</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span> <span class="o">=</span> <span class="n">out_keys_inv</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_missing_tolerance</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="c1"># we use __dict__ to avoid having nn.Module placing these objects in the module list</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_container&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_parent&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">args</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected at most 1 positional argument, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">default</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">default</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Only &#39;default&#39; keyword argument is supported&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">args</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Got two values for keyword argument &#39;default&#39;&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ready</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Used to block ray until the actor is ready, see RayTransform</span>
@@ -746,7 +768,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys_inv</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821 # type: ignore</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the collector associated with the container, if it exists.</span>
 
 <span class="sd">        This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</span>
@@ -3923,8 +3945,8 @@
 <span class="sd">    gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.envs.utils import RandomPolicy        &gt;&gt;&gt; from torchrl.envs import UnsqueezeTransform, CatFrames</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import RandomPolicy        &gt;&gt;&gt;         &gt;&gt;&gt;         &gt;&gt;&gt; from torchrl.envs import UnsqueezeTransform, CatFrames</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import Collector</span>
 <span class="sd">        &gt;&gt;&gt; # Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension</span>
 <span class="sd">        &gt;&gt;&gt; env = TransformedEnv(</span>
 <span class="sd">        ...     GymEnv(&quot;CartPole-v1&quot;, from_pixels=True),</span>
@@ -3937,7 +3959,7 @@
 <span class="sd">        ...     )</span>
 <span class="sd">        ... )</span>
 <span class="sd">        &gt;&gt;&gt; # we design a collector</span>
-<span class="sd">        &gt;&gt;&gt; collector = SyncDataCollector(</span>
+<span class="sd">        &gt;&gt;&gt; collector = Collector(</span>
 <span class="sd">        ...     env,</span>
 <span class="sd">        ...     RandomPolicy(env.action_spec),</span>
 <span class="sd">        ...     frames_per_batch=10,</span>
@@ -9222,11 +9244,11 @@
 <span class="sd">    append the `inv` method of the transform.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.envs.utils import RandomPolicy        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import RandomPolicy        &gt;&gt;&gt;         &gt;&gt;&gt;         &gt;&gt;&gt; from torchrl.collectors import Collector</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
 <span class="sd">        &gt;&gt;&gt; t = Reward2GoTransform(gamma=0.99, out_keys=[&quot;reward_to_go&quot;])</span>
 <span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; collector = SyncDataCollector(</span>
+<span class="sd">        &gt;&gt;&gt; collector = Collector(</span>
 <span class="sd">        ...     env,</span>
 <span class="sd">        ...     RandomPolicy(env.action_spec),</span>
 <span class="sd">        ...     frames_per_batch=200,</span>
@@ -10273,8 +10295,8 @@
 <span class="sd">    This transform can be used to deploy non-batch-locked environments within data</span>
 <span class="sd">    collectors:</span>
 
-<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector</span>
-<span class="sd">        &gt;&gt;&gt; collector = SyncDataCollector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import Collector</span>
+<span class="sd">        &gt;&gt;&gt; collector = Collector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)</span>
 <span class="sd">        &gt;&gt;&gt; for data in collector:</span>
 <span class="sd">        ...     print(data)</span>
 <span class="sd">        ...     break</span>

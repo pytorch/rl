@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-WeightSender
-============
-
-.. autoclass:: WeightSender
-    :members:
-    :inherited-members:

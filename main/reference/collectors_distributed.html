@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="DistributedDataCollector" href="generated/torchrl.collectors.distributed.DistributedDataCollector.html" />
-    <link rel="prev" title="aSyncDataCollector" href="generated/torchrl.collectors.aSyncDataCollector.html" />
+    <link rel="next" title="DistributedCollector" href="generated/torchrl.collectors.distributed.DistributedCollector.html" />
+    <link rel="prev" title="MultiAsyncCollector" href="generated/torchrl.collectors.MultiAsyncCollector.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -431,8 +431,8 @@
   <section id="distributed-collectors">
 <h1>Distributed Collectors<a class="headerlink" href="#distributed-collectors" title="Permalink to this heading">¶</a></h1>
 <p>TorchRL provides a set of distributed data collectors. These tools support
-multiple backends (<code class="docutils literal notranslate"><span class="pre">'gloo'</span></code>, <code class="docutils literal notranslate"><span class="pre">'nccl'</span></code>, <code class="docutils literal notranslate"><span class="pre">'mpi'</span></code> with the <a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector" title="torchrl.collectors.distributed.DistributedDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedDataCollector</span></code></a>
-or PyTorch RPC with <a class="reference internal" href="generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector" title="torchrl.collectors.distributed.RPCDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RPCDataCollector</span></code></a>) and launchers (<code class="docutils literal notranslate"><span class="pre">'ray'</span></code>,
+multiple backends (<code class="docutils literal notranslate"><span class="pre">'gloo'</span></code>, <code class="docutils literal notranslate"><span class="pre">'nccl'</span></code>, <code class="docutils literal notranslate"><span class="pre">'mpi'</span></code> with the <a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector" title="torchrl.collectors.distributed.DistributedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedCollector</span></code></a>
+or PyTorch RPC with <a class="reference internal" href="generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector" title="torchrl.collectors.distributed.RPCCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RPCCollector</span></code></a>) and launchers (<code class="docutils literal notranslate"><span class="pre">'ray'</span></code>,
 <code class="docutils literal notranslate"><span class="pre">submitit</span></code> or <code class="docutils literal notranslate"><span class="pre">torch.multiprocessing</span></code>).
 They can be efficiently used in synchronous or asynchronous mode, on a single
 node or across multiple nodes.</p>
@@ -441,7 +441,7 @@ node or across multiple nodes.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p><em>Choosing the sub-collector</em>: All distributed collectors support the various single machine collectors.
-One may wonder why using a <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> or a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>
+One may wonder why using a <a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> or a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>
 instead. In general, multiprocessed collectors have a lower IO footprint than
 parallel environments which need to communicate at each step. Yet, the model specs
 play a role in the opposite direction, since using parallel environments will
@@ -468,23 +468,41 @@ see these warnings, they can be displayed by setting <code class="docutils liter
 </div>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector" title="torchrl.collectors.distributed.DistributedDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedDataCollector</span></code></a>(create_env_fn, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector" title="torchrl.collectors.distributed.DistributedCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedCollector</span></code></a>(create_env_fn, policy, ...)</p></td>
 <td><p>A distributed data collector with torch.distributed backend.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector" title="torchrl.collectors.distributed.RPCDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RPCDataCollector</span></code></a>(create_env_fn, policy, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector" title="torchrl.collectors.distributed.RPCCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RPCCollector</span></code></a>(create_env_fn, policy, ...)</p></td>
 <td><p>An RPC-based distributed data collector.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector" title="torchrl.collectors.distributed.DistributedSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedSyncDataCollector</span></code></a>(create_env_fn, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedSyncCollector.html#torchrl.collectors.distributed.DistributedSyncCollector" title="torchrl.collectors.distributed.DistributedSyncCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedSyncCollector</span></code></a>(create_env_fn, ...)</p></td>
 <td><p>A distributed synchronous data collector with torch.distributed backend.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.submitit_delayed_launcher.html#torchrl.collectors.distributed.submitit_delayed_launcher" title="torchrl.collectors.distributed.submitit_delayed_launcher"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submitit_delayed_launcher</span></code></a>(num_jobs[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector" title="torchrl.collectors.distributed.DistributedDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedDataCollector</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Deprecated version of <a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector" title="torchrl.collectors.distributed.DistributedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedCollector</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector" title="torchrl.collectors.distributed.RPCDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RPCDataCollector</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Deprecated version of <a class="reference internal" href="generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector" title="torchrl.collectors.distributed.RPCCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RPCCollector</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector" title="torchrl.collectors.distributed.DistributedSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributedSyncDataCollector</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Deprecated version of <a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedSyncCollector.html#torchrl.collectors.distributed.DistributedSyncCollector" title="torchrl.collectors.distributed.DistributedSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedSyncCollector</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.submitit_delayed_launcher.html#torchrl.collectors.distributed.submitit_delayed_launcher" title="torchrl.collectors.distributed.submitit_delayed_launcher"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submitit_delayed_launcher</span></code></a>(num_jobs[, ...])</p></td>
 <td><p>Delayed launcher for submitit.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayCollector</span></code></a>(create_env_fn, policy, ...[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayCollector</span></code></a>(create_env_fn, policy, ...[, ...])</p></td>
 <td><p>Distributed data collector with <a class="reference external" href="https://docs.ray.io/">Ray</a> backend.</p></td>
 </tr>
 </tbody>
 </table>
+<section id="legacy-names">
+<h2>Legacy names<a class="headerlink" href="#legacy-names" title="Permalink to this heading">¶</a></h2>
+<p>The following names are kept for backward compatibility:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">DistributedDataCollector</span></code> → <code class="docutils literal notranslate"><span class="pre">DistributedCollector</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RPCDataCollector</span></code> → <code class="docutils literal notranslate"><span class="pre">RPCCollector</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DistributedSyncDataCollector</span></code> → <code class="docutils literal notranslate"><span class="pre">DistributedSyncCollector</span></code></p></li>
+</ul>
+</section>
 </section>
 
 
@@ -495,10 +513,10 @@ see these warnings, they can be displayed by setting <code class="docutils liter
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="generated/torchrl.collectors.distributed.DistributedDataCollector.html" class="btn btn-neutral float-right" title="DistributedDataCollector" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="generated/torchrl.collectors.distributed.DistributedCollector.html" class="btn btn-neutral float-right" title="DistributedCollector" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="generated/torchrl.collectors.aSyncDataCollector.html" class="btn btn-neutral" title="aSyncDataCollector" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="generated/torchrl.collectors.MultiAsyncCollector.html" class="btn btn-neutral" title="MultiAsyncCollector" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -532,7 +550,10 @@ see these warnings, they can be displayed by setting <code class="docutils liter
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">Distributed Collectors</a></li>
+<li><a class="reference internal" href="#">Distributed Collectors</a><ul>
+<li><a class="reference internal" href="#legacy-names">Legacy names</a></li>
+</ul>
+</li>
 </ul>
 
             </div>

@@ -445,37 +445,34 @@
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A composition of TensorSpecs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.DiscreteTensorSpec.html#torchrl.data.DiscreteTensorSpec" title="torchrl.data.DiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteTensorSpec</span></code></a>(*args, **kwargs)</p></td>
-<td><p>Deprecated version of <a class="reference internal" href="generated/torchrl.data.Categorical.html#torchrl.data.Categorical" title="torchrl.data.Categorical"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.Categorical</span></code></a>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec" title="torchrl.data.LazyStackedCompositeSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyStackedCompositeSpec</span></code></a>(*args, **kwargs)</p></td>
-<td><p>Deprecated version of <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.StackedComposite</span></code>.</p></td>
-</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.MultiCategorical.html#torchrl.data.MultiCategorical" title="torchrl.data.MultiCategorical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiCategorical</span></code></a>(nvec[, shape, device, ...])</p></td>
 <td><p>A concatenation of discrete tensor spec.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.MultiDiscreteTensorSpec.html#torchrl.data.MultiDiscreteTensorSpec" title="torchrl.data.MultiDiscreteTensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiDiscreteTensorSpec</span></code></a>(*args, **kwargs)</p></td>
-<td><p>Deprecated version of <a class="reference internal" href="generated/torchrl.data.MultiCategorical.html#torchrl.data.MultiCategorical" title="torchrl.data.MultiCategorical"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.MultiCategorical</span></code></a>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.MultiOneHot.html#torchrl.data.MultiOneHot" title="torchrl.data.MultiOneHot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiOneHot</span></code></a>(nvec[, shape, device, dtype, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.MultiOneHot.html#torchrl.data.MultiOneHot" title="torchrl.data.MultiOneHot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiOneHot</span></code></a>(nvec[, shape, device, dtype, ...])</p></td>
 <td><p>A concatenation of one-hot discrete tensor spec.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor" title="torchrl.data.NonTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensor</span></code></a>([shape, device, dtype, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor" title="torchrl.data.NonTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NonTensor</span></code></a>([shape, device, dtype, ...])</p></td>
 <td><p>A spec for non-tensor data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.OneHot.html#torchrl.data.OneHot" title="torchrl.data.OneHot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneHot</span></code></a>(n[, shape, device, dtype, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.OneHot.html#torchrl.data.OneHot" title="torchrl.data.OneHot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneHot</span></code></a>(n[, shape, device, dtype, ...])</p></td>
 <td><p>A unidimensional, one-hot discrete tensor spec.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>(shape, space, device, dtype, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.Stacked.html#torchrl.data.Stacked" title="torchrl.data.Stacked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Stacked</span></code></a>(*specs, dim)</p></td>
+<td><p>A lazy representation of a stack of tensor specs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite" title="torchrl.data.StackedComposite"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StackedComposite</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A lazy representation of a stack of composite specs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>(shape, space, device, dtype, ...)</p></td>
 <td><p>Parent class of the tensor meta-data containers.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.Unbounded.html#torchrl.data.Unbounded" title="torchrl.data.Unbounded"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Unbounded</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.Unbounded.html#torchrl.data.Unbounded" title="torchrl.data.Unbounded"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Unbounded</span></code></a>(*args, **kwargs)</p></td>
 <td><p>An unbounded tensor spec.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.UnboundedContinuous.html#torchrl.data.UnboundedContinuous" title="torchrl.data.UnboundedContinuous"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnboundedContinuous</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.UnboundedContinuous.html#torchrl.data.UnboundedContinuous" title="torchrl.data.UnboundedContinuous"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnboundedContinuous</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A specialized version of <a class="reference internal" href="generated/torchrl.data.Unbounded.html#torchrl.data.Unbounded" title="torchrl.data.Unbounded"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.Unbounded</span></code></a> with continuous space.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete" title="torchrl.data.UnboundedDiscrete"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnboundedDiscrete</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete" title="torchrl.data.UnboundedDiscrete"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnboundedDiscrete</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A specialized version of <a class="reference internal" href="generated/torchrl.data.Unbounded.html#torchrl.data.Unbounded" title="torchrl.data.Unbounded"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.Unbounded</span></code></a> with discrete space.</p></td>
 </tr>
 </tbody>

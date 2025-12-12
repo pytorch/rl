@@ -663,7 +663,7 @@ are direct members of this module.</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb.collector">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.collector" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector" title="torchrl.collectors.BaseCollector"><span class="pre">BaseCollector</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.collector" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the collector associated with the container, if it exists.</p>
 <p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
 <p>Make sure to call this property only on transforms that are not nested in sub-processes.
@@ -1505,7 +1505,7 @@ all hooks registered by this method.</p></li>
 <dd><p>Register a backward pre-hook on the module.</p>
 <p>The hook will be called every time the gradients for the module are computed.
 The hook should have the following signature:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">hook</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="ow">or</span> <span class="kc">None</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">hook</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">Tensor</span> <span class="ow">or</span> <span class="kc">None</span>
 </pre></div>
 </div>
 <p>The <code class="xref py py-attr docutils literal notranslate"><span class="pre">grad_output</span></code> is a tuple. The hook should

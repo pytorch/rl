@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors
-
-
-SyncDataCollector
-=================
-
-.. autoclass:: SyncDataCollector
-    :members:
-    :inherited-members:

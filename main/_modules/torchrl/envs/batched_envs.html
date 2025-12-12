@@ -3123,7 +3123,6 @@
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">consolidate</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
@@ -3135,6 +3134,9 @@
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">cur_td</span><span class="p">)</span>
+            <span class="c1"># Set event after successfully sending through pipe to avoid race condition</span>
+            <span class="c1"># where event is set but pipe send fails (BrokenPipeError)</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">cur_td</span>
 
@@ -3148,7 +3150,6 @@
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">consolidate</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
@@ -3157,6 +3158,9 @@
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
             <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">next_td</span><span class="p">)</span>
+            <span class="c1"># Set event after successfully sending through pipe to avoid race condition</span>
+            <span class="c1"># where event is set but pipe send fails (BrokenPipeError)</span>
+            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">next_td</span>
 

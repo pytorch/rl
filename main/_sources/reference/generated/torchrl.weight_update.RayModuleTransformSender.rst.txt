@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.weight_update
-
-
-RayModuleTransformSender
-========================
-
-.. autoclass:: RayModuleTransformSender
-    :members:
-    :inherited-members:

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors
-
-
-DataCollectorBase
-=================
-
-.. autoclass:: DataCollectorBase
-    :members:
-    :inherited-members:

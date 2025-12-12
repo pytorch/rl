@@ -436,10 +436,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModuleWrapper</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">DataCollectorBase</span><span class="p">,</span>
-    <span class="n">MultiaSyncDataCollector</span><span class="p">,</span>
-    <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
-    <span class="n">SyncDataCollector</span><span class="p">,</span>
+    <span class="n">BaseCollector</span><span class="p">,</span>
+    <span class="n">Collector</span><span class="p">,</span>
+    <span class="n">MultiAsyncCollector</span><span class="p">,</span>
+    <span class="n">MultiSyncCollector</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.postprocs</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParallelEnv</span>
@@ -452,14 +452,14 @@
     <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MultiaSyncDataCollector</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MultiAsyncCollector</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs asynchronous collectors, each running synchronous environments.</span>
 
 <span class="sd">    .. aafig::</span>
 
 
 <span class="sd">            +----------------------------------------------------------------------+</span>
-<span class="sd">            |           &quot;MultiaSyncDataCollector&quot;                 |                |</span>
+<span class="sd">            |           &quot;MultiAsyncCollector&quot;                     |                |</span>
 <span class="sd">            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |</span>
 <span class="sd">            |  &quot;Collector 1&quot;  |  &quot;Collector 2&quot;  |  &quot;Collector 3&quot;  |     &quot;Main&quot;     |</span>
 <span class="sd">            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
@@ -497,7 +497,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">_make_collector</span><span class="p">(</span>
-        <span class="n">MultiaSyncDataCollector</span><span class="p">,</span>
+        <span class="n">MultiAsyncCollector</span><span class="p">,</span>
         <span class="n">env_fns</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
         <span class="n">env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
         <span class="n">num_env_per_collector</span><span class="o">=</span><span class="n">num_env_per_collector</span><span class="p">,</span>
@@ -512,7 +512,7 @@
     <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncDataCollector</span> <span class="o">|</span> <span class="n">MultiSyncDataCollector</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Collector</span> <span class="o">|</span> <span class="n">MultiSyncCollector</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs synchronous collectors, each running synchronous environments.</span>
 
 <span class="sd">    E.g.</span>
@@ -520,7 +520,7 @@
 <span class="sd">    .. aafig::</span>
 
 <span class="sd">            +----------------------------------------------------------------------+</span>
-<span class="sd">            |            &quot;MultiSyncDataCollector&quot;                 |                |</span>
+<span class="sd">            |            &quot;MultiSyncCollector&quot;                     |                |</span>
 <span class="sd">            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |</span>
 <span class="sd">            |   &quot;Collector 1&quot; |  &quot;Collector 2&quot;  |  &quot;Collector 3&quot;  |     Main       |</span>
 <span class="sd">            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
@@ -571,7 +571,7 @@
         <span class="k">if</span> <span class="s2">&quot;storing_device&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;storing_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;storing_device&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">_make_collector</span><span class="p">(</span>
-            <span class="n">SyncDataCollector</span><span class="p">,</span>
+            <span class="n">Collector</span><span class="p">,</span>
             <span class="n">env_fns</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
             <span class="n">env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
             <span class="n">num_env_per_collector</span><span class="o">=</span><span class="n">num_env_per_collector</span><span class="p">,</span>
@@ -579,7 +579,7 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">_make_collector</span><span class="p">(</span>
-        <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
+        <span class="n">MultiSyncCollector</span><span class="p">,</span>
         <span class="n">env_fns</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
         <span class="n">env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
         <span class="n">num_env_per_collector</span><span class="o">=</span><span class="n">num_env_per_collector</span><span class="p">,</span>
@@ -600,7 +600,7 @@
     <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">env_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_fns</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
@@ -653,7 +653,7 @@
             <span class="k">for</span> <span class="n">_env_fn</span><span class="p">,</span> <span class="n">_env_kwargs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">env_fns_split</span><span class="p">,</span> <span class="n">env_kwargs_split</span><span class="p">)</span>
         <span class="p">]</span>
         <span class="n">env_kwargs</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">collector_class</span> <span class="ow">is</span> <span class="n">SyncDataCollector</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">collector_class</span> <span class="ow">is</span> <span class="n">Collector</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_fns</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Something went wrong: expected a single env constructor but got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">env_fns</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -677,7 +677,7 @@
     <span class="n">actor_model_explore</span><span class="p">:</span> <span class="p">(</span><span class="n">TensorDictModuleWrapper</span> <span class="o">|</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">),</span>
     <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
     <span class="n">make_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a data collector for off-policy sota-implementations.</span>
 
 <span class="sd">    Args:</span>
@@ -739,7 +739,7 @@
     <span class="n">actor_model_explore</span><span class="p">:</span> <span class="p">(</span><span class="n">TensorDictModuleWrapper</span> <span class="o">|</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">),</span>
     <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
     <span class="n">make_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Makes a collector in on-policy settings.</span>
 
 <span class="sd">    Args:</span>

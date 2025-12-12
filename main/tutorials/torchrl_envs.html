@@ -495,7 +495,7 @@ will pass the arguments and keyword arguments to the root library builder.</p>
 <p>Like other frameworks, TorchRL envs have attributes that indicate what
 space is for the observations, action, done and reward. Because it often happens
 that more than one observation is retrieved, we expect the observation spec
-to be of type <code class="docutils literal notranslate"><span class="pre">CompositeSpec</span></code>.
+to be of type <code class="docutils literal notranslate"><span class="pre">Composite</span></code>.
 Reward and action do not have this restriction:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Env observation_spec: </span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Env action_spec: </span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
@@ -526,7 +526,7 @@ these three signals:</p>
 </pre></div>
 </div>
 <p>Envs are also packed with an <code class="docutils literal notranslate"><span class="pre">env.state_spec</span></code> attribute of type
-<code class="docutils literal notranslate"><span class="pre">CompositeSpec</span></code> which contains all the specs that are inputs to the env
+<code class="docutils literal notranslate"><span class="pre">Composite</span></code> which contains all the specs that are inputs to the env
 but are not the action.
 For stateful
 envs (e.g. gym) this will be void most of the time.

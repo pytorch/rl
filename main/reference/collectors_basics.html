@@ -441,18 +441,18 @@ state, and/or after a predefined number of steps.</p>
 <p>Because data collection is a potentially compute heavy process, it is crucial to
 configure the execution hyperparameters appropriately.
 The first parameter to take into consideration is whether the data collection should
-occur serially with the optimization step or in parallel. The <a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>
-class will execute the data collection on the training worker. The <a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>
-will split the workload across an number of workers and aggregate the results that
-will be delivered to the training worker. Finally, the <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a> will
-execute the data collection on several workers and deliver the first batch of results
+occur serially with the optimization step or in parallel. The <a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>
+class will execute the data collection on the training worker. The <a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a>
+(or <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>) will split the workload across a number of workers and aggregate the results that
+will be delivered to the training worker. Finally, the <a class="reference internal" href="generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector" title="torchrl.collectors.MultiAsyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a>
+(or <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=False)</span></code>) will execute the data collection on several workers and deliver the first batch of results
 that it can gather. This execution will occur continuously and concomitantly with
 the training of the networks: this implies that the weights of the policy that
 is used for the data collection may slightly lag the configuration of the policy
 on the training worker. Therefore, although this class may be the fastest to collect
 data, it comes at the price of being suitable only in settings where it is acceptable
 to gather data asynchronously (e.g. off-policy RL or curriculum RL).
-For remotely executed rollouts (<a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> or <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>)
+For remotely executed rollouts (<a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a> with <code class="docutils literal notranslate"><span class="pre">sync=True</span></code> or <code class="docutils literal notranslate"><span class="pre">sync=False</span></code>)
 it is necessary to synchronise the weights of the remote policy with the weights
 from the training worker using either the <code class="xref py py-meth docutils literal notranslate"><span class="pre">collector.update_policy_weights_()</span></code> or
 by setting <code class="docutils literal notranslate"><span class="pre">update_at_each_batch=True</span></code> in the constructor.</p>
@@ -489,9 +489,9 @@ be expected when collecting data:</p>
 <table class="docutils # Necessary for the table generated by autosummary to look decent align-default">
 <thead>
 <tr class="row-odd"><th class="head"></th>
-<th class="head"><p>SyncDataCollector</p></th>
-<th class="head" colspan="3"><p>MultiSyncDataCollector (n=B)</p></th>
-<th class="head"><p>MultiaSyncDataCollector (n=B)</p></th>
+<th class="head"><p>Collector</p></th>
+<th class="head" colspan="3"><p>MultiCollector(sync=True) (n=B)</p></th>
+<th class="head"><p>MultiCollector(sync=False)</p></th>
 </tr>
 </thead>
 <tbody>
@@ -523,7 +523,7 @@ that the batch size equals the <code class="docutils literal notranslate"><span 
 collector.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p><a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> should not be
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>) should not be
 used with <code class="docutils literal notranslate"><span class="pre">cat_results=0</span></code>, as the data will be stacked along the batch
 dimension with batched environment, or the time dimension for single environments,
 which can introduce some confusion when swapping one with the other.
@@ -532,12 +532,12 @@ with the environments as it will keep each dimension separate, and provide
 better interchangeability between configurations, collector classes and other
 components.</p>
 </div>
-<p>Whereas <a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>
+<p>Whereas <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=True)</span></code>)
 has a dimension corresponding to the number of sub-collectors being run (<code class="docutils literal notranslate"><span class="pre">B</span></code>),
-<a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a> doesn’t. This
-is easily understood when considering that <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code> (i.e., <code class="docutils literal notranslate"><span class="pre">MultiCollector(sync=False)</span></code>) doesn’t. This
+is easily understood when considering that <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>
 delivers batches of data on a first-come, first-serve basis, whereas
-<a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> gathers data from
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> gathers data from
 each sub-collector before delivering it.</p>
 </section>
 <section id="collectors-and-policy-copies">

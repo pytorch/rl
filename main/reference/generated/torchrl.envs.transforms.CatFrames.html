@@ -441,7 +441,7 @@ It can also be used with models that require access to past observations such as
 It was first proposed in “Playing Atari with Deep Reinforcement Learning” (<a class="reference external" href="https://arxiv.org/pdf/1312.5602.pdf">https://arxiv.org/pdf/1312.5602.pdf</a>).</p>
 <p>When used within a transformed environment,
 <a class="reference internal" href="#torchrl.envs.transforms.CatFrames" title="torchrl.envs.transforms.CatFrames"><code class="xref py py-class docutils literal notranslate"><span class="pre">CatFrames</span></code></a> is a stateful class, and it can be reset to its native state by
-calling the <a class="reference internal" href="torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.reset" title="torchrl.collectors.MultiSyncDataCollector.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> method. This method accepts tensordicts with a
+calling the <a class="reference internal" href="torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.reset" title="torchrl.collectors.AsyncCollector.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> method. This method accepts tensordicts with a
 <code class="docutils literal notranslate"><span class="pre">&quot;_reset&quot;</span></code> entry that indicates which buffer to reset.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -484,8 +484,8 @@ effect of the online frame concatenation at a different scale (or for the
 purpose of limiting the memory consumption). The following example
 gives the complete picture, together with the usage of a <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.ReplayBuffer</span></code></a>:</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>        <span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnsqueezeTransform</span><span class="p">,</span> <span class="n">CatFrames</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>        <span class="o">&gt;&gt;&gt;</span>         <span class="o">&gt;&gt;&gt;</span>         <span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnsqueezeTransform</span><span class="p">,</span> <span class="n">CatFrames</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collector</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <span class="n">from_pixels</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
@@ -498,7 +498,7 @@ gives the complete picture, together with the usage of a <a class="reference int
 <span class="gp">... </span>    <span class="p">)</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># we design a collector</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">env</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>

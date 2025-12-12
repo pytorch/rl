@@ -452,7 +452,7 @@
 <span class="sd">      updating a state-dict, or more complex if an inference server is being used.</span>
 <span class="sd">    - In server collector nodes, it is responsible for sending the weights to the leaf collectors.</span>
 
-<span class="sd">    In a collector, the updater is called within :meth:`~torchrl.collector.DataCollectorBase.update_policy_weights_`.`</span>
+<span class="sd">    In a collector, the updater is called within :meth:`~torchrl.collector.BaseCollector.update_policy_weights_`.`</span>
 
 <span class="sd">    The main method of this class is the :meth:`~._push_weights` method, which updates the policy weights in the worker /</span>
 <span class="sd">    policy. This method is called by :meth:`~.push_weights`, which also calls the post-hooks: only `_push_weights` should</span>
@@ -490,7 +490,7 @@
 <span class="sd">            The post-hook will be called in the same process as the weight updater.</span>
 <span class="sd">            The post-hook will be called in the same order as the post-hooks were registered.</span>
 
-<span class="sd">    .. seealso:: :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.</span>
+<span class="sd">    .. seealso:: :meth:`~torchrl.collectors.BaseCollector.update_policy_weights_`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -539,7 +539,7 @@
 <span class="sd">        Once registered, the updater will not accept another collector.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            collector (DataCollectorBase): The collector to register.</span>
+<span class="sd">            collector (BaseCollector): The collector to register.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -775,10 +775,10 @@
 <span class="sd">    in scenarios where the weight update logic is straightforward and does not require any</span>
 <span class="sd">    complex mapping or transformation.</span>
 
-<span class="sd">    This class is used by default in the `SyncDataCollector` when no custom weight sender</span>
+<span class="sd">    This class is used by default in the `Collector` when no custom weight sender</span>
 <span class="sd">    is provided.</span>
 
-<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.</span>
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.Collector`.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.</span>
@@ -855,7 +855,7 @@
 <span class="sd">        logic, consider extending `WeightUpdaterBase` with a custom implementation.</span>
 
 <span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and</span>
-<span class="sd">        :class:`~torchrl.collectors.DataCollectorBase`.</span>
+<span class="sd">        :class:`~torchrl.collectors.BaseCollector`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -1000,7 +1000,7 @@
         <span class="k">return</span> <span class="n">server_weights</span></div>
 
 <div class="viewcode-block" id="RayWeightUpdater._sync_weights_with_worker"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._sync_weights_with_worker">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;syncing weights with worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;syncing weights with worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span>
         <span class="n">c</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">server_weights</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span></div>

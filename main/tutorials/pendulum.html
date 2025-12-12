@@ -753,8 +753,8 @@ actually querying the environment (which can be costly with real-world
 physical systems for instance).</p>
 <p>There are four specs that we must code in our environment:</p>
 <ul class="simple">
-<li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase.observation_spec</span></code>: This will be a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeSpec</span></code>
-instance where each key is an observation (a <code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeSpec</span></code> can be
+<li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase.observation_spec</span></code>: This will be a <a class="reference internal" href="../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a>
+instance where each key is an observation (a <code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code> can be
 viewed as a dictionary of specs).</p></li>
 <li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvBase.action_spec</span></code>: It can be any type of spec, but it is required
 that it corresponds to the <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code> entry in the input <code class="docutils literal notranslate"><span class="pre">tensordict</span></code>;</p></li>

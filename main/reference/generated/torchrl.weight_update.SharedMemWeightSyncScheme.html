@@ -434,139 +434,126 @@
 <h1>SharedMemWeightSyncScheme<a class="headerlink" href="#sharedmemweightsyncscheme" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">SharedMemWeightSyncScheme</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tensordict'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_register</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#SharedMemWeightSyncScheme"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">SharedMemWeightSyncScheme</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'tensordict'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sync</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme" title="Permalink to this definition">¶</a></dt>
 <dd><p>Weight synchronization using shared memory.</p>
-<p>This scheme mimics the old WeightUpdater behavior by using shared memory
-for in-place weight updates. Workers automatically see weight updates
-without explicit message passing.</p>
-<p>By default, this scheme uses lazy registration: models are automatically
-registered on the first weight send. This makes it seamless to use with
-configuration systems like Hydra where schemes are created before models
-are available.</p>
+<p>This scheme uses shared memory for in-place weight updates. Workers
+automatically see weight updates without explicit message passing.</p>
+<p>A background thread on the receiver side listens for “receive” instructions
+from the sender. When an instruction arrives, the thread applies the current
+shared memory weights to the model and sends an acknowledgment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>policy_weights</strong> – Dictionary mapping model_id to shared TensorDict weights.
-Can be empty if using lazy registration (auto_register=True).</p></li>
 <li><p><strong>strategy</strong> – The weight transmission strategy (default: “tensordict”).</p></li>
-<li><p><strong>auto_register</strong> – Whether to automatically register models on first weight send.
-Default is True. Set to False to require explicit registration via
-register_shared_weights().</p></li>
+<li><p><strong>sync</strong> – If True (default), send() blocks until receiver acknowledges.
+If False, send() returns immediately (use send_async/wait_async).</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># With auto-registration (default) - works with Hydra configs</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic usage</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">scheme</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Models are auto-registered on first weight send</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># With explicit registration</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">scheme</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">(</span><span class="n">auto_register</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">shared_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">scheme</span><span class="o">.</span><span class="n">register_shared_weights</span><span class="p">(</span><span class="s2">&quot;policy&quot;</span><span class="p">,</span> <span class="n">shared_weights</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Weights are initialized via init_on_sender()</span>
 </pre></div>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.create_receiver">
-<span class="sig-name descname"><span class="pre">create_receiver</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver" title="torchrl.weight_update.weight_sync_schemes.WeightReceiver"><span class="pre">WeightReceiver</span></a></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.create_receiver" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create a receiver for this scheme (legacy).</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.apply_weights">
+<span class="sig-name descname"><span class="pre">apply_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.apply_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Apply weights to the model.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>WeightReceiver instance configured for this scheme.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>weights</strong> – The weights to apply.</p></li>
+<li><p><strong>inplace</strong> – Whether to apply weights in place. Default is <cite>True</cite>.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.create_sender">
-<span class="sig-name descname"><span class="pre">create_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.WeightSender.html#torchrl.weight_update.WeightSender" title="torchrl.weight_update.weight_sync_schemes.WeightSender"><span class="pre">WeightSender</span></a></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.create_sender" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create a sender for this scheme (legacy).</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.connect">
+<span class="sig-name descname"><span class="pre">connect</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.connect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to be called once the workers have started.</p>
+<p>Triggers a rendez-vous for the workers to receive their copy of the weights.</p>
+<p>Dispatches to _setup_connection_and_weights_on_sender_impl() or _setup_connection_and_weights_on_receiver_impl()
+based on which initialization was performed.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.context">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">context</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.context" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the context object (e.g., collector), if available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>WeightSender instance configured for this scheme.</p>
+<dd class="field-odd"><p>The context object if available, None otherwise.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.create_transport">
-<span class="sig-name descname"><span class="pre">create_transport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pipe_or_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend" title="torchrl.weight_update.weight_sync_schemes.TransportBackend"><span class="pre">TransportBackend</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#SharedMemWeightSyncScheme.create_transport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.create_transport" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create shared memory transport and register pipe for lazy buffer distribution (legacy).</p>
-<p>For lazy registration to work, we register each worker’s pipe with the transport.
-On first weight send, the transport will send buffer references via these pipes.</p>
+<span class="sig-name descname"><span class="pre">create_transport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend" title="torchrl.weight_update.weight_sync_schemes.TransportBackend"><span class="pre">TransportBackend</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme.create_transport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.create_transport" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create shared memory transport.</p>
 <p>Returns the shared transport instance that all workers will use.
 Since this is shared memory, there’s only one transport shared by all workers.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This is used internally by init_on_sender/init_on_receiver.</p>
+</div>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.get_receiver">
-<span class="sig-name descname"><span class="pre">get_receiver</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.WeightReceiver.html#torchrl.weight_update.WeightReceiver" title="torchrl.weight_update.weight_sync_schemes.WeightReceiver"><span class="pre">WeightReceiver</span></a></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.get_receiver" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get the receiver instance.</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.init_on_receiver">
+<span class="sig-name descname"><span class="pre">init_on_receiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.init_on_receiver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize on worker process (receiver side).</p>
+<p>This method is called once in each worker’s initialization.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Receiver instance for receiving weights in this worker</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>RuntimeError</strong> – If init_on_worker() hasn’t been called yet</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.get_sender">
-<span class="sig-name descname"><span class="pre">get_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.weight_update.WeightSender.html#torchrl.weight_update.WeightSender" title="torchrl.weight_update.weight_sync_schemes.WeightSender"><span class="pre">WeightSender</span></a></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.get_sender" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get the sender instance.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Sender instance for sending weights to workers</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>RuntimeError</strong> – If init_on_sender() hasn’t been called yet</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_id</strong> – Identifier for the model being synchronized</p></li>
+<li><p><strong>context</strong> – Optional context object (e.g., inner collector)</p></li>
+<li><p><strong>**kwargs</strong> – Alternative to context (model, etc.)</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.init_on_sender">
-<span class="sig-name descname"><span class="pre">init_on_sender</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#SharedMemWeightSyncScheme.init_on_sender"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.init_on_sender" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">init_on_sender</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.init_on_sender" title="Permalink to this definition">¶</a></dt>
 <dd><p>Initialize on the main process (sender side).</p>
-<p>For SharedMemWeightSyncScheme, this handles:
-1. Getting cached shared memory weights from context
-2. Pre-registering the weights with the transport
-3. Distributing buffer references to all workers (avoiding later deadlock)</p>
+<p>This method is called once in the collector’s _run_processes() method,
+after workers have been started and are ready to receive messages.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.model">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">model</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the model object, if available.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model_id</strong> – Identifier for the model being synchronized</p></li>
-<li><p><strong>context</strong> – Optional context object providing pipes, cached_weights</p></li>
-<li><p><strong>**kwargs</strong> – Alternative to context (pipes, cached_weights, etc.)</p></li>
-</ul>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The model object if available, None otherwise.</p>
 </dd>
 </dl>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.init_on_worker">
-<span class="sig-name descname"><span class="pre">init_on_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#SharedMemWeightSyncScheme.init_on_worker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.init_on_worker" title="Permalink to this definition">¶</a></dt>
-<dd><p>Initialize on worker process (receiver side).</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.model_id">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">model_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.model_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the model ID for this scheme.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model_id</strong> – Identifier for the model being synchronized</p></li>
-<li><p><strong>context</strong> – Optional context object providing pipe and model</p></li>
-<li><p><strong>**kwargs</strong> – Alternative to context (pipe, model, etc.)</p></li>
-</ul>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The model ID if set, None otherwise.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.prepare_weights">
-<span class="sig-name descname"><span class="pre">prepare_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">WeightStrategy</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#SharedMemWeightSyncScheme.prepare_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.prepare_weights" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">prepare_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">WeightStrategy</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme.prepare_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.prepare_weights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Prepare weights for SharedMemWeightSyncScheme.</p>
-<p>For SharedMemWeightSyncScheme, we prioritize using cached shared memory weights
-from the context (collector) to avoid extracting fresh (non-shared) weights.</p>
+<p>When weights=None, we extract fresh weights from the model and update
+the shared memory buffer in-place so workers see the change.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -583,17 +570,105 @@ from the context (collector) to avoid extracting fresh (non-shared) weights.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.register_shared_weights">
-<span class="sig-name descname"><span class="pre">register_shared_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#SharedMemWeightSyncScheme.register_shared_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.register_shared_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register shared memory weights for a model.</p>
-<p>This method allows explicit registration of shared weights. It’s optional
-when auto_register=True (the default), but required when auto_register=False.</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.receive">
+<span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tensordict.base.TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.receive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check for and apply new weights (non-blocking).</p>
+<p>This method is called in the worker’s main loop to check if
+new weights have been sent. If weights are available, they
+are applied to the registered model immediately, and the update
+is cascaded to any sub-collectors via context.update_policy_weights_().</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeout</strong> – Maximum time to wait for weights (seconds).
+None means no timeout (blocking). Some transports may not
+support timeout and will raise ValueError if specified.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The received weights if available, None otherwise.</p>
+</dd>
+</dl>
+<p>Note: For SharedMemWeightSyncScheme, this always returns None
+since workers automatically see updates via shared memory.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.receiver_transport">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">receiver_transport</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend" title="torchrl.weight_update.weight_sync_schemes.TransportBackend"><span class="pre">torchrl.weight_update.weight_sync_schemes.TransportBackend</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.receiver_transport" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the receiver transport.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The receiver transport.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.send">
+<span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme.send"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights via shared memory (in-place update).</p>
+<p>For SharedMemWeightSyncScheme:
+1. prepare_weights() updates the shared memory buffer in-place
+2. _send_instruction() tells workers to apply the new weights
+3. If sync=True, waits for acknowledgments from all workers</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>model_id</strong> – Identifier for the model.</p></li>
-<li><p><strong>weights</strong> – Shared memory TensorDict containing the model’s weights.</p></li>
+<li><p><strong>weights</strong> – Weights to send (can be None to extract from model).</p></li>
+<li><p><strong>worker_ids</strong> – Which workers to notify (None = all workers).</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.sender_transports">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sender_transports</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend" title="torchrl.weight_update.weight_sync_schemes.TransportBackend"><span class="pre">torchrl.weight_update.weight_sync_schemes.TransportBackend</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.sender_transports" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the sender transports.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The sender transports.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.shared_transport">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shared_transport</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend" title="torchrl.weight_update.weight_sync_schemes.TransportBackend"><span class="pre">torchrl.weight_update.weight_sync_schemes.TransportBackend</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.shared_transport" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the shared transport.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The shared transport.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.shutdown">
+<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_shared.html#SharedMemWeightSyncScheme.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stop the background receiver thread and clean up.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.weights">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">weights</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the current weights from shared memory.</p>
+<p>For SharedMemWeightSyncScheme:
+- On sender side: weights are in transport’s _unique_weights
+- On receiver side: weights are in _receiver_shared_weights (stored during connect())</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The weights TensorDict if available, None otherwise.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.weight_update.SharedMemWeightSyncScheme.worker_idx">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">worker_idx</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.SharedMemWeightSyncScheme.worker_idx" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the worker index for this scheme.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The worker index if set, None otherwise.</p>
 </dd>
 </dl>
 </dd></dl>

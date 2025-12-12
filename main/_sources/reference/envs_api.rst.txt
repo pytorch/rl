@@ -198,7 +198,6 @@ Helpers
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    RandomPolicy
     check_env_specs
     exploration_type
     get_available_libraries

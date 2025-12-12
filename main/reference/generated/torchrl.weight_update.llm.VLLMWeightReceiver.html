@@ -467,8 +467,16 @@ actual data transfer is independent of the RPC mechanism.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights">
-<span class="sig-name descname"><span class="pre">apply_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMWeightReceiver.apply_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">apply_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/llm/vllm_nccl.html#VLLMWeightReceiver.apply_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.apply_weights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Apply weights to vLLM engine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>weights</strong> – The weights to apply.</p></li>
+<li><p><strong>inplace</strong> – Whether to apply weights in place. Default is <cite>True</cite>.</p></li>
+</ul>
+</dd>
+</dl>
 <p>Note: For vLLM, weights are applied automatically during the collective
 broadcast operation. This method is a no-op but kept for API consistency.</p>
 </dd></dl>
@@ -493,27 +501,6 @@ broadcast operation. This method is a no-op but kept for API consistency.</p>
 <dd class="field-odd"><p>False - vLLM uses push-based updates via collectives, not polling.</p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.llm.VLLMWeightReceiver.receive">
-<span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.weight_update.llm.VLLMWeightReceiver.receive" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check for and apply new weights (non-blocking).</p>
-<p>This method is called in the worker’s main loop to check if
-new weights have been sent. If weights are available, they
-are applied to the registered model immediately.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>timeout</strong> – Maximum time to wait for weights (seconds).
-Use 0 for immediate return.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>True if weights were received and applied
-False if no weights were available</p>
-</dd>
-</dl>
-<p>Note: For SharedMemWeightSyncScheme, this always returns False
-since workers automatically see updates via shared memory.</p>
 </dd></dl>
 
 </dd></dl>

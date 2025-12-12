@@ -434,61 +434,87 @@
 <h1>MPTransport<a class="headerlink" href="#mptransport" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.MPTransport">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">MPTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pipe_connection</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport" title="Permalink to this definition">¶</a></dt>
-<dd><p>Multiprocessing transport using pipes.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">MPTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weight_queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ack_queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/_mp.html#MPTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport" title="Permalink to this definition">¶</a></dt>
+<dd><p>Multiprocessing transport using queues.</p>
+<p>This transport uses queues for weight distribution and synchronization.
+Similar to SharedMemTransport’s queue-based approach, MPTransport uses
+queues to send initial weights to workers during synchronization.</p>
+<p>Initialization flow:
+- synchronize_weights() extracts weights and sends to all workers via queues
+- Workers receive the initial weights via setup_connection_and_weights_on_receiver()
+- Subsequent updates use send_weights_async() followed by acknowledgments</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pipe_connection</strong> (<em>mp.Pipe</em>) – The pipe connection to use for communication.</p></li>
+<li><p><strong>weight_queue</strong> (<em>mp.Queue</em>) – The queue to use for sending weights.</p></li>
+<li><p><strong>ack_queue</strong> (<em>mp.Queue</em>) – The queue to use for receiving acknowledgments.</p></li>
 <li><p><strong>timeout</strong> (<em>float</em>) – The timeout for waiting for acknowledgment. Default is 10 seconds.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.check_ack">
-<span class="sig-name descname"><span class="pre">check_ack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'updated'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.check_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.check_ack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check for acknowledgment.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.receive_weights">
-<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Receive weights from the pipe (used in worker process).</p>
+<span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_mp.html#MPTransport.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.receive_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Receive weights from the queue (used in worker process).</p>
 <p>This method only handles weight update messages. Other messages
 (like “close”, “continue”, etc.) are ignored and should be handled
 by the main worker loop.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Tuple of (model_id, weights) if weights were received, None if no data available
-or if a non-weight message was received.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>timeout</strong> – Maximum time to wait for weights (seconds).
+None means use the transport’s default timeout.</p></li>
+<li><p><strong>weights</strong> – Ignored (weights come from queue).</p></li>
+<li><p><strong>model</strong> – The model to apply weights to.</p></li>
+<li><p><strong>strategy</strong> – Strategy for applying weights to the model.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The received weights, or None if no data available.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.send_ack">
-<span class="sig-name descname"><span class="pre">send_ack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'updated'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.send_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.send_ack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send acknowledgment back to sender.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.send_weights">
-<span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.send_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights through the pipe.</p>
-<p>Sends weights and waits for acknowledgment to ensure delivery.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.send_weights_async">
-<span class="sig-name descname"><span class="pre">send_weights_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.send_weights_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.send_weights_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>Send weights through the pipe without waiting for acknowledgment.</p>
+<span class="sig-name descname"><span class="pre">send_weights_async</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'policy'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_mp.html#MPTransport.send_weights_async"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.send_weights_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send weights through the queue without waiting for acknowledgment.</p>
 <p>Use wait_ack() to wait for acknowledgment after sending to all workers.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.wait_ack">
-<span class="sig-name descname"><span class="pre">wait_ack</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#MPTransport.wait_ack"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.wait_ack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Wait for acknowledgment from worker.</p>
+<dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.setup_connection_and_weights_on_receiver">
+<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_receiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_mp.html#MPTransport.setup_connection_and_weights_on_receiver"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.setup_connection_and_weights_on_receiver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Receive initial weights from sender during worker initialization.</p>
+<p>This method blocks waiting for the initial weights to be sent from the main process
+via queue. Similar to SharedMemTransport.setup_connection_and_weights_on_receiver() which receives
+shared memory buffer references via queues, this receives the actual weights via queues.</p>
+<p>The received weights are then applied to the worker’s model by the scheme’s synchronize_weights().</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>worker_idx</strong> – The worker index (used for logging/debugging).</p></li>
+<li><p><strong>weights</strong> – Ignored (weights come from queue).</p></li>
+<li><p><strong>model</strong> – Ignored.</p></li>
+<li><p><strong>strategy</strong> – Ignored.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The received weights if available, None otherwise (weights will come later via receive()).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.MPTransport.setup_connection_and_weights_on_sender">
+<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/_mp.html#MPTransport.setup_connection_and_weights_on_sender"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.MPTransport.setup_connection_and_weights_on_sender" title="Permalink to this definition">¶</a></dt>
+<dd><p>No-op for MPTransport - weights are sent via scheme’s synchronize_weights().</p>
+<p>The actual sending happens in MultiProcessWeightSyncScheme._setup_connection_and_weights_on_sender_impl(), which:
+1. Extracts weights from the context (e.g., collector.policy)
+2. Calls send_weights_async() on all worker transports
+3. Sends initial weights through queues to all workers</p>
+<p>This is similar to SharedMemTransport.setup_connection_and_weights_on_sender() which
+sends shared memory buffer references via queues.</p>
 </dd></dl>
 
 </dd></dl>

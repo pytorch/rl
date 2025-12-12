@@ -491,7 +491,7 @@ will work:</p>
 <span class="gp">... </span>    <span class="n">memory</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Using replay buffers that sample trajectories with <a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>
+<p>Using replay buffers that sample trajectories with <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code>
 isn’t currently fully supported as the data batches can come from any worker and in most cases consecutive
 batches written in the buffer won’t come from the same source (thereby interrupting the trajectories).</p>
 </section>

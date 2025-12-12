@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.collectors.DataCollectorConfig
-==================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.collectors
-
-.. autoclass:: DataCollectorConfig

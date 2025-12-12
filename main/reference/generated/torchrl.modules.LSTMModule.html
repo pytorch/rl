@@ -620,7 +620,7 @@ are not registered within the environment specs.</p>
 <p>See <code class="xref py py-func docutils literal notranslate"><span class="pre">torchrl.modules.utils.get_primers_from_module()</span></code> for a method to generate all primers for a given
 module.</p>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collector</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">InitTracker</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLP</span><span class="p">,</span> <span class="n">LSTMModule</span>
@@ -637,7 +637,7 @@ module.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">Seq</span><span class="p">(</span><span class="n">lstm_module</span><span class="p">,</span> <span class="n">Mod</span><span class="p">(</span><span class="n">mlp</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;intermediate&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">lstm_module</span><span class="o">.</span><span class="n">make_tensordict_primer</span><span class="p">())</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data_collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data_collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">env</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">policy</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">10</span>

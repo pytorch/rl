@@ -1173,9 +1173,9 @@ on the number of frames per batch of data, on the (a)sync nature of this
 collection and on the resources allocated to the data collection (for example
 GPU, number of workers, and so on).</p>
 <p>Here we will use
-<a class="reference internal" href="../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>, a simple, single-process
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code>, a simple, single-process
 data collector. TorchRL offers other collectors, such as
-<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>, which executed the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>, which executed the
 rollouts in an asynchronous manner (for example, data will be collected while
 the policy is being optimized, thereby decoupling the training and
 data collection).</p>

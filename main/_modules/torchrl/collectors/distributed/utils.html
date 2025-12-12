@@ -480,8 +480,7 @@
 <span class="sd">        &gt;&gt;&gt; num_jobs=2</span>
 <span class="sd">        &gt;&gt;&gt; @submitit_delayed_launcher(num_jobs=num_jobs)</span>
 <span class="sd">        ... def main():</span>
-<span class="sd">        ...     from torchrl.envs.utils import RandomPolicy</span>
-<span class="sd">                from torchrl.envs.libs.gym import GymEnv</span>
+<span class="sd">        ...     from torchrl.modules.utils.utils import RandomPolicyfrom torchrl.envs.libs.gym import GymEnv</span>
 <span class="sd">        ...     from torchrl.data import BoundedContinuous</span>
 <span class="sd">        ...     collector = DistributedDataCollector(</span>
 <span class="sd">        ...         [EnvCreator(lambda: GymEnv(&quot;Pendulum-v1&quot;))] * num_jobs,</span>
@@ -525,7 +524,7 @@
             <span class="n">executor</span><span class="o">.</span><span class="n">update_parameters</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">submitit_main_conf</span><span class="p">)</span>
             <span class="n">main_job</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">main_func</span><span class="p">)</span>
             <span class="c1"># listen to output file looking for IP address</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;job id: </span><span class="si">{</span><span class="n">main_job</span><span class="o">.</span><span class="n">job_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;job id: </span><span class="si">{</span><span class="n">main_job</span><span class="o">.</span><span class="n">job_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span>
             <span class="n">node</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">while</span> <span class="ow">not</span> <span class="n">node</span><span class="p">:</span>
@@ -536,11 +535,11 @@
                 <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
                     <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
                     <span class="k">continue</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;node: </span><span class="si">{</span><span class="n">node</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;node: </span><span class="si">{</span><span class="n">node</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="c1"># by default, sinfo will truncate the node name at char 20, we increase this to 200</span>
             <span class="n">cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;sinfo -n </span><span class="si">{</span><span class="n">node</span><span class="si">}</span><span class="s2"> -O nodeaddr:200 | tail -1&quot;</span>
             <span class="n">rank0_ip</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">check_output</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;IP: </span><span class="si">{</span><span class="n">rank0_ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;IP: </span><span class="si">{</span><span class="n">rank0_ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_jobs</span> <span class="o">+</span> <span class="mi">1</span>
 
             <span class="c1"># submit jobs</span>

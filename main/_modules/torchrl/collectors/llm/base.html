@@ -436,7 +436,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">as_remote</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._single</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_QueueAsRB</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
@@ -445,8 +445,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.policy_version</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyVersion</span>
 
 
-<div class="viewcode-block" id="LLMCollector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMCollector</span><span class="p">(</span><span class="n">SyncDataCollector</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A simplified version of SyncDataCollector for LLM inference.</span>
+<div class="viewcode-block" id="LLMCollector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMCollector</span><span class="p">(</span><span class="n">Collector</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A simplified version of Collector for LLM inference.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        env (EnvBase or EnvBase constructor): the environment to be used for data collection.</span>
@@ -494,7 +494,7 @@
 <span class="sd">            Defaults to `True` when `replay_buffer` is provided, `False` otherwise.</span>
 <span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
-<span class="sd">            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.</span>
+<span class="sd">            This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
 <span class="sd">        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.</span>
 <span class="sd">            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.</span>
@@ -730,7 +730,7 @@
         <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
         <span class="k">while</span> <span class="n">collected_steps</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;LLMCollector: Collected </span><span class="si">{</span><span class="n">collected_steps</span><span class="si">}</span><span class="s2"> steps over </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="si">}</span><span class="s2"> requested.&quot;</span>
                 <span class="p">)</span>
             <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
@@ -763,7 +763,7 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
                 <span class="k">break</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;LLMCollector: Collected </span><span class="si">{</span><span class="n">collected_steps</span><span class="si">}</span><span class="s2"> steps with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span><span class="si">}</span><span class="s2"> elements in the resulting batch, over </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="si">}</span><span class="s2"> requested.&quot;</span>
                 <span class="p">)</span>
             <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">next_output</span><span class="p">)</span>
@@ -807,7 +807,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">-=</span> <span class="n">result</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;LLMCollector: Yielding completed trajectory with shape </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
@@ -869,7 +869,7 @@
 
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;LLMCollector: Yielding completed trajectory with shape </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>

@@ -467,17 +467,16 @@ Defaults to <code class="xref py py-obj docutils literal notranslate"><span clas
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">num_jobs</span><span class="o">=</span><span class="mi">2</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@submitit_delayed_launcher</span><span class="p">(</span><span class="n">num_jobs</span><span class="o">=</span><span class="n">num_jobs</span><span class="p">)</span>
 <span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>
-<span class="go">        from torchrl.envs.libs.gym import GymEnv</span>
-<span class="go">...     from torchrl.data import BoundedContinuous</span>
-<span class="go">...     collector = DistributedDataCollector(</span>
-<span class="go">...         [EnvCreator(lambda: GymEnv(&quot;Pendulum-v1&quot;))] * num_jobs,</span>
-<span class="go">...         policy=RandomPolicy(BoundedContinuous(-1, 1, shape=(1,))),</span>
-<span class="go">...         launcher=&quot;submitit_delayed&quot;,</span>
-<span class="go">...     )</span>
-<span class="go">...     for data in collector:</span>
-<span class="go">...         print(data)</span>
-<span class="go">...</span>
+<span class="gp">... </span>    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.utils.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicyfrom</span> <span class="n">torchrl</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">libs</span><span class="o">.</span><span class="n">gym</span> <span class="kn">import</span><span class="w"> </span><span class="nn">GymEnv</span>
+<span class="gp">... </span>    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BoundedContinuous</span>
+<span class="gp">... </span>    <span class="n">collector</span> <span class="o">=</span> <span class="n">DistributedDataCollector</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">[</span><span class="n">EnvCreator</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">))]</span> <span class="o">*</span> <span class="n">num_jobs</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">policy</span><span class="o">=</span><span class="n">RandomPolicy</span><span class="p">(</span><span class="n">BoundedContinuous</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))),</span>
+<span class="gp">... </span>        <span class="n">launcher</span><span class="o">=</span><span class="s2">&quot;submitit_delayed&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">main</span><span class="p">()</span>
 <span class="gp">...</span>

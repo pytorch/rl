@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-LazyStackedCompositeSpec
-========================
-
-.. autoclass:: LazyStackedCompositeSpec
-    :members:
-    :inherited-members:
