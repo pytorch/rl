@@ -140,12 +140,8 @@ echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-# Install jax with CUDA support before ale-py to satisfy its build dependency
-# (ale-py source builds require jax/jaxlib which needs CUDA-compatible wheels)
-# See: https://docs.jax.dev/en/latest/installation.html
-python -m pip install --upgrade "jax[cuda13-local]"
-# Use --no-build-isolation so ale-py uses the already-installed jax/jaxlib
-python -m pip install ale-py -U --no-build-isolation
+# Install ale-py from pre-built wheel (no source build needed)
+python -m pip install ale-py -U
 python -m pip install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
