@@ -15,7 +15,7 @@ from functools import partial
 from tensordict import TensorDict, TensorDictBase
 from torch import optim
 
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -67,7 +67,7 @@ class PPOTrainer(Trainer):
     Logging can be configured via constructor parameters to enable/disable specific metrics.
 
     Args:
-        collector (DataCollectorBase): The data collector for gathering training data.
+        collector (BaseCollector): The data collector for gathering training data.
         total_frames (int): Total number of frames to train for.
         frame_skip (int): Frame skip value for the environment.
         optim_steps_per_batch (int): Number of optimization steps per batch.
@@ -123,7 +123,7 @@ class PPOTrainer(Trainer):
     def __init__(
         self,
         *,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,

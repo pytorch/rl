@@ -12,14 +12,14 @@ from tensordict import TensorDict, TensorDictBase
 
 from torchrl import logger as torchrl_logger
 from torchrl._utils import VERBOSE
-from torchrl.collectors._base import DataCollectorBase
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     _MAX_IDLE_COUNT,
     _MIN_TIMEOUT,
     _TIMEOUT,
     DEFAULT_EXPLORATION_TYPE,
 )
-from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors._single import Collector
 
 from torchrl.collectors.utils import (
     _cast,
@@ -61,13 +61,13 @@ def _main_async_collector(
     cudagraph_policy: bool = False,
     no_cuda_sync: bool = False,
     policy_factory: Callable | None = None,
-    collector_class: type | Callable[[], DataCollectorBase] | None = None,
+    collector_class: type | Callable[[], BaseCollector] | None = None,
     postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
     weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     worker_idx: int | None = None,
 ) -> None:
     if collector_class is None:
-        collector_class = SyncDataCollector
+        collector_class = Collector
     pipe_parent.close()
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
@@ -318,7 +318,7 @@ def _main_async_collector(
             else:
                 if next_data is not collected_tensordict:
                     raise RuntimeError(
-                        "SyncDataCollector should return the same tensordict modified in-place."
+                        "Collector should return the same tensordict modified in-place."
                     )
                 data = idx  # flag the worker that has sent its data
             try:

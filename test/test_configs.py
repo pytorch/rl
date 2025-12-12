@@ -940,14 +940,14 @@ class TestCollectorsConfig:
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
         from torchrl.collectors import (
-            aSyncDataCollector,
-            MultiaSyncDataCollector,
-            MultiSyncDataCollector,
+            AsyncCollector,
+            MultiAsyncCollector,
+            MultiSyncCollector,
         )
         from torchrl.trainers.algorithms.configs.collectors import (
             AsyncDataCollectorConfig,
-            MultiaSyncDataCollectorConfig,
-            MultiSyncDataCollectorConfig,
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
         )
         from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
         from torchrl.trainers.algorithms.configs.modules import (
@@ -972,10 +972,10 @@ class TestCollectorsConfig:
             cfg_cls = AsyncDataCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
-            cfg_cls = MultiSyncDataCollectorConfig
+            cfg_cls = MultiSyncCollectorConfig
             kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
         elif collector == "multi_async":
-            cfg_cls = MultiaSyncDataCollectorConfig
+            cfg_cls = MultiAsyncCollectorConfig
             kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
         else:
             raise ValueError(f"Unknown collector type: {collector}")
@@ -1004,11 +1004,11 @@ class TestCollectorsConfig:
         collector_instance = instantiate(cfg)
         try:
             if collector == "async":
-                assert isinstance(collector_instance, aSyncDataCollector)
+                assert isinstance(collector_instance, AsyncCollector)
             elif collector == "multi_sync":
-                assert isinstance(collector_instance, MultiSyncDataCollector)
+                assert isinstance(collector_instance, MultiSyncCollector)
             elif collector == "multi_async":
-                assert isinstance(collector_instance, MultiaSyncDataCollector)
+                assert isinstance(collector_instance, MultiAsyncCollector)
             for _c in collector_instance:
                 # Just check that we can iterate
                 break
@@ -1123,9 +1123,7 @@ class TestTrainerConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_ppo_trainer_config_optional_fields(self):
         """Test that optional fields can be omitted from PPO trainer config."""
-        from torchrl.trainers.algorithms.configs.collectors import (
-            SyncDataCollectorConfig,
-        )
+        from torchrl.trainers.algorithms.configs.collectors import CollectorConfig
         from torchrl.trainers.algorithms.configs.data import (
             TensorDictReplayBufferConfig,
         )
@@ -1164,7 +1162,7 @@ class TestTrainerConfigs:
 
         optimizer_config = AdamConfig(lr=0.001)
 
-        collector_config = SyncDataCollectorConfig(
+        collector_config = CollectorConfig(
             create_env_fn=env_config,
             policy=actor_model,
             total_frames=1000,
@@ -1525,7 +1523,7 @@ collector:
 
         test_code = """
     collector = hydra.utils.instantiate(cfg.collector)
-    assert isinstance(collector, torchrl.collectors.SyncDataCollector)
+    assert isinstance(collector, torchrl.collectors.Collector)
     # Just verify we can create the collector without running it
 """
 
@@ -1630,7 +1628,7 @@ trainer:
     assert isinstance(loss, torchrl.objectives.PPOLoss)
 
     collector = hydra.utils.instantiate(cfg.data_collector)
-    assert isinstance(collector, torchrl.collectors.SyncDataCollector)
+    assert isinstance(collector, torchrl.collectors.Collector)
 
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)

@@ -45,14 +45,14 @@ from torchrl._utils import (
     seed_generator,
 )
 from torchrl.collectors import (
-    aSyncDataCollector,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
+    AsyncCollector,
+    Collector,
+    MultiAsyncCollector,
+    MultiSyncCollector,
     WeightUpdaterBase,
 )
 from torchrl.collectors._constants import _Interruptor
-from torchrl.collectors._multi_base import _MultiDataCollector
+from torchrl.collectors._multi_base import MultiCollector
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -288,7 +288,7 @@ class TestCollectorGeneric:
         torch.manual_seed(0)
         np.random.seed(0)
 
-        ccollector = MultiaSyncDataCollector(
+        ccollector = MultiAsyncCollector(
             create_env_fn=[env_fn for _ in range(num_workers)],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -305,7 +305,7 @@ class TestCollectorGeneric:
         finally:
             ccollector.shutdown()
 
-        ccollector = MultiSyncDataCollector(
+        ccollector = MultiSyncCollector(
             create_env_fn=[env_fn for _ in range(num_workers)],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -371,7 +371,7 @@ class TestCollectorGeneric:
         finally:
             env.close()
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
             policy=policy,
@@ -427,7 +427,7 @@ class TestCollectorGeneric:
         try:
             # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
             env.set_seed(0)
-            collector = SyncDataCollector(
+            collector = Collector(
                 env,
                 policy=None,
                 total_frames=2001,
@@ -476,12 +476,12 @@ class TestCollectorGeneric:
                 [functools.partial(CountingEnv, 10 + i) for i in range(n_envs)],
             )
         env.reset()
-        c_inplace = SyncDataCollector(
+        c_inplace = Collector(
             env, policy_inplace, frames_per_batch=10, total_frames=100
         )
         d_inplace = torch.cat(list(c_inplace), dim=0)
         env.reset()
-        c_outplace = SyncDataCollector(
+        c_outplace = Collector(
             env, policy_outplace, frames_per_batch=10, total_frames=100
         )
         d_outplace = torch.cat(list(c_outplace), dim=0)
@@ -491,9 +491,9 @@ class TestCollectorGeneric:
     @pytest.mark.parametrize(
         "collector_class",
         [
-            SyncDataCollector,
-            MultiaSyncDataCollector,
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
+            Collector,
+            MultiAsyncCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
         ],
     )
     @pytest.mark.parametrize("init_random_frames", [0, 50])  # 1226: faster execution
@@ -552,7 +552,7 @@ class TestCollectorGeneric:
             "split_trajs": split_trajs,
         }
 
-        if collector_class is not SyncDataCollector:
+        if collector_class is not Collector:
             collector_kwargs["create_env_fn"] = [
                 collector_kwargs["create_env_fn"] for _ in range(num_envs)
             ]
@@ -590,9 +590,9 @@ class TestCollectorGeneric:
     @pytest.mark.parametrize(
         "collector_class",
         [
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
-            MultiaSyncDataCollector,
-            SyncDataCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+            Collector,
         ],
     )
     def test_collector_reloading(self, collector_class):
@@ -613,7 +613,7 @@ class TestCollectorGeneric:
             "frames_per_batch": 30,
             "total_frames": 90,
         }
-        if collector_class is not SyncDataCollector:
+        if collector_class is not Collector:
             collector_kwargs["create_env_fn"] = [
                 collector_kwargs["create_env_fn"] for _ in range(3)
             ]
@@ -664,7 +664,7 @@ class TestCollectorGeneric:
 
         policy = RandomPolicy(env_make.action_spec)
         num_data_collectors = 2
-        c = MultiSyncDataCollector(
+        c = MultiSyncCollector(
             [env_make] * num_data_collectors,
             policy=policy,
             total_frames=int(1e6),
@@ -749,7 +749,7 @@ class TestCollectorGeneric:
 
         policy = make_policy(env_name)
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
             policy=policy,
@@ -773,7 +773,7 @@ class TestCollectorGeneric:
         finally:
             collector.shutdown()
 
-        ccollector = aSyncDataCollector(
+        ccollector = AsyncCollector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
             policy=policy,
@@ -823,7 +823,7 @@ class TestCollectorGeneric:
 
         torch.manual_seed(0)
         np.random.seed(0)
-        ccollector = aSyncDataCollector(
+        ccollector = AsyncCollector(
             create_env_fn=env_fn,
             create_env_kwargs={},
             policy=policy,
@@ -850,13 +850,13 @@ class TestCollectorGeneric:
             ccollector.shutdown()
 
     @pytest.mark.parametrize(
-        "ctype", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+        "ctype", [Collector, MultiAsyncCollector, MultiSyncCollector]
     )
     def test_env_that_errors(self, ctype):
         make_env = EnvThatErrorsAfter10Iters
         policy = RandomPolicy(make_env().action_spec)
-        if ctype is SyncDataCollector:
-            collector = SyncDataCollector(
+        if ctype is Collector:
+            collector = Collector(
                 make_env, policy=policy, frames_per_batch=30, total_frames=60
             )
         else:
@@ -874,7 +874,7 @@ class TestCollectorGeneric:
     @pytest.mark.skipif(IS_FB, reason="Not compatible with fbcode")
     @pytest.mark.parametrize("to", [3, 10])
     @pytest.mark.parametrize(
-        "collector_cls", ["MultiSyncDataCollector", "MultiaSyncDataCollector"]
+        "collector_cls", ["MultiSyncCollector", "MultiAsyncCollector"]
     )
     def test_env_that_waits(self, to, collector_cls):
         # Tests that the collector fails if the MAX_IDLE_COUNT<waiting time, but succeeds otherwise
@@ -931,9 +931,9 @@ if __name__ == "__main__":
     @pytest.mark.parametrize(
         "collector_class",
         [
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
-            MultiaSyncDataCollector,
-            SyncDataCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+            Collector,
         ],
     )
     @pytest.mark.parametrize("exclude", [True, False])
@@ -941,7 +941,7 @@ if __name__ == "__main__":
         "out_key", ["_dummy", ("out", "_dummy"), ("_out", "dummy")]
     )
     def test_excluded_keys(self, collector_class, exclude, out_key):
-        if not exclude and collector_class is not SyncDataCollector:
+        if not exclude and collector_class is not Collector:
             pytest.skip("defining _exclude_private_keys is not possible")
 
         def make_env():
@@ -970,7 +970,7 @@ if __name__ == "__main__":
             "frames_per_batch": 30,
             "total_frames": -1,
         }
-        if collector_class is not SyncDataCollector:
+        if collector_class is not Collector:
             collector_kwargs["create_env_fn"] = [
                 collector_kwargs["create_env_fn"] for _ in range(3)
             ]
@@ -1012,7 +1012,7 @@ if __name__ == "__main__":
         policy = lambda tensordict: tensordict.set(
             "action", torch.ones(tensordict.shape, dtype=torch.int)
         )
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=((max_steps - 3) * 2 + 2)
@@ -1042,14 +1042,14 @@ if __name__ == "__main__":
 
     def test_maxframes_error(self):
         env = TransformedEnv(CountingEnv(), StepCounter(2))
-        _ = SyncDataCollector(
+        _ = Collector(
             env,
             RandomPolicy(env.action_spec),
             total_frames=10_000,
             frames_per_batch=1000,
         )
         with pytest.raises(ValueError):
-            _ = SyncDataCollector(
+            _ = Collector(
                 env,
                 RandomPolicy(env.action_spec),
                 total_frames=10_000,
@@ -1063,9 +1063,9 @@ if __name__ == "__main__":
     @pytest.mark.parametrize(
         "collector_type",
         [
-            SyncDataCollector,
-            MultiaSyncDataCollector,
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
+            Collector,
+            MultiAsyncCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
         ],
     )
     def test_no_deepcopy_policy(self, collector_type):
@@ -1109,7 +1109,7 @@ if __name__ == "__main__":
 
             policy.__deepcopy__ = __deepcopy_error__
             envs = ContinuousActionVecMockEnv(device=env_device)
-            if collector_type is not SyncDataCollector:
+            if collector_type is not Collector:
                 envs = [envs, envs]
             c = collector_type(
                 envs,
@@ -1128,12 +1128,12 @@ if __name__ == "__main__":
         policy = make_policy()
         make_and_test_policy(policy)
 
-        if collector_type is SyncDataCollector or original_device.type != "mps":
+        if collector_type is Collector or original_device.type != "mps":
             # mps cannot be shared
             policy = make_policy(device=original_device)
             make_and_test_policy(policy, env_device=original_device)
 
-        if collector_type is SyncDataCollector or original_device.type != "mps":
+        if collector_type is Collector or original_device.type != "mps":
             policy = make_policy(device=original_device)
             make_and_test_policy(
                 policy, policy_device=original_device, env_device=original_device
@@ -1141,25 +1141,25 @@ if __name__ == "__main__":
 
         # Test that we DON'T raise deepcopy errors anymore even when policy_device differs
         # These scenarios previously would have triggered deepcopy, but now use meta device context manager
-        if collector_type is not SyncDataCollector:
+        if collector_type is not Collector:
             # policy_device differs from the actual device - previously required deepcopy, now works!
             policy = make_policy(device=original_device)
             make_and_test_policy(
                 policy, policy_device=shared_device, env_device=shared_device
             )
 
-        if collector_type is not SyncDataCollector:
+        if collector_type is not Collector:
             # device differs from the actual device - previously required deepcopy, now works!
             policy = make_policy(device=original_device)
             make_and_test_policy(policy, device=shared_device)
 
         # If there is no policy_device, we assume that the user is doing things right too but don't warn
-        if collector_type is SyncDataCollector or original_device.type != "mps":
+        if collector_type is Collector or original_device.type != "mps":
             policy = make_policy(original_device, nn_module=False)
             make_and_test_policy(policy, env_device=original_device)
 
         # If the policy is a CudaGraphModule, we know it's on cuda - no need to warn
-        if torch.cuda.is_available() and collector_type is SyncDataCollector:
+        if torch.cuda.is_available() and collector_type is Collector:
             policy = make_policy(original_device)
             cudagraph_policy = CudaGraphModule(policy)
             make_and_test_policy(
@@ -1169,11 +1169,11 @@ if __name__ == "__main__":
             )
 
     @pytest.mark.parametrize(
-        "ctype", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+        "ctype", [Collector, MultiAsyncCollector, MultiSyncCollector]
     )
     def test_no_stopiteration(self, ctype):
         # Tests that there is no StopIteration raised and that the length of the collector is properly set
-        if ctype is SyncDataCollector:
+        if ctype is Collector:
             envs = SerialEnv(16, CountingEnv)
         else:
             envs = [SerialEnv(8, CountingEnv), SerialEnv(8, CountingEnv)]
@@ -1204,9 +1204,7 @@ if __name__ == "__main__":
             td.set("action", action)
             return td
 
-        collector = SyncDataCollector(
-            env, policy=policy, frames_per_batch=10, total_frames=20
-        )
+        collector = Collector(env, policy=policy, frames_per_batch=10, total_frames=20)
         for _ in collector:
             break
         collector.shutdown()
@@ -1246,7 +1244,7 @@ if __name__ == "__main__":
         env = cls(
             2, [env1, env2], device=env_device, share_individual_td=share_individual_td
         )
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             total_frames=10_000,
@@ -1275,7 +1273,7 @@ if __name__ == "__main__":
 
     @pytest.mark.parametrize(
         "collector_cls",
-        [SyncDataCollector, MultiSyncDataCollector, MultiaSyncDataCollector],
+        [Collector, MultiSyncCollector, MultiAsyncCollector],
     )
     def test_set_truncated(self, collector_cls):
         env_fn = lambda: TransformedEnv(
@@ -1283,7 +1281,7 @@ if __name__ == "__main__":
         ).add_truncated_keys()
         env = env_fn()
         policy = CloudpickleWrapper(env.rand_action)
-        if collector_cls == SyncDataCollector:
+        if collector_cls == Collector:
             collector = collector_cls(
                 env,
                 policy=policy,
@@ -1341,7 +1339,7 @@ if __name__ == "__main__":
 
         policy = make_policy(env_name)
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
             policy=policy,
@@ -1371,9 +1369,9 @@ if __name__ == "__main__":
     @pytest.mark.parametrize(
         "collector_class",
         [
-            SyncDataCollector,
+            Collector,
         ],
-    )  # aSyncDataCollector])
+    )  # AsyncCollector])
     @pytest.mark.parametrize(
         "env_name", ["vec"]
     )  # 1226: removing "conv" for efficiency
@@ -1494,9 +1492,7 @@ if __name__ == "__main__":
         )
         policy(create_env().reset())
 
-        collector_class = (
-            MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
-        )
+        collector_class = MultiSyncCollector if not use_async else MultiAsyncCollector
         kwargs = {}
         if weight_sync_scheme is not None:
             kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
@@ -1586,9 +1582,7 @@ if __name__ == "__main__":
             params_map={0: policy_weights, 1: policy_weights, 2: policy_weights},
         )
 
-        collector_class = (
-            MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
-        )
+        collector_class = MultiSyncCollector if not use_async else MultiAsyncCollector
         collector = collector_class(
             [create_env] * 3,
             policy=policy,
@@ -1659,7 +1653,7 @@ if __name__ == "__main__":
 
         frames_per_batch = sum(frames_per_batch_worker)
 
-        collector = MultiaSyncDataCollector(
+        collector = MultiAsyncCollector(
             create_env_fn=[env_fn for _ in range(num_workers)],
             policy=policy,
             frames_per_batch=frames_per_batch_worker,
@@ -1676,7 +1670,7 @@ if __name__ == "__main__":
         finally:
             collector.shutdown()
 
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             create_env_fn=[env_fn for _ in range(num_workers)],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -1704,7 +1698,7 @@ if __name__ == "__main__":
             ValueError,
             match="If `frames_per_batch` is provided as a sequence, it should contain exactly one value per worker.",
         ):
-            collector = MultiSyncDataCollector(
+            collector = MultiSyncCollector(
                 create_env_fn=[env_fn for _ in range(num_workers)],
                 policy=policy,
                 frames_per_batch=frames_per_batch_worker[:-1],
@@ -1861,7 +1855,7 @@ class TestCollectorDevices:
         policy_device = main_device
         env = self.DeviceLessEnv(main_device)
         policy = self.PolicyWithDevice(main_device)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             device=device,
@@ -1882,7 +1876,7 @@ class TestCollectorDevices:
         policy_device = None
         env = self.EnvWithDevice(main_device)
         policy = self.DeviceLessPolicy()
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             device=device,
@@ -1902,7 +1896,7 @@ class TestCollectorDevices:
         policy_device = None
         env = self.EnvWithDevice(main_device)
         policy = self.PolicyWithDevice(main_device)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             device=device,
@@ -1924,7 +1918,7 @@ class TestCollectorDevices:
         policy_device = main_device
         env = self.EnvWithDevice(main_device)
         policy = self.PolicyWithDevice(main_device)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             device=device,
@@ -1946,7 +1940,7 @@ class TestCollectorDevices:
         policy_device = None
         env = self.DeviceLessEnv(main_device)
         policy = self.DeviceLessPolicy()
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             device=device,
@@ -2013,7 +2007,7 @@ class TestCollectorDevices:
         with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
             AssertionError, match="Expected 'synchronize' to not have been called."
         ) if should_raise else contextlib.nullcontext():
-            collector = SyncDataCollector(
+            collector = Collector(
                 create_env_fn=functools.partial(
                     self.GoesThroughEnv, n_obs=1000, device=None
                 ),
@@ -2052,7 +2046,7 @@ class TestCollectorDevices:
 
         policy = dummypolicy_conv()
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": 0},
             policy=policy,
@@ -2067,7 +2061,7 @@ class TestCollectorDevices:
         assert batch.device == _make_ordinal_device(torch.device(storing_device))
         collector.shutdown()
 
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             create_env_fn=[
                 env_fn,
             ],
@@ -2090,7 +2084,7 @@ class TestCollectorDevices:
         assert batch.device == _make_ordinal_device(torch.device(storing_device))
         collector.shutdown()
 
-        collector = MultiaSyncDataCollector(
+        collector = MultiAsyncCollector(
             create_env_fn=[
                 env_fn,
             ],
@@ -2164,7 +2158,7 @@ class TestCollectorDevices:
 #     else:
 #         policy = ParametricPolicy().to(torch.device(_policy_device))
 #
-#     collector = SyncDataCollector(
+#     collector = Collector(
 #         create_env_fn=env_fn,
 #         create_env_kwargs={"seed": seed},
 #         policy=policy,
@@ -2183,7 +2177,7 @@ class TestCollectorDevices:
 #
 #     collector.shutdown()
 #
-#     ccollector = aSyncDataCollector(
+#     ccollector = AsyncCollector(
 #         create_env_fn=env_fn,
 #         create_env_kwargs={"seed": seed},
 #         policy=policy,
@@ -2234,7 +2228,7 @@ class TestCollectorDevices:
 #
 #     policy = make_policy(env_name)
 #
-#     collector = SyncDataCollector(
+#     collector = Collector(
 #         create_env_fn=env_fn,
 #         create_env_kwargs={"seed": seed},
 #         policy=policy,
@@ -2266,7 +2260,7 @@ class TestCollectorDevices:
 #
 #     policy = make_policy(env_name)
 #
-#     ccollector = aSyncDataCollector(
+#     ccollector = AsyncCollector(
 #         create_env_fn=env_fn,
 #         create_env_kwargs={"seed": seed},
 #         policy=policy,
@@ -2292,11 +2286,11 @@ class TestCollectorDevices:
 @pytest.mark.parametrize(
     "collector_class,num_envs",
     [
-        (SyncDataCollector, 1),
-        (MultiaSyncDataCollector, 1),
-        (functools.partial(MultiSyncDataCollector, cat_results="stack"), 1),
-        (MultiaSyncDataCollector, 2),
-        (functools.partial(MultiSyncDataCollector, cat_results="stack"), 2),
+        (Collector, 1),
+        (MultiAsyncCollector, 1),
+        (functools.partial(MultiSyncCollector, cat_results="stack"), 1),
+        (MultiAsyncCollector, 2),
+        (functools.partial(MultiSyncCollector, cat_results="stack"), 2),
     ],
 )
 class TestAutoWrap:
@@ -2314,7 +2308,7 @@ class TestAutoWrap:
             "total_frames": -1,
         }
 
-        if collector_class is not SyncDataCollector:
+        if collector_class is not Collector:
             collector_kwargs["create_env_fn"] = [
                 collector_kwargs["create_env_fn"] for _ in range(num_envs)
             ]
@@ -2339,7 +2333,7 @@ class TestAutoWrap:
             ),
             device=device,
         )
-        if isinstance(collector, _MultiDataCollector):
+        if isinstance(collector, MultiCollector):
             assert collector._weight_sync_schemes is not None
             assert "policy" in collector._weight_sync_schemes
 
@@ -2348,7 +2342,7 @@ class TestAutoWrap:
             if multiple_outputs:
                 out_keys.extend(f"output{i}" for i in range(1, 4))
 
-            if collector_class is SyncDataCollector:
+            if collector_class is Collector:
                 assert isinstance(collector._wrapped_policy, TensorDictModule)
                 assert collector._wrapped_policy.out_keys == out_keys
                 # this does not work now that we force the device of the policy
@@ -2384,7 +2378,7 @@ class TestAutoWrap:
     #         **self._create_collector_kwargs(env_maker, collector_class, policy)
     #     )
     #
-    #     if collector_class is not SyncDataCollector:
+    #     if collector_class is not Collector:
     #         # We now do the casting only on the remote workers
     #         pass
     #     else:
@@ -2439,7 +2433,7 @@ class TestPreemptiveThreshold:
         interruptor = _Interruptor()
         interruptor.start_collection()
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
             policy=policy,
@@ -2471,7 +2465,7 @@ class TestPreemptiveThreshold:
 
         policy = make_policy(env_name)
 
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             create_env_fn=[env_fn] * 4,
             create_env_kwargs=[{"seed": seed}] * 4,
             policy=policy,
@@ -2503,7 +2497,7 @@ class TestNestedEnvsCollector:
             env.full_action_spec[env.action_key], env.action_key
         )
 
-        ccollector = MultiaSyncDataCollector(
+        ccollector = MultiAsyncCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=20,
@@ -2525,7 +2519,7 @@ class TestNestedEnvsCollector:
             ccollector.shutdown()
             del ccollector
 
-        ccollector = MultiSyncDataCollector(
+        ccollector = MultiSyncCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=20,
@@ -2570,7 +2564,7 @@ class TestNestedEnvsCollector:
         policy = CountingEnvCountPolicy(
             env.full_action_spec[env.action_key], env.action_key
         )
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2600,7 +2594,7 @@ class TestNestedEnvsCollector:
             env.full_action_spec[env.action_key], env.action_key
         )
         policy(env.reset())
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env_fn,
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2637,7 +2631,7 @@ class TestHeterogeneousEnvsCollector:
         torch.manual_seed(seed)
         device = get_default_devices()[0]
         policy = HeterogeneousCountingEnvPolicy(env.input_spec["full_action_spec"])
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2673,7 +2667,7 @@ class TestHeterogeneousEnvsCollector:
         check_env_specs(env_fn(), return_contiguous=False)
         policy = HeterogeneousCountingEnvPolicy(env.input_spec["full_action_spec"])
 
-        ccollector = MultiaSyncDataCollector(
+        ccollector = MultiAsyncCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2694,7 +2688,7 @@ class TestHeterogeneousEnvsCollector:
         finally:
             ccollector.shutdown()
 
-        ccollector = MultiSyncDataCollector(
+        ccollector = MultiSyncCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2732,7 +2726,7 @@ class TestMultiKeyEnvsCollector:
         policy = MultiKeyCountingEnvPolicy(
             env.input_spec["full_action_spec"].to(device)
         )
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2759,7 +2753,7 @@ class TestMultiKeyEnvsCollector:
             env.input_spec["full_action_spec"].to(device), deterministic=True
         )
 
-        ccollector = MultiaSyncDataCollector(
+        ccollector = MultiAsyncCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2778,7 +2772,7 @@ class TestMultiKeyEnvsCollector:
             assert_allclose_td(c1, c2)
         ccollector.shutdown()
 
-        ccollector = MultiSyncDataCollector(
+        ccollector = MultiSyncCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -2858,8 +2852,8 @@ class TestUpdateParams:
     @pytest.mark.parametrize(
         "collector",
         [
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
-            MultiaSyncDataCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize("give_weights", [True, False])
@@ -2924,8 +2918,8 @@ class TestUpdateParams:
     @pytest.mark.parametrize(
         "collector",
         [
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
-            MultiaSyncDataCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize("give_weights", [True, False])
@@ -3017,7 +3011,7 @@ class TestUpdateParams:
 
         # Create collector with workers on cuda:2, cuda:1, cuda:2
         # Workers 0 and 2 share cuda:2 - this is the key test case
-        collector = MultiaSyncDataCollector(
+        collector = MultiAsyncCollector(
             [make_env, make_env, make_env],
             policy=policy,
             frames_per_batch=30,
@@ -3335,7 +3329,7 @@ def _test_num_threads_impl():
     )
     num_threads = torch.get_num_threads()
     try:
-        c = MultiSyncDataCollector(
+        c = MultiSyncCollector(
             [env],
             policy=RandomPolicy(env.action_spec),
             num_threads=7,
@@ -3367,7 +3361,7 @@ def _test_auto_num_threads_impl():
 
     # Test 1: Single env
     try:
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             [ContinuousActionVecMockEnv],
             RandomPolicy(ContinuousActionVecMockEnv().full_action_spec),
             frames_per_batch=3,
@@ -3390,7 +3384,7 @@ def _test_auto_num_threads_impl():
 
     # Test 2: ParallelEnv with 2 workers
     try:
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             [ParallelEnv(2, ContinuousActionVecMockEnv)],
             RandomPolicy(ContinuousActionVecMockEnv().full_action_spec.expand(2)),
             frames_per_batch=3,
@@ -3436,7 +3430,7 @@ class TestUniqueTraj:
         buffer = ReplayBuffer(
             storage=LazyTensorStorage(900, ndim=2 + stack_results), batch_size=16
         )
-        c = MultiSyncDataCollector(
+        c = MultiSyncCollector(
             [SerialEnv(2, EnvCreator(lambda: GymEnv("CartPole-v1")))] * 3,
             policy=RandomPolicy(GymEnv("CartPole-v1").action_spec),
             total_frames=900,
@@ -3479,9 +3473,7 @@ class TestDynamicEnvs:
     def test_dynamic_sync_collector(self):
         env = EnvWithDynamicSpec()
         policy = RandomPolicy(env.action_spec)
-        collector = SyncDataCollector(
-            env, policy, frames_per_batch=20, total_frames=100
-        )
+        collector = Collector(env, policy, frames_per_batch=20, total_frames=100)
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
             assert data.names[-1] == "time"
@@ -3493,7 +3485,7 @@ class TestDynamicEnvs:
         if policy_device is not None:
             spec = spec.to(policy_device)
         policy = RandomPolicy(spec)
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             [env],
             policy,
             frames_per_batch=20,
@@ -3511,7 +3503,7 @@ class TestDynamicEnvs:
     def test_dynamic_multiasync_collector(self):
         env = EnvWithDynamicSpec
         policy = RandomPolicy(env().action_spec)
-        collector = MultiaSyncDataCollector(
+        collector = MultiAsyncCollector(
             [env],
             policy,
             frames_per_batch=20,
@@ -3531,9 +3523,9 @@ class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",
         # Clearing compiled policies causes segfault on machines with cuda
-        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+        [Collector, MultiAsyncCollector, MultiSyncCollector]
         if not torch.cuda.is_available()
-        else [SyncDataCollector],
+        else [Collector],
     )
     @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "default"}])
     @pytest.mark.parametrize(
@@ -3544,9 +3536,9 @@ class TestCompile:
             nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
         )
         make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
-        if collector_cls is SyncDataCollector:
+        if collector_cls is Collector:
             torch._dynamo.reset_code_caches()
-            collector = SyncDataCollector(
+            collector = Collector(
                 make_env(),
                 policy,
                 frames_per_batch=10,
@@ -3573,7 +3565,7 @@ class TestCompile:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
     @pytest.mark.parametrize(
         "collector_cls",
-        [SyncDataCollector],
+        [Collector],
     )
     @pytest.mark.parametrize("cudagraph_policy", [True, {}, {"warmup": 10}])
     def test_cudagraph_policy(self, collector_cls, cudagraph_policy):
@@ -3582,8 +3574,8 @@ class TestCompile:
             nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
         )
         make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
-        if collector_cls is SyncDataCollector:
-            collector = SyncDataCollector(
+        if collector_cls is Collector:
+            collector = Collector(
                 make_env(),
                 policy,
                 frames_per_batch=30,
@@ -3642,7 +3634,7 @@ class TestCollectorsNonTensor:
         torch.manual_seed(0)
         env = self.make_env()
         env.set_seed(0)
-        collector = SyncDataCollector(env, frames_per_batch=10, total_frames=200)
+        collector = Collector(env, frames_per_batch=10, total_frames=200)
         result = []
         for data in collector:
             result.append(data)
@@ -3661,7 +3653,7 @@ class TestCollectorsNonTensor:
     @pytest.mark.parametrize("use_buffers", [True, False])
     def test_sync(self, use_buffers):
         torch.manual_seed(0)
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             [self.make_env, self.make_env],
             frames_per_batch=10,
             total_frames=200,
@@ -3691,7 +3683,7 @@ class TestCollectorsNonTensor:
     @pytest.mark.parametrize("use_buffers", [True, False])
     def test_async(self, use_buffers):
         torch.manual_seed(0)
-        collector = MultiaSyncDataCollector(
+        collector = MultiAsyncCollector(
             [self.make_env, self.make_env],
             frames_per_batch=10,
             total_frames=200,
@@ -3723,7 +3715,7 @@ class TestCollectorRB:
         env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
         env.set_seed(0)
         rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             replay_buffer=rb,
@@ -3744,7 +3736,7 @@ class TestCollectorRB:
         env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
         env.set_seed(0)
         rb = ReplayBuffer(storage=LazyTensorStorage(256, ndim=2), batch_size=5)
-        collector = SyncDataCollector(
+        collector = Collector(
             env, RandomPolicy(env.action_spec), total_frames=256, frames_per_batch=16
         )
         torch.manual_seed(0)
@@ -3788,7 +3780,7 @@ class TestCollectorRB:
             storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
         rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
 
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             [env, env],
             RandomPolicy(action_spec),
             replay_buffer=rb,
@@ -3839,7 +3831,7 @@ class TestCollectorRB:
             storagetype = functools.partial(LazyMemmapStorage, scratch_dir=tmpdir)
         rb = ReplayBuffer(storage=storagetype(256), batch_size=5)
 
-        collector = MultiaSyncDataCollector(
+        collector = MultiAsyncCollector(
             [env, env],
             RandomPolicy(action_spec),
             replay_buffer=rb,
@@ -3874,9 +3866,9 @@ class TestCollectorRB:
     @pytest.mark.parametrize(
         "collector_class",
         [
-            SyncDataCollector,
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
-            MultiaSyncDataCollector,
+            Collector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize("use_replay_buffer", [True, False])
@@ -3913,7 +3905,7 @@ class TestCollectorRB:
             )
 
             # Test with replay buffer
-            if collector_class == SyncDataCollector:
+            if collector_class == Collector:
                 collector = collector_class(
                     make_env(),
                     make_policy(make_env()),
@@ -3969,7 +3961,7 @@ class TestCollectorRB:
 
         else:
             # Test without replay buffer
-            if collector_class == SyncDataCollector:
+            if collector_class == Collector:
                 collector = collector_class(
                     make_env(),
                     make_policy(make_env()),
@@ -4058,7 +4050,7 @@ class TestPolicyFactory:
                 model=policy_factory(), devices=[device] * 2, model_id="policy"
             )
 
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             create_env_fn=[env_maker, env_maker],
             policy_factory=policy_factory,
             total_frames=2000,
@@ -4093,8 +4085,8 @@ class TestPolicyFactory:
     @pytest.mark.parametrize(
         "collector_cls",
         [
-            functools.partial(MultiSyncDataCollector, cat_results="stack"),
-            MultiaSyncDataCollector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
         ],
     )
     @pytest.mark.parametrize(
@@ -4170,7 +4162,7 @@ class TestAsyncCollection:
         rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
         env = CountingEnv()
         policy = RandomPolicy(action_spec=env.action_spec)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             replay_buffer=rb,
@@ -4194,7 +4186,7 @@ class TestAsyncCollection:
         rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
         env = CountingEnv()
         policy = RandomPolicy(action_spec=env.action_spec)
-        collector = aSyncDataCollector(
+        collector = AsyncCollector(
             CountingEnv,
             policy,
             replay_buffer=rb,
@@ -4225,7 +4217,7 @@ class TestAsyncCollection:
             del collector
 
     @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
-    @pytest.mark.parametrize("cls", [MultiaSyncDataCollector, MultiSyncDataCollector])
+    @pytest.mark.parametrize("cls", [MultiAsyncCollector, MultiSyncCollector])
     def test_start_multi(self, total_frames, cls):
         rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
         policy = RandomPolicy(action_spec=CountingEnv().action_spec)
@@ -4250,7 +4242,7 @@ class TestAsyncCollection:
 
     @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
     @pytest.mark.parametrize(
-        "cls", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+        "cls", [Collector, MultiAsyncCollector, MultiSyncCollector]
     )
     @pytest.mark.parametrize(
         "weight_sync_scheme",
@@ -4273,12 +4265,12 @@ class TestAsyncCollection:
             ),
         )
         td = TensorDict.from_module(policy).data.clone()
-        if cls != SyncDataCollector:
+        if cls != Collector:
             env = [CountingEnv] * 2
 
         # Add weight sync schemes for multi-process collectors
         kwargs = {}
-        if cls != SyncDataCollector and weight_sync_scheme is not None:
+        if cls != Collector and weight_sync_scheme is not None:
             kwargs["weight_sync_schemes"] = {"policy": weight_sync_scheme()}
 
         collector = cls(
@@ -4290,7 +4282,7 @@ class TestAsyncCollection:
             **kwargs,
         )
         try:
-            if not isinstance(collector, SyncDataCollector):
+            if not isinstance(collector, Collector):
                 if weight_sync_scheme is not None:
                     assert isinstance(
                         collector._weight_sync_schemes["policy"], weight_sync_scheme

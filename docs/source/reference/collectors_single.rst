@@ -12,20 +12,84 @@ Single node data collectors
     :toctree: generated/
     :template: rl_template.rst
 
-    DataCollectorBase
-    SyncDataCollector
-    MultiSyncDataCollector
-    MultiaSyncDataCollector
-    aSyncDataCollector
+    BaseCollector
+    Collector
+    AsyncCollector
+    MultiCollector
+    MultiSyncCollector
+    MultiAsyncCollector
+
+.. note::
+    The following legacy names are also available for backward compatibility:
+
+    - ``DataCollectorBase`` → ``BaseCollector``
+    - ``SyncDataCollector`` → ``Collector``
+    - ``aSyncDataCollector`` → ``AsyncCollector``
+    - ``_MultiDataCollector`` → ``MultiCollector``
+    - ``MultiSyncDataCollector`` → ``MultiSyncCollector``
+    - ``MultiaSyncDataCollector`` → ``MultiAsyncCollector``
+
+Using MultiCollector
+--------------------
+
+The :class:`MultiCollector` class is the recommended way to run parallel data collection.
+It uses a ``sync`` parameter to dispatch to either :class:`MultiSyncCollector` or :class:`MultiAsyncCollector`:
+
+.. code-block:: python
+
+    from torchrl.collectors import MultiCollector
+    from torchrl.envs import GymEnv
+
+    def make_env():
+        return GymEnv("CartPole-v1")
+
+    # Synchronous multi-worker collection (recommended for on-policy algorithms)
+    sync_collector = MultiCollector(
+        create_env_fn=[make_env] * 4,  # 4 parallel workers
+        policy=my_policy,
+        frames_per_batch=1000,
+        total_frames=100000,
+        sync=True,  # ← All workers complete before delivering batch
+    )
+
+    # Asynchronous multi-worker collection (recommended for off-policy algorithms)
+    async_collector = MultiCollector(
+        create_env_fn=[make_env] * 4,
+        policy=my_policy,
+        frames_per_batch=1000,
+        total_frames=100000,
+        sync=False,  # ← First-come-first-serve delivery
+    )
+
+    # Iterate over collected data
+    for data in sync_collector:
+        # Train on data...
+        pass
+
+    sync_collector.shutdown()
+
+**Comparison:**
+
++------------------------+----------------------------------+----------------------------------+
+| Feature                | ``sync=True``                    | ``sync=False``                   |
++========================+==================================+==================================+
+| Batch delivery         | All workers complete first       | First available worker           |
++------------------------+----------------------------------+----------------------------------+
+| Policy consistency     | All data from same policy version| Data may be from older policy    |
++------------------------+----------------------------------+----------------------------------+
+| Best for               | On-policy (PPO, A2C)             | Off-policy (SAC, DQN)            |
++------------------------+----------------------------------+----------------------------------+
+| Throughput             | Limited by slowest worker        | Higher throughput                |
++------------------------+----------------------------------+----------------------------------+
 
 Running the Collector Asynchronously
 ------------------------------------
 
 Passing replay buffers to a collector allows us to start the collection and get rid of the iterative nature of the
 collector.
-If you want to run a data collector in the background, simply run :meth:`~torchrl.DataCollectorBase.start`:
+If you want to run a data collector in the background, simply run :meth:`~torchrl.collectors.BaseCollector.start`:
 
-    >>> collector = SyncDataCollector(..., replay_buffer=rb) # pass your replay buffer
+    >>> collector = Collector(..., replay_buffer=rb) # pass your replay buffer
     >>> collector.start()
     >>> # little pause
     >>> time.sleep(10)
@@ -34,14 +98,14 @@ If you want to run a data collector in the background, simply run :meth:`~torchr
     ...     data = rb.sample()  # Sampling from the replay buffer
     ...     # rest of the training loop
 
-Single-process collectors (:class:`~torchrl.collectors.SyncDataCollector`) will run the process using multithreading,
+Single-process collectors (:class:`~torchrl.collectors.Collector`) will run the process using multithreading,
 so be mindful of Python's GIL and related multithreading restrictions.
 
 Multiprocessed collectors will on the other hand let the child processes handle the filling of the buffer on their own,
 which truly decouples the data collection and training.
 
 Data collectors that have been started with `start()` should be shut down using
-:meth:`~torchrl.DataCollectorBase.async_shutdown`.
+:meth:`~torchrl.collectors.BaseCollector.async_shutdown`.
 
 .. warning:: Running a collector asynchronously decouples the collection from training, which means that the training
     performance may be drastically different depending on the hardware, load and other factors (although it is generally
