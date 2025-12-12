@@ -16,7 +16,7 @@ from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequentia
 from torch import nn
 from torchrl._utils import _replace_last
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import Bounded, Categorical, Composite, OneHot
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
@@ -342,7 +342,7 @@ class TestOrnsteinUhlenbeckProcess:
         else:
             raise NotImplementedError
         exploratory_policy(env.reset())
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env,
             policy=exploratory_policy,
             frames_per_batch=100,
@@ -403,7 +403,7 @@ class TestOrnsteinUhlenbeckProcess:
             )
         else:
             raise NotImplementedError
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env,
             policy=exploratory_policy,
             frames_per_batch=frames_per_batch,
@@ -617,7 +617,7 @@ class TestAdditiveGaussian:
         else:
             raise NotImplementedError
         exploratory_policy(env.reset())
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env,
             policy=exploratory_policy,
             frames_per_batch=100,
@@ -760,7 +760,7 @@ class TestConsistentDropout:
         @torch.no_grad()
         def inner_verify_routine(module, env):
             # Perform transitions.
-            collector = SyncDataCollector(
+            collector = Collector(
                 create_env_fn=env,
                 policy=module,
                 frames_per_batch=1,

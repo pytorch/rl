@@ -41,7 +41,7 @@ from torch import multiprocessing as mp, nn, Tensor
 from torchrl import logger as torchrl_logger
 from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
 
-from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiSyncCollector
 from torchrl.data import (
     Bounded,
     BoundedContinuous,
@@ -2261,7 +2261,7 @@ class TestTrajCounter(TransformBase):
             )
             return env
 
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             [EnvCreator(make_env, max_steps=5), EnvCreator(make_env, max_steps=4)],
             total_frames=32,
             frames_per_batch=8,
@@ -15112,7 +15112,7 @@ class TestRayModuleTransform:
         # Create collector with scheme registered
         torchrl_logger.debug("Creating collector")
         policy = RandomPolicy(base_env().action_spec)
-        collector = SyncDataCollector(
+        collector = Collector(
             make_env,
             policy,
             frames_per_batch=50,

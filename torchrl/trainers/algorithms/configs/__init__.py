@@ -21,10 +21,14 @@ except ImportError as e:
     ) from e
 
 from torchrl.trainers.algorithms.configs.collectors import (
+    # New canonical config names
+    AsyncCollectorConfig,
+    # Legacy config names (aliases)
     AsyncDataCollectorConfig,
-    DataCollectorConfig,
-    MultiaSyncDataCollectorConfig,
-    MultiSyncDataCollectorConfig,
+    BaseCollectorConfig,
+    CollectorConfig,
+    MultiAsyncCollectorConfig,
+    MultiSyncCollectorConfig,
     SyncDataCollectorConfig,
 )
 
@@ -222,11 +226,16 @@ __all__ = [
     "RpropConfig",
     "SGDConfig",
     "SparseAdamConfig",
-    # Collectors
+    # Collectors (new canonical names)
+    "AsyncCollectorConfig",
+    "CollectorConfig",
+    "BaseCollectorConfig",
+    "MultiAsyncCollectorConfig",
+    "MultiSyncCollectorConfig",
+    # Collectors (legacy aliases)
     "AsyncDataCollectorConfig",
-    "DataCollectorConfig",
-    "MultiSyncDataCollectorConfig",
-    "MultiaSyncDataCollectorConfig",
+    "MultiSyncCollectorConfig",
+    "MultiAsyncCollectorConfig",
     "SyncDataCollectorConfig",
     # Environments
     "BatchedEnvConfig",
@@ -575,10 +584,10 @@ def _register_configs():
     # Collector Configurations
     # =============================================================================
 
-    cs.store(group="collector", name="sync", node=SyncDataCollectorConfig)
-    cs.store(group="collector", name="async", node=AsyncDataCollectorConfig)
-    cs.store(group="collector", name="multi_sync", node=MultiSyncDataCollectorConfig)
-    cs.store(group="collector", name="multi_async", node=MultiaSyncDataCollectorConfig)
+    cs.store(group="collector", name="sync", node=CollectorConfig)
+    cs.store(group="collector", name="async", node=AsyncCollectorConfig)
+    cs.store(group="collector", name="multi_sync", node=MultiSyncCollectorConfig)
+    cs.store(group="collector", name="multi_async", node=MultiAsyncCollectorConfig)
 
     # =============================================================================
     # Trainer Configurations

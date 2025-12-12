@@ -368,7 +368,7 @@ Weight sync schemes integrate seamlessly with TorchRL collectors. The collector 
 
     import torch.nn as nn
     from tensordict.nn import TensorDictModule
-    from torchrl.collectors import MultiSyncDataCollector
+    from torchrl.collectors import MultiCollector
     from torchrl.envs import GymEnv
     from torchrl.weight_update import SharedMemWeightSyncScheme
 
@@ -384,7 +384,8 @@ Weight sync schemes integrate seamlessly with TorchRL collectors. The collector 
     # Create scheme - collector handles initialization
     scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
-    collector = MultiSyncDataCollector(
+    collector = MultiCollector(
+        sync=True,
         create_env_fn=[lambda: GymEnv("CartPole-v1")] * 3,
         policy=policy,
         frames_per_batch=192,

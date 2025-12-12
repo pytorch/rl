@@ -19,11 +19,11 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors._base import DataCollectorBase
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
-from torchrl.collectors._multi_async import MultiaSyncDataCollector
-from torchrl.collectors._multi_sync import MultiSyncDataCollector
-from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
@@ -69,13 +69,13 @@ def _distributed_init_collection_node(
         torchrl_logger.debug(
             f"node with rank {rank} -- creating collector of type {collector_class}"
         )
-    if not issubclass(collector_class, SyncDataCollector):
+    if not issubclass(collector_class, Collector):
         env_make = [env_make] * num_workers
     else:
         collector_kwargs["return_same_td"] = True
         if num_workers != 1:
             raise RuntimeError(
-                "SyncDataCollector and subclasses can only support a single environment."
+                "Collector and subclasses can only support a single environment."
             )
 
     torchrl_logger.debug(f"IP address: {rank0_ip} \ttcp port: {tcpport}")
@@ -133,7 +133,7 @@ def _distributed_init_collection_node(
     return
 
 
-class DistributedSyncDataCollector(DataCollectorBase):
+class DistributedSyncCollector(BaseCollector):
     """A distributed synchronous data collector with torch.distributed backend.
 
     Args:
@@ -241,12 +241,12 @@ class DistributedSyncDataCollector(DataCollectorBase):
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
         collector_class (Type or str, optional): a collector class for the remote node. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -305,7 +305,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class: type | Callable[[], DataCollectorBase] = SyncDataCollector,
+        collector_class: type | Callable[[], BaseCollector] = Collector,
         collector_kwargs: dict[str, Any] | None = None,
         num_workers_per_collector: int = 1,
         slurm_kwargs: dict[str, Any] | None = None,
@@ -317,11 +317,11 @@ class DistributedSyncDataCollector(DataCollectorBase):
     ):
 
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         self.policy = policy
@@ -418,7 +418,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             # exists when workers try to connect
             for model_id, scheme in self._weight_sync_schemes.items():
                 torchrl_logger.debug(
-                    f"DistributedSyncDataCollector: Initializing scheme for '{model_id}' on sender"
+                    f"DistributedSyncCollector: Initializing scheme for '{model_id}' on sender"
                 )
                 scheme.init_on_sender(
                     model_id=model_id,
@@ -510,7 +510,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
     def _make_container(self):
         env_constructor = self.env_constructors[0]
-        pseudo_collector = SyncDataCollector(
+        pseudo_collector = Collector(
             env_constructor,
             self.policy,
             frames_per_batch=self._frames_per_batch_corrected,
@@ -616,11 +616,11 @@ class DistributedSyncDataCollector(DataCollectorBase):
         if self._weight_sync_schemes is not None:
             for model_id, scheme in self._weight_sync_schemes.items():
                 torchrl_logger.debug(
-                    f"DistributedSyncDataCollector: Connecting scheme '{model_id}' (will init process group)"
+                    f"DistributedSyncCollector: Connecting scheme '{model_id}' (will init process group)"
                 )
                 scheme.connect()
             torchrl_logger.debug(
-                "DistributedSyncDataCollector: Initial weight sync completed"
+                "DistributedSyncCollector: Initial weight sync completed"
             )
         else:
             # No schemes - init process group manually
@@ -691,3 +691,11 @@ class DistributedSyncDataCollector(DataCollectorBase):
             for scheme in self._weight_sync_schemes.values():
                 scheme.shutdown()
             self._weight_sync_schemes = None
+
+
+class DistributedSyncDataCollector(
+    DistributedSyncCollector, metaclass=_LegacyCollectorMeta
+):
+    """Deprecated version of :class:`~torchrl.collectors.distributed.DistributedSyncCollector`."""
+
+    ...
