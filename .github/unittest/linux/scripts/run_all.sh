@@ -111,19 +111,13 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda deactivate
 conda activate "${env_dir}"
 
-# Install dm_control
-# For Python 3.13+, labmaze doesn't have pre-built wheels, so we need to build from source
-if [[ "$PYTHON_VERSION" == "3.13" || "$PYTHON_VERSION" == "3.14" ]]; then
-  echo "installing bazel for labmaze build"
-  apt-get install -y apt-transport-https curl gnupg
-  curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/bazel.gpg
-  echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" > /etc/apt/sources.list.d/bazel.list
-  apt-get update && apt-get install -y bazel
-  echo "installing labmaze from source"
-  pip3 install git+https://github.com/google-deepmind/labmaze.git
+# Install dm_control for Python < 3.13
+# labmaze (dm_control dependency) doesn't have Python 3.13+ wheels and its
+# WORKSPACE-based build is incompatible with Bazel 8+ (WORKSPACE deprecated)
+if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing dm_control"
+  pip3 install dm_control
 fi
-echo "installing dm_control"
-pip3 install dm_control
 
 echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.12" ]]; then
@@ -135,12 +129,19 @@ else
 fi
 
 # sanity check
-python -c """
+if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
+  python -c """
 import dm_control
 from dm_control import composer
 from tensorboard import *
 from google.protobuf import descriptor as _descriptor
 """
+else
+  python -c """
+from tensorboard import *
+from google.protobuf import descriptor as _descriptor
+"""
+fi
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
