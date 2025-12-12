@@ -95,7 +95,8 @@ conda env config vars set \
   BATCHED_PIPE_TIMEOUT=60 \
   TOKENIZERS_PARALLELISM=true
 
-pip install pip --upgrade
+# Use python -m pip to ensure we use conda's Python, not system GraalPy
+python -m pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
@@ -142,22 +143,23 @@ git submodule sync && git submodule update --init --recursive
 # Install jax with CUDA support before ale-py to satisfy its build dependency
 # (ale-py source builds require jax/jaxlib which needs CUDA-compatible wheels)
 # See: https://docs.jax.dev/en/latest/installation.html
-pip install --upgrade "jax[cuda13-local]"
-pip install ale-py -U
-pip install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
+python -m pip install --upgrade "jax[cuda13-local]"
+# Use --no-build-isolation so ale-py uses the already-installed jax/jaxlib
+python -m pip install ale-py -U --no-build-isolation
+python -m pip install "gymnasium[atari,accept-rom-license,mujoco]>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      python -m pip install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      pip install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      python -m pip install --pre torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/cpu
+      python -m pip install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/cpu
   else
-      pip install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/$CU_VERSION
+      python -m pip install torch torchvision numpy==1.26.4 --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -172,9 +174,9 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip install git+https://github.com/pytorch/tensordict.git
+  python -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip install tensordict
+  python -m pip install tensordict
 fi
 
 printf "* Installing torchrl\n"

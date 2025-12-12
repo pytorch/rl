@@ -125,8 +125,17 @@ if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   pip3 install ray
 fi
 
+# Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
+if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing mujoco"
+  pip3 install "mujoco<3.3.6"
+fi
+
 echo "installing gymnasium"
-if [[ "$PYTHON_VERSION" == "3.12" ]]; then
+if [[ "$PYTHON_VERSION" == "3.14" ]]; then
+  # Python 3.14: no mujoco wheels available
+  pip3 install "gymnasium[atari]>=1.1"
+elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
   pip3 install ale-py
   pip3 install sympy
   pip3 install "gymnasium[mujoco]>=1.1" mo-gymnasium[mujoco]
