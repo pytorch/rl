@@ -91,7 +91,7 @@ uv pip install \
   coverage \
   vmas \
   transformers \
-  minari
+  "minari[hdf5]"
 
 # Install gymnasium with atari and mujoco support
 uv pip install "gymnasium[atari,mujoco]>=1.1.0"
