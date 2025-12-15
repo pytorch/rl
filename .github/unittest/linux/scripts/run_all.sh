@@ -223,10 +223,11 @@ uv_pip_install -e . --no-build-isolation
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
-  python -c "
-from torchrl.envs.transforms.vc1 import VC1Transform
-VC1Transform.install_vc_models(auto_exit=True)
-"
+  # Install vc_models directly via uv.
+  # VC1Transform.install_vc_models() uses `setup.py develop` which expects `pip`
+  # to be present in the environment, but uv-created venvs do not necessarily
+  # ship with pip.
+  uv_pip_install "git+https://github.com/facebookresearch/eai-vc.git#subdirectory=vc_models"
 
   printf "* Upgrading timm\n"
   uv_pip_install --upgrade "timm>=0.9.0"
