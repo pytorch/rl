@@ -11,10 +11,42 @@ making it easy to collect high-quality training data efficiently.
 
 TorchRL provides several collector implementations optimized for different scenarios:
 
-- **SyncDataCollector**: Single-process collection on the training worker
-- **MultiSyncDataCollector**: Parallel collection across multiple workers with synchronized delivery
-- **MultiaSyncDataCollector**: Asynchronous collection with first-come-first-serve delivery
-- **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends
+- :class:`Collector`: Single-process collection on the training worker
+- :class:`MultiCollector`: Parallel collection across multiple workers (see below)
+- **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`DistributedCollector` / :class:`RPCCollector`)
+
+MultiCollector API
+------------------
+
+The :class:`MultiCollector` class provides a unified interface for multi-process data collection.
+Use the ``sync`` parameter to choose between synchronous and asynchronous collection:
+
+.. code-block:: python
+
+    from torchrl.collectors import MultiCollector
+
+    # Synchronous collection: all workers complete before delivering batch
+    collector = MultiCollector(
+        create_env_fn=[make_env] * 4,  # 4 parallel workers
+        policy=my_policy,
+        frames_per_batch=200,
+        total_frames=10000,
+        sync=True,  # synchronized delivery
+    )
+
+    # Asynchronous collection: first-come-first-serve delivery
+    collector = MultiCollector(
+        create_env_fn=[make_env] * 4,
+        policy=my_policy,
+        frames_per_batch=200,
+        total_frames=10000,
+        sync=False,  # async delivery (faster, but policy may lag)
+    )
+
+**When to use sync vs async:**
+
+- ``sync=True``: Use for on-policy algorithms (PPO, A2C) where data must match current policy
+- ``sync=False``: Use for off-policy algorithms (SAC, DQN) where slight policy lag is acceptable
 
 Key Features
 ------------
@@ -30,7 +62,7 @@ Quick Example
 
 .. code-block:: python
 
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.envs import GymEnv, ParallelEnv
     
     # Create a batched environment
@@ -40,7 +72,7 @@ Quick Example
     env = ParallelEnv(4, make_env)
     
     # Create collector
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy=my_policy,
         frames_per_batch=200,
@@ -57,6 +89,16 @@ Quick Example
             collector.update_policy_weights_()
     
     collector.shutdown()
+
+Legacy names
+------------
+
+The following names are kept for backward compatibility:
+
+- ``SyncDataCollector`` → ``Collector``
+- ``MultiSyncDataCollector`` → ``MultiCollector(sync=True)``
+- ``MultiaSyncDataCollector`` → ``MultiCollector(sync=False)``
+- ``DataCollectorBase`` → ``BaseCollector``
 
 Documentation Sections
 ----------------------

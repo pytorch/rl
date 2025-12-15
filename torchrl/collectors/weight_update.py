@@ -30,7 +30,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
       updating a state-dict, or more complex if an inference server is being used.
     - In server collector nodes, it is responsible for sending the weights to the leaf collectors.
 
-    In a collector, the updater is called within :meth:`~torchrl.collector.DataCollectorBase.update_policy_weights_`.`
+    In a collector, the updater is called within :meth:`~torchrl.collector.BaseCollector.update_policy_weights_`.`
 
     The main method of this class is the :meth:`~._push_weights` method, which updates the policy weights in the worker /
     policy. This method is called by :meth:`~.push_weights`, which also calls the post-hooks: only `_push_weights` should
@@ -68,7 +68,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
             The post-hook will be called in the same process as the weight updater.
             The post-hook will be called in the same order as the post-hooks were registered.
 
-    .. seealso:: :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
+    .. seealso:: :meth:`~torchrl.collectors.BaseCollector.update_policy_weights_`.
 
     """
 
@@ -117,7 +117,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         Once registered, the updater will not accept another collector.
 
         Args:
-            collector (DataCollectorBase): The collector to register.
+            collector (BaseCollector): The collector to register.
 
         """
         if self._collector_wrs is None:
@@ -353,10 +353,10 @@ class VanillaWeightUpdater(WeightUpdaterBase):
     in scenarios where the weight update logic is straightforward and does not require any
     complex mapping or transformation.
 
-    This class is used by default in the `SyncDataCollector` when no custom weight sender
+    This class is used by default in the `Collector` when no custom weight sender
     is provided.
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.Collector`.
 
     Keyword Args:
         weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.
@@ -433,7 +433,7 @@ class MultiProcessedWeightUpdater(WeightUpdaterBase):
         logic, consider extending `WeightUpdaterBase` with a custom implementation.
 
     .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
-        :class:`~torchrl.collectors.DataCollectorBase`.
+        :class:`~torchrl.collectors.BaseCollector`.
 
     """
 

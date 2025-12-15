@@ -478,7 +478,7 @@ class TestDQN(LossModuleTestBase):
         elif action_spec_type == "categorical":
             action_spec = Categorical(action_dim)
         # elif action_spec_type == "nd_bounded":
-        #     action_spec = BoundedTensorSpec(
+        #     action_spec = Bounded(
         #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         #     )
         else:

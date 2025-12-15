@@ -84,7 +84,7 @@ list(GymEnv.available_envs)[:10]
 # Like other frameworks, TorchRL envs have attributes that indicate what
 # space is for the observations, action, done and reward. Because it often happens
 # that more than one observation is retrieved, we expect the observation spec
-# to be of type ``CompositeSpec``.
+# to be of type ``Composite``.
 # Reward and action do not have this restriction:
 
 print("Env observation_spec: \n", env.observation_spec)
@@ -119,7 +119,7 @@ print(env.done_spec)
 
 ###############################################################################
 # Envs are also packed with an ``env.state_spec`` attribute of type
-# ``CompositeSpec`` which contains all the specs that are inputs to the env
+# ``Composite`` which contains all the specs that are inputs to the env
 # but are not the action.
 # For stateful
 # envs (e.g. gym) this will be void most of the time.

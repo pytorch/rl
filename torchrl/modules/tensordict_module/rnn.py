@@ -596,7 +596,7 @@ class LSTMModule(ModuleBase):
         module.
 
         Examples:
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.envs import TransformedEnv, InitTracker
             >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP, LSTMModule
@@ -613,7 +613,7 @@ class LSTMModule(ModuleBase):
             >>> policy = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy(env.reset())
             >>> env = env.append_transform(lstm_module.make_tensordict_primer())
-            >>> data_collector = SyncDataCollector(
+            >>> data_collector = Collector(
             ...     env,
             ...     policy,
             ...     frames_per_batch=10
@@ -1393,7 +1393,7 @@ class GRUModule(ModuleBase):
         module.
 
         Examples:
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.envs import TransformedEnv, InitTracker
             >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP, LSTMModule
@@ -1410,7 +1410,7 @@ class GRUModule(ModuleBase):
             >>> policy = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy(env.reset())
             >>> env = env.append_transform(gru_module.make_tensordict_primer())
-            >>> data_collector = SyncDataCollector(
+            >>> data_collector = Collector(
             ...     env,
             ...     policy,
             ...     frames_per_batch=10

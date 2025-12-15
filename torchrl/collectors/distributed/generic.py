@@ -19,13 +19,18 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn
-from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors._base import DataCollectorBase
+from torchrl._utils import (
+    _get_mp_ctx,
+    _ProcessNoWarn,
+    logger as torchrl_logger,
+    VERBOSE,
+)
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
-from torchrl.collectors._multi_async import MultiaSyncDataCollector
-from torchrl.collectors._multi_base import _MultiDataCollector
-from torchrl.collectors._multi_sync import MultiSyncDataCollector
-from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.distributed.default_configs import (
     _create_tcpstore_with_retry,
     DEFAULT_SLURM_CONF,
@@ -184,16 +189,16 @@ def _run_collector(
         torchrl_logger.debug(
             f"RANK {rank} -- creating collector of type {collector_class}"
         )
-    if not issubclass(collector_class, SyncDataCollector):
+    if not issubclass(collector_class, Collector):
         env_make = [env_make] * num_workers
     else:
         collector_kwargs["return_same_td"] = True
         if num_workers != 1:
             raise RuntimeError(
-                "SyncDataCollector and subclasses can only support a single environment."
+                "Collector and subclasses can only support a single environment."
             )
 
-    if issubclass(collector_class, _MultiDataCollector) and (
+    if issubclass(collector_class, MultiCollector) and (
         (not isinstance(policy_factory, Sequence) and policy_factory is not None)
         or (isinstance(policy_factory, Sequence) and any(policy_factory))
     ):
@@ -220,7 +225,7 @@ def _run_collector(
     # NOTE:
     # - `weight_sync_schemes` here are the *distributed* schemes used to send
     #   weights from the main process to this node.
-    # - Inner multi-process collectors (e.g., MultiSyncDataCollector) should
+    # - Inner multi-process collectors (e.g., MultiSyncCollector) should
     #   manage their own local weight sync schemes (SharedMem / MP) for their
     #   sub-workers.
     #   Therefore, we do NOT pass `weight_sync_schemes` down into
@@ -351,7 +356,7 @@ def _run_collector(
     return
 
 
-class DistributedDataCollector(DataCollectorBase):
+class DistributedCollector(BaseCollector):
     """A distributed data collector with torch.distributed backend.
 
     Supports sync and async data collection.
@@ -461,12 +466,12 @@ class DistributedDataCollector(DataCollectorBase):
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
         collector_class (Type or str, optional): a collector class for the remote node. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -556,7 +561,7 @@ class DistributedDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class: type = SyncDataCollector,
+        collector_class: type = Collector,
         collector_kwargs: dict[str, Any] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
@@ -577,11 +582,11 @@ class DistributedDataCollector(DataCollectorBase):
             torchrl_logger.setLevel("DEBUG")
 
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         if not isinstance(policy_factory, Sequence):
@@ -823,12 +828,12 @@ class DistributedDataCollector(DataCollectorBase):
         kwargs = self.collector_kwargs[
             0
         ].copy()  # Create a copy to avoid modifying the original
-        # Mirror the SyncDataCollector configuration used on the workers so
+        # Mirror the Collector configuration used on the workers so
         # that the dummy batch structure matches what remote ranks will send.
-        # _run_collector always sets return_same_td=True for SyncDataCollector,
+        # _run_collector always sets return_same_td=True for Collector,
         # so we must do the same here to ensure structural consistency.
         kwargs["return_same_td"] = True
-        pseudo_collector = SyncDataCollector(
+        pseudo_collector = Collector(
             env_constructor,
             policy=self.policy if not self.policy_factory[0] else None,
             policy_factory=self.policy_factory[0],
@@ -919,6 +924,7 @@ class DistributedDataCollector(DataCollectorBase):
         TCP_PORT = self.tcp_port
         job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
+            _start_method=_get_mp_ctx().get_start_method(),
             kwargs=dict(  # noqa: C408
                 rank=i + 1,
                 rank0_ip=self.IPAddr,
@@ -1233,3 +1239,9 @@ class DistributedWeightUpdater(WeightUpdaterBase):
             if status != b"updated":
                 raise RuntimeError(f"Expected 'updated' but got status {status}.")
             self._store.delete_key(f"NODE_{rank}_out")
+
+
+class DistributedDataCollector(DistributedCollector, metaclass=_LegacyCollectorMeta):
+    """Deprecated version of :class:`~torchrl.collectors.distributed.DistributedCollector`."""
+
+    ...

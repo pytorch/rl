@@ -346,7 +346,7 @@ class Transform(nn.Module):
         self._out_keys_inv = value
 
     @property
-    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+    def collector(self) -> BaseCollector | None:  # noqa: F821 # type: ignore
         """Returns the collector associated with the container, if it exists.
 
         This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.
@@ -3524,7 +3524,7 @@ class CatFrames(ObservationTransform):
 
     Examples:
         >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.envs import UnsqueezeTransform, CatFrames
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> # Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension
         >>> env = TransformedEnv(
         ...     GymEnv("CartPole-v1", from_pixels=True),
@@ -3537,7 +3537,7 @@ class CatFrames(ObservationTransform):
         ...     )
         ... )
         >>> # we design a collector
-        >>> collector = SyncDataCollector(
+        >>> collector = Collector(
         ...     env,
         ...     RandomPolicy(env.action_spec),
         ...     frames_per_batch=10,
@@ -8822,11 +8822,11 @@ class Reward2GoTransform(Transform):
     append the `inv` method of the transform.
 
     Examples:
-        >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.modules import RandomPolicy        >>>         >>>         >>> from torchrl.collectors import Collector
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> t = Reward2GoTransform(gamma=0.99, out_keys=["reward_to_go"])
         >>> env = GymEnv("Pendulum-v1")
-        >>> collector = SyncDataCollector(
+        >>> collector = Collector(
         ...     env,
         ...     RandomPolicy(env.action_spec),
         ...     frames_per_batch=200,
@@ -9873,8 +9873,8 @@ class BatchSizeTransform(Transform):
     This transform can be used to deploy non-batch-locked environments within data
     collectors:
 
-        >>> from torchrl.collectors import SyncDataCollector
-        >>> collector = SyncDataCollector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)
+        >>> from torchrl.collectors import Collector
+        >>> collector = Collector(env, lambda td: env.rand_action(td), frames_per_batch=10, total_frames=-1)
         >>> for data in collector:
         ...     print(data)
         ...     break

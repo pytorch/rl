@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .grpo import (
-    CISPO,
+    CISPOLoss,
     CISPOLossOutput,
     DAPO,
     DAPOLossOutput,
@@ -17,7 +17,7 @@ from .grpo import (
 from .sft import SFTLoss, SFTLossOutput
 
 __all__ = [
-    "CISPO",
+    "CISPOLoss",
     "CISPOLossOutput",
     "DAPO",
     "DAPOLossOutput",

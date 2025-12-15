@@ -24,7 +24,7 @@ from torchrl.weight_update.utils import _resolve_attr
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 
-class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
+class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors."""
 
     _task = None
@@ -808,3 +808,44 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         """
         if self.weight_updater is not None:
             self.weight_updater.init(*args, **kwargs)
+
+
+def _make_legacy_metaclass(parent_metaclass):
+    """Create a legacy metaclass for deprecated collector names.
+
+    This factory creates a metaclass that inherits from the given parent metaclass
+    to avoid metaclass conflicts.
+    """
+
+    class _LegacyMeta(parent_metaclass):
+        """Metaclass for deprecated collector class names.
+
+        Raises a deprecation warning when the old class name is instantiated,
+        and ensures isinstance() checks work for both old and new names.
+        """
+
+        def __call__(cls, *args, **kwargs):
+            warnings.warn(
+                f"{cls.__name__} has been deprecated and will be removed in v0.13. "
+                f"Please use {cls.__bases__[0].__name__} instead.",
+                category=DeprecationWarning,
+            )
+            return super().__call__(*args, **kwargs)
+
+        def __instancecheck__(cls, instance):
+            if super().__instancecheck__(instance):
+                return True
+            parent_cls = cls.__bases__[0]
+            return isinstance(instance, parent_cls)
+
+    return _LegacyMeta
+
+
+# Default legacy metaclass for classes with abc.ABCMeta
+_LegacyCollectorMeta = _make_legacy_metaclass(abc.ABCMeta)
+
+
+class DataCollectorBase(BaseCollector, metaclass=_LegacyCollectorMeta):
+    """Deprecated version of :class:`~torchrl.collectors.BaseCollector`."""
+
+    ...

@@ -50,7 +50,7 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl._utils import implement_for, logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.distributed import RayCollector
 from torchrl.data import (
     Binary,
@@ -65,7 +65,7 @@ from torchrl.data import (
     ReplayBuffer,
     ReplayBufferEnsemble,
     Unbounded,
-    UnboundedDiscreteTensorSpec,
+    UnboundedDiscrete,
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -316,7 +316,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            # g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            # g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -331,7 +331,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -346,7 +346,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -361,7 +361,7 @@ class TestGym:
             d=cat(5, shape=cat_shape, dtype=torch.int64),
             e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
             f=Bounded(-3, 4, shape=(*batch_size, 1)),
-            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            g=UnboundedDiscrete(shape=(*batch_size, 1), dtype=torch.long),
             h=Binary(n=5, shape=(*batch_size, 5)),
             shape=batch_size,
         )
@@ -1361,7 +1361,7 @@ class TestGym:
         # same with collector
         env = GymEnv("CartPole-v0", num_envs=2)
         env.set_seed(0)
-        c = SyncDataCollector(
+        c = Collector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
         )
         for rollout in c:
@@ -1386,7 +1386,7 @@ class TestGym:
         # same with collector
         env = GymEnv("CartPole-v0", num_envs=2)
         env.set_seed(0)
-        c = SyncDataCollector(
+        c = Collector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
         )
         for rollout in c:
@@ -1418,7 +1418,7 @@ class TestGym:
         # same with collector
         env = GymEnv("CartPole-v1", num_envs=2)
         env.set_seed(0)
-        c = SyncDataCollector(
+        c = Collector(
             env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
         )
         for rollout in c:
@@ -2072,7 +2072,7 @@ class TestCollectorLib:
 
         # env = ParallelEnv(3, env_fn)
         frames_per_batch = 21
-        collector = SyncDataCollector(  # 1226: not using MultiaSync for perf reasons
+        collector = Collector(  # 1226: not using MultiaSync for perf reasons
             create_env_fn=env,
             policy=RandomPolicy(action_spec=env.action_spec),
             total_frames=-1,
@@ -3119,7 +3119,7 @@ class TestVmas:
             spec=env.full_action_spec[env.action_key],
             safe=True,
         )
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
@@ -3166,7 +3166,7 @@ class TestVmas:
         )
         torch.manual_seed(1)
 
-        ccollector = SyncDataCollector(
+        ccollector = Collector(
             create_env_fn=env,
             policy=None,
             frames_per_batch=frames_per_batch,
@@ -4365,7 +4365,7 @@ class TestIsaacGym:
     #
     # def test_collector(self, task, num_envs, device):
     #     env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
-    #     collector = SyncDataCollector(
+    #     collector = Collector(
     #         env,
     #         policy=SafeModule(nn.LazyLinear(out_features=env.observation_spec['obs'].shape[-1]), in_keys=["obs"], out_keys=["action"]),
     #         frames_per_batch=20,
@@ -4653,7 +4653,7 @@ class TestPettingZoo:
                 max_cycles=1000,
             )
 
-        collector = SyncDataCollector(
+        collector = Collector(
             lambda: maybe_fork_ParallelEnv(
                 num_workers=2,
                 create_env_fn=base_env_fn,
@@ -4679,7 +4679,7 @@ class TestPettingZoo:
             seed=0,
             use_mask=not parallel,
         )
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=env_fun, frames_per_batch=30, total_frames=60, policy=None
         )
         for _ in collector:
@@ -4805,9 +4805,7 @@ class TestSmacv2:
         )
         actor = TensorDictSequential(module, prob)
 
-        collector = SyncDataCollector(
-            env, policy=actor, frames_per_batch=20, total_frames=40
-        )
+        collector = Collector(env, policy=actor, frames_per_batch=20, total_frames=40)
         for _ in collector:
             break
         collector.shutdown()
@@ -5162,7 +5160,7 @@ class TestIsaacLab:
         assert (flat_ranges == arange).all()
 
     def test_isaac_collector(self, env):
-        col = SyncDataCollector(
+        col = Collector(
             env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
         )
         try:

@@ -15,7 +15,7 @@ from functools import partial
 from tensordict import TensorDict, TensorDictBase
 from torch import optim
 
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.objectives.common import LossModule
@@ -47,7 +47,7 @@ class SACTrainer(Trainer):
     - Gradient clipping and optimization steps
 
     Args:
-        collector (DataCollectorBase): The data collector used to gather environment interactions.
+        collector (BaseCollector): The data collector used to gather environment interactions.
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
@@ -70,13 +70,13 @@ class SACTrainer(Trainer):
         target_net_updater (TargetNetUpdater, optional): Target network updater for soft updates. Defaults to None.
 
     Example:
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.objectives import SACLoss
         >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
         >>> from torch import optim
         >>>
         >>> # Set up collector, loss, and replay buffer
-        >>> collector = SyncDataCollector(env, policy, frames_per_batch=1000)
+        >>> collector = Collector(env, policy, frames_per_batch=1000)
         >>> loss_module = SACLoss(actor_network, qvalue_network)
         >>> optimizer = optim.Adam(loss_module.parameters(), lr=3e-4)
         >>> replay_buffer = ReplayBuffer(storage=LazyTensorStorage(100000))
@@ -103,7 +103,7 @@ class SACTrainer(Trainer):
     def __init__(
         self,
         *,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
@@ -193,7 +193,7 @@ class SACTrainer(Trainer):
             self._setup_sac_logging()
 
     def _pass_action_spec_from_collector_to_loss(
-        self, collector: DataCollectorBase, loss: LossModule
+        self, collector: BaseCollector, loss: LossModule
     ):
         """Pass the action specification from the collector's environment to the loss module.
 
@@ -203,7 +203,7 @@ class SACTrainer(Trainer):
         action space bounds for proper entropy calculation and action clipping.
 
         Args:
-            collector (DataCollectorBase): The data collector containing the environment.
+            collector (BaseCollector): The data collector containing the environment.
             loss (LossModule): The loss module that needs the action specification.
         """
         if hasattr(loss, "_action_spec") and loss._action_spec is None:

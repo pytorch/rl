@@ -40,7 +40,7 @@ from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
 from torchrl import set_auto_unwrap_transformed_env
-from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+from torchrl.collectors import Collector, MultiSyncCollector
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import (
     AsyncEnvPool,
@@ -2528,9 +2528,7 @@ class TestStepMdp:
             env = ContinuousActionVecMockEnv()
         env.set_spec_lock_()
         env.rollout(10)
-        c = SyncDataCollector(
-            env, env.rand_action, frames_per_batch=10, total_frames=20
-        )
+        c = Collector(env, env.rand_action, frames_per_batch=10, total_frames=20)
         for data in c:  # noqa: B007
             pass
         assert ("collector", "traj_ids") in data.keys(True)
@@ -2541,9 +2539,7 @@ class TestStepMdp:
             env = SerialEnv(2, ContinuousActionVecMockEnv)
         else:
             env = ContinuousActionVecMockEnv()
-        c = SyncDataCollector(
-            env, env.rand_action, frames_per_batch=10, total_frames=20
-        )
+        c = Collector(env, env.rand_action, frames_per_batch=10, total_frames=20)
         for data in c:  # noqa: B007
             pass
 
@@ -2747,7 +2743,7 @@ class TestConcurrentEnvs:
         ]
         spec = make_envs[0]().action_spec
         policy = TestConcurrentEnvs.Policy(Composite(action=spec))
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             make_envs,
             policy,
             frames_per_batch=n_workers * 100,
@@ -2758,7 +2754,7 @@ class TestConcurrentEnvs:
             cat_results=-1,
         )
         single_collectors = [
-            SyncDataCollector(
+            Collector(
                 make_envs[i](),
                 policy,
                 frames_per_batch=n_workers * 100,
@@ -4664,7 +4660,7 @@ class TestEnvWithHistory:
             env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("device_env", [None, "cpu"])
-    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    @pytest.mark.parametrize("collector_cls", [Collector])
     def test_env_history_base_collector(self, device_env, collector_cls):
         env = self._make_env(device_env)
         collector = collector_cls(
@@ -4677,7 +4673,7 @@ class TestEnvWithHistory:
                 )
 
     @pytest.mark.parametrize("device_env", [None, "cpu"])
-    @pytest.mark.parametrize("collector_cls", [SyncDataCollector])
+    @pytest.mark.parametrize("collector_cls", [Collector])
     def test_skipping_history_env_collector(self, device_env, collector_cls):
         env = self._make_skipping_env(device_env, max_steps=10)
         collector = collector_cls(

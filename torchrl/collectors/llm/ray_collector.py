@@ -72,7 +72,7 @@ class RayLLMCollector(LLMCollector):
                >>> for data in collector:  # non-blocking
                ...     # expensive operation - collector is collecting data
 
-            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncDataCollector` (`sync_iter=True`) or
+            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncCollector` (`sync_iter=True`) or
             :class:`~torchrl.collectors.MultiAsyncDataCollector` (`sync_iter=False`).
             Defaults to `True`.
         verbose (bool, optional): if ``True``, the collector will print progress information.

@@ -12,13 +12,14 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import _check_for_faulty_process, accept_remote_rref_udf_invocation
+from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
-from torchrl.collectors._multi_base import _MultiDataCollector
+from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
 from torchrl.collectors.utils import split_trajectories
 
 
 @accept_remote_rref_udf_invocation
-class MultiaSyncDataCollector(_MultiDataCollector):
+class MultiAsyncCollector(MultiCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
 
     .. aafig::
@@ -57,7 +58,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     .. note:: Python requires multiprocessed code to be instantiated within a main guard:
 
-            >>> from torchrl.collectors import MultiaSyncDataCollector
+            >>> from torchrl.collectors import MultiAsyncCollector
             >>> if __name__ == "__main__":
             ...     # Create your collector here
 
@@ -67,11 +68,11 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
-        >>> from torchrl.collectors import MultiaSyncDataCollector
+        >>> from torchrl.collectors import MultiAsyncCollector
         >>> if __name__ == "__main__":
         ...     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         ...     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        ...     collector = MultiaSyncDataCollector(
+        ...     collector = MultiAsyncCollector(
         ...         create_env_fn=[env_maker, env_maker],
         ...         policy=policy,
         ...         total_frames=2000,
@@ -118,7 +119,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     """
 
-    __doc__ += _MultiDataCollector.__doc__
+    __doc__ += MultiCollector.__doc__
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -301,3 +302,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     # for RPC
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
         return super().receive_weights(policy_or_weights)
+
+
+_LegacyMultiAsyncMeta = _make_legacy_metaclass(_MultiCollectorMeta)
+
+
+class MultiaSyncDataCollector(MultiAsyncCollector, metaclass=_LegacyMultiAsyncMeta):
+    """Deprecated version of :class:`~torchrl.collectors.MultiAsyncCollector`."""
+
+    ...

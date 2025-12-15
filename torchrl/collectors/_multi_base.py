@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import _pickle
+import abc
 
 import contextlib
 import warnings
@@ -15,8 +16,14 @@ from tensordict.nn import CudaGraphModule, TensorDictModule
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp, nn
 from torchrl import logger as torchrl_logger
-from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, RL_WARNINGS
-from torchrl.collectors._base import DataCollectorBase
+from torchrl._utils import (
+    _check_for_faulty_process,
+    _get_mp_ctx,
+    _ProcessNoWarn,
+    _set_mp_start_method_if_unset,
+    RL_WARNINGS,
+)
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     _InterruptorManager,
     _is_osx,
@@ -25,7 +32,7 @@ from torchrl.collectors._constants import (
     INSTANTIATE_TIMEOUT,
 )
 from torchrl.collectors._runner import _main_async_collector
-from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import _make_meta_policy, _TrajectoryPool
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
@@ -40,7 +47,31 @@ from torchrl.weight_update import (
 from torchrl.weight_update.utils import _resolve_model
 
 
-class _MultiDataCollector(DataCollectorBase):
+class _MultiCollectorMeta(abc.ABCMeta):
+    """Metaclass for MultiCollector that dispatches based on sync parameter.
+
+    When MultiCollector is instantiated with sync=True or sync=False, the metaclass
+    intercepts the call and returns the appropriate subclass instance:
+    - sync=True: returns MultiSyncCollector (alias: MultiSyncCollector)
+    - sync=False: returns MultiAsyncCollector (alias: MultiAsyncCollector)
+    """
+
+    def __call__(cls, *args, sync: bool | None = None, **kwargs):
+        # Only dispatch if we're instantiating MultiCollector directly (not a subclass)
+        # and sync is explicitly provided
+        if cls.__name__ == "MultiCollector" and sync is not None:
+            if sync:
+                from torchrl.collectors._multi_sync import MultiSyncCollector
+
+                return MultiSyncCollector(*args, **kwargs)
+            else:
+                from torchrl.collectors._multi_async import MultiAsyncCollector
+
+                return MultiAsyncCollector(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
+
+
+class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:
@@ -78,6 +109,8 @@ class _MultiDataCollector(DataCollectorBase):
                 weight synchronization purposes.
 
     Keyword Args:
+        sync (bool, optional): if ``True``, the collector will run in sync mode (:class:`~torchrl.collectors.MultiSyncCollector`). If
+            `False`, the collector will run in async mode (:class:`~torchrl.collectors.MultiAsyncCollector`).
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
             (or list of callables) that returns a policy instance.
 
@@ -144,11 +177,11 @@ class _MultiDataCollector(DataCollectorBase):
             keyword arguments used to create an environment. If a list is
             provided, each of its elements will be assigned to a sub-collector.
         collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
             Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
@@ -194,7 +227,7 @@ class _MultiDataCollector(DataCollectorBase):
             each subprocess (or one if a single process is launched).
             Defaults to 1 for safety: if none is indicated, launching multiple
             workers may charge the cpu load too much and harm performance.
-        cat_results (str, int or None): (:class:`~torchrl.collectors.MultiSyncDataCollector` exclusively).
+        cat_results (str, int or None): (:class:`~torchrl.collectors.MultiSyncCollector` exclusively).
             If ``"stack"``, the data collected from the workers will be stacked along the
             first dimension. This is the preferred behavior as it is the most compatible
             with the rest of the library.
@@ -253,7 +286,7 @@ class _MultiDataCollector(DataCollectorBase):
         weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
             RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
-            This enables cascading in hierarchies like: RPCDataCollector -> MultiSyncDataCollector -> SyncDataCollector.
+            This enables cascading in hierarchies like: RPCDataCollector -> MultiSyncCollector -> Collector.
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
@@ -262,6 +295,37 @@ class _MultiDataCollector(DataCollectorBase):
             the policy version.
             Defaults to `False`.
         worker_idx (int, optional): the index of the worker.
+
+    Examples:
+        >>> from torchrl.collectors import MultiCollector
+        >>> from torchrl.envs import GymEnv
+        >>>
+        >>> def make_env():
+        ...     return GymEnv("CartPole-v1")
+        >>>
+        >>> # Synchronous collection (for on-policy algorithms like PPO)
+        >>> sync_collector = MultiCollector(
+        ...     create_env_fn=[make_env] * 4,  # 4 parallel workers
+        ...     policy=my_policy,
+        ...     frames_per_batch=1000,
+        ...     total_frames=100000,
+        ...     sync=True,  # All workers complete before batch is delivered
+        ... )
+        >>>
+        >>> # Asynchronous collection (for off-policy algorithms like SAC)
+        >>> async_collector = MultiCollector(
+        ...     create_env_fn=[make_env] * 4,
+        ...     policy=my_policy,
+        ...     frames_per_batch=1000,
+        ...     total_frames=100000,
+        ...     sync=False,  # First-come-first-serve delivery
+        ... )
+        >>>
+        >>> # Iterate over collected data
+        >>> for data in sync_collector:
+        ...     # data is a TensorDict with collected transitions
+        ...     pass
+        >>> sync_collector.shutdown()
 
     """
 
@@ -282,7 +346,7 @@ class _MultiDataCollector(DataCollectorBase):
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         create_env_kwargs: Sequence[dict] | None = None,
-        collector_class: type | Callable[[], DataCollectorBase] | None = None,
+        collector_class: type | Callable[[], BaseCollector] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -760,14 +824,14 @@ class _MultiDataCollector(DataCollectorBase):
                 f"or an integer representing the cat dimension. Got {cat_results}."
             )
         # Lazy import to avoid circular dependency
-        from torchrl.collectors._multi_sync import MultiSyncDataCollector
+        from torchrl.collectors._multi_sync import MultiSyncCollector
 
-        if not isinstance(self, MultiSyncDataCollector) and cat_results not in (
+        if not isinstance(self, MultiSyncCollector) and cat_results not in (
             "stack",
             None,
         ):
             raise ValueError(
-                "cat_results can only be used with ``MultiSyncDataCollector``."
+                "cat_results can only be used with ``MultiSyncCollector``."
             )
         self.cat_results = cat_results
 
@@ -849,7 +913,7 @@ class _MultiDataCollector(DataCollectorBase):
             )
         storing_device, policy_device, env_device = zip(
             *[
-                SyncDataCollector._get_devices(
+                Collector._get_devices(
                     storing_device=storing_device,
                     policy_device=policy_device,
                     env_device=env_device,
@@ -878,13 +942,17 @@ class _MultiDataCollector(DataCollectorBase):
 
         # Set up for worker processes
         torch.set_num_threads(self.num_threads)
-        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
+        ctx = _get_mp_ctx()
+        # Best-effort global init (only if unset) to keep other mp users consistent.
+        _set_mp_start_method_if_unset(ctx.get_start_method())
+
+        queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
-        self._traj_pool = _TrajectoryPool(lock=True)
+        self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
 
         # Create all pipes upfront (needed for weight sync scheme initialization)
         # Store as list of (parent, child) tuples for use in worker creation
-        pipe_pairs = [mp.Pipe() for _ in range(self.num_workers)]
+        pipe_pairs = [ctx.Pipe() for _ in range(self.num_workers)]
         # Extract parent pipes for external use (e.g., polling, receiving messages)
         self.pipes = [pipe_parent for pipe_parent, _ in pipe_pairs]
 
@@ -1007,6 +1075,7 @@ class _MultiDataCollector(DataCollectorBase):
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
                     num_threads=self.num_sub_threads,
+                    _start_method=ctx.get_start_method(),
                     kwargs=kwargs,
                 )
                 # proc.daemon can't be set as daemonic processes may be launched by the process itself
@@ -1024,6 +1093,37 @@ class _MultiDataCollector(DataCollectorBase):
                             "This is not supported in multiprocessed data collectors.\n- For ReplayBuffer transforms, use a `transform_factory` instead with `delayed_init=True`.\n"
                             "- Make sure your environment constructor does not reference tensors already instantiated on the main process.\n"
                             "- Since no gradient can be propagated through the Collector pipes, the backward graph is never needed. Consider using detached tensors instead."
+                        ) from err
+                    elif "_share_fd_: only available on CPU" in str(
+                        err
+                    ) or "_share_filename_: only available on CPU" in str(err):
+                        # This is a common failure mode on older PyTorch versions when using the
+                        # "spawn" multiprocessing start method: the process object contains a
+                        # CUDA/MPS tensor (or a module/buffer on a non-CPU device), which must be
+                        # pickled when spawning workers.
+                        #
+                        # See: https://github.com/pytorch/pytorch/issues/87688#issuecomment-1968901877
+                        start_method = None
+                        try:
+                            start_method = mp.get_start_method(allow_none=True)
+                        except Exception:
+                            # Best effort: some environments may disallow querying here.
+                            start_method = None
+                        raise RuntimeError(
+                            "Failed to start a collector worker process because a non-CPU tensor "
+                            "was captured in the worker process arguments and had to be serialized "
+                            "(pickled) at process start.\n\n"
+                            f"Detected multiprocessing start method: {start_method!r}.\n\n"
+                            "Workarounds:\n"
+                            "- Keep any tensors/modules referenced by your collector constructor "
+                            "(policy, replay buffer, postprocs, env factory captures, etc.) on CPU "
+                            "when using a spawning start method (common on macOS/Windows).\n"
+                            "- Or set the multiprocessing start method to 'fork' *before* creating "
+                            "the collector (Unix only). Example:\n\n"
+                            "    import torch.multiprocessing as mp\n"
+                            "    if __name__ == '__main__':\n"
+                            "        mp.set_start_method('fork', force=True)\n\n"
+                            "Upstream context: https://github.com/pytorch/pytorch/issues/87688#issuecomment-1968901877"
                         ) from err
                     else:
                         raise err
@@ -1126,7 +1226,7 @@ also that the state dict is synchronised across processes if needed."""
             >>>
             >>> import tqdm
             >>>
-            >>> from torchrl.collectors import MultiaSyncDataCollector
+            >>> from torchrl.collectors import MultiAsyncCollector
             >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
             >>> from torchrl.envs import GymEnv, set_gym_backend
             >>> import ale_py
@@ -1144,7 +1244,7 @@ also that the state dict is synchronised across processes if needed."""
             ...
             ...     # Create a multi-async data collector with 16 environments
             ...     num_envs = 16
-            ...     collector = MultiaSyncDataCollector(
+            ...     collector = MultiAsyncCollector(
             ...         [env_fn] * num_envs,
             ...         policy=policy,
             ...         replay_buffer=rb,
@@ -1325,7 +1425,7 @@ also that the state dict is synchronised across processes if needed."""
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
             >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-            >>> collector = SyncDataCollector(env_fn_parallel, policy, frames_per_batch=100, total_frames=300)
+            >>> collector = Collector(env_fn_parallel, policy, frames_per_batch=100, total_frames=300)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
@@ -1557,3 +1657,7 @@ also that the state dict is synchronised across processes if needed."""
     # for RPC
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
+
+
+# Backward-compatible alias (deprecated, use MultiCollector instead)
+MultiCollector = MultiCollector

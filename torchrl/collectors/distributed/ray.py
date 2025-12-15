@@ -16,11 +16,11 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors._base import DataCollectorBase
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
-from torchrl.collectors._multi_async import MultiaSyncDataCollector
-from torchrl.collectors._multi_sync import MultiSyncDataCollector
-from torchrl.collectors._single import SyncDataCollector
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
@@ -75,7 +75,7 @@ def print_remote_collector_info(self):
     torchrl_logger.debug(s)
 
 
-class RayCollector(DataCollectorBase):
+class RayCollector(BaseCollector):
     """Distributed data collector with `Ray <https://docs.ray.io/>`_ backend.
 
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
@@ -214,11 +214,11 @@ class RayCollector(DataCollectorBase):
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
         collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -293,14 +293,14 @@ class RayCollector(DataCollectorBase):
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs.libs.gym import GymEnv
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.collectors.distributed import RayCollector
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
         >>> distributed_collector = RayCollector(
         ...     create_env_fn=[env_maker],
         ...     policy=policy,
-        ...     collector_class=SyncDataCollector,
+        ...     collector_class=Collector,
         ...     max_frames_per_traj=50,
         ...     init_random_frames=-1,
         ...     reset_at_each_iter=-False,
@@ -339,7 +339,7 @@ class RayCollector(DataCollectorBase):
         postproc=None,
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
-        collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
+        collector_class: Callable[[TensorDict], TensorDict] = Collector,
         collector_kwargs: dict[str, Any] | list[dict] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
@@ -447,17 +447,15 @@ class RayCollector(DataCollectorBase):
 
         # Define collector_class, monkey patch it with as_remote and print_remote_collector_info methods
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         elif not isinstance(collector_class, type) or not issubclass(
-            collector_class, DataCollectorBase
+            collector_class, BaseCollector
         ):
-            raise TypeError(
-                "The collector_class must be an instance of DataCollectorBase."
-            )
+            raise TypeError("The collector_class must be an instance of BaseCollector.")
         if not hasattr(collector_class, "as_remote"):
             collector_class.as_remote = as_remote
         if not hasattr(collector_class, "print_remote_collector_info"):
@@ -814,7 +812,7 @@ class RayCollector(DataCollectorBase):
                 if num_envs > 1
                 or (
                     isinstance(self.collector_class, type)
-                    and not issubclass(self.collector_class, SyncDataCollector)
+                    and not issubclass(self.collector_class, Collector)
                 )
                 else env_maker,
                 policy=policy,
