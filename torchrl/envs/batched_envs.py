@@ -1565,8 +1565,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         if self.consolidate:
             try:
+                # Use share_memory=False to avoid resource_sharer deadlocks.
+                # The data is being sent through a pipe, so shared memory is not needed.
                 td = tensordict.consolidate(
-                    share_memory=True, inplace=True, num_threads=1
+                    share_memory=False, inplace=True, num_threads=1
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1847,8 +1849,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         if self.consolidate:
             try:
+                # Use share_memory=False to avoid resource_sharer deadlocks.
+                # The data is being sent through a pipe, so shared memory is not needed.
                 data = tensordict.consolidate(
-                    share_memory=True, inplace=False, num_threads=1
+                    share_memory=False, inplace=False, num_threads=1
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2076,11 +2080,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
-            # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
+            # Use share_memory=False to avoid resource_sharer deadlocks.
+            # The data is being sent through a pipe, so shared memory is not needed.
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
-                        share_memory=True, num_threads=1
+                        share_memory=False, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2705,8 +2710,10 @@ def _run_worker_pipe_direct(
                 event.synchronize()
             if consolidate:
                 try:
+                    # Use share_memory=False to avoid resource_sharer deadlocks.
+                    # The data is being sent through a pipe, so shared memory is not needed.
                     cur_td = cur_td.consolidate(
-                        share_memory=True, inplace=True, num_threads=1
+                        share_memory=False, inplace=True, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2731,8 +2738,10 @@ def _run_worker_pipe_direct(
                 event.synchronize()
             if consolidate:
                 try:
+                    # Use share_memory=False to avoid resource_sharer deadlocks.
+                    # The data is being sent through a pipe, so shared memory is not needed.
                     next_td = next_td.consolidate(
-                        share_memory=True, inplace=True, num_threads=1
+                        share_memory=False, inplace=True, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
