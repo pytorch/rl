@@ -886,22 +886,18 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
     def shutdown(self) -> None:
         """Stop the background receiver thread and clean up."""
+        # Check if already shutdown
+        if getattr(self, "_is_shutdown", False):
+            return
+        self._is_shutdown = True
+
         # Signal all workers to stop
-        if self._instruction_queues:
+        if getattr(self, "_instruction_queues", None):
             for worker_idx in self._instruction_queues:
                 try:
                     self._instruction_queues[worker_idx].put("stop")
                 except Exception:
                     pass
 
-        # Stop local background thread if running
-        if self._stop_event is not None:
-            self._stop_event.set()
-        if self._background_thread is not None:
-            self._background_thread.join(timeout=5.0)
-            if self._background_thread.is_alive():
-                torchrl_logger.warning(
-                    "SharedMemWeightSyncScheme: Background thread did not stop gracefully"
-                )
-        self._background_thread = None
-        self._stop_event = None
+        # Let base class handle background thread cleanup
+        super().shutdown()

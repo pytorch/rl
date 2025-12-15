@@ -589,16 +589,13 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
     def shutdown(self) -> None:
         """Stop background receiver thread and clean up."""
-        if self._stop_event is not None:
-            self._stop_event.set()
-        if self._background_thread is not None:
-            self._background_thread.join(timeout=5.0)
-            if self._background_thread.is_alive():
-                torchrl_logger.warning(
-                    "DistributedWeightSyncScheme: Background thread did not stop gracefully"
-                )
-        self._background_thread = None
-        self._stop_event = None
+        # Check if already shutdown
+        if getattr(self, "_is_shutdown", False):
+            return
+        self._is_shutdown = True
+
+        # Let base class handle background thread cleanup
+        super().shutdown()
 
     @property
     def model(self) -> Any | None:

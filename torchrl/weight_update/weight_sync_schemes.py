@@ -1231,3 +1231,30 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
     def __setstate__(self, state):
         """Restore the scheme from pickling."""
         self.__dict__.update(state)
+
+    def __del__(self):
+        """Clean up resources when the scheme is garbage collected."""
+        try:
+            self.shutdown()
+        except Exception:
+            # Silently ignore any errors during garbage collection cleanup
+            pass
+
+    def shutdown(self) -> None:
+        """Shutdown the scheme and release resources.
+
+        This method stops any background threads and cleans up connections.
+        It is safe to call multiple times. Subclasses should override this
+        method to add custom cleanup logic, but should call super().shutdown()
+        to ensure base cleanup is performed.
+        """
+        # Stop background receiver thread if running
+        if getattr(self, "_stop_event", None) is not None:
+            self._stop_event.set()
+        if getattr(self, "_background_thread", None) is not None:
+            try:
+                self._background_thread.join(timeout=5.0)
+            except Exception:
+                pass
+            self._background_thread = None
+        self._stop_event = None
