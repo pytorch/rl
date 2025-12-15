@@ -686,8 +686,26 @@ class DistributedSyncDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def shutdown(self, timeout: float | None = None) -> None:
-        # Clean up weight sync schemes
+        # Prevent double shutdown
+        if getattr(self, "_shutdown", False):
+            return
+        self._shutdown = True
+
+        # Clean up weight sync schemes first (stops background threads)
         if self._weight_sync_schemes is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
             for scheme in self._weight_sync_schemes.values():
-                scheme.shutdown()
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
             self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torchrl_logger.debug("destroying process group")
+            torch.distributed.destroy_process_group()
+
+        torchrl_logger.debug("collector shut down")

@@ -1067,6 +1067,18 @@ class RayCollector(DataCollectorBase):
                 to shut down the entire Ray cluster.
 
         """
+        # Clean up weight sync schemes first (stops background threads)
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
         self._stop_event.set()
         if self._collection_thread is not None and self._collection_thread.is_alive():
             self._collection_thread.join(
