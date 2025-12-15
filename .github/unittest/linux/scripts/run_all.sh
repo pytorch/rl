@@ -106,7 +106,7 @@ uv_pip_install \
   pytest-timeout \
   pytest-asyncio \
   expecttest \
-  pybind11 \
+  "pybind11[global]>=2.13" \
   pyyaml \
   scipy \
   hydra-core \
@@ -205,6 +205,11 @@ fi
 
 # smoke test
 python -c "import functorch"
+
+# Help CMake find pybind11 when building tensordict from source.
+# pybind11 ships a CMake package; its location can be obtained via `python -m pybind11 --cmakedir`.
+pybind11_DIR="$(python -m pybind11 --cmakedir)"
+export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
