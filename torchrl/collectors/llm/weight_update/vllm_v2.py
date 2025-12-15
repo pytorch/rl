@@ -244,7 +244,7 @@ class vLLMUpdaterV2(WeightUpdaterBase):
         """Register a collector and set up policy version increment post-hook.
 
         Args:
-            collector: The collector to register (DataCollectorBase)
+            collector: The collector to register (BaseCollector)
         """
         result = super().register_collector(collector)
 

@@ -68,7 +68,7 @@ import torch
 
 from tensordict import set_list_to_stack, TensorDict
 from torchrl import torchrl_logger
-from torchrl.data import CompositeSpec, Unbounded
+from torchrl.data import Composite, Unbounded
 from torchrl.envs import Transform
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.browser import BrowserTransform
@@ -163,17 +163,17 @@ class RewardTransform(Transform):
             tensordict["reward"] = torch.full((1, 1), 0.0)
         return tensordict
 
-    def transform_reward_spec(self, reward_spec: CompositeSpec) -> CompositeSpec:
+    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         """Transform the reward spec to include our custom reward.
 
         This method is required to override the reward spec since the environment
         is initially reward-agnostic.
 
         Args:
-            reward_spec (CompositeSpec): The original reward spec from the environment.
+            reward_spec (Composite): The original reward spec from the environment.
 
         Returns:
-            CompositeSpec: The transformed reward spec with our custom reward definition.
+            Composite: The transformed reward spec with our custom reward definition.
                 The reward will have shape (B, 1) where B is the batch size.
         """
         reward_spec["reward"] = Unbounded(

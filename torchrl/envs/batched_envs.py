@@ -1565,10 +1565,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         if self.consolidate:
             try:
-                # Use share_memory=False to avoid resource_sharer deadlocks.
-                # The data is being sent through a pipe, so shared memory is not needed.
                 td = tensordict.consolidate(
-                    share_memory=False, inplace=True, num_threads=1
+                    share_memory=True, inplace=True, num_threads=1
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1849,10 +1847,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         if self.consolidate:
             try:
-                # Use share_memory=False to avoid resource_sharer deadlocks.
-                # The data is being sent through a pipe, so shared memory is not needed.
                 data = tensordict.consolidate(
-                    share_memory=False, inplace=False, num_threads=1
+                    share_memory=True, inplace=False, num_threads=1
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2080,12 +2076,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
-            # Use share_memory=False to avoid resource_sharer deadlocks.
-            # The data is being sent through a pipe, so shared memory is not needed.
+            # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
-                        share_memory=False, num_threads=1
+                        share_memory=True, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2463,16 +2458,12 @@ def _run_worker_pipe_shared_mem(
                 event.synchronize()
 
             if _non_tensor_keys:
-                # IMPORTANT: set the mp event before sending non-tensor data.
-                # The parent waits on `mp_event` before calling `recv()`. If we try to
-                # `send()` first and that send blocks (eg, due to pipe backpressure),
-                # we can deadlock: parent waits for event; worker waits for parent to read.
-                mp_event.set()
                 child_pipe.send(
                     ("non_tensor", cur_td.select(*_non_tensor_keys, strict=False))
                 )
-            else:
-                mp_event.set()
+
+            # Set event only after non-tensor data is sent to avoid race condition
+            mp_event.set()
 
             del cur_td
 
@@ -2503,9 +2494,10 @@ def _run_worker_pipe_shared_mem(
             # Make sure the root is updated
             root_shared_tensordict.update_(env._step_mdp(input))
 
-            # Set event before sending non-tensor data so parent knows worker is done.
-            # The recv() call itself will provide synchronization for the pipe.
+            # Set event before sending non-tensor data so parent knows worker is done
+            # The recv() call itself will provide synchronization for the pipe
             mp_event.set()
+
             if _non_tensor_keys:
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
@@ -2544,9 +2536,10 @@ def _run_worker_pipe_shared_mem(
                 event.record()
                 event.synchronize()
 
-            # Set event before sending non-tensor data so parent knows worker is done.
-            # The recv() call itself will provide synchronization for the pipe.
+            # Set event before sending non-tensor data so parent knows worker is done
+            # The recv() call itself will provide synchronization for the pipe
             mp_event.set()
+
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
@@ -2710,19 +2703,18 @@ def _run_worker_pipe_direct(
                 event.synchronize()
             if consolidate:
                 try:
-                    # Use share_memory=False to avoid resource_sharer deadlocks.
-                    # The data is being sent through a pipe, so shared memory is not needed.
-                    cur_td = cur_td.consolidate(
-                        share_memory=False, inplace=True, num_threads=1
+                    child_pipe.send(
+                        cur_td.consolidate(
+                            share_memory=True, inplace=True, num_threads=1
+                        )
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            # IMPORTANT: set mp_event before sending.
-            # The parent waits on `mp_event` before calling `recv()`. If we `send()` first
-            # and that send blocks, the worker never reaches `mp_event.set()` and the
-            # parent never `recv()`s: deadlock.
+            else:
+                child_pipe.send(cur_td)
+            # Set event after successfully sending through pipe to avoid race condition
+            # where event is set but pipe send fails (BrokenPipeError)
             mp_event.set()
-            child_pipe.send(cur_td)
 
             del cur_td
 
@@ -2738,16 +2730,15 @@ def _run_worker_pipe_direct(
                 event.synchronize()
             if consolidate:
                 try:
-                    # Use share_memory=False to avoid resource_sharer deadlocks.
-                    # The data is being sent through a pipe, so shared memory is not needed.
                     next_td = next_td.consolidate(
-                        share_memory=False, inplace=True, num_threads=1
+                        share_memory=True, inplace=True, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            # Set mp_event before sending: see comment in reset.
-            mp_event.set()
             child_pipe.send(next_td)
+            # Set event after successfully sending through pipe to avoid race condition
+            # where event is set but pipe send fails (BrokenPipeError)
+            mp_event.set()
 
             del next_td
 
@@ -2765,9 +2756,8 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
-            # Set mp_event before sending: see comment in reset.
-            mp_event.set()
             child_pipe.send((td, root_next_td))
+            mp_event.set()
             del td, root_next_td
 
         elif cmd == "close":

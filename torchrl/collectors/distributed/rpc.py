@@ -23,14 +23,14 @@ from torch import nn
 
 from torch.distributed import rpc
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors._base import DataCollectorBase
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
-from torchrl.collectors._multi_async import MultiaSyncDataCollector
-from torchrl.collectors._multi_sync import MultiSyncDataCollector
-from torchrl.collectors._single import SyncDataCollector
-from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.distributed.default_configs import (
+    DEFAULT_SLURM_CONF,
     DEFAULT_TENSORPIPE_OPTIONS,
     IDLE_TIMEOUT,
     TCP_PORT,
@@ -104,7 +104,7 @@ def _rpc_init_collection_node(
     torch.distributed.destroy_process_group()
 
 
-class RPCDataCollector(DataCollectorBase):
+class RPCCollector(BaseCollector):
     """An RPC-based distributed data collector.
 
     Supports sync and async data collection.
@@ -215,17 +215,17 @@ class RPCDataCollector(DataCollectorBase):
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
             Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
         collector_class (Type or str, optional): a collector class for the remote node. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
 
             .. note::
 
-              Support for :class:`MultiSyncDataCollector` and :class:`MultiaSyncDataCollector`
-              is experimental, and :class:`~torchrl.collectors.SyncDataCollector`
+              Support for :class:`MultiSyncCollector` and :class:`MultiAsyncCollector`
+              is experimental, and :class:`~torchrl.collectors.Collector`
               should always be preferred. If multiple simultaneous environment
               need to be executed on a single node, consider using a
               :class:`~torchrl.envs.ParallelEnv` instance.
@@ -319,7 +319,7 @@ class RPCDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class: type = SyncDataCollector,
+        collector_class: type = Collector,
         collector_kwargs: dict[str, Any] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
@@ -342,11 +342,11 @@ class RPCDataCollector(DataCollectorBase):
             torchrl_logger.setLevel("DEBUG")
 
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         self.policy = policy
@@ -636,7 +636,7 @@ class RPCDataCollector(DataCollectorBase):
                 collector_class,
                 args=(
                     [env_make] * num_workers_per_collector
-                    if collector_class is not SyncDataCollector
+                    if collector_class is not Collector
                     else env_make,
                     policy_to_send,
                 ),
@@ -864,18 +864,6 @@ class RPCDataCollector(DataCollectorBase):
         if self._shutdown:
             return
 
-        # Clean up weight sync schemes first (stops background threads)
-        if getattr(self, "_weight_sync_schemes", None) is not None:
-            torchrl_logger.debug("shutting down weight sync schemes")
-            for scheme in self._weight_sync_schemes.values():
-                try:
-                    scheme.shutdown()
-                except Exception as e:
-                    torchrl_logger.warning(
-                        f"Error shutting down weight sync scheme: {e}"
-                    )
-            self._weight_sync_schemes = None
-
         torchrl_logger.debug("shutting down")
         for future, i in self.futures:
             # clear the futures
@@ -889,10 +877,6 @@ class RPCDataCollector(DataCollectorBase):
         torchrl_logger.debug("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
 
-        # Destroy torch.distributed process group
-        if torch.distributed.is_initialized():
-            torch.distributed.destroy_process_group()
-
         if self.launcher == "mp":
             for job in self.jobs:
                 job.join(int(IDLE_TIMEOUT))
@@ -903,6 +887,23 @@ class RPCDataCollector(DataCollectorBase):
             pass
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
+
+        # Clean up weight sync schemes AFTER workers have exited
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
+
         self._shutdown = True
 
 
@@ -997,3 +998,9 @@ class RPCWeightUpdater(WeightUpdaterBase):
                 torchrl_logger.debug(f"waiting for worker {i}")
                 futures[i].wait()
                 torchrl_logger.debug("got it!")
+
+
+class RPCDataCollector(RPCCollector, metaclass=_LegacyCollectorMeta):
+    """Deprecated version of :class:`~torchrl.collectors.distributed.RPCCollector`."""
+
+    ...

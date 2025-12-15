@@ -69,12 +69,7 @@ from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from torchrl._utils import logger
-from torchrl.weight_update.weight_sync_schemes import (
-    WeightReceiver,
-    WeightSender,
-    WeightStrategy,
-    WeightSyncScheme,
-)
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 
 class VLLMDoubleBufferTransport:
@@ -226,7 +221,7 @@ class VLLMDoubleBufferSyncScheme(WeightSyncScheme):
         return VLLMDoubleBufferWeightReceiver(self, vllm_engine)
 
 
-class VLLMDoubleBufferWeightSender(WeightSender):
+class VLLMDoubleBufferWeightSender:
     """Sends weights to vLLM workers using double-buffered storage.
 
     This sender extracts weights from a training model and writes them to
@@ -287,7 +282,7 @@ class VLLMDoubleBufferWeightSender(WeightSender):
         self._transport.send_weights("vllm_model", weights)
 
 
-class VLLMDoubleBufferWeightReceiver(WeightReceiver):
+class VLLMDoubleBufferWeightReceiver:
     """Receives weights in a vLLM worker using double-buffered storage.
 
     This receiver reads weights from a shared directory and loads them into

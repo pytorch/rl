@@ -36,6 +36,78 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 
+@implement_for("torch", "2.5.0")
+def _get_default_mp_start_method() -> str:
+    """Returns TorchRL's preferred multiprocessing start method for this torch version.
+
+    On newer PyTorch versions we default to ``"spawn"`` for improved safety across
+    backends and to avoid known issues with ``fork`` in multi-threaded programs.
+    """
+    return "spawn"
+
+
+@implement_for("torch", None, "2.5.0")
+def _get_default_mp_start_method() -> str:  # noqa: F811
+    """Returns TorchRL's preferred multiprocessing start method for this torch version.
+
+    On older PyTorch versions we prefer ``"fork"`` when available to avoid failures
+    when spawning workers with non-CPU storages that must be pickled at process start.
+    """
+    try:
+        mp.get_context("fork")
+    except ValueError:
+        return "spawn"
+    return "fork"
+
+
+def _get_mp_ctx(start_method: str | None = None):
+    """Return a multiprocessing context with TorchRL's preferred start method.
+
+    This is intentionally context-based (instead of relying on global
+    ``mp.set_start_method``) so that TorchRL components can consistently allocate
+    primitives (Queue/Pipe/Lock/Process) with a matching context.
+    """
+    if start_method is None:
+        start_method = _get_default_mp_start_method()
+    try:
+        return mp.get_context(start_method)
+    except ValueError:
+        # Best effort fallback if a start method isn't supported on this platform.
+        return mp.get_context("spawn")
+
+
+def _set_mp_start_method_if_unset(start_method: str | None = None) -> str | None:
+    """Set the global start method only if it hasn't been set yet.
+
+    Returns the (possibly pre-existing) start method, or ``None`` if it cannot be
+    determined.
+    """
+    if start_method is None:
+        start_method = _get_default_mp_start_method()
+
+    current = None
+    try:
+        current = mp.get_start_method(allow_none=True)
+    except TypeError:
+        # Older python/torch wrappers may not accept allow_none.
+        try:
+            current = mp.get_start_method()
+        except Exception:
+            current = None
+    except Exception:
+        current = None
+
+    if current is None:
+        try:
+            mp.set_start_method(start_method, force=False)
+            current = start_method
+        except Exception:
+            # If another library already touched the context, we should not
+            # override it here.
+            pass
+    return current
+
+
 def strtobool(val: Any) -> bool:
     """Convert a string representation of truth to a boolean.
 

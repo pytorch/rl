@@ -546,18 +546,16 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         LLMCollector  # noqa: F821 # type: ignore
     ] | None = None
 
-    def register_collector(
-        self, collector: DataCollectorBase  # noqa: F821 # type: ignore
-    ):
+    def register_collector(self, collector: BaseCollector):  # noqa: F821 # type: ignore
         """Registers a collector with the environment.
 
         Args:
-            collector (DataCollectorBase): The collector to register.
+            collector (BaseCollector): The collector to register.
         """
         self._collector = weakref.ref(collector)
 
     @property
-    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+    def collector(self) -> BaseCollector | None:  # noqa: F821 # type: ignore
         """Returns the collector associated with the container, if it exists."""
         return self._collector() if self._collector is not None else None
 
