@@ -18,7 +18,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   dpkg-reconfigure -f noninteractive tzdata || true
 
   apt-get upgrade -y
-  apt-get install -y vim git wget cmake curl
+  apt-get install -y vim git wget cmake curl python3-dev
 
   # SDL2 and freetype needed for building pygame from source (Python 3.14+)
   apt-get install -y libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev
@@ -60,6 +60,9 @@ export PATH="$HOME/.local/bin:$PATH"
 printf "* Creating venv with Python ${PYTHON_VERSION}\n"
 uv venv --python "${PYTHON_VERSION}" "${env_dir}"
 source "${env_dir}/bin/activate"
+uv_pip_install() {
+  uv pip install --python "${env_dir}/bin/python" "$@"
+}
 
 # Verify CPython
 python -c "import sys; assert sys.implementation.name == 'cpython', f'Expected CPython, got {sys.implementation.name}'"
@@ -88,7 +91,7 @@ export BATCHED_PIPE_TIMEOUT=60
 printf "* Installing dependencies\n"
 
 # Install base dependencies
-uv pip install \
+uv_pip_install \
   hypothesis \
   future \
   cloudpickle \
@@ -121,31 +124,31 @@ uv pip install \
 # labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
 if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing dm_control"
-  uv pip install dm_control
+  uv_pip_install dm_control
 fi
 
 # Install ray for Python < 3.14 (ray doesn't support Python 3.14 yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing ray"
-  uv pip install ray
+  uv_pip_install ray
 fi
 
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
-  uv pip install "mujoco>=3.3.7"
+  uv_pip_install "mujoco>=3.3.7"
 fi
 
 # Install gymnasium
 echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.14" ]]; then
   # Python 3.14: no mujoco wheels available, ale_py also failing
-  uv pip install "gymnasium>=1.1"
+  uv_pip_install "gymnasium>=1.1"
 elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
-  uv pip install ale-py sympy
-  uv pip install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]"
+  uv_pip_install ale-py sympy
+  uv_pip_install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]"
 else
-  uv pip install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]"
+  uv_pip_install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]"
 fi
 
 # sanity check
@@ -169,7 +172,6 @@ fi
 unset PYTORCH_VERSION
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    version="cpu"
     echo "Using cpu build"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
@@ -178,7 +180,6 @@ else
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-    version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
 
 # submodules
@@ -187,15 +188,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+      uv_pip_install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      uv_pip_install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      uv_pip_install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      uv pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+      uv_pip_install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -207,13 +208,13 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install git+https://github.com/pytorch/tensordict.git
+  uv_pip_install --no-build-isolation git+https://github.com/pytorch/tensordict.git
 else
-  uv pip install tensordict
+  uv_pip_install tensordict
 fi
 
 printf "* Installing torchrl\n"
-uv pip install -e . --no-build-isolation
+uv_pip_install -e . --no-build-isolation
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
@@ -223,7 +224,7 @@ VC1Transform.install_vc_models(auto_exit=True)
 "
 
   printf "* Upgrading timm\n"
-  uv pip install --upgrade "timm>=0.9.0"
+  uv_pip_install --upgrade "timm>=0.9.0"
 
   python -c "
 import vc_models
