@@ -61,7 +61,7 @@ printf "* Creating venv with Python ${PYTHON_VERSION}\n"
 uv venv --python "${PYTHON_VERSION}" "${env_dir}"
 source "${env_dir}/bin/activate"
 uv_pip_install() {
-  uv pip install --python "${env_dir}/bin/python" "$@"
+  uv pip install --no-progress --python "${env_dir}/bin/python" "$@"
 }
 
 # Verify CPython
