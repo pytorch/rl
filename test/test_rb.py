@@ -35,7 +35,7 @@ from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
 from torchrl._utils import _replace_last, logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     CompressedListStorage,
@@ -3957,7 +3957,7 @@ class TestRBMultidim:
         torch.manual_seed(0)
         env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             RandomPolicy(env.action_spec),
             frames_per_batch=4,
@@ -4060,7 +4060,7 @@ class TestCheckpointers:
         env = GymEnv(CARTPOLE_VERSIONED(), device=None)
         env.set_seed(0)
         torch.manual_seed(0)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy=env.rand_step,
             total_frames=200,
@@ -4099,7 +4099,7 @@ class TestCheckpointers:
         )
         env.set_seed(0)
         torch.manual_seed(0)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy=env.rand_step,
             total_frames=200,

@@ -279,7 +279,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
             >>> policy = make_stateful_policy()
             >>> scheme = SharedMemWeightSyncScheme(strategy="tensordict")
-            >>> collector = MultiSyncDataCollector(
+            >>> collector = MultiSyncCollector(
             ...     create_env_fn=[lambda: GymEnv("CartPole-v1")],
             ...     policy=policy,
             ...     frames_per_batch=100,
@@ -299,7 +299,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             ...     devices=[torch.device("cuda:0"), torch.device("cuda:1")],
             ...     num_workers=2,
             ... )
-            >>> collector = MultiSyncDataCollector(
+            >>> collector = MultiSyncCollector(
             ...     create_env_fn=[lambda: GymEnv("CartPole-v1")],
             ...     policy_factory=[make_stateful_policy],
             ...     frames_per_batch=100,

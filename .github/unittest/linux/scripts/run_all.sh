@@ -254,6 +254,14 @@ pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_contro
 # Track if any tests fail
 EXIT_STATUS=0
 
+# Run TestNonTensorEnv.test_parallel in ISOLATION first to check for test pollution issues.
+# This test deadlocks when run after other tests due to resource_sharer thread interference.
+# See: https://bugs.python.org/issue30289
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest \
+  test/test_env.py::TestNonTensorEnv::test_parallel \
+  --instafail --durations 200 -vv --capture no \
+  --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
+
 # Run distributed tests first (GPU only) to surface errors early
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py \
@@ -262,17 +270,20 @@ if [ "${CU_VERSION:-}" != cpu ] ; then
 fi
 
 # Run remaining tests (always run even if distributed tests failed)
+# Note: TestNonTensorEnv::test_parallel is excluded since it was run in isolation above
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
     --ignore test/test_distributed.py \
     --ignore test/llm \
+    -k "not (TestNonTensorEnv and test_parallel)" \
     --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
     --ignore test/test_distributed.py \
     --ignore test/llm \
+    -k "not (TestNonTensorEnv and test_parallel)" \
     --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
 fi
 

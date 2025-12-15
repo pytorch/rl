@@ -11,7 +11,7 @@ from typing import Any
 import torch
 from tensordict.nn import TensorDictModuleBase
 
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
@@ -98,7 +98,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     if critic_network is not None:
         critic_network = critic_network()
 
-    if not isinstance(collector, DataCollectorBase):
+    if not isinstance(collector, BaseCollector):
         # then it's a partial config
         if not async_collection:
             collector = collector()
@@ -125,10 +125,8 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         optimizer = optimizer(params=loss_module.parameters())
 
     # Quick instance checks
-    if not isinstance(collector, DataCollectorBase):
-        raise ValueError(
-            f"collector must be a DataCollectorBase, got {type(collector)}"
-        )
+    if not isinstance(collector, BaseCollector):
+        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
     if not isinstance(loss_module, LossModule):
         raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -284,7 +282,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     ):
         replay_buffer._transform[1].module.value_network = critic_network
 
-    if not isinstance(collector, DataCollectorBase):
+    if not isinstance(collector, BaseCollector):
         # then it's a partial config
         if not async_collection:
             collector = collector()
@@ -304,10 +302,8 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         optimizer = optimizer(params=loss_module.parameters())
 
     # Quick instance checks
-    if not isinstance(collector, DataCollectorBase):
-        raise ValueError(
-            f"collector must be a DataCollectorBase, got {type(collector)}"
-        )
+    if not isinstance(collector, BaseCollector):
+        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
     if not isinstance(loss_module, LossModule):
         raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
     if not isinstance(optimizer, torch.optim.Optimizer):

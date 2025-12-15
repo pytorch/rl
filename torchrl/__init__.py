@@ -21,7 +21,7 @@ if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
 
-from ._extension import _init_extension
+from ._extension import _init_extension  # noqa: E402
 
 
 try:
@@ -39,19 +39,8 @@ except ImportError:
 
 _init_extension()
 
-try:
-    mp.set_start_method("spawn")
-except RuntimeError as err:
-    if str(err).startswith("context has already been set"):
-        mp_start_method = mp.get_start_method()
-        if mp_start_method != "spawn":
-            warn(
-                f"failed to set start method to spawn, "
-                f"and current start method for mp is {mp_start_method}."
-            )
-
-
-from torchrl._utils import (
+from torchrl._utils import (  # noqa: E402
+    _get_default_mp_start_method,
     auto_unwrap_transformed_env,
     compile_with_warmup,
     get_ray_default_runtime_env,
@@ -63,6 +52,21 @@ from torchrl._utils import (
 )
 
 logger = logger
+
+# TorchRL's multiprocessing default:
+# We only force "spawn" on newer PyTorch versions (see `_get_default_mp_start_method`).
+_preferred_start_method = _get_default_mp_start_method()
+if _preferred_start_method == "spawn":
+    try:
+        mp.set_start_method("spawn")
+    except RuntimeError as err:
+        if str(err).startswith("context has already been set"):
+            mp_start_method = mp.get_start_method()
+            if mp_start_method != "spawn":
+                warn(
+                    f"failed to set start method to spawn, "
+                    f"and current start method for mp is {mp_start_method}."
+                )
 
 # Filter warnings in subprocesses: True by default given the multiple optional
 # deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.

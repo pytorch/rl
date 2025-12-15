@@ -17,19 +17,20 @@ from torchrl._utils import (
     accept_remote_rref_udf_invocation,
     RL_WARNINGS,
 )
+from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
-from torchrl.collectors._multi_base import _MultiDataCollector
+from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
 from torchrl.collectors.utils import split_trajectories
 
 
 @accept_remote_rref_udf_invocation
-class MultiSyncDataCollector(_MultiDataCollector):
+class MultiSyncCollector(MultiCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
 
     .. aafig::
 
             +----------------------------------------------------------------------+
-            |            "MultiSyncDataCollector"                 |                |
+            |            "MultiSyncCollector"                 |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |   "Collector 1" |  "Collector 2"  |  "Collector 3"  |     Main       |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -71,10 +72,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
     .. note::
         Python requires multiprocessed code to be instantiated within a main guard:
 
-            >>> from torchrl.collectors import MultiSyncDataCollector
+            >>> from torchrl.collectors import MultiSyncCollector
             >>> if __name__ == "__main__":
             ...     # Create your collector here
-            ...     collector = MultiSyncDataCollector(...)
+            ...     collector = MultiSyncCollector(...)
 
         See https://docs.python.org/3/library/multiprocessing.html for more info.
 
@@ -82,11 +83,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
-        >>> from torchrl.collectors import MultiSyncDataCollector
+        >>> from torchrl.collectors import MultiSyncCollector
         >>> if __name__ == "__main__":
         ...     env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         ...     policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        ...     collector = MultiSyncDataCollector(
+        ...     collector = MultiSyncCollector(
         ...         create_env_fn=[env_maker, env_maker],
         ...         policy=policy,
         ...         total_frames=2000,
@@ -133,7 +134,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     """
 
-    __doc__ += _MultiDataCollector.__doc__
+    __doc__ += MultiCollector.__doc__
 
     # for RPC
     def next(self):
@@ -436,3 +437,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
     # for RPC
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
+
+
+_LegacyMultiSyncMeta = _make_legacy_metaclass(_MultiCollectorMeta)
+
+
+class MultiSyncDataCollector(MultiSyncCollector, metaclass=_LegacyMultiSyncMeta):
+    """Deprecated version of :class:`~torchrl.collectors.MultiSyncCollector`."""
+
+    ...

@@ -42,10 +42,6 @@ Quick Example
 Documentation Sections
 ----------------------
 
-.. toctree::
-   :maxdepth: 2
-
-<<<<<<< HEAD
 Policy Version Tracking
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -471,11 +467,3 @@ SFT
     :template: rl_template.rst
 
     TopKRewardSelector
-==================
-   llms_data
-   llms_modules
-   llms_envs
-   llms_transforms
-   llms_collectors
-   llms_objectives
->>>>>>> 571142f4e ([Doc] Huge doc refactoring)

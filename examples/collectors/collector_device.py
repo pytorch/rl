@@ -4,17 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Using the SyncDataCollector with Different Device Combinations
+Using the Collector with Different Device Combinations
 ==============================================================
 
-TorchRL's SyncDataCollector allows you to specify the devices on which different components of the data collection
+TorchRL's Collector allows you to specify the devices on which different components of the data collection
 process are executed. This example demonstrates how to use the collector with various device combinations.
 
 
 Understanding Device Precedence
 -------------------------------
 
-When creating a SyncDataCollector, you can specify the devices for the environment (env_device), policy (policy_device),
+When creating a Collector, you can specify the devices for the environment (env_device), policy (policy_device),
 and data collection (device). The device argument serves as a default value for any unspecified devices. However, if you
 provide env_device or policy_device, they take precedence over the device argument for their respective components.
 
@@ -37,7 +37,7 @@ the policy used by the collector has the same parameters as the policy in the ma
 Example Use Cases
 -----------------
 
-This script demonstrates the SyncDataCollector with the following device combinations:
+This script demonstrates the Collector with the following device combinations:
 
 - Collector on CUDA
 - Collector on CPU
@@ -46,7 +46,7 @@ This script demonstrates the SyncDataCollector with the following device combina
 - Mixed collector: all on CUDA, except env on CPU.
 
 For each configuration, we run a DQN algorithm and check that it converges.
-By following this example, you can learn how to use the SyncDataCollector with different device combinations and ensure
+By following this example, you can learn how to use the Collector with different device combinations and ensure
 that your policy's parameters are kept in sync.
 
 """
@@ -60,7 +60,7 @@ import torch.optim as optim
 
 from tensordict.nn import TensorDictSequential as TDSeq
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs import Compose, GymEnv, RewardSum, StepCounter, TransformedEnv
 from torchrl.modules import EGreedyModule, QValueActor
@@ -141,7 +141,7 @@ if __name__ == "__main__":
         policy_explore = EGreedyModule(env.action_spec)
         agent_explore = TDSeq(agent, policy_explore)
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             agent_explore,
             frames_per_batch=FRAMES_PER_BATCH,

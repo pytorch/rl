@@ -23,7 +23,7 @@ from torchrl._utils import (
     prod,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import DataCollectorBase
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
@@ -47,7 +47,7 @@ from torchrl.weight_update.utils import _resolve_model
 
 
 @accept_remote_rref_udf_invocation
-class SyncDataCollector(DataCollectorBase):
+class Collector(BaseCollector):
     """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
@@ -208,17 +208,17 @@ class SyncDataCollector(DataCollectorBase):
             Defaults to ``False``.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
-            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
+            This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
-        weight_sync_schemes (dict[str, WeightSyncScheme], optional): **Not supported for SyncDataCollector**.
-            SyncDataCollector is a leaf collector and cannot send weights to sub-collectors.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): **Not supported for Collector**.
+            Collector is a leaf collector and cannot send weights to sub-collectors.
             Providing this parameter will raise a ValueError.
             Use ``weight_recv_schemes`` if you need to receive weights from a parent collector.
         weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
             RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
             This enables cascading weight updates in hierarchies like:
-            RPCDataCollector -> MultiSyncDataCollector -> SyncDataCollector.
+            RPCDataCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
@@ -232,7 +232,7 @@ class SyncDataCollector(DataCollectorBase):
         >>> from torch import nn
         >>> env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
         >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-        >>> collector = SyncDataCollector(
+        >>> collector = Collector(
         ...     create_env_fn=env_maker,
         ...     policy=policy,
         ...     total_frames=2000,
@@ -458,7 +458,7 @@ class SyncDataCollector(DataCollectorBase):
             if create_env_kwargs:
                 if not isinstance(env, BatchedEnvBase):
                     raise RuntimeError(
-                        "kwargs were passed to SyncDataCollector but they can't be set "
+                        "kwargs were passed to Collector but they can't be set "
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
@@ -1191,7 +1191,7 @@ class SyncDataCollector(DataCollectorBase):
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = ParallelEnv(6, env_fn)
             >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
-            >>> collector = SyncDataCollector(env_fn_parallel, policy, total_frames=300, frames_per_batch=100)
+            >>> collector = Collector(env_fn_parallel, policy, total_frames=300, frames_per_batch=100)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
@@ -1309,7 +1309,7 @@ class SyncDataCollector(DataCollectorBase):
             >>>
             >>> import tqdm
             >>>
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
             >>> from torchrl.envs import GymEnv, set_gym_backend
             >>> import ale_py
@@ -1326,7 +1326,7 @@ class SyncDataCollector(DataCollectorBase):
             ...     rb = ReplayBuffer(storage=LazyTensorStorage(1000), shared=True)
             ...
             ...     # Create a synchronous data collector
-            ...     collector = SyncDataCollector(
+            ...     collector = Collector(
             ...         env,
             ...         policy=policy,
             ...         replay_buffer=rb,
@@ -1848,3 +1848,9 @@ class SyncDataCollector(DataCollectorBase):
 
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
+
+
+class SyncDataCollector(Collector, metaclass=_LegacyCollectorMeta):
+    """Deprecated version of :class:`~torchrl.collectors.Collector`."""
+
+    ...
