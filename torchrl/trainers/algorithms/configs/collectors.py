@@ -16,13 +16,13 @@ from torchrl.trainers.algorithms.configs.envs import EnvConfig
 
 
 @dataclass
-class DataCollectorConfig(ConfigBase):
+class BaseCollectorConfig(ConfigBase):
     """Parent class to configure a data collector."""
 
 
 @dataclass
-class SyncDataCollectorConfig(DataCollectorConfig):
-    """A class to configure a synchronous data collector."""
+class CollectorConfig(BaseCollectorConfig):
+    """A class to configure a synchronous data collector (Collector)."""
 
     create_env_fn: ConfigBase = MISSING
     policy: Any = None
@@ -54,7 +54,7 @@ class SyncDataCollectorConfig(DataCollectorConfig):
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
     local_init_rb: bool = False
-    _target_: str = "torchrl.collectors.SyncDataCollector"
+    _target_: str = "torchrl.collectors.Collector"
     _partial_: bool = False
 
     def __post_init__(self):
@@ -65,9 +65,13 @@ class SyncDataCollectorConfig(DataCollectorConfig):
             self.weight_updater._partial_ = True
 
 
+# Legacy alias
+SyncDataCollectorConfig = CollectorConfig
+
+
 @dataclass
-class AsyncDataCollectorConfig(DataCollectorConfig):
-    """Configuration for asynchronous data collector."""
+class AsyncCollectorConfig(BaseCollectorConfig):
+    """Configuration for asynchronous data collector (AsyncCollector)."""
 
     create_env_fn: ConfigBase = field(
         default_factory=partial(EnvConfig, _partial_=True)
@@ -99,7 +103,7 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
     local_init_rb: bool = False
-    _target_: str = "torchrl.collectors.aSyncDataCollector"
+    _target_: str = "torchrl.collectors.AsyncCollector"
     _partial_: bool = False
 
     def __post_init__(self):
@@ -110,9 +114,13 @@ class AsyncDataCollectorConfig(DataCollectorConfig):
             self.weight_updater._partial_ = True
 
 
+# Legacy alias
+AsyncDataCollectorConfig = AsyncCollectorConfig
+
+
 @dataclass
-class MultiSyncDataCollectorConfig(DataCollectorConfig):
-    """Configuration for multi-synchronous data collector."""
+class MultiSyncCollectorConfig(BaseCollectorConfig):
+    """Configuration for multi-synchronous data collector (MultiSyncCollector)."""
 
     create_env_fn: Any = MISSING
     num_workers: int | None = None
@@ -143,7 +151,7 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
     local_init_rb: bool = False
-    _target_: str = "torchrl.collectors.MultiSyncDataCollector"
+    _target_: str = "torchrl.collectors.MultiSyncCollector"
     _partial_: bool = False
 
     def __post_init__(self):
@@ -155,9 +163,13 @@ class MultiSyncDataCollectorConfig(DataCollectorConfig):
             self.weight_updater._partial_ = True
 
 
+# Legacy alias
+MultiSyncCollectorConfig = MultiSyncCollectorConfig
+
+
 @dataclass
-class MultiaSyncDataCollectorConfig(DataCollectorConfig):
-    """Configuration for multi-asynchronous data collector."""
+class MultiAsyncCollectorConfig(BaseCollectorConfig):
+    """Configuration for multi-asynchronous data collector (MultiAsyncCollector)."""
 
     create_env_fn: Any = MISSING
     num_workers: int | None = None
@@ -188,7 +200,7 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
     local_init_rb: bool = False
-    _target_: str = "torchrl.collectors.MultiaSyncDataCollector"
+    _target_: str = "torchrl.collectors.MultiAsyncCollector"
     _partial_: bool = False
 
     def __post_init__(self):
@@ -198,3 +210,7 @@ class MultiaSyncDataCollectorConfig(DataCollectorConfig):
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:
             self.weight_updater._partial_ = True
+
+
+# Legacy alias
+MultiAsyncCollectorConfig = MultiAsyncCollectorConfig

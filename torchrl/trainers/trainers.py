@@ -32,7 +32,7 @@ from torchrl._utils import (
     timeit,
     VERBOSE,
 )
-from torchrl.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
@@ -175,7 +175,7 @@ class Trainer:
     def __init__(
         self,
         *,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
@@ -407,11 +407,11 @@ class Trainer:
         np.random.seed(seed)
 
     @property
-    def collector(self) -> DataCollectorBase:
+    def collector(self) -> BaseCollector:
         return self._collector
 
     @collector.setter
-    def collector(self, collector: DataCollectorBase) -> None:
+    def collector(self, collector: BaseCollector) -> None:
         self._collector = collector
 
     def register_op(
@@ -1792,7 +1792,7 @@ class UpdateWeights(TrainerHookBase):
     intervals. If the devices match, this will result in a no-op.
 
     Args:
-        collector (DataCollectorBase): A data collector where the policy weights
+        collector (BaseCollector): A data collector where the policy weights
             must be synced.
         update_weights_interval (int): Interval (in terms of number of batches
             collected) where the sync must take place.
@@ -1829,7 +1829,7 @@ class UpdateWeights(TrainerHookBase):
 
     def __init__(
         self,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         update_weights_interval: int,
         policy_weights_getter: Callable[[Any], Any] | None = None,
         weight_update_map: dict[str, str] | None = None,

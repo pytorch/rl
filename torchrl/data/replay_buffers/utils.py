@@ -141,7 +141,7 @@ class TED2Flat:
         >>>
         >>> from tensordict import TensorDict
         >>>
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.data import ReplayBuffer, TED2Flat, LazyMemmapStorage
         >>> from torchrl.envs import GymEnv
         >>> import torch
@@ -149,7 +149,7 @@ class TED2Flat:
         >>> env = GymEnv("CartPole-v1")
         >>> env.set_seed(0)
         >>> torch.manual_seed(0)
-        >>> collector = SyncDataCollector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
+        >>> collector = Collector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
         >>> rb = ReplayBuffer(storage=LazyMemmapStorage(200))
         >>> rb.register_save_hook(TED2Flat())
         >>> with tempfile.TemporaryDirectory() as tmpdir:
@@ -370,7 +370,7 @@ class Flat2TED:
         >>>
         >>> from tensordict import TensorDict
         >>>
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.data import ReplayBuffer, TED2Flat, LazyMemmapStorage, Flat2TED
         >>> from torchrl.envs import GymEnv
         >>> import torch
@@ -378,7 +378,7 @@ class Flat2TED:
         >>> env = GymEnv("CartPole-v1")
         >>> env.set_seed(0)
         >>> torch.manual_seed(0)
-        >>> collector = SyncDataCollector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
+        >>> collector = Collector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
         >>> rb = ReplayBuffer(storage=LazyMemmapStorage(200))
         >>> rb.register_save_hook(TED2Flat())
         >>> with tempfile.TemporaryDirectory() as tmpdir:

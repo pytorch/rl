@@ -18,7 +18,7 @@ from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
 from torchrl.objectives.llm.grpo import (
-    CISPO,
+    CISPOLoss,
     CISPOLossOutput,
     GRPOLoss,
     GRPOLossOutput,
@@ -381,7 +381,7 @@ class TestLosses:
 
         # Create loss module
 
-        loss_fn = CISPO(actor_network, clip_epsilon=eps)
+        loss_fn = CISPOLoss(actor_network, clip_epsilon=eps)
 
         # Create fake data
         data = _mock_data_grpo(vocab_size=vocab_size, device=device)

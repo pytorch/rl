@@ -334,7 +334,7 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         """Returns [0] since we only have one worker."""
         return [0]
 
-    def register_collector(self, collector: DataCollectorBase):  # noqa: F821
+    def register_collector(self, collector: BaseCollector):  # noqa: F821
         result = super().register_collector(collector)
         self.register_post_hook(collector.increment_version)
         return result

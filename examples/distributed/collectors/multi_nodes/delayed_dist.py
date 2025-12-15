@@ -34,7 +34,7 @@ from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,
 )
-from torchrl.collectors.distributed.generic import DistributedDataCollector
+from torchrl.collectors.distributed.generic import DistributedCollector
 from torchrl.envs import EnvCreator
 
 parser = ArgumentParser()
@@ -113,12 +113,12 @@ frames_per_batch = args.frames_per_batch
 )
 def main():
     import gym
-    from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
+    from torchrl.collectors import Collector, MultiSyncCollector
     from torchrl.data import Bounded
     from torchrl.envs.libs.gym import GymEnv, set_gym_backend
     from torchrl.modules import RandomPolicy
 
-    collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
+    collector_class = Collector if num_workers == 1 else MultiSyncCollector
     device_str = "device" if num_workers == 1 else "devices"
 
     def make_env():
@@ -126,7 +126,7 @@ def main():
         with set_gym_backend(gym):
             return GymEnv("ALE/Pong-v5")
 
-    collector = DistributedDataCollector(
+    collector = DistributedCollector(
         [EnvCreator(make_env)] * num_jobs,
         policy=RandomPolicy(Bounded(-1, 1, shape=(1,))),
         launcher="submitit_delayed",

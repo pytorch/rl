@@ -900,6 +900,58 @@ class TestModuleConfigs:
         instantiate(cfg)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tensordict_sequential_config(self):
+        """Test TensorDictSequentialConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TensorDictModuleConfig,
+            TensorDictSequentialConfig,
+        )
+
+        cfg = TensorDictSequentialConfig(
+            modules=[
+                TensorDictModuleConfig(
+                    module=MLPConfig(
+                        in_features=10, out_features=10, depth=2, num_cells=32
+                    ),
+                    in_keys=["observation"],
+                    out_keys=["hidden"],
+                ),
+                TensorDictModuleConfig(
+                    module=MLPConfig(
+                        in_features=10, out_features=5, depth=2, num_cells=32
+                    ),
+                    in_keys=["hidden"],
+                    out_keys=["action"],
+                ),
+            ],
+            partial_tolerant=False,
+            selected_out_keys=None,
+            inplace=None,
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential"
+        )
+        assert cfg.modules is not None
+        assert len(cfg.modules) == 2
+        assert cfg.partial_tolerant is False
+        assert cfg.selected_out_keys is None
+        assert cfg.inplace is None
+
+        seq = instantiate(cfg)
+        from tensordict.nn import TensorDictSequential
+
+        assert isinstance(seq, TensorDictSequential)
+        assert len(seq.module) == 2
+        from tensordict.nn import TensorDictModule
+
+        assert all(isinstance(m, TensorDictModule) for m in seq.module)
+        assert seq.in_keys == ["observation"]
+        assert "action" in seq.out_keys
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_value_model_config(self):
         """Test ValueModelConfig."""
         from hydra.utils import instantiate
@@ -940,14 +992,14 @@ class TestCollectorsConfig:
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
         from torchrl.collectors import (
-            aSyncDataCollector,
-            MultiaSyncDataCollector,
-            MultiSyncDataCollector,
+            AsyncCollector,
+            MultiAsyncCollector,
+            MultiSyncCollector,
         )
         from torchrl.trainers.algorithms.configs.collectors import (
             AsyncDataCollectorConfig,
-            MultiaSyncDataCollectorConfig,
-            MultiSyncDataCollectorConfig,
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
         )
         from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
         from torchrl.trainers.algorithms.configs.modules import (
@@ -972,10 +1024,10 @@ class TestCollectorsConfig:
             cfg_cls = AsyncDataCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
-            cfg_cls = MultiSyncDataCollectorConfig
+            cfg_cls = MultiSyncCollectorConfig
             kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
         elif collector == "multi_async":
-            cfg_cls = MultiaSyncDataCollectorConfig
+            cfg_cls = MultiAsyncCollectorConfig
             kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
         else:
             raise ValueError(f"Unknown collector type: {collector}")
@@ -1004,11 +1056,11 @@ class TestCollectorsConfig:
         collector_instance = instantiate(cfg)
         try:
             if collector == "async":
-                assert isinstance(collector_instance, aSyncDataCollector)
+                assert isinstance(collector_instance, AsyncCollector)
             elif collector == "multi_sync":
-                assert isinstance(collector_instance, MultiSyncDataCollector)
+                assert isinstance(collector_instance, MultiSyncCollector)
             elif collector == "multi_async":
-                assert isinstance(collector_instance, MultiaSyncDataCollector)
+                assert isinstance(collector_instance, MultiAsyncCollector)
             for _c in collector_instance:
                 # Just check that we can iterate
                 break
@@ -1123,9 +1175,7 @@ class TestTrainerConfigs:
     @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
     def test_ppo_trainer_config_optional_fields(self):
         """Test that optional fields can be omitted from PPO trainer config."""
-        from torchrl.trainers.algorithms.configs.collectors import (
-            SyncDataCollectorConfig,
-        )
+        from torchrl.trainers.algorithms.configs.collectors import CollectorConfig
         from torchrl.trainers.algorithms.configs.data import (
             TensorDictReplayBufferConfig,
         )
@@ -1164,7 +1214,7 @@ class TestTrainerConfigs:
 
         optimizer_config = AdamConfig(lr=0.001)
 
-        collector_config = SyncDataCollectorConfig(
+        collector_config = CollectorConfig(
             create_env_fn=env_config,
             policy=actor_model,
             total_frames=1000,
@@ -1525,7 +1575,7 @@ collector:
 
         test_code = """
     collector = hydra.utils.instantiate(cfg.collector)
-    assert isinstance(collector, torchrl.collectors.SyncDataCollector)
+    assert isinstance(collector, torchrl.collectors.Collector)
     # Just verify we can create the collector without running it
 """
 
@@ -1630,7 +1680,7 @@ trainer:
     assert isinstance(loss, torchrl.objectives.PPOLoss)
 
     collector = hydra.utils.instantiate(cfg.data_collector)
-    assert isinstance(collector, torchrl.collectors.SyncDataCollector)
+    assert isinstance(collector, torchrl.collectors.Collector)
 
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
@@ -1787,6 +1837,23 @@ class TestWeightUpdaterConfigs:
         assert cfg.master_port == 12345
         assert cfg.model_metadata is None
         assert cfg.vllm_tp_size == 2
+
+
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
+class TestTransformConfigs:
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_init_tracker_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.transforms import InitTrackerConfig
+
+        cfg = InitTrackerConfig(init_key="is_test_init")
+        assert cfg.init_key == "is_test_init"
+        instantiate(cfg)
 
 
 if __name__ == "__main__":

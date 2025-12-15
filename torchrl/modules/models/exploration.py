@@ -561,12 +561,12 @@ class ConsistentDropout(_DropoutNd):
 
     .. seealso::
 
-      - :class:`~torchrl.collectors.SyncDataCollector`:
-        :meth:`~torchrl.collectors.SyncDataCollector.rollout()` and :meth:`~torchrl.collectors.SyncDataCollector.iterator()`
-      - :class:`~torchrl.collectors.MultiSyncDataCollector`:
-        Uses :meth:`~torchrl.collectors._main_async_collector` (:class:`~torchrl.collectors.SyncDataCollector`)
+      - :class:`~torchrl.collectors.Collector`:
+        :meth:`~torchrl.collectors.Collector.rollout()` and :meth:`~torchrl.collectors.Collector.iterator()`
+      - :class:`~torchrl.collectors.MultiSyncCollector`:
+        Uses :meth:`~torchrl.collectors._main_async_collector` (:class:`~torchrl.collectors.Collector`)
         under the hood
-      - :class:`~torchrl.collectors.MultiaSyncDataCollector`, :class:`~torchrl.collectors.aSyncDataCollector`: Ditto.
+      - :class:`~torchrl.collectors.MultiAsyncCollector`, :class:`~torchrl.collectors.AsyncCollector`: Ditto.
 
     """
 
