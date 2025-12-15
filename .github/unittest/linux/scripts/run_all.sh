@@ -112,6 +112,7 @@ uv_pip_install \
   hydra-core \
   tensorboard \
   "imageio==2.26.0" \
+  "huggingface-hub>=0.34.0,<1.0" \
   wandb \
   mlflow \
   av \
