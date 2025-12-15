@@ -1721,7 +1721,7 @@ if __name__ == "__main__":
         returns as the observation at every step.
         """
 
-        def __init__(self, env_id: int, max_steps: int = 10, **kwargs):
+        def __init__(self, env_id: int, max_steps: int = 10, sleep_odd_only: bool = False, **kwargs):
             """
             Args:
                 env_id: The ID to return as observation. This will be returned as a tensor.
@@ -1730,6 +1730,7 @@ if __name__ == "__main__":
             super().__init__(device="cpu", batch_size=torch.Size([]))
             self.env_id = env_id
             self.max_steps = max_steps
+            self.sleep_odd_only = sleep_odd_only
             self._step_count = 0
 
             # Define specs
@@ -1750,9 +1751,13 @@ if __name__ == "__main__":
 
         def _reset(self, tensordict: TensorDict | None = None, **kwargs) -> TensorDict:
             """Reset the environment and return initial observation."""
-            # Add random sleep to simulate real-world timing variations
+            # Add sleep to simulate real-world timing variations
             # This helps test that the collector properly handles different reset times
-            time.sleep(torch.rand(1).item() * 0.01)  # Random sleep up to 10ms
+            if not self.sleep_odd_only:
+                # Random sleep up to 10ms
+                time.sleep(torch.rand(1).item() * 0.01)
+            elif self.env_id % 2 == 0:
+                time.sleep(0.01 + torch.rand(1).item() * 0.001)
 
             self._step_count = 0
             return TensorDict(
@@ -1792,19 +1797,23 @@ if __name__ == "__main__":
             return seed
 
     @pytest.mark.parametrize("num_envs", [8])
-    def test_multi_sync_data_collector_ordering(self, num_envs: int):
+    @pytest.mark.parametrize("with_preempt", [False, True])
+    def test_multi_sync_data_collector_ordering(self, num_envs: int, with_preempt: bool):
         """
         Test that MultiSyncDataCollector returns data in the correct order.
 
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
         """
+        if with_preempt and IS_OSX:
+            pytest.skip("Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform.")
+
         frames_per_batch = num_envs * 5  # Collect 5 steps per environment
 
         # Create environment factories using partial - one for each env_id
         # This pattern mirrors CrossPlayEvaluator._rollout usage
         env_factories = [
-            functools.partial(self.FixedIDEnv, env_id=i, max_steps=10)
+            functools.partial(self.FixedIDEnv, env_id=i, max_steps=10, sleep_odd_only=with_preempt)
             for i in range(num_envs)
         ]
 
@@ -1818,14 +1827,16 @@ if __name__ == "__main__":
             frames_per_batch=frames_per_batch,
             total_frames=frames_per_batch,
             device="cpu",
+            preemptive_threshold=0.5 if with_preempt else None
         )
 
         # Collect one batch
         for batch in collector:
             # Verify that each environment's observations match its env_id
             # batch has shape [num_envs, frames_per_env]
-            for env_idx in range(num_envs):
-                env_data = batch[env_idx]
+            # In the pre-emption case, we have slow odd envs. These should be skipped by pre-emption
+            for i, env_idx in enumerate(range(0, num_envs, 2 if with_preempt else 1)):
+                env_data = batch[i]
                 observations = env_data["observation"]
 
                 # All observations from this environment should equal its env_id
