@@ -863,6 +863,19 @@ class RPCDataCollector(DataCollectorBase):
             return
         if self._shutdown:
             return
+
+        # Clean up weight sync schemes first (stops background threads)
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
         torchrl_logger.debug("shutting down")
         for future, i in self.futures:
             # clear the futures

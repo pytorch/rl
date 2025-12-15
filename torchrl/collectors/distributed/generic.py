@@ -1111,6 +1111,23 @@ class DistributedDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def shutdown(self, timeout: float | None = None) -> None:
+        # Prevent double shutdown
+        if getattr(self, "_shutdown", False):
+            return
+        self._shutdown = True
+
+        # Clean up weight sync schemes first (stops background threads)
+        if self._weight_sync_schemes is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
         self._store.set("TRAINER_status", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
@@ -1132,6 +1149,12 @@ class DistributedDataCollector(DataCollectorBase):
                 self.jobs[i].result()
             elif self.launcher == "submitit_delayed":
                 pass
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torchrl_logger.debug("destroying process group")
+            torch.distributed.destroy_process_group()
+
         torchrl_logger.debug("collector shut down")
 
 
