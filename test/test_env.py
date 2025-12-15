@@ -3833,9 +3833,14 @@ class TestNonTensorEnv:
 
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("use_buffers", [False, True])
-    def test_parallel(self, bwad, use_buffers, maybe_fork_ParallelEnv):
+    def test_parallel(self, bwad, use_buffers):
         N = 50
-        env = maybe_fork_ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        # Always use spawn for non-tensor envs to avoid resource_sharer deadlocks with fork.
+        # Fork + threads (resource_sharer, tqdm monitor) is fundamentally problematic.
+        # See: https://bugs.python.org/issue30289
+        env = ParallelEnv(
+            2, EnvWithMetadata, use_buffers=use_buffers, mp_start_method="spawn"
+        )
         try:
             r = env.rollout(N, break_when_any_done=bwad)
             assert r.get("non_tensor").tolist() == [list(range(N))] * 2
