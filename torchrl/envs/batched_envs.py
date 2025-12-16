@@ -1815,9 +1815,42 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         timeout = self.BATCHED_PIPE_TIMEOUT
         t0 = time.time()
 
-        # Map pipes to worker indices
-        pipes_pending = {self.parent_channels[i]: i for i in workers_range}
+        # In shared-memory/buffer mode, workers signal completion by setting
+        # their `mp_event` (they may not send anything back on the pipe).
+        if self._use_buffers:
+            pending = set(workers_range)
+            n_iter = 0
+            while pending:
+                n_iter += 1
+                remaining = timeout - (time.time() - t0)
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Failed to run all workers within the {timeout} sec time limit. This "
+                        f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                    )
 
+                # Wait in short slices so we can both harvest multiple events and
+                # periodically check for dead workers without blocking forever.
+                slice_timeout = min(0.1, remaining)
+                progressed = False
+                for wi in tuple(pending):
+                    if self._events[wi].wait(timeout=slice_timeout):
+                        self._events[wi].clear()
+                        pending.remove(wi)
+                        progressed = True
+
+                if not progressed and (n_iter % 50) == 0:
+                    for wi in pending:
+                        if not self._workers[wi].is_alive():
+                            try:
+                                self._shutdown_workers()
+                            finally:
+                                raise RuntimeError(f"Cannot proceed, worker {wi} dead.")
+            return
+
+        # No-buffer mode: workers send back data on the pipe, so we can efficiently
+        # block on readability.
+        pipes_pending = {self.parent_channels[i]: i for i in workers_range}
         i = 0
         while pipes_pending:
             i += 1
@@ -1834,18 +1867,18 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
             if not ready and should_check_for_dead_workers:
                 # Timeout with no pipes ready - check for dead workers
-                for i in pipes_pending.values():
-                    if not self._workers[i].is_alive():
+                for wi in pipes_pending.values():
+                    if not self._workers[wi].is_alive():
                         try:
                             self._shutdown_workers()
                         finally:
-                            raise RuntimeError(f"Cannot proceed, worker {i} dead.")
+                            raise RuntimeError(f"Cannot proceed, worker {wi} dead.")
                 continue
 
-            # Clear events for ready workers
+            # Clear events for ready workers (best-effort)
             for pipe in ready:
-                i = pipes_pending.pop(pipe)
-                self._events[i].clear()
+                wi = pipes_pending.pop(pipe)
+                self._events[wi].clear()
 
     def _step_no_buffers(
         self, tensordict: TensorDictBase
@@ -2515,14 +2548,14 @@ def _run_worker_pipe_shared_mem(
             # Make sure the root is updated
             root_shared_tensordict.update_(env._step_mdp(input))
 
-            # Set event before sending non-tensor data so parent knows worker is done
-            # The recv() call itself will provide synchronization for the pipe
-            mp_event.set()
-
             if _non_tensor_keys:
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
                 )
+
+            # Signal completion only after all side-channel sends are done to avoid races
+            # with the parent waiting on the event and immediately calling recv().
+            mp_event.set()
 
             del next_td
 
@@ -2557,14 +2590,13 @@ def _run_worker_pipe_shared_mem(
                 event.record()
                 event.synchronize()
 
-            # Set event before sending non-tensor data so parent knows worker is done
-            # The recv() call itself will provide synchronization for the pipe
-            mp_event.set()
-
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
                 child_pipe.send(("non_tensor", ntd))
+
+            # Signal completion only after all side-channel sends are done.
+            mp_event.set()
 
             del td, root_next_td
 
