@@ -162,24 +162,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         rand_reset,
         retry,
     )
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        CountingEnvWithString,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        EnvWithScalarAction,
-        IncrementingEnv,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MultiAgentCountingEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-        StateLessCountingEnv,
-    )
 else:
     from _utils_internal import (  # noqa
         BREAKOUT_VERSIONED,
@@ -191,24 +173,24 @@ else:
         rand_reset,
         retry,
     )
-    from mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        CountingEnvWithString,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        EnvWithScalarAction,
-        IncrementingEnv,
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MultiAgentCountingEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-        StateLessCountingEnv,
-    )
+from torchrl.testing.mocking_classes import (
+    ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
+    CountingEnv,
+    CountingEnvCountPolicy,
+    CountingEnvWithString,
+    DiscreteActionConvMockEnv,
+    DiscreteActionConvMockEnvNumpy,
+    EnvWithScalarAction,
+    IncrementingEnv,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
+    MultiAgentCountingEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
+    NestedCountingEnv,
+    StateLessCountingEnv,
+)
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
