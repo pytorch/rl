@@ -1816,11 +1816,16 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 if i not in workers_range_consume:
                     continue
                 worker = self._workers[i]
-                if worker.is_alive():
+                with timeit("_wait_for_workers is_alive"):
+                    alive = worker.is_alive()
+                if alive:
                     event: mp.Event = self._events[i]
-                    if event.is_set():
+                    with timeit("_wait_for_workers is_set"):
+                        is_set = event.is_set()
+                    if is_set:
                         workers_range_consume.discard(i)
-                        event.clear()
+                        with timeit("_wait_for_workers clear"):
+                            event.clear()
                     else:
                         continue
                 else:
@@ -1828,7 +1833,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         self._shutdown_workers()
                     finally:
                         raise RuntimeError(f"Cannot proceed, worker {i} dead.")
-                # event.wait(self.BATCHED_PIPE_TIMEOUT)
         if len(workers_range_consume):
             raise RuntimeError(
                 f"Failed to run all workers within the {self.BATCHED_PIPE_TIMEOUT} sec time limit. This "
@@ -2712,37 +2716,44 @@ def _run_worker_pipe_direct(
                 raise RuntimeError("call 'init' before resetting")
             # we use 'data' to pass the keys that we need to pass to reset,
             # because passing the entire buffer may have unwanted consequences
-            # data, idx, reset_kwargs = data
-            # data = data[idx]
             data, reset_kwargs = data
-            if data is not None:
-                data.unlock_()
-                data._fast_apply(
-                    lambda x: x.clone() if x.device.type == "cuda" else x, out=data
+            
+            with timeit("worker reset data_prep"):
+                if data is not None:
+                    data.unlock_()
+                    data._fast_apply(
+                        lambda x: x.clone() if x.device.type == "cuda" else x, out=data
+                    )
+            
+            with timeit("worker reset env.reset"):
+                cur_td = env.reset(
+                    tensordict=data,
+                    **reset_kwargs,
                 )
-            cur_td = env.reset(
-                tensordict=data,
-                **reset_kwargs,
-            )
-            if event is not None:
-                event.record()
-                event.synchronize()
-            if consolidate:
-                try:
-                    child_pipe.send(
-                        cur_td.consolidate(
+            
+            with timeit("worker reset cuda_sync"):
+                if event is not None:
+                    event.record()
+                    event.synchronize()
+            
+            with timeit("worker reset consolidate"):
+                if consolidate:
+                    try:
+                        cur_td = cur_td.consolidate(
                             # share_memory=False: avoid resource_sharer which causes
                             # progressive slowdown with fork on Linux
                             share_memory=False, inplace=True, num_threads=1
                         )
-                    )
-                except Exception as err:
-                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            else:
+                    except Exception as err:
+                        raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            
+            with timeit("worker reset pipe.send"):
                 child_pipe.send(cur_td)
-            # Set event after successfully sending through pipe to avoid race condition
-            # where event is set but pipe send fails (BrokenPipeError)
-            mp_event.set()
+            
+            with timeit("worker reset event.set"):
+                # Set event after successfully sending through pipe to avoid race condition
+                # where event is set but pipe send fails (BrokenPipeError)
+                mp_event.set()
 
             del cur_td
 
@@ -2750,23 +2761,32 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            next_td = env._step(data)
-            if event is not None:
-                event.record()
-                event.synchronize()
-            if consolidate:
-                try:
-                    next_td = next_td.consolidate(
-                        # share_memory=False: avoid resource_sharer which causes
-                        # progressive slowdown with fork on Linux
-                        share_memory=False, inplace=True, num_threads=1
-                    )
-                except Exception as err:
-                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            child_pipe.send(next_td)
-            # Set event after successfully sending through pipe to avoid race condition
-            # where event is set but pipe send fails (BrokenPipeError)
-            mp_event.set()
+            
+            with timeit("worker step env._step"):
+                next_td = env._step(data)
+            
+            with timeit("worker step cuda_sync"):
+                if event is not None:
+                    event.record()
+                    event.synchronize()
+            
+            with timeit("worker step consolidate"):
+                if consolidate:
+                    try:
+                        next_td = next_td.consolidate(
+                            # TESTING: share_memory=True to observe slowdown
+                            share_memory=True, inplace=True, num_threads=1
+                        )
+                    except Exception as err:
+                        raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            
+            with timeit("worker step pipe.send"):
+                child_pipe.send(next_td)
+            
+            with timeit("worker step event.set"):
+                # Set event after successfully sending through pipe to avoid race condition
+                # where event is set but pipe send fails (BrokenPipeError)
+                mp_event.set()
 
             del next_td
 
