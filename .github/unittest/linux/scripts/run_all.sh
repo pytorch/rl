@@ -255,11 +255,6 @@ pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_contro
 # Track if any tests fail
 EXIT_STATUS=0
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_env.py::TestNonTensorEnv::test_parallel \
-  --instafail --durations 200 -vvv \
-  --capture no \
-  --timeout=120 --mp_fork_if_no_cuda
-
 # Run distributed tests first (GPU only) to surface errors early
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py \
