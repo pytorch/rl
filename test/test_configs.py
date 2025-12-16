@@ -952,6 +952,37 @@ class TestModuleConfigs:
         assert "action" in seq.out_keys
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tanh_module_config(self):
+        """Test TanhModuleConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import TanhModuleConfig
+
+        cfg = TanhModuleConfig(
+            in_keys=["action"],
+            out_keys=["action"],
+            low=-1.0,
+            high=1.0,
+            clamp=False,
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_tanh_module"
+        )
+        assert cfg.in_keys == ["action"]
+        assert cfg.out_keys == ["action"]
+        assert cfg.low == -1.0
+        assert cfg.high == 1.0
+        assert cfg.clamp is False
+
+        # Test instantiation
+        tanh_module = instantiate(cfg)
+        from torchrl.modules import TanhModule
+
+        assert isinstance(tanh_module, TanhModule)
+        assert tanh_module.in_keys == ["action"]
+        assert tanh_module.out_keys == ["action"]
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_value_model_config(self):
         """Test ValueModelConfig."""
         from hydra.utils import instantiate
