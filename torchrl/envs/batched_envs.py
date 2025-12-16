@@ -1524,6 +1524,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             channel.send(("init", None))
         self.is_closed = False
         self.set_spec_lock_()
+        
+        # Create thread pool for efficient parallel waiting on worker events
+        from concurrent.futures import ThreadPoolExecutor
+        self._wait_executor = ThreadPoolExecutor(max_workers=self.num_workers)
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -1806,38 +1810,50 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @timeit("_wait_for_workers")
     def _wait_for_workers(self, workers_range):
-        workers_range_consume = set(workers_range)
+        """Wait for all workers to signal completion via their events.
+        
+        Uses multithreaded event.wait() for efficient parallel blocking.
+        """
+        from concurrent.futures import as_completed
+        
+        timeout = self.BATCHED_PIPE_TIMEOUT
         t0 = time.time()
-        while (
-            len(workers_range_consume)
-            and (time.time() - t0) < self.BATCHED_PIPE_TIMEOUT
-        ):
-            for i in workers_range:
-                if i not in workers_range_consume:
-                    continue
-                worker = self._workers[i]
-                with timeit("_wait_for_workers is_alive"):
-                    alive = worker.is_alive()
-                if alive:
-                    event: mp.Event = self._events[i]
-                    with timeit("_wait_for_workers is_set"):
-                        is_set = event.is_set()
-                    if is_set:
-                        workers_range_consume.discard(i)
-                        with timeit("_wait_for_workers clear"):
-                            event.clear()
-                    else:
-                        continue
-                else:
+        
+        def wait_for_worker(i):
+            """Wait for a single worker's event."""
+            worker = self._workers[i]
+            event: mp.Event = self._events[i]
+            
+            remaining = timeout - (time.time() - t0)
+            if remaining <= 0:
+                return (i, False, "timeout")
+            
+            signaled = event.wait(timeout=remaining)
+            
+            if not signaled:
+                if not worker.is_alive():
+                    return (i, False, "dead")
+                return (i, False, "timeout")
+            
+            event.clear()
+            return (i, True, None)
+        
+        # Wait for all workers in parallel using persistent thread pool
+        futures = {self._wait_executor.submit(wait_for_worker, i): i for i in workers_range}
+        
+        for future in as_completed(futures):
+            i, success, error = future.result()
+            if not success:
+                if error == "dead":
                     try:
                         self._shutdown_workers()
                     finally:
                         raise RuntimeError(f"Cannot proceed, worker {i} dead.")
-        if len(workers_range_consume):
-            raise RuntimeError(
-                f"Failed to run all workers within the {self.BATCHED_PIPE_TIMEOUT} sec time limit. This "
-                f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
-            )
+                else:
+                    raise RuntimeError(
+                        f"Failed to run all workers within the {timeout} sec time limit. This "
+                        f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                    )
 
     @timeit("_step_no_buffers")
     def _step_no_buffers(
@@ -2260,6 +2276,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     @_check_start
     def _shutdown_workers(self) -> None:
         try:
+            # Shutdown the wait executor first
+            if hasattr(self, "_wait_executor") and self._wait_executor is not None:
+                self._wait_executor.shutdown(wait=False)
+                self._wait_executor = None
+            
             if self.is_closed:
                 raise RuntimeError(
                     "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
