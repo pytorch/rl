@@ -1567,7 +1567,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.consolidate:
             try:
                 td = tensordict.consolidate(
-                    share_memory=True, inplace=True, num_threads=1
+                    # share_memory=False: avoid resource_sharer which causes
+                    # progressive slowdown with fork on Linux
+                    share_memory=False, inplace=True, num_threads=1
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1856,7 +1858,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             if self.consolidate:
                 try:
                     data = tensordict.consolidate(
-                        share_memory=True, inplace=False, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False, inplace=False, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2097,11 +2101,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
-            # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
-                        share_memory=True, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2726,7 +2731,9 @@ def _run_worker_pipe_direct(
                 try:
                     child_pipe.send(
                         cur_td.consolidate(
-                            share_memory=True, inplace=True, num_threads=1
+                            # share_memory=False: avoid resource_sharer which causes
+                            # progressive slowdown with fork on Linux
+                            share_memory=False, inplace=True, num_threads=1
                         )
                     )
                 except Exception as err:
@@ -2743,8 +2750,6 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            # data, idx = data
-            # data = data[idx]
             next_td = env._step(data)
             if event is not None:
                 event.record()
@@ -2752,7 +2757,9 @@ def _run_worker_pipe_direct(
             if consolidate:
                 try:
                     next_td = next_td.consolidate(
-                        share_memory=True, inplace=True, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False, inplace=True, num_threads=1
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
