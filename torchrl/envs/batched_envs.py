@@ -19,7 +19,6 @@ from multiprocessing.synchronize import Lock as MpLock
 from typing import Any
 from warnings import warn
 
-from torchrl._utils import timeit
 import torch
 from tensordict import (
     is_tensor_collection,
@@ -37,6 +36,7 @@ from torchrl._utils import (
     _make_ordinal_device,
     _ProcessNoWarn,
     logger as torchrl_logger,
+    timeit,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
@@ -1837,7 +1837,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _step_no_buffers(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
-        torchrl_logger.debug(f"Entering _step_no_buffers. Timeit state: {timeit.print()}")
+        torchrl_logger.debug(
+            f"Entering _step_no_buffers. Timeit state: {timeit.print()}"
+        )
         with timeit("_step_no_buffers prep"):
             partial_steps = tensordict.get("_step")
             tensordict_save = tensordict
@@ -1959,9 +1961,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     )
             else:
                 workers_range = range(self.num_workers)
-                shared_tensordict_parent: Unknown = self.shared_tensordict_parent
+                shared_tensordict_parent = self.shared_tensordict_parent
 
-        with timeit("_step update")
+        with timeit("_step update"):
             shared_tensordict_parent.update_(
                 tensordict,
                 # We also update the output keys because they can be implicitly used, eg
