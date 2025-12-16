@@ -3881,7 +3881,7 @@ class TestNonTensorEnv:
         r = env.rollout(N, break_when_any_done=bwad)
         assert r.get("non_tensor").tolist() == [list(range(N))] * 2
 
-    @pytest.mark.forked  # Run in isolated subprocess to avoid resource_sharer pollution from other tests
+    # @pytest.mark.forked  # Run in isolated subprocess to avoid resource_sharer pollution from other tests
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("use_buffers", [False, True])
     def test_parallel(self, bwad, use_buffers, maybe_fork_ParallelEnv):
