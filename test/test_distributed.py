@@ -50,10 +50,7 @@ from torchrl.modules import RandomPolicy
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
-else:
-    from mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
 
 TIMEOUT = 200
 

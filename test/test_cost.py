@@ -163,7 +163,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_default_devices,
         PENDULUM_VERSIONED,
     )
-    from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
 else:
     from _utils_internal import (  # noqa
         _call_value_nets,
@@ -172,7 +171,7 @@ else:
         get_default_devices,
         PENDULUM_VERSIONED,
     )
-    from mocking_classes import ContinuousActionConvMockEnv
+from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 
 _has_functorch = True
 try:
