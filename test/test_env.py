@@ -9,6 +9,7 @@ import contextlib
 import functools
 import gc
 import importlib
+import threading
 import os.path
 import pickle
 import random
@@ -97,6 +98,53 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings("ignore:unclosed file"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def check_no_lingering_multiprocessing_resources(request):
+    """Fixture that checks for leftover multiprocessing resources after each test.
+
+    This helps detect test pollution where one test leaves behind resource_sharer
+    threads, zombie processes, or other multiprocessing state that can cause
+    deadlocks in subsequent tests (especially with fork start method on Linux).
+
+    See: https://bugs.python.org/issue30289
+    """
+    # Record state before test
+    threads_before = {t.name for t in threading.enumerate()}
+    # Count resource_sharer threads specifically
+    resource_sharer_before = sum(
+        1 for t in threading.enumerate() if "_serve" in t.name or "resource_sharer" in t.name.lower()
+    )
+
+    yield
+
+    # Give a brief moment for cleanup
+    gc.collect()
+    time.sleep(0.05)
+
+    # Check for new resource_sharer threads
+    resource_sharer_after = sum(
+        1 for t in threading.enumerate() if "_serve" in t.name or "resource_sharer" in t.name.lower()
+    )
+
+    # Only warn (not fail) for now - this is informational to help debug
+    if resource_sharer_after > resource_sharer_before:
+        new_threads = {t.name for t in threading.enumerate()} - threads_before
+        resource_sharer_threads = [
+            t.name for t in threading.enumerate()
+            if "_serve" in t.name or "resource_sharer" in t.name.lower()
+        ]
+        import warnings
+        warnings.warn(
+            f"Test {request.node.name} left behind {resource_sharer_after - resource_sharer_before} "
+            f"resource_sharer thread(s): {resource_sharer_threads}. "
+            f"New threads: {new_threads}. "
+            "This can cause deadlocks in subsequent tests with fork start method.",
+            UserWarning,
+            stacklevel=1,
+        )
+
 
 gym_version = None
 if _has_gym:
@@ -3827,16 +3875,12 @@ class TestNonTensorEnv:
         r = env.rollout(N, break_when_any_done=bwad)
         assert r.get("non_tensor").tolist() == [list(range(N))] * 2
 
+    @pytest.mark.forked  # Run in isolated subprocess to avoid resource_sharer pollution from other tests
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("use_buffers", [False, True])
-    def test_parallel(self, bwad, use_buffers):
+    def test_parallel(self, bwad, use_buffers, maybe_fork_ParallelEnv):
         N = 50
-        # Always use spawn for non-tensor envs to avoid resource_sharer deadlocks with fork.
-        # Fork + threads (resource_sharer, tqdm monitor) is fundamentally problematic.
-        # See: https://bugs.python.org/issue30289
-        env = ParallelEnv(
-            2, EnvWithMetadata, use_buffers=use_buffers, mp_start_method="spawn"
-        )
+        env = maybe_fork_ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
         try:
             r = env.rollout(N, break_when_any_done=bwad)
             assert r.get("non_tensor").tolist() == [list(range(N))] * 2
