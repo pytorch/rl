@@ -106,24 +106,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         PENDULUM_VERSIONED,
         retry,
     )
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvPolicy,
-        DiscreteActionVecMockEnv,
-        DiscreteActionVecPolicy,
-        EnvThatErrorsAfter10Iters,
-        EnvWithDynamicSpec,
-        HeterogeneousCountingEnv,
-        HeterogeneousCountingEnvPolicy,
-        MockSerialEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-    )
 else:
     IS_FB = False
     from _utils_internal import (
@@ -137,24 +119,24 @@ else:
         PENDULUM_VERSIONED,
         retry,
     )
-    from mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        CountingEnvCountPolicy,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvPolicy,
-        DiscreteActionVecMockEnv,
-        DiscreteActionVecPolicy,
-        EnvThatErrorsAfter10Iters,
-        EnvWithDynamicSpec,
-        HeterogeneousCountingEnv,
-        HeterogeneousCountingEnvPolicy,
-        MockSerialEnv,
-        MultiKeyCountingEnv,
-        MultiKeyCountingEnvPolicy,
-        NestedCountingEnv,
-    )
+from torchrl.testing.mocking_classes import (
+    ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
+    CountingEnv,
+    CountingEnvCountPolicy,
+    DiscreteActionConvMockEnv,
+    DiscreteActionConvPolicy,
+    DiscreteActionVecMockEnv,
+    DiscreteActionVecPolicy,
+    EnvThatErrorsAfter10Iters,
+    EnvWithDynamicSpec,
+    HeterogeneousCountingEnv,
+    HeterogeneousCountingEnvPolicy,
+    MockSerialEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
+    NestedCountingEnv,
+)
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -2580,12 +2562,15 @@ class TestNestedEnvsCollector:
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
         if os.getenv("PYTORCH_TEST_FBCODE"):
-            from pytorch.rl.test.mocking_classes import (
+            from torchrl.testing.mocking_classes import (
                 CountingEnvCountPolicy,
                 NestedCountingEnv,
             )
         else:
-            from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
+            from torchrl.testing.mocking_classes import (
+                CountingEnvCountPolicy,
+                NestedCountingEnv,
+            )
 
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)

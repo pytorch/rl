@@ -38,22 +38,15 @@ from torchrl.trainers.helpers.models import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import generate_seeds, get_default_devices
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        MockSerialEnv,
-    )
 else:
     from _utils_internal import generate_seeds, get_default_devices
-    from mocking_classes import (
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        MockSerialEnv,
-    )
+from torchrl.testing.mocking_classes import (
+    ContinuousActionConvMockEnvNumpy,
+    ContinuousActionVecMockEnv,
+    DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
+    MockSerialEnv,
+)
 
 try:
     from hydra import compose, initialize
