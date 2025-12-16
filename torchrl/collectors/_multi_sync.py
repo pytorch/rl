@@ -299,9 +299,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     # mask buffers if cat, and create a mask if stack
                     if cat_results != "stack":
                         buffers = [None] * self.num_workers
-                        for worker_idx, buffer in enumerate(
-                            filter(lambda x: x is not None, self.buffers)
-                        ):
+                        for worker_idx, buffer in enumerate(self.buffers):
+                            # Skip pre-empted envs:
+                            if buffer is None:
+                                continue
                             valid = buffer.get(("collector", "traj_ids")) != -1
                             if valid.ndim > 2:
                                 valid = valid.flatten(0, -2)

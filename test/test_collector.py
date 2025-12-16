@@ -1721,7 +1721,13 @@ if __name__ == "__main__":
         returns as the observation at every step.
         """
 
-        def __init__(self, env_id: int, max_steps: int = 10, sleep_odd_only: bool = False, **kwargs):
+        def __init__(
+            self,
+            env_id: int,
+            max_steps: int = 10,
+            sleep_odd_only: bool = False,
+            **kwargs,
+        ):
             """
             Args:
                 env_id: The ID to return as observation. This will be returned as a tensor.
@@ -1756,8 +1762,8 @@ if __name__ == "__main__":
             if not self.sleep_odd_only:
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
-            elif self.env_id % 2 == 0:
-                time.sleep(0.01 + torch.rand(1).item() * 0.001)
+            elif self.env_id % 2 == 1:
+                time.sleep(1)
 
             self._step_count = 0
             return TensorDict(
@@ -1776,6 +1782,9 @@ if __name__ == "__main__":
             """Execute one step and return the env_id as observation."""
             self._step_count += 1
             done = self._step_count >= self.max_steps
+
+            if self.sleep_odd_only and self.env_id % 2 == 1:
+                time.sleep(1)
 
             return TensorDict(
                 {
@@ -1796,9 +1805,12 @@ if __name__ == "__main__":
                 torch.manual_seed(seed)
             return seed
 
-    @pytest.mark.parametrize("num_envs", [8])
+    @pytest.mark.parametrize("num_envs,n_steps", [(8, 5)])
     @pytest.mark.parametrize("with_preempt", [False, True])
-    def test_multi_sync_data_collector_ordering(self, num_envs: int, with_preempt: bool):
+    @pytest.mark.parametrize("cat_results", ["stack", -1])
+    def test_multi_sync_data_collector_ordering(
+        self, num_envs: int, n_steps: int, with_preempt: bool, cat_results: str | int
+    ):
         """
         Test that MultiSyncDataCollector returns data in the correct order.
 
@@ -1806,39 +1818,66 @@ if __name__ == "__main__":
         After collection, we verify that the observations correspond to the correct env_ids in order
         """
         if with_preempt and IS_OSX:
-            pytest.skip("Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform.")
-
-        frames_per_batch = num_envs * 5  # Collect 5 steps per environment
+            pytest.skip(
+                "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
+            )
 
         # Create environment factories using partial - one for each env_id
         # This pattern mirrors CrossPlayEvaluator._rollout usage
         env_factories = [
-            functools.partial(self.FixedIDEnv, env_id=i, max_steps=10, sleep_odd_only=with_preempt)
+            functools.partial(
+                self.FixedIDEnv, env_id=i, max_steps=10, sleep_odd_only=with_preempt
+            )
             for i in range(num_envs)
         ]
-
-        # Create policy factories using partial
-        policy = ParametricPolicy()
 
         # Initialize MultiSyncDataCollector
         collector = MultiSyncDataCollector(
             create_env_fn=env_factories,
-            policy=policy,
-            frames_per_batch=frames_per_batch,
-            total_frames=frames_per_batch,
+            frames_per_batch=num_envs * n_steps,
+            total_frames=num_envs * n_steps,
             device="cpu",
-            preemptive_threshold=0.5 if with_preempt else None
+            preemptive_threshold=0.5 if with_preempt else None,
+            cat_results=cat_results,
+            init_random_frames=n_steps,  # no need of a policy
+            use_buffers=True,
         )
 
         # Collect one batch
         for batch in collector:
             # Verify that each environment's observations match its env_id
             # batch has shape [num_envs, frames_per_env]
-            # In the pre-emption case, we have slow odd envs. These should be skipped by pre-emption
-            for i, env_idx in enumerate(range(0, num_envs, 2 if with_preempt else 1)):
-                env_data = batch[i]
-                observations = env_data["observation"]
+            # In the pre-emption case, we have that envs with odd ids are order of magnitude slower.
+            # These should be skipped by pre-emption (since they are the 50% slowest)
 
+            # Recover rectangular shape of batch to uniform checks
+            if cat_results != "stack":
+                if not with_preempt:
+                    batch = batch.reshape(num_envs, n_steps)
+                else:
+                    traj_ids = batch["collector", "traj_ids"]
+                    traj_ids[traj_ids == 0] = 99  # avoid using traj_ids = 0
+                    # Split trajectories to recover correct shape
+                    # thanks to having a single trajectory per env
+                    # Pads with zeros!
+                    batch = split_trajectories(
+                        batch, trajectory_key=("collector", "traj_ids")
+                    )
+                    # Use -1 for padding to uniform with other preemption
+                    is_padded = batch["collector", "traj_ids"] == 0
+                    batch[is_padded] = -1
+
+            #
+            for env_idx in range(num_envs):
+                if with_preempt and env_idx % 2 == 1:
+                    # This is a slow env, should have been preempted after first step
+                    assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
+                    continue
+                # This is a fast env, no preemption happened
+                assert (batch["collector", "traj_ids"][env_idx] != -1).all()
+
+                env_data = batch[env_idx]
+                observations = env_data["observation"]
                 # All observations from this environment should equal its env_id
                 expected_id = float(env_idx)
                 actual_ids = observations.flatten().unique()
@@ -1850,9 +1889,6 @@ if __name__ == "__main__":
                 assert (
                     actual_ids[0].item() == expected_id
                 ), f"Environment {env_idx} should produce observation {expected_id}, but got {actual_ids[0].item()}"
-
-            # Only process the first batch
-            break
 
         collector.shutdown()
 
