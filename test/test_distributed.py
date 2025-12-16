@@ -55,6 +55,8 @@ TIMEOUT = 200
 if sys.platform.startswith("win"):
     pytest.skip("skipping windows tests in windows", allow_module_level=True)
 
+pytestmark = [pytest.mark.forked]
+
 
 class CountingPolicy(TensorDictModuleBase):
     """A policy for counting env.

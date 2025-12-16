@@ -55,6 +55,9 @@ tests = [
     "pytest-rerunfailures",
     "pytest-error-for-skips",
     "pytest-timeout",
+    "pytest-forked",
+    "pytest-random-order",
+    "pytest-repeat",
 ]
 utils = [
     "tensorboard",
