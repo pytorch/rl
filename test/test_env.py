@@ -9,11 +9,11 @@ import contextlib
 import functools
 import gc
 import importlib
-import threading
 import os.path
 import pickle
 import random
 import re
+import threading
 import time
 from collections import defaultdict
 from functools import partial
@@ -114,7 +114,9 @@ def check_no_lingering_multiprocessing_resources(request):
     threads_before = {t.name for t in threading.enumerate()}
     # Count resource_sharer threads specifically
     resource_sharer_before = sum(
-        1 for t in threading.enumerate() if "_serve" in t.name or "resource_sharer" in t.name.lower()
+        1
+        for t in threading.enumerate()
+        if "_serve" in t.name or "resource_sharer" in t.name.lower()
     )
 
     yield
@@ -125,17 +127,21 @@ def check_no_lingering_multiprocessing_resources(request):
 
     # Check for new resource_sharer threads
     resource_sharer_after = sum(
-        1 for t in threading.enumerate() if "_serve" in t.name or "resource_sharer" in t.name.lower()
+        1
+        for t in threading.enumerate()
+        if "_serve" in t.name or "resource_sharer" in t.name.lower()
     )
 
     # Only warn (not fail) for now - this is informational to help debug
     if resource_sharer_after > resource_sharer_before:
         new_threads = {t.name for t in threading.enumerate()} - threads_before
         resource_sharer_threads = [
-            t.name for t in threading.enumerate()
+            t.name
+            for t in threading.enumerate()
             if "_serve" in t.name or "resource_sharer" in t.name.lower()
         ]
         import warnings
+
         warnings.warn(
             f"Test {request.node.name} left behind {resource_sharer_after - resource_sharer_before} "
             f"resource_sharer thread(s): {resource_sharer_threads}. "
