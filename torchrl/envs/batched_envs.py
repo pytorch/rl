@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
+from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any
 from warnings import warn
@@ -36,7 +37,6 @@ from torchrl._utils import (
     _make_ordinal_device,
     _ProcessNoWarn,
     logger as torchrl_logger,
-    timeit,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
@@ -1524,10 +1524,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             channel.send(("init", None))
         self.is_closed = False
         self.set_spec_lock_()
-        
-        # Create thread pool for efficient parallel waiting on worker events
-        from concurrent.futures import ThreadPoolExecutor
-        self._wait_executor = ThreadPoolExecutor(max_workers=self.num_workers)
 
     @_check_start
     def state_dict(self) -> OrderedDict:
@@ -1573,7 +1569,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 td = tensordict.consolidate(
                     # share_memory=False: avoid resource_sharer which causes
                     # progressive slowdown with fork on Linux
-                    share_memory=False, inplace=True, num_threads=1
+                    share_memory=False,
+                    inplace=True,
+                    num_threads=1,
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1808,143 +1806,127 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         return tensordict, tensordict_
 
-    @timeit("_wait_for_workers")
     def _wait_for_workers(self, workers_range):
         """Wait for all workers to signal completion via their events.
-        
-        Uses multithreaded event.wait() for efficient parallel blocking.
+
+        Uses multiprocessing.connection.wait() for efficient OS-level
+        waiting on multiple pipes simultaneously.
         """
-        from concurrent.futures import as_completed
-        
         timeout = self.BATCHED_PIPE_TIMEOUT
         t0 = time.time()
-        
-        def wait_for_worker(i):
-            """Wait for a single worker's event."""
-            worker = self._workers[i]
-            event: mp.Event = self._events[i]
-            
+
+        # Map pipes to worker indices
+        pipes_pending = {self.parent_channels[i]: i for i in workers_range}
+
+        i = 0
+        while pipes_pending:
+            i += 1
+            should_check_for_dead_workers = (i % 20) == 0
             remaining = timeout - (time.time() - t0)
             if remaining <= 0:
-                return (i, False, "timeout")
-            
-            signaled = event.wait(timeout=remaining)
-            
-            if not signaled:
-                if not worker.is_alive():
-                    return (i, False, "dead")
-                return (i, False, "timeout")
-            
-            event.clear()
-            return (i, True, None)
-        
-        # Wait for all workers in parallel using persistent thread pool
-        futures = {self._wait_executor.submit(wait_for_worker, i): i for i in workers_range}
-        
-        for future in as_completed(futures):
-            i, success, error = future.result()
-            if not success:
-                if error == "dead":
-                    try:
-                        self._shutdown_workers()
-                    finally:
-                        raise RuntimeError(f"Cannot proceed, worker {i} dead.")
-                else:
-                    raise RuntimeError(
-                        f"Failed to run all workers within the {timeout} sec time limit. This "
-                        f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
-                    )
+                raise RuntimeError(
+                    f"Failed to run all workers within the {timeout} sec time limit. This "
+                    f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                )
 
-    @timeit("_step_no_buffers")
+            # Wait for any pipes to become readable (OS-level select/poll)
+            ready = connection_wait(list(pipes_pending.keys()), timeout=remaining)
+
+            if not ready and should_check_for_dead_workers:
+                # Timeout with no pipes ready - check for dead workers
+                for i in pipes_pending.values():
+                    if not self._workers[i].is_alive():
+                        try:
+                            self._shutdown_workers()
+                        finally:
+                            raise RuntimeError(f"Cannot proceed, worker {i} dead.")
+                continue
+
+            # Clear events for ready workers
+            for pipe in ready:
+                i = pipes_pending.pop(pipe)
+                self._events[i].clear()
+
     def _step_no_buffers(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
-        torchrl_logger.debug(
-            f"Entering _step_no_buffers. Timeit state: {timeit.print()}"
-        )
-        with timeit("_step_no_buffers prep"):
-            partial_steps = tensordict.get("_step")
-            tensordict_save = tensordict
-            if partial_steps is not None and partial_steps.all():
-                partial_steps = None
-            if partial_steps is not None:
-                partial_steps = partial_steps.view(tensordict.shape)
-                tensordict = tensordict[partial_steps]
-                workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
-            else:
-                workers_range = range(self.num_workers)
+        partial_steps = tensordict.get("_step")
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            partial_steps = partial_steps.view(tensordict.shape)
+            tensordict = tensordict[partial_steps]
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
+        else:
+            workers_range = range(self.num_workers)
 
-        with timeit("_step_no_buffers prep"):
-            if self.consolidate:
-                try:
-                    data = tensordict.consolidate(
-                        # share_memory=False: avoid resource_sharer which causes
-                        # progressive slowdown with fork on Linux
-                        share_memory=False, inplace=False, num_threads=1
-                    )
-                except Exception as err:
-                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            else:
-                data = tensordict
-
-        with timeit("_step_no_buffers send"):
-            for i, local_data in zip(workers_range, data.unbind(0)):
-                env_device = (
-                    self.meta_data[i].device
-                    if isinstance(self.meta_data, list)
-                    else self.meta_data.device
+        if self.consolidate:
+            try:
+                data = tensordict.consolidate(
+                    # share_memory=False: avoid resource_sharer which causes
+                    # progressive slowdown with fork on Linux
+                    share_memory=False,
+                    inplace=False,
+                    num_threads=1,
                 )
-                if data.device != env_device:
-                    if env_device is None:
-                        local_data.clear_device_()
+            except Exception as err:
+                raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+        else:
+            data = tensordict
+
+        for i, local_data in zip(workers_range, data.unbind(0)):
+            env_device = (
+                self.meta_data[i].device
+                if isinstance(self.meta_data, list)
+                else self.meta_data.device
+            )
+            if data.device != env_device:
+                if env_device is None:
+                    local_data.clear_device_()
+                else:
+                    local_data = local_data.to(env_device)
+            self.parent_channels[i].send(("step", local_data))
+
+        self._wait_for_workers(workers_range)
+
+        out_tds = []
+        for i in workers_range:
+            channel = self.parent_channels[i]
+            td = channel.recv()
+            out_tds.append(td)
+
+        out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
+        if self.device is not None and out.device != self.device:
+            out = out.to(self.device, non_blocking=self.non_blocking)
+        if partial_steps is not None:
+            result = out.new_zeros(tensordict_save.shape)
+
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device != y.device:
+                        x = x.to(y.device)
                     else:
-                        local_data = local_data.to(env_device)
-                self.parent_channels[i].send(("step", local_data))
-        # for i in range(data.shape[0]):
-        #     self.parent_channels[i].send(("step", (data, i)))
+                        x = x.clone()
+                    return x
 
-        with timeit("_step_no_buffers wait for workers"):
-            self._wait_for_workers(workers_range)
-        with timeit("_step_no_buffers recv"):
-            out_tds = []
-            for i in workers_range:
-                channel = self.parent_channels[i]
-                td = channel.recv()
-                out_tds.append(td)
+            prev = tensordict_save._fast_apply(
+                select_and_clone,
+                result,
+                filter_empty=True,
+                device=result.device,
+                batch_size=result.batch_size,
+                is_leaf=_is_leaf_nontensor,
+                default=None,
+            )
 
-        with timeit("_step_no_buffers post-process"):
-            out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
-            if self.device is not None and out.device != self.device:
-                out = out.to(self.device, non_blocking=self.non_blocking)
-            if partial_steps is not None:
-                result = out.new_zeros(tensordict_save.shape)
+            result.update(prev)
 
-                def select_and_clone(x, y):
-                    if y is not None:
-                        if x.device != y.device:
-                            x = x.to(y.device)
-                        else:
-                            x = x.clone()
-                        return x
+            if partial_steps.any():
+                result[partial_steps] = out
+            return result
+        return out
 
-                prev = tensordict_save._fast_apply(
-                    select_and_clone,
-                    result,
-                    filter_empty=True,
-                    device=result.device,
-                    batch_size=result.batch_size,
-                    is_leaf=_is_leaf_nontensor,
-                    default=None,
-                )
-
-                result.update(prev)
-
-                if partial_steps.any():
-                    result[partial_steps] = out
-                return result
-            return out
-
-    @timeit("_step")
     @torch.no_grad()
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1958,43 +1940,41 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         #   and this transform overrides an observation key (eg, CatFrames)
         #   the shape, dtype or device may not necessarily match and writing
         #   the value in-place will fail.
-        with timeit("_step prep"):
-            partial_steps = tensordict.get("_step")
-            tensordict_save = tensordict
-            if partial_steps is not None and partial_steps.all():
-                partial_steps = None
-            if partial_steps is not None:
-                partial_steps = partial_steps.view(tensordict.shape)
-                workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
-                shared_tensordict_parent = TensorDict.lazy_stack(
-                    [self.shared_tensordicts[i] for i in workers_range]
-                )
-                if self.shared_tensordict_parent.device is None:
-                    tensordict = tensordict._fast_apply(
-                        lambda x, y: x[partial_steps].to(y.device)
-                        if y is not None
-                        else x[partial_steps],
-                        self.shared_tensordict_parent,
-                        default=None,
-                        device=None,
-                        batch_size=shared_tensordict_parent.shape,
-                    )
-                else:
-                    tensordict = tensordict[partial_steps].to(
-                        self.shared_tensordict_parent.device
-                    )
-            else:
-                workers_range = range(self.num_workers)
-                shared_tensordict_parent = self.shared_tensordict_parent
-
-        with timeit("_step update"):
-            shared_tensordict_parent.update_(
-                tensordict,
-                # We also update the output keys because they can be implicitly used, eg
-                # during partial steps to fill in values
-                keys_to_update=list(self._env_input_keys),
-                non_blocking=self.non_blocking,
+        partial_steps = tensordict.get("_step")
+        tensordict_save = tensordict
+        if partial_steps is not None and partial_steps.all():
+            partial_steps = None
+        if partial_steps is not None:
+            partial_steps = partial_steps.view(tensordict.shape)
+            workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
+            shared_tensordict_parent = TensorDict.lazy_stack(
+                [self.shared_tensordicts[i] for i in workers_range]
             )
+            if self.shared_tensordict_parent.device is None:
+                tensordict = tensordict._fast_apply(
+                    lambda x, y: x[partial_steps].to(y.device)
+                    if y is not None
+                    else x[partial_steps],
+                    self.shared_tensordict_parent,
+                    default=None,
+                    device=None,
+                    batch_size=shared_tensordict_parent.shape,
+                )
+            else:
+                tensordict = tensordict[partial_steps].to(
+                    self.shared_tensordict_parent.device
+                )
+        else:
+            workers_range = range(self.num_workers)
+            shared_tensordict_parent = self.shared_tensordict_parent
+
+        shared_tensordict_parent.update_(
+            tensordict,
+            # We also update the output keys because they can be implicitly used, eg
+            # during partial steps to fill in values
+            keys_to_update=list(self._env_input_keys),
+            non_blocking=self.non_blocking,
+        )
         next_td_passthrough = tensordict.get("next", None)
         if next_td_passthrough is not None:
             # if we have input "next" data (eg, RNNs which pass the next state)
@@ -2038,81 +2018,75 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             data = [{} for _ in range(self.num_workers)]
 
         if self._non_tensor_keys:
-            with timeit("_step non-tensor keys"):
-                for i, td in zip(
-                    workers_range,
-                    tensordict.select(*self._non_tensor_keys, strict=False).unbind(0),
-                ):
-                    data[i]["non_tensor_data"] = td
+            for i, td in zip(
+                workers_range,
+                tensordict.select(*self._non_tensor_keys, strict=False).unbind(0),
+            ):
+                data[i]["non_tensor_data"] = td
 
-        with timeit("_step sync m2w"):
-            self._sync_m2w()
+        self._sync_m2w()
 
-        with timeit("_step event"):
-            if self.event is not None:
-                self.event.record()
-                self.event.synchronize()
-        with timeit("_step send"):
+        if self.event is not None:
+            self.event.record()
+            self.event.synchronize()
+
+        for i in workers_range:
+            self.parent_channels[i].send(("step", data[i]))
+
+        self._wait_for_workers(workers_range)
+
+        if self._non_tensor_keys:
+            non_tensor_tds = []
             for i in workers_range:
-                self.parent_channels[i].send(("step", data[i]))
+                msg, non_tensor_td = self.parent_channels[i].recv()
+                non_tensor_tds.append(non_tensor_td)
 
-        with timeit("_step wait for workers"):
-            self._wait_for_workers(workers_range)
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        next_td = shared_tensordict_parent.get("next")
+        device = self.device
 
-        with timeit("_step recv"):
-            if self._non_tensor_keys:
-                non_tensor_tds = []
-                for i in workers_range:
-                    msg, non_tensor_td = self.parent_channels[i].recv()
-                    non_tensor_tds.append(non_tensor_td)
-
-        with timeit("_step post-process"):
-            # We must pass a clone of the tensordict, as the values of this tensordict
-            # will be modified in-place at further steps
-            next_td = shared_tensordict_parent.get("next")
-            device = self.device
-
-            out = next_td.named_apply(
-                self.select_and_clone,
-                nested_keys=True,
-                filter_empty=True,
-                device=device,
+        out = next_td.named_apply(
+            self.select_and_clone,
+            nested_keys=True,
+            filter_empty=True,
+            device=device,
+        )
+        if self._non_tensor_keys:
+            out.update(
+                LazyStackedTensorDict(*non_tensor_tds),
+                keys_to_update=self._non_tensor_keys,
             )
-            if self._non_tensor_keys:
-                out.update(
-                    LazyStackedTensorDict(*non_tensor_tds),
-                    keys_to_update=self._non_tensor_keys,
-                )
-            if next_td_passthrough is not None:
-                out.update(next_td_passthrough)
+        if next_td_passthrough is not None:
+            out.update(next_td_passthrough)
 
-            self._sync_w2m()
-            if partial_steps is not None:
-                result = out.new_zeros(tensordict_save.shape)
+        self._sync_w2m()
+        if partial_steps is not None:
+            result = out.new_zeros(tensordict_save.shape)
 
-                def select_and_clone(x, y):
-                    if y is not None:
-                        if x.device != y.device:
-                            x = x.to(y.device)
-                        else:
-                            x = x.clone()
-                        return x
+            def select_and_clone(x, y):
+                if y is not None:
+                    if x.device != y.device:
+                        x = x.to(y.device)
+                    else:
+                        x = x.clone()
+                    return x
 
-                prev = tensordict_save._fast_apply(
-                    select_and_clone,
-                    result,
-                    filter_empty=True,
-                    device=result.device,
-                    batch_size=result.batch_size,
-                    is_leaf=_is_leaf_nontensor,
-                    default=None,
-                )
+            prev = tensordict_save._fast_apply(
+                select_and_clone,
+                result,
+                filter_empty=True,
+                device=result.device,
+                batch_size=result.batch_size,
+                is_leaf=_is_leaf_nontensor,
+                default=None,
+            )
 
-                result.update(prev)
-                if partial_steps.any():
-                    result[partial_steps] = out
-                return result
-            return out
+            result.update(prev)
+            if partial_steps.any():
+                result[partial_steps] = out
+            return result
+        return out
 
     def _reset_no_buffers(
         self,
@@ -2126,7 +2100,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     tensordict = tensordict.consolidate(
                         # share_memory=False: avoid resource_sharer which causes
                         # progressive slowdown with fork on Linux
-                        share_memory=False, num_threads=1
+                        share_memory=False,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2276,11 +2251,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     @_check_start
     def _shutdown_workers(self) -> None:
         try:
-            # Shutdown the wait executor first
-            if hasattr(self, "_wait_executor") and self._wait_executor is not None:
-                self._wait_executor.shutdown(wait=False)
-                self._wait_executor = None
-            
             if self.is_closed:
                 raise RuntimeError(
                     "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
@@ -2703,7 +2673,6 @@ def _run_worker_pipe_direct(
 
     child_pipe.send("started")
     while True:
-        torchrl_logger.debug(f"[worker {pid}] poll, timing: {timeit.print()}")
         try:
             if child_pipe.poll(_timeout):
                 cmd, data = child_pipe.recv()
@@ -2739,43 +2708,33 @@ def _run_worker_pipe_direct(
             # we use 'data' to pass the keys that we need to pass to reset,
             # because passing the entire buffer may have unwanted consequences
             data, reset_kwargs = data
-            
-            with timeit("worker reset data_prep"):
-                if data is not None:
-                    data.unlock_()
-                    data._fast_apply(
-                        lambda x: x.clone() if x.device.type == "cuda" else x, out=data
-                    )
-            
-            with timeit("worker reset env.reset"):
-                cur_td = env.reset(
-                    tensordict=data,
-                    **reset_kwargs,
+            if data is not None:
+                data.unlock_()
+                data._fast_apply(
+                    lambda x: x.clone() if x.device.type == "cuda" else x, out=data
                 )
-            
-            with timeit("worker reset cuda_sync"):
-                if event is not None:
-                    event.record()
-                    event.synchronize()
-            
-            with timeit("worker reset consolidate"):
-                if consolidate:
-                    try:
-                        cur_td = cur_td.consolidate(
-                            # share_memory=False: avoid resource_sharer which causes
-                            # progressive slowdown with fork on Linux
-                            share_memory=False, inplace=True, num_threads=1
-                        )
-                    except Exception as err:
-                        raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            
-            with timeit("worker reset pipe.send"):
-                child_pipe.send(cur_td)
-            
-            with timeit("worker reset event.set"):
-                # Set event after successfully sending through pipe to avoid race condition
-                # where event is set but pipe send fails (BrokenPipeError)
-                mp_event.set()
+            cur_td = env.reset(
+                tensordict=data,
+                **reset_kwargs,
+            )
+            if event is not None:
+                event.record()
+                event.synchronize()
+            if consolidate:
+                try:
+                    cur_td = cur_td.consolidate(
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        inplace=True,
+                        num_threads=1,
+                    )
+                except Exception as err:
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            # Set event BEFORE send so parent starts reading, which unblocks send
+            # if pipe buffer was full (prevents deadlock)
+            mp_event.set()
+            child_pipe.send(cur_td)
 
             del cur_td
 
@@ -2783,35 +2742,25 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            
-            with timeit("worker step env._step"):
-                next_td = env._step(data)
-            
-            with timeit("worker step cuda_sync"):
-                if event is not None:
-                    event.record()
-                    event.synchronize()
-            
-            with timeit("worker step consolidate"):
-                if consolidate:
-                    try:
-                        next_td = next_td.consolidate(
-                            # TESTING: share_memory=True to observe slowdown
-                            share_memory=True, inplace=True, num_threads=1
-                        )
-                    except Exception as err:
-                        raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            
-            with timeit("worker step pipe.send"):
-                child_pipe.send(next_td)
-            
-            with timeit("worker step event.set"):
-                # Set event after successfully sending through pipe to avoid race condition
-                # where event is set but pipe send fails (BrokenPipeError)
-                mp_event.set()
-
-            # Print worker timing after each step to observe progressive slowdown
-            torchrl_logger.info(f"[worker {pid}] step {i} timing: {timeit.print()}")
+            next_td = env._step(data)
+            if event is not None:
+                event.record()
+                event.synchronize()
+            if consolidate:
+                try:
+                    next_td = next_td.consolidate(
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        inplace=True,
+                        num_threads=1,
+                    )
+                except Exception as err:
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+            # Set event BEFORE send so parent starts reading, which unblocks send
+            # if pipe buffer was full (prevents deadlock)
+            mp_event.set()
+            child_pipe.send(next_td)
 
             del next_td
 

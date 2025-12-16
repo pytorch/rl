@@ -43,18 +43,13 @@ from torchrl.modules.tensordict_module.exploration import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingEnvCountModule,
-        NestedCountingEnv,
-    )
 else:
     from _utils_internal import get_default_devices
-    from mocking_classes import (
-        ContinuousActionVecMockEnv,
-        CountingEnvCountModule,
-        NestedCountingEnv,
-    )
+from torchrl.testing.mocking_classes import (
+    ContinuousActionVecMockEnv,
+    CountingEnvCountModule,
+    NestedCountingEnv,
+)
 
 
 class TestEGreedy:
