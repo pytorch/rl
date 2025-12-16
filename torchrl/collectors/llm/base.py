@@ -85,7 +85,7 @@ class LLMCollector(Collector):
     Examples:
         >>> import vllm
         >>> from torchrl.modules import vLLMWrapper
-        >>> from pytorch.rl.test.mocking_classes import DummyStrDataLoader
+        >>> from torchrl.testing.mocking_classes import DummyStrDataLoader
         >>> from torchrl.envs import LLMEnv
         >>> llm_model = vllm.LLM("gpt2")
         >>> tokenizer = llm_model.get_tokenizer()

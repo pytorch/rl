@@ -13,13 +13,6 @@ from numbers import Number
 import numpy as np
 import pytest
 import torch
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices, retry
-    from pytorch.rl.test.mocking_classes import MockBatchedUnLockedEnv
-else:
-    from _utils_internal import get_default_devices, retry
-    from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
@@ -64,6 +57,13 @@ from torchrl.modules.models.model_based import (
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
+
+from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import get_default_devices, retry
+else:
+    from _utils_internal import get_default_devices, retry
 
 
 @pytest.fixture

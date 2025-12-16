@@ -61,6 +61,7 @@ default_spec_kwargs = {
 
 
 def make_spec(spec_str):
+    """Create a spec instance from a short spec name."""
     target_class = spec_dict[spec_str]
     return target_class(**default_spec_kwargs[target_class])
 
@@ -262,7 +263,7 @@ class MockSerialEnv(EnvBase):
 
 
 class MockBatchedLockedEnv(EnvBase):
-    """Mocks an env whose batch_size defines the size of the output tensordict"""
+    """Mocks an env whose batch_size defines the size of the output tensordict."""
 
     @classmethod
     def __new__(
@@ -428,6 +429,8 @@ class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
 
 
 class StateLessCountingEnv(EnvBase):
+    """A simple counting environment with no internal state beyond the input tensordict."""
+
     def __init__(self):
         self.observation_spec = Composite(
             count=Unbounded((1,), dtype=torch.int32),
@@ -511,6 +514,8 @@ class StateLessCountingEnv(EnvBase):
 
 
 class DiscreteActionVecMockEnv(_MockEnv):
+    """Mock env with vector observations and discrete (one-hot/categorical) actions."""
+
     @classmethod
     def __new__(
         cls,
@@ -615,6 +620,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
+    """Mock env with vector observations and continuous (bounded) actions."""
+
     adapt_dtype: bool = True
 
     @classmethod
@@ -731,6 +738,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
 
 
 class DiscreteActionVecPolicy(TensorDictModuleBase):
+    """Deterministic policy for `DiscreteActionVecMockEnv`-like observations."""
+
     in_keys = ["observation"]
     out_keys = ["action"]
 
@@ -749,6 +758,8 @@ class DiscreteActionVecPolicy(TensorDictModuleBase):
 
 
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
+    """Mock env with image-like observations and discrete (one-hot) actions."""
+
     @classmethod
     def __new__(
         cls,
@@ -804,6 +815,8 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
 
 class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
+    """Numpy-style variant of `DiscreteActionConvMockEnv` (channels-last pixels)."""
+
     @classmethod
     def __new__(
         cls,
@@ -861,6 +874,8 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 
 
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
+    """Mock env with image-like observations and continuous (bounded) actions."""
+
     @classmethod
     def __new__(
         cls,
@@ -917,6 +932,8 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
 
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
+    """Numpy-style variant of `ContinuousActionConvMockEnv` (channels-last pixels)."""
+
     @classmethod
     def __new__(
         cls,
@@ -959,6 +976,8 @@ class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
 
 
 class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
+    """Policy for discrete-action convolutional mock environments."""
+
     in_keys = ["pixels"]
     out_keys = ["action"]
 
@@ -1034,6 +1053,8 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
 
 
 class ActionObsMergeLinear(nn.Module):
+    """Linear layer that consumes concatenated observation and action tensors."""
+
     def __init__(self, in_size, out_size):
         super().__init__()
         self.linear = nn.Linear(in_size, out_size)
@@ -1043,6 +1064,8 @@ class ActionObsMergeLinear(nn.Module):
 
 
 class CountingEnvCountPolicy(TensorDictModuleBase):
+    """Policy that always returns an increment action for counting environments."""
+
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         super().__init__()
         assert not isinstance(action_spec, Composite)
@@ -1056,6 +1079,8 @@ class CountingEnvCountPolicy(TensorDictModuleBase):
 
 
 class CountingEnvCountModule(nn.Module):
+    """Module that returns a constant increment action given an action spec."""
+
     def __init__(self, action_spec: TensorSpec):
         super().__init__()
         self.action_spec = action_spec
@@ -1158,11 +1183,14 @@ class CountingEnv(EnvBase):
 
 
 def get_random_string(min_size, max_size):
+    """Return a random ASCII lowercase string with length in [min_size, max_size]."""
     size = random.randint(min_size, max_size)
     return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
 
 
 class CountingEnvWithString(CountingEnv):
+    """`CountingEnv` variant that adds a non-tensor string observation."""
+
     def __init__(self, *args, **kwargs):
         self.max_size = kwargs.pop("max_size", 30)
         self.min_size = kwargs.pop("min_size", 4)
@@ -1354,7 +1382,8 @@ class MultiAgentCountingEnv(EnvBase):
 
 
 class IncrementingEnv(CountingEnv):
-    # Same as CountingEnv but always increments the count by 1 regardless of the action.
+    """`CountingEnv` variant that always increments the count by 1 regardless of action."""
+
     def _step(
         self,
         tensordict: TensorDictBase,
@@ -1374,7 +1403,8 @@ class IncrementingEnv(CountingEnv):
 
 
 class NestedCountingEnv(CountingEnv):
-    # an env with nested reward and done states
+    """Counting environment with nested observation/action/reward/done structures."""
+
     def __init__(
         self,
         max_steps: int = 5,
@@ -1653,6 +1683,8 @@ class CountingBatchedEnv(EnvBase):
 
 
 class HeterogeneousCountingEnvPolicy(TensorDictModuleBase):
+    """Policy for `HeterogeneousCountingEnv` that outputs increment (or zero) actions."""
+
     def __init__(self, full_action_spec: TensorSpec, count: bool = True):
         super().__init__()
         self.full_action_spec = full_action_spec
@@ -1835,6 +1867,8 @@ class HeterogeneousCountingEnv(EnvBase):
 
 
 class MultiKeyCountingEnvPolicy(TensorDictModuleBase):
+    """Policy for `MultiKeyCountingEnv` that can count deterministically or stochastically."""
+
     def __init__(
         self,
         full_action_spec: TensorSpec,
@@ -1869,6 +1903,8 @@ class MultiKeyCountingEnvPolicy(TensorDictModuleBase):
 
 
 class MultiKeyCountingEnv(EnvBase):
+    """Counting env with multiple action/observation keys and nested structures."""
+
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
         super().__init__(**kwargs)
 
@@ -2066,6 +2102,8 @@ class MultiKeyCountingEnv(EnvBase):
 
 
 class EnvWithMetadata(EnvBase):
+    """Environment that emits both tensor and non-tensor observations (for metadata tests)."""
+
     def __init__(self):
         super().__init__()
         self.observation_spec = Composite(
@@ -2103,6 +2141,8 @@ class EnvWithMetadata(EnvBase):
 
 
 class AutoResettingCountingEnv(CountingEnv):
+    """`CountingEnv` variant that auto-resets when done is reached."""
+
     def _step(self, tensordict):
         tensordict = super()._step(tensordict)
         if tensordict["done"].any():
@@ -2117,6 +2157,8 @@ class AutoResettingCountingEnv(CountingEnv):
 
 
 class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
+    """`HeterogeneousCountingEnv` variant that partially resets done sub-episodes."""
+
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
         super().__init__(**kwargs)
         self.n_nested_dim = 3
@@ -2176,6 +2218,8 @@ class AutoResetHeteroCountingEnv(HeterogeneousCountingEnv):
 
 
 class EnvWithDynamicSpec(EnvBase):
+    """Environment with dynamic (ragged) observation specs that grow over time."""
+
     def __init__(self, max_count=5):
         super().__init__(batch_size=())
         self.observation_spec = Composite(
@@ -2229,6 +2273,8 @@ class EnvWithDynamicSpec(EnvBase):
 
 
 class EnvWithScalarAction(EnvBase):
+    """Environment exposing a scalar (or singleton) action spec for edge-case testing."""
+
     def __init__(self, singleton: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.singleton = singleton
@@ -2298,6 +2344,8 @@ class EnvWithScalarAction(EnvBase):
 
 
 class EnvThatDoesNothing(EnvBase):
+    """Environment whose reset/step return empty tensordicts (for plumbing tests)."""
+
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         return TensorDict(batch_size=self.batch_size, device=self.device)
 
@@ -2312,6 +2360,8 @@ class EnvThatDoesNothing(EnvBase):
 
 
 class Str2StrEnv(EnvBase):
+    """String-to-string environment with non-tensor observation/action fields."""
+
     def __init__(self, min_size=4, max_size=10, **kwargs):
         self.observation_spec = Composite(
             observation=NonTensor(example_data="an observation!", shape=())
@@ -2347,6 +2397,8 @@ class Str2StrEnv(EnvBase):
 
 
 class EnvThatErrorsAfter10Iters(EnvBase):
+    """Environment that raises after 10 steps (used to validate error propagation)."""
+
     def __init__(self):
         self.action_spec = Composite(action=Unbounded((1,)))
         self.reward_spec = Composite(reward=Unbounded((1,)))
@@ -2374,11 +2426,15 @@ class EnvThatErrorsAfter10Iters(EnvBase):
 
 @tensorclass()
 class TC:
+    """Simple tensorclass used by `EnvWithTensorClass`."""
+
     field0: str
     field1: torch.Tensor
 
 
 class EnvWithTensorClass(CountingEnv):
+    """`CountingEnv` variant that carries a tensorclass observation."""
+
     tc_cls = TC
 
     def __init__(self, **kwargs):
@@ -2413,6 +2469,8 @@ class EnvWithTensorClass(CountingEnv):
 
 @tensorclass
 class History:
+    """Simple history record (role/content) used by `HistoryTransform`."""
+
     role: str
     content: str
 
@@ -2478,6 +2536,8 @@ class HistoryTransform(Transform):
 
 
 class DummyStrDataLoader:
+    """Minimal iterator that yields random strings (for LLM tests)."""
+
     def __init__(self, batch_size=0):
         if isinstance(batch_size, tuple):
             batch_size = torch.Size(batch_size).numel()
@@ -2500,6 +2560,8 @@ class DummyStrDataLoader:
 
 
 class DummyTensorDataLoader:
+    """Minimal iterator that yields random token tensors (for LLM tests)."""
+
     def __init__(self, batch_size=0, max_length=10, padding=False):
         if isinstance(batch_size, tuple):
             batch_size = torch.Size(batch_size).numel()
@@ -2591,6 +2653,8 @@ class MockNestedResetEnv(EnvBase):
 
 
 class EnvThatErrorsBecauseOfStack(EnvBase):
+    """Environment crafted to trigger stacking errors with certain batch shapes."""
+
     def __init__(self, target: int = 5, batch_size: int | None = None):
         super().__init__(device="cpu", batch_size=batch_size)
         self.target = target
