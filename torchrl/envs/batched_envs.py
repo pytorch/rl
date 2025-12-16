@@ -2682,6 +2682,7 @@ def _run_worker_pipe_direct(
 
     child_pipe.send("started")
     while True:
+        torchrl_logger.debug(f"[worker {pid}] poll, timing: {timeit.print()}")
         try:
             if child_pipe.poll(_timeout):
                 cmd, data = child_pipe.recv()
@@ -2787,6 +2788,9 @@ def _run_worker_pipe_direct(
                 # Set event after successfully sending through pipe to avoid race condition
                 # where event is set but pipe send fails (BrokenPipeError)
                 mp_event.set()
+
+            # Print worker timing after each step to observe progressive slowdown
+            torchrl_logger.info(f"[worker {pid}] step {i} timing: {timeit.print()}")
 
             del next_td
 
