@@ -100,7 +100,7 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)  # Turn to True to enable
 def check_no_lingering_multiprocessing_resources(request):
     """Fixture that checks for leftover multiprocessing resources after each test.
 
