@@ -1073,6 +1073,73 @@ class TestCountFrames:
         CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
 
 
+class TestProcessLossHook:
+    @pytest.mark.parametrize("factor", [0.5, 2.0, 10.0])
+    def test_scale_loss(self, factor):
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"sub_batch": torch.tensor(1.0)}, [])
+
+        class ScaleLoss:
+            def __init__(self, scale):
+                self.scale = scale
+
+            def __call__(self, sub_batch, losses):
+                return losses.apply(lambda t: t * self.scale)
+
+        scale_hook = ScaleLoss(factor)
+        trainer.register_op("process_loss", scale_hook)
+        td_out = trainer._process_loss_hook(td_sub_batch.clone(), td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(factor))
+
+    def test_chained_hooks(self):
+        """Test that multiple process_loss hooks are applied in order."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(2.0)}, [])
+        td_sub_batch = TensorDict({}, [])
+
+        call_order = []
+
+        class AddOne:
+            def __call__(self, sub_batch, losses):
+                call_order.append("add")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] + 1
+                return losses
+
+        class MultiplyTwo:
+            def __call__(self, sub_batch, losses):
+                call_order.append("mul")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * 2
+                return losses
+
+        trainer.register_op("process_loss", AddOne())
+        trainer.register_op("process_loss", MultiplyTwo())
+
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        # (2 + 1) * 2 = 6
+        assert torch.allclose(td_out["loss_a"], torch.tensor(6.0))
+        assert call_order == ["add", "mul"]
+
+    def test_hook_receives_sub_batch(self):
+        """Test that the hook can use information from the sub_batch."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"importance_weight": torch.tensor(0.5)}, [])
+
+        class WeightedLoss:
+            def __call__(self, sub_batch, losses):
+                weight = sub_batch.get("importance_weight")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * weight
+                return losses
+
+        trainer.register_op("process_loss", WeightedLoss())
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(0.5))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
