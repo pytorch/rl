@@ -405,12 +405,7 @@ class DistributedCollectorBase:
                             policy.weight.add_(1)
                     else:
                         assert weights is not None
-                        # `TensorDict.data` is a read-only property: `+=` would
-                        # attempt to call a setter. Mutate the underlying tensors
-                        # in-place instead.
-                        for v in weights.values(True, True):
-                            if isinstance(v, torch.Tensor):
-                                v.add_(1)
+                        weights.data += 1
                     torchrl_logger.info("TEST -- Calling update_policy_weights_()")
                     collector.update_policy_weights_(weights)
                     torchrl_logger.info("TEST -- Done calling update_policy_weights_()")
