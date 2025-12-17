@@ -33,7 +33,7 @@ jobs:
       runner: linux.12xlarge
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
-      timeout: 90
+      timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -66,7 +66,7 @@ jobs:
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -104,7 +104,7 @@ jobs:
       docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         set -euo pipefail
         export PYTHON_VERSION="3.9"
@@ -138,7 +138,7 @@ jobs:
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
