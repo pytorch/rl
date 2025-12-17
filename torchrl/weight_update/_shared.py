@@ -20,6 +20,12 @@ from torchrl.weight_update.weight_sync_schemes import (
 )
 
 
+def _close_mp_queue(queue: mp.Queue) -> None:
+    """Close a multiprocessing Queue and wait for its feeder thread to exit."""
+    queue.close()
+    queue.join_thread()
+
+
 class SharedMemTransport:
     """Shared memory transport for in-place weight updates.
 
@@ -892,12 +898,25 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         self._is_shutdown = True
 
         # Signal all workers to stop
-        if getattr(self, "_instruction_queues", None):
-            for worker_idx in self._instruction_queues:
-                try:
-                    self._instruction_queues[worker_idx].put("stop")
-                except Exception:
-                    pass
+        instruction_queues = getattr(self, "_instruction_queues", None)
+        if instruction_queues:
+            for _, queue in instruction_queues.items():
+                queue.put("stop")
 
         # Let base class handle background thread cleanup
         super().shutdown()
+
+        # Close all multiprocessing queues created by the scheme.
+        queues_to_close = []
+        for name in ("_weight_init_queues", "_instruction_queues", "_ack_queues"):
+            mapping = getattr(self, name, None)
+            if not mapping:
+                continue
+            queues_to_close.extend(mapping.values())
+            setattr(self, name, {})
+
+        unique = {}
+        for q in queues_to_close:
+            unique[id(q)] = q
+        for q in unique.values():
+            _close_mp_queue(q)
