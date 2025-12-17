@@ -48,6 +48,7 @@ tests = [
     "pyyaml",
     "pytest-instafail",
     "scipy",
+    "psutil",
     "pytest-mock",
     "pytest-cov",
     "pytest-asyncio",
