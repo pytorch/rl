@@ -253,8 +253,7 @@ class DistributedCollectorBase:
                 total += data.numel()
                 if i == 0:
                     first_batch = data
-                    with torch.no_grad():
-                        policy.weight.add_(1)
+                    policy.weight.data.add_(1)
                     collector.update_policy_weights_(policy)
                 else:
                     if (data["action"] == 2).all():
@@ -401,8 +400,7 @@ class DistributedCollectorBase:
                     first_batch = data
                     if policy is not None:
                         # Avoid using `.data` (and avoid tracking in autograd).
-                        with torch.no_grad():
-                            policy.weight.add_(1)
+                        policy.weight.data.add_(1)
                     else:
                         assert weights is not None
                         weights.data += 1
@@ -547,8 +545,7 @@ class TestSyncCollector(DistributedCollectorBase):
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    with torch.no_grad():
-                        policy.weight.add_(1)
+                    policy.weight.data.add_(1)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
             assert first_batch is not None
@@ -707,8 +704,7 @@ class TestRayCollector(DistributedCollectorBase):
                 total += data.numel()
                 if i == 0:
                     first_batch = data
-                    with torch.no_grad():
-                        policy.weight.add_(1)
+                    policy.weight.data.add_(1)
                     collector.update_policy_weights_(policy)
                 else:
                     if (data["action"] == 2).all():
@@ -820,13 +816,10 @@ class TestRayCollector(DistributedCollectorBase):
                 if i == 0:
                     first_batch = data
                     if policy is not None:
-                        with torch.no_grad():
-                            policy.weight.add_(1)
+                        policy.weight.data.add_(1)
                     else:
                         assert weights is not None
-                        for v in weights.values(True, True):
-                            if isinstance(v, torch.Tensor):
-                                v.add_(1)
+                        weights.data.add_(1)
                     collector.update_policy_weights_(weights)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
