@@ -1071,6 +1071,19 @@ class RayCollector(BaseCollector):
                 timeout=timeout if timeout is not None else 5.0
             )
         self.stop_remote_collectors()
+
+        # Clean up weight sync schemes AFTER workers have exited
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
         if shutdown_ray:
             ray.shutdown()
 

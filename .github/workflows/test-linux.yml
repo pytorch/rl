@@ -26,14 +26,14 @@ jobs:
   tests-cpu:
     strategy:
       matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12"]
+        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
-      timeout: 90
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -56,17 +56,17 @@ jobs:
   tests-gpu:
     strategy:
       matrix:
-        python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -104,7 +104,7 @@ jobs:
       docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         set -euo pipefail
         export PYTHON_VERSION="3.9"
@@ -128,17 +128,17 @@ jobs:
   tests-optdeps:
     strategy:
       matrix:
-        python_version: ["3.11"]
-        cuda_arch_version: ["12.8"]
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -163,17 +163,17 @@ jobs:
   tests-stable-gpu:
     strategy:
       matrix:
-        python_version: ["3.10"] # "3.9", "3.10", "3.11"
-        cuda_arch_version: ["11.8"] # "11.6", "11.7"
+        python_version: ["3.12"] # "3.9", "3.10", "3.11"
+        cuda_arch_version: ["13.0"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      timeout: 120
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}

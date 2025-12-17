@@ -16,11 +16,11 @@ maintainers = [
 ]
 keywords = ["reinforcement-learning", "pytorch", "rl", "machine-learning"]
 classifiers = [
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -48,6 +48,7 @@ tests = [
     "pyyaml",
     "pytest-instafail",
     "scipy",
+    "psutil",
     "pytest-mock",
     "pytest-cov",
     "pytest-asyncio",
@@ -55,6 +56,9 @@ tests = [
     "pytest-rerunfailures",
     "pytest-error-for-skips",
     "pytest-timeout",
+    "pytest-forked",
+    "pytest-random-order",
+    "pytest-repeat",
 ]
 utils = [
     "tensorboard",

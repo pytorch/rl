@@ -300,6 +300,13 @@ def _run_collector(
         elif instruction == b"shutdown":
             if verbose:
                 torchrl_logger.debug(f"RANK {rank} -- shutting down")
+            # Shutdown weight sync schemes first (stops background threads)
+            if weight_sync_schemes is not None:
+                for scheme in weight_sync_schemes.values():
+                    try:
+                        scheme.shutdown()
+                    except Exception:
+                        pass
             try:
                 collector.shutdown()
             except Exception:
@@ -569,6 +576,7 @@ class DistributedCollector(BaseCollector):
         backend: str = "gloo",
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
+        update_interval: int | None = None,
         launcher: str = "submitit",
         tcp_port: int | None = None,
         weight_updater: WeightUpdaterBase
@@ -617,6 +625,12 @@ class DistributedCollector(BaseCollector):
         self._sync = sync
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
+        if update_interval is not None and update_interval < 1:
+            raise ValueError(
+                "`update_interval` must be >= 1 when provided. "
+                f"Got update_interval={update_interval}."
+            )
+        self.update_interval = update_interval
         if self.update_after_each_batch and self.max_weight_update_interval > -1:
             raise RuntimeError(
                 "Got conflicting update instructions: `update_after_each_batch` "
@@ -992,6 +1006,7 @@ class DistributedCollector(BaseCollector):
         torchrl_logger.debug("RANK 0 -- iterating...")
 
         total_frames = 0
+        num_batches_yielded = 0
         if not self._sync:
             for rank in range(1, self.num_workers + 1):
                 torchrl_logger.debug(f"RANK 0 -- sending 'continue' to {rank}")
@@ -1009,13 +1024,48 @@ class DistributedCollector(BaseCollector):
             if self._sync:
                 data, total_frames = self._next_sync(total_frames)
             else:
-                data, total_frames = self._next_async(total_frames, trackers)
+                data, total_frames, ready_worker_idx = self._next_async(
+                    total_frames, trackers
+                )
 
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
                 data = self.postproc(data)
             yield data
+            num_batches_yielded += 1
+            has_more = total_frames < self.total_frames
+
+            # Automatic weight update hook: update_interval controls how often we
+            # propagate weights through the registered weight sync schemes.
+            #
+            # Important: for async collection, we do this *after* yielding the batch
+            # (so the user can mutate policy weights) but *before* letting the worker
+            # continue, to ensure the next batch reflects the new weights.
+            if (
+                has_more
+                and self.update_interval is not None
+                and self._weight_sync_schemes is not None
+                and num_batches_yielded % self.update_interval == 0
+            ):
+                if self._sync:
+                    # Sync case: all workers will proceed next, update everyone.
+                    for scheme in self._weight_sync_schemes.values():
+                        scheme.send()
+                else:
+                    # Async case: only release the worker that just produced data.
+                    for scheme in self._weight_sync_schemes.values():
+                        scheme.send(worker_ids=ready_worker_idx)
+
+            if (not self._sync) and has_more:
+                # Release the worker that produced the last batch and restart its
+                # receive tracker *after* any weight update has been propagated.
+                rank = ready_worker_idx + 1
+                torchrl_logger.debug(f"RANK 0 -- sending 'continue' to {rank}")
+                self._store.set(f"NODE_{rank}_in", b"continue")
+                trackers[ready_worker_idx] = self._tensordict_out[
+                    ready_worker_idx
+                ].irecv(src=rank, return_premature=True)
 
             if self.max_weight_update_interval > -1:
                 for j in range(self.num_workers):
@@ -1070,6 +1120,7 @@ class DistributedCollector(BaseCollector):
 
     def _next_async(self, total_frames, trackers):
         data = None
+        ready_worker_idx = None
         while data is None:
             for i in range(self.num_workers):
                 rank = i + 1
@@ -1086,16 +1137,15 @@ class DistributedCollector(BaseCollector):
                         )
                         self.update_policy_weights_(worker_ids=rank)
                     total_frames += data.numel()
-                    if total_frames < self.total_frames:
-                        torchrl_logger.debug(f"RANK 0 -- sending 'continue' to {rank}")
-                        self._store.set(f"NODE_{rank}_in", b"continue")
-                    trackers[i] = self._tensordict_out[i].irecv(
-                        src=i + 1, return_premature=True
-                    )
+                    ready_worker_idx = i
                     for j in range(self.num_workers):
                         self._batches_since_weight_update[j] += j != i
                     break
-        return data, total_frames
+        if ready_worker_idx is None:
+            raise RuntimeError(
+                "Failed to find a ready worker in async collection loop."
+            )
+        return data, total_frames, ready_worker_idx
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
@@ -1117,6 +1167,11 @@ class DistributedCollector(BaseCollector):
         raise NotImplementedError
 
     def shutdown(self, timeout: float | None = None) -> None:
+        # Prevent double shutdown
+        if getattr(self, "_shutdown", False):
+            return
+        self._shutdown = True
+
         self._store.set("TRAINER_status", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
@@ -1138,6 +1193,25 @@ class DistributedCollector(BaseCollector):
                 self.jobs[i].result()
             elif self.launcher == "submitit_delayed":
                 pass
+
+        # Clean up weight sync schemes AFTER workers have exited
+        # (workers have their own scheme instances that they clean up)
+        if self._weight_sync_schemes is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torchrl_logger.debug("destroying process group")
+            torch.distributed.destroy_process_group()
+
         torchrl_logger.debug("collector shut down")
 
 

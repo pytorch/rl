@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
+from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any
 from warnings import warn
@@ -1566,7 +1567,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.consolidate:
             try:
                 td = tensordict.consolidate(
-                    share_memory=True, inplace=True, num_threads=1
+                    # share_memory=False: avoid resource_sharer which causes
+                    # progressive slowdown with fork on Linux
+                    share_memory=False,
+                    inplace=True,
+                    num_threads=1,
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1802,34 +1807,78 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         return tensordict, tensordict_
 
     def _wait_for_workers(self, workers_range):
-        workers_range_consume = set(workers_range)
+        """Wait for all workers to signal completion via their events.
+
+        Uses multiprocessing.connection.wait() for efficient OS-level
+        waiting on multiple pipes simultaneously.
+        """
+        timeout = self.BATCHED_PIPE_TIMEOUT
         t0 = time.time()
-        while (
-            len(workers_range_consume)
-            and (time.time() - t0) < self.BATCHED_PIPE_TIMEOUT
-        ):
-            for i in workers_range:
-                if i not in workers_range_consume:
-                    continue
-                worker = self._workers[i]
-                if worker.is_alive():
-                    event: mp.Event = self._events[i]
-                    if event.is_set():
-                        workers_range_consume.discard(i)
-                        event.clear()
-                    else:
-                        continue
-                else:
-                    try:
-                        self._shutdown_workers()
-                    finally:
-                        raise RuntimeError(f"Cannot proceed, worker {i} dead.")
-                # event.wait(self.BATCHED_PIPE_TIMEOUT)
-        if len(workers_range_consume):
-            raise RuntimeError(
-                f"Failed to run all workers within the {self.BATCHED_PIPE_TIMEOUT} sec time limit. This "
-                f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
-            )
+
+        # In shared-memory/buffer mode, workers signal completion by setting
+        # their `mp_event` (they may not send anything back on the pipe).
+        if self._use_buffers:
+            pending = set(workers_range)
+            n_iter = 0
+            while pending:
+                n_iter += 1
+                remaining = timeout - (time.time() - t0)
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Failed to run all workers within the {timeout} sec time limit. This "
+                        f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                    )
+
+                # Wait in short slices so we can both harvest multiple events and
+                # periodically check for dead workers without blocking forever.
+                slice_timeout = min(0.1, remaining)
+                progressed = False
+                for wi in tuple(pending):
+                    if self._events[wi].wait(timeout=slice_timeout):
+                        self._events[wi].clear()
+                        pending.remove(wi)
+                        progressed = True
+
+                if not progressed and (n_iter % 50) == 0:
+                    for wi in pending:
+                        if not self._workers[wi].is_alive():
+                            try:
+                                self._shutdown_workers()
+                            finally:
+                                raise RuntimeError(f"Cannot proceed, worker {wi} dead.")
+            return
+
+        # No-buffer mode: workers send back data on the pipe, so we can efficiently
+        # block on readability.
+        pipes_pending = {self.parent_channels[i]: i for i in workers_range}
+        i = 0
+        while pipes_pending:
+            i += 1
+            should_check_for_dead_workers = (i % 20) == 0
+            remaining = timeout - (time.time() - t0)
+            if remaining <= 0:
+                raise RuntimeError(
+                    f"Failed to run all workers within the {timeout} sec time limit. This "
+                    f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
+                )
+
+            # Wait for any pipes to become readable (OS-level select/poll)
+            ready = connection_wait(list(pipes_pending.keys()), timeout=remaining)
+
+            if not ready and should_check_for_dead_workers:
+                # Timeout with no pipes ready - check for dead workers
+                for wi in pipes_pending.values():
+                    if not self._workers[wi].is_alive():
+                        try:
+                            self._shutdown_workers()
+                        finally:
+                            raise RuntimeError(f"Cannot proceed, worker {wi} dead.")
+                continue
+
+            # Clear events for ready workers (best-effort)
+            for pipe in ready:
+                wi = pipes_pending.pop(pipe)
+                self._events[wi].clear()
 
     def _step_no_buffers(
         self, tensordict: TensorDictBase
@@ -1848,7 +1897,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.consolidate:
             try:
                 data = tensordict.consolidate(
-                    share_memory=True, inplace=False, num_threads=1
+                    # share_memory=False: avoid resource_sharer which causes
+                    # progressive slowdown with fork on Linux
+                    share_memory=False,
+                    inplace=False,
+                    num_threads=1,
                 )
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -1867,8 +1920,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 else:
                     local_data = local_data.to(env_device)
             self.parent_channels[i].send(("step", local_data))
-        # for i in range(data.shape[0]):
-        #     self.parent_channels[i].send(("step", (data, i)))
 
         self._wait_for_workers(workers_range)
 
@@ -2011,6 +2062,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
+
         for i in workers_range:
             self.parent_channels[i].send(("step", data[i]))
 
@@ -2076,11 +2128,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
-            # tensordict = tensordict.consolidate(share_memory=True, num_threads=1)
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
-                        share_memory=True, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
@@ -2458,12 +2512,15 @@ def _run_worker_pipe_shared_mem(
                 event.synchronize()
 
             if _non_tensor_keys:
+                # Set event BEFORE sending to avoid deadlocks when the pipe buffer
+                # is full (the parent will start reading as soon as it observes
+                # the event).
+                mp_event.set()
                 child_pipe.send(
                     ("non_tensor", cur_td.select(*_non_tensor_keys, strict=False))
                 )
-
-            # Set event only after non-tensor data is sent to avoid race condition
-            mp_event.set()
+            else:
+                mp_event.set()
 
             del cur_td
 
@@ -2494,14 +2551,16 @@ def _run_worker_pipe_shared_mem(
             # Make sure the root is updated
             root_shared_tensordict.update_(env._step_mdp(input))
 
-            # Set event before sending non-tensor data so parent knows worker is done
-            # The recv() call itself will provide synchronization for the pipe
-            mp_event.set()
-
             if _non_tensor_keys:
+                # Set event BEFORE sending to avoid deadlocks when the pipe buffer
+                # is full (the parent will start reading as soon as it observes
+                # the event).
+                mp_event.set()
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
                 )
+            else:
+                mp_event.set()
 
             del next_td
 
@@ -2536,14 +2595,16 @@ def _run_worker_pipe_shared_mem(
                 event.record()
                 event.synchronize()
 
-            # Set event before sending non-tensor data so parent knows worker is done
-            # The recv() call itself will provide synchronization for the pipe
-            mp_event.set()
-
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
+                # Set event BEFORE sending to avoid deadlocks when the pipe buffer
+                # is full (the parent will start reading as soon as it observes
+                # the event).
+                mp_event.set()
                 child_pipe.send(("non_tensor", ntd))
+            else:
+                mp_event.set()
 
             del td, root_next_td
 
@@ -2686,8 +2747,6 @@ def _run_worker_pipe_direct(
                 raise RuntimeError("call 'init' before resetting")
             # we use 'data' to pass the keys that we need to pass to reset,
             # because passing the entire buffer may have unwanted consequences
-            # data, idx, reset_kwargs = data
-            # data = data[idx]
             data, reset_kwargs = data
             if data is not None:
                 data.unlock_()
@@ -2703,18 +2762,19 @@ def _run_worker_pipe_direct(
                 event.synchronize()
             if consolidate:
                 try:
-                    child_pipe.send(
-                        cur_td.consolidate(
-                            share_memory=True, inplace=True, num_threads=1
-                        )
+                    cur_td = cur_td.consolidate(
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        inplace=True,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            else:
-                child_pipe.send(cur_td)
-            # Set event after successfully sending through pipe to avoid race condition
-            # where event is set but pipe send fails (BrokenPipeError)
+            # Set event BEFORE send so parent starts reading, which unblocks send
+            # if pipe buffer was full (prevents deadlock)
             mp_event.set()
+            child_pipe.send(cur_td)
 
             del cur_td
 
@@ -2722,8 +2782,6 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            # data, idx = data
-            # data = data[idx]
             next_td = env._step(data)
             if event is not None:
                 event.record()
@@ -2731,14 +2789,18 @@ def _run_worker_pipe_direct(
             if consolidate:
                 try:
                     next_td = next_td.consolidate(
-                        share_memory=True, inplace=True, num_threads=1
+                        # share_memory=False: avoid resource_sharer which causes
+                        # progressive slowdown with fork on Linux
+                        share_memory=False,
+                        inplace=True,
+                        num_threads=1,
                     )
                 except Exception as err:
                     raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
-            child_pipe.send(next_td)
-            # Set event after successfully sending through pipe to avoid race condition
-            # where event is set but pipe send fails (BrokenPipeError)
+            # Set event BEFORE send so parent starts reading, which unblocks send
+            # if pipe buffer was full (prevents deadlock)
             mp_event.set()
+            child_pipe.send(next_td)
 
             del next_td
 

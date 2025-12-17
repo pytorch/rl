@@ -42,15 +42,21 @@ from torchrl.data import (
     SamplerWithoutReplacement,
 )
 from torchrl.modules import RandomPolicy
-
-_has_ray = importlib.util.find_spec("ray") is not None
+from torchrl.testing.dist_utils import (
+    assert_no_new_python_processes,
+    snapshot_python_processes,
+)
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 TIMEOUT = 200
 
 if sys.platform.startswith("win"):
     pytest.skip("skipping windows tests in windows", allow_module_level=True)
+
+pytestmark = [pytest.mark.forked]
 
 
 class CountingPolicy(TensorDictModuleBase):
@@ -222,6 +228,81 @@ class DistributedCollectorBase:
             queue.close()
 
     @classmethod
+    def _test_distributed_collector_updatepolicy_shutdown_only(cls, queue, sync):
+        """Small rollout + weight sync + shutdown (used for leak checks in parent process)."""
+        collector = None
+        try:
+            frames_per_batch = 50
+            total_frames = 250
+            env = CountingEnv
+            policy = CountingPolicy()
+            dcls = cls.distributed_class()
+            collector = dcls(
+                [env] * 2,
+                policy,
+                collector_class=Collector,
+                total_frames=total_frames,
+                frames_per_batch=frames_per_batch,
+                sync=sync,
+                **cls.distributed_kwargs(),
+            )
+            first_batch = None
+            seen_updated = False
+            total = 0
+            for i, data in enumerate(collector):
+                total += data.numel()
+                if i == 0:
+                    first_batch = data
+                    policy.weight.data.add_(1)
+                    collector.update_policy_weights_(policy)
+                else:
+                    if (data["action"] == 2).all():
+                        seen_updated = True
+            assert total == total_frames
+            assert first_batch is not None
+            assert (first_batch["action"] == 1).all(), first_batch["action"]
+            assert (
+                seen_updated
+            ), "Updated weights were never observed in collected batches."
+            queue.put(("passed", None))
+        except Exception as e:
+            tb = traceback.format_exc()
+            queue.put(("not passed", (e, tb)))
+        finally:
+            if collector is not None:
+                collector.shutdown()
+
+    @pytest.mark.parametrize("sync", [False, True])
+    def test_collector_shutdown_clears_python_processes(self, sync):
+        """Regression test: collector.shutdown() should not leak python processes."""
+        queue = mp.Queue(1)
+        # Creating multiprocessing primitives (Queue / SemLock) may spawn Python's
+        # `multiprocessing.resource_tracker` helper process. That process is not owned
+        # by the collector and may live for the duration of the test runner, so we
+        # include it in the baseline.
+        baseline = snapshot_python_processes()
+        baseline_time = time.time()
+
+        proc = mp.Process(
+            target=self._test_distributed_collector_updatepolicy_shutdown_only,
+            args=(queue, sync),
+        )
+        proc.start()
+        try:
+            out, maybe_err = queue.get(timeout=TIMEOUT)
+            if out != "passed":
+                raise RuntimeError(f"Error with stack {maybe_err[1]}") from maybe_err[0]
+        finally:
+            proc.join(10)
+            if proc.is_alive():
+                proc.terminate()
+            queue.close()
+
+        assert_no_new_python_processes(
+            baseline=baseline, baseline_time=baseline_time, timeout=20.0
+        )
+
+    @classmethod
     def _test_distributed_collector_class(cls, queue, collector_class):
         try:
             frames_per_batch = 50
@@ -318,14 +399,18 @@ class DistributedCollectorBase:
                 if i == 0:
                     first_batch = data
                     if policy is not None:
-                        policy.weight.data += 1
+                        # Avoid using `.data` (and avoid tracking in autograd).
+                        policy.weight.data.add_(1)
                     else:
+                        assert weights is not None
                         weights.data += 1
                     torchrl_logger.info("TEST -- Calling update_policy_weights_()")
                     collector.update_policy_weights_(weights)
                     torchrl_logger.info("TEST -- Done calling update_policy_weights_()")
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
+            assert first_batch is not None
+            assert last_batch is not None
             assert (first_batch["action"] == 1).all(), first_batch["action"]
             assert (last_batch["action"] == 2).all(), last_batch["action"]
             collector.shutdown()
@@ -421,6 +506,10 @@ class TestSyncCollector(DistributedCollectorBase):
     def test_distributed_collector_sync(self, *args):
         raise pytest.skip("skipping as only sync is supported")
 
+    @pytest.mark.parametrize("sync", [True])
+    def test_collector_shutdown_clears_python_processes(self, sync):
+        super().test_collector_shutdown_clears_python_processes(sync)
+
     @classmethod
     def _test_distributed_collector_updatepolicy(
         cls,
@@ -456,9 +545,11 @@ class TestSyncCollector(DistributedCollectorBase):
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
+                    policy.weight.data.add_(1)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
+            assert first_batch is not None
+            assert last_batch is not None
             assert (first_batch["action"] == 1).all(), first_batch["action"]
             if update_interval == 1:
                 assert (last_batch["action"] == 2).all(), last_batch["action"]
@@ -517,7 +608,16 @@ class TestRayCollector(DistributedCollectorBase):
         import ray
         from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
-        ray.init(**DEFAULT_RAY_INIT_CONFIG)
+        # Ensure Ray is initialized with a runtime_env that lets workers import
+        # this test module (e.g. `CountingPolicy`), otherwise actor unpickling can
+        # fail with "No module named 'test_distributed'".
+        ray.shutdown()
+        ray_init_config = dict(DEFAULT_RAY_INIT_CONFIG)
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+        }
+        ray.init(**ray_init_config)
 
         yield
         ray.shutdown()
@@ -538,14 +638,13 @@ class TestRayCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        import ray
-
-        ray.shutdown()  # make sure ray is not running
-        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        # Ray will be auto-initialized by RayCollector if not already started.
+        # We need to provide runtime_env so workers can import this test module.
+        ray_init_config = dict(DEFAULT_RAY_INIT_CONFIG)
         ray_init_config["runtime_env"] = {
             "working_dir": os.path.dirname(__file__),
             "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
-        }  # for ray workers
+        }
         remote_configs = {
             "num_cpus": 1,
             "num_gpus": 0.0,
@@ -578,6 +677,67 @@ class TestRayCollector(DistributedCollectorBase):
             assert total == 200
         finally:
             collector.shutdown()
+
+    @pytest.mark.parametrize("sync", [False, True])
+    def test_collector_shutdown_clears_python_processes(self, sync):
+        """Regression test: collector.shutdown() should not leak python processes (ray)."""
+        kwargs = self.distributed_kwargs()
+        baseline = snapshot_python_processes()
+        baseline_time = time.time()
+
+        frames_per_batch = 50
+        total_frames = 250
+        env = CountingEnv
+        policy = CountingPolicy()
+        collector = self.distributed_class()(
+            [env] * 2,
+            policy,
+            collector_class=Collector,
+            total_frames=total_frames,
+            frames_per_batch=frames_per_batch,
+            sync=sync,
+            **kwargs,
+        )
+        try:
+            total = 0
+            first_batch = None
+            seen_updated = False
+            for i, data in enumerate(collector):
+                total += data.numel()
+                if i == 0:
+                    first_batch = data
+                    policy.weight.data.add_(1)
+                    collector.update_policy_weights_(policy)
+                else:
+                    if (data["action"] == 2).all():
+                        seen_updated = True
+            assert total == total_frames
+            assert first_batch is not None
+            assert (first_batch["action"] == 1).all(), first_batch["action"]
+            assert (
+                seen_updated
+            ), "Updated weights were never observed in collected batches."
+        finally:
+            collector.shutdown()
+
+        def _is_ray_runtime_proc(info):
+            args = info.get("args") or ""
+            comm = info.get("comm") or ""
+            return (
+                " ray::" in args.lower()
+                or "/site-packages/ray/" in args
+                or comm in {"raylet", "gcs_server"}
+            )
+
+        assert_no_new_python_processes(
+            baseline=baseline,
+            baseline_time=baseline_time,
+            timeout=30.0,
+            # Ray's core daemons and prestarted workers can legitimately outlive a
+            # collector. We only want to catch leaked *non-Ray* Python processes
+            # spawned by the collector itself.
+            ignore_info_fn=_is_ray_runtime_proc,
+        )
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -658,12 +818,15 @@ class TestRayCollector(DistributedCollectorBase):
                 if i == 0:
                     first_batch = data
                     if policy is not None:
-                        policy.weight.data += 1
+                        policy.weight.data.add_(1)
                     else:
-                        weights.data += 1
+                        assert weights is not None
+                        weights.data.add_(1)
                     collector.update_policy_weights_(weights)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
+            assert first_batch is not None
+            assert last_batch is not None
             assert (first_batch["action"] == 1).all(), first_batch["action"]
             assert (last_batch["action"] == 2).all(), last_batch["action"]
             assert total == total_frames
@@ -730,8 +893,10 @@ class TestRayCollector(DistributedCollectorBase):
         p = policy_constructor()
         # p(env().reset())
         weights = TensorDict.from_module(p)
-        weights["module", "1", "module", "weight"].data.fill_(0)
-        weights["module", "1", "module", "bias"].data.fill_(2)
+        # `TensorDict.__getitem__` returns tensors; use in-place ops directly.
+        with torch.no_grad():
+            weights["module", "1", "module", "weight"].fill_(0)
+            weights["module", "1", "module", "bias"].fill_(2)
         collector.update_policy_weights_(weights)
         try:
             for data in collector:

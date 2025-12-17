@@ -686,11 +686,41 @@ class DistributedSyncCollector(BaseCollector):
         raise NotImplementedError
 
     def shutdown(self, timeout: float | None = None) -> None:
-        # Clean up weight sync schemes
+        # Prevent double shutdown
+        if getattr(self, "_shutdown", False):
+            return
+        self._shutdown = True
+
+        # Wait for workers to exit
+        if hasattr(self, "jobs"):
+            for job in self.jobs:
+                if self.launcher == "mp":
+                    if hasattr(job, "is_alive") and job.is_alive():
+                        job.join(timeout=timeout if timeout is not None else 10)
+                elif self.launcher == "submitit":
+                    try:
+                        job.result()
+                    except Exception:
+                        pass
+
+        # Clean up weight sync schemes AFTER workers have exited
         if self._weight_sync_schemes is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
             for scheme in self._weight_sync_schemes.values():
-                scheme.shutdown()
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
             self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torchrl_logger.debug("destroying process group")
+            torch.distributed.destroy_process_group()
+
+        torchrl_logger.debug("collector shut down")
 
 
 class DistributedSyncDataCollector(

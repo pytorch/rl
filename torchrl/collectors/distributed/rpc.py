@@ -863,6 +863,7 @@ class RPCCollector(BaseCollector):
             return
         if self._shutdown:
             return
+
         torchrl_logger.debug("shutting down")
         for future, i in self.futures:
             # clear the futures
@@ -876,10 +877,6 @@ class RPCCollector(BaseCollector):
         torchrl_logger.debug("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
 
-        # Destroy torch.distributed process group
-        if torch.distributed.is_initialized():
-            torch.distributed.destroy_process_group()
-
         if self.launcher == "mp":
             for job in self.jobs:
                 job.join(int(IDLE_TIMEOUT))
@@ -890,6 +887,23 @@ class RPCCollector(BaseCollector):
             pass
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
+
+        # Clean up weight sync schemes AFTER workers have exited
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
+
         self._shutdown = True
 
 
