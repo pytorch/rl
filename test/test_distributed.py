@@ -638,11 +638,13 @@ class TestRayCollector(DistributedCollectorBase):
 
     @classmethod
     def distributed_kwargs(cls) -> dict:
-        import ray
-
-        # Ray is started by the class fixture.
-        assert ray.is_initialized()
-        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        # Ray will be auto-initialized by RayCollector if not already started.
+        # We need to provide runtime_env so workers can import this test module.
+        ray_init_config = dict(DEFAULT_RAY_INIT_CONFIG)
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+        }
         remote_configs = {
             "num_cpus": 1,
             "num_gpus": 0.0,
