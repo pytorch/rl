@@ -682,7 +682,12 @@
 
         <span class="c1"># Optimization-related hook collections</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pre_optim_ops</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Before optimization steps (e.g., cache clearing)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_ops</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># After loss computation (e.g., priority updates)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_ops</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[]</span>
+        <span class="p">)</span>  <span class="c1"># After loss computation, operates on batch (e.g., priority updates)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_ops</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[]</span>
+        <span class="p">)</span>  <span class="c1"># Transform loss values before optimizer (e.g., scaling, clipping)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_ops</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># During optimization (e.g., gradient clipping)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_process_optim_batch_ops</span> <span class="o">=</span> <span class="p">(</span>
             <span class="p">[]</span>
@@ -843,6 +848,7 @@
             <span class="s2">&quot;pre_optim_steps&quot;</span><span class="p">,</span>
             <span class="s2">&quot;process_optim_batch&quot;</span><span class="p">,</span>
             <span class="s2">&quot;post_loss&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;process_loss&quot;</span><span class="p">,</span>
             <span class="s2">&quot;optimizer&quot;</span><span class="p">,</span>
             <span class="s2">&quot;post_steps&quot;</span><span class="p">,</span>
             <span class="s2">&quot;post_optim&quot;</span><span class="p">,</span>
@@ -888,6 +894,12 @@
                 <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
+
+        <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;process_loss&quot;</span><span class="p">:</span>
+            <span class="n">_check_input_output_typehint</span><span class="p">(</span>
+                <span class="n">op</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">TensorDictBase</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_ops</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">timed_op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">elif</span> <span class="n">dest</span> <span class="o">==</span> <span class="s2">&quot;optimizer&quot;</span><span class="p">:</span>
             <span class="n">_check_input_output_typehint</span><span class="p">(</span>
@@ -944,7 +956,8 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The hook collection </span><span class="si">{</span><span class="n">dest</span><span class="si">}</span><span class="s2"> is not recognised. Choose from:&quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;(batch_process, pre_steps, pre_step, post_loss, post_steps, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(batch_process, pre_optim_steps, process_optim_batch, post_loss, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;process_loss, optimizer, post_steps, post_optim, pre_steps_log, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;pre_epoch, post_epoch)&quot;</span>
             <span class="p">)</span>
@@ -992,6 +1005,30 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
                 <span class="n">batch</span> <span class="o">=</span> <span class="n">out</span>
         <span class="k">return</span> <span class="n">batch</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process_loss_hook</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sub_batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">losses_td</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply registered loss transformation hooks before optimization.</span>
+
+<span class="sd">        Unlike ``post_loss`` hooks which operate on the batch (e.g., for priority updates),</span>
+<span class="sd">        ``process_loss`` hooks transform the loss TensorDict itself. These hooks receive</span>
+<span class="sd">        both the sub_batch and the losses, and should return the modified losses.</span>
+
+<span class="sd">        Use cases include loss scaling, clipping, or applying importance weights.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            sub_batch: The batch of data used to compute the losses.</span>
+<span class="sd">            losses_td: The TensorDict containing loss components from the loss module.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The (possibly modified) losses TensorDict.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_ops</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">op</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">,</span> <span class="n">losses_td</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+                <span class="n">losses_td</span> <span class="o">=</span> <span class="n">out</span>
+        <span class="k">return</span> <span class="n">losses_td</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_optimizer_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_ops</span><span class="p">):</span>
@@ -1176,6 +1213,8 @@
                     <span class="k">break</span>
                 <span class="n">losses_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_post_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
+
+                <span class="n">losses_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_loss_hook</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">,</span> <span class="n">losses_td</span><span class="p">)</span>
 
                 <span class="n">losses_detached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_hook</span><span class="p">(</span><span class="n">losses_td</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_post_optim_hook</span><span class="p">()</span>
