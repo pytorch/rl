@@ -261,6 +261,7 @@ class Trainer:
         # Optimization-related hook collections
         self._pre_optim_ops = []  # Before optimization steps (e.g., cache clearing)
         self._post_loss_ops = []  # After loss computation (e.g., priority updates)
+        self._process_loss_ops = []  # Process losses before optimizer (e.g., normalization)
         self._optimizer_ops = []  # During optimization (e.g., gradient clipping)
         self._process_optim_batch_ops = (
             []
@@ -421,6 +422,7 @@ class Trainer:
             "pre_optim_steps",
             "process_optim_batch",
             "post_loss",
+            "process_loss",
             "optimizer",
             "post_steps",
             "post_optim",
@@ -466,6 +468,12 @@ class Trainer:
                 op, input=TensorDictBase, output=TensorDictBase
             )
             self._post_loss_ops.append((timed_op, kwargs))
+
+        elif dest == "process_loss":
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
+            self._process_loss_ops.append((timed_op, kwargs))
 
         elif dest == "optimizer":
             _check_input_output_typehint(
@@ -570,6 +578,18 @@ class Trainer:
             if isinstance(out, TensorDictBase):
                 batch = out
         return batch
+
+    def _process_loss_hook(self, losses_td: TensorDictBase) -> TensorDictBase:
+        """Apply any registered loss post-processing hooks before optimization.
+
+        These hooks can be used to rescale, clip or otherwise transform the loss
+        components prior to the optimizer step.
+        """
+        for op, kwargs in self._process_loss_ops:
+            out = op(losses_td, **kwargs)
+            if isinstance(out, TensorDictBase):
+                losses_td = out
+        return losses_td
 
     def _optimizer_hook(self, batch):
         for i, (op, kwargs) in enumerate(self._optimizer_ops):
@@ -754,6 +774,8 @@ class Trainer:
                     break
                 losses_td = self.loss_module(sub_batch)
                 self._post_loss_hook(sub_batch)
+
+                losses_td = self._process_loss_hook(losses_td)
 
                 losses_detached = self._optimizer_hook(losses_td)
                 self._post_optim_hook()
