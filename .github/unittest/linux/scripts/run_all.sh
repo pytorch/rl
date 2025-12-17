@@ -58,6 +58,12 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Create venv with uv
 printf "* Creating venv with Python ${PYTHON_VERSION}\n"
+# IMPORTANT: ensure a clean environment.
+# In CI (and some local workflows), the workspace directory can be reused across runs.
+# A reused venv may contain packages that violate our constraints (e.g. transformers'
+# huggingface-hub upper bound), and `uv pip install` does not always guarantee
+# downgrades of already-present packages unless the environment is clean.
+rm -rf "${env_dir}"
 uv venv --python "${PYTHON_VERSION}" "${env_dir}"
 source "${env_dir}/bin/activate"
 uv_pip_install() {
@@ -95,6 +101,7 @@ uv_pip_install \
   hypothesis \
   future \
   cloudpickle \
+  packaging \
   pygame \
   "moviepy<2.0.0" \
   tqdm \
@@ -221,7 +228,11 @@ else
 fi
 
 printf "* Installing torchrl\n"
-uv_pip_install -e . --no-build-isolation
+if [[ "$RELEASE" == 0 ]]; then
+  uv_pip_install -e . --no-build-isolation --no-deps
+else
+  uv_pip_install -e . --no-build-isolation
+fi
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
@@ -232,7 +243,9 @@ if [ "${CU_VERSION:-}" != cpu ] ; then
   uv_pip_install "git+https://github.com/facebookresearch/eai-vc.git#subdirectory=vc_models"
 
   printf "* Upgrading timm\n"
-  uv_pip_install --upgrade "timm>=0.9.0"
+  # Keep HF Hub constrained: timm can pull a hub>=1.x which breaks transformers'
+  # import-time version check.
+  uv_pip_install --upgrade "timm>=0.9.0" "huggingface-hub>=0.34.0,<1.0"
 
   python -c "
 import vc_models
