@@ -1073,6 +1073,25 @@ class TestCountFrames:
         CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
 
 
+class TestProcessLossHook:
+    @pytest.mark.parametrize("factor", [0.5, 2.0, 10.0])
+    def test_scale_loss(self, factor):
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+
+        class ScaleLoss:
+            def __init__(self, scale):
+                self.scale = scale
+
+            def __call__(self, losses):
+                return losses.apply(lambda t: t * self.scale)
+
+        scale_hook = ScaleLoss(factor)
+        trainer.register_op("process_loss", scale_hook)
+        td_out = trainer._process_loss_hook(td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(factor))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
