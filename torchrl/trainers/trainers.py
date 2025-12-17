@@ -260,10 +260,12 @@ class Trainer:
 
         # Optimization-related hook collections
         self._pre_optim_ops = []  # Before optimization steps (e.g., cache clearing)
-        self._post_loss_ops = []  # After loss computation (e.g., priority updates)
+        self._post_loss_ops = (
+            []
+        )  # After loss computation, operates on batch (e.g., priority updates)
         self._process_loss_ops = (
             []
-        )  # Process losses before optimizer (e.g., normalization)
+        )  # Transform loss values before optimizer (e.g., scaling, clipping)
         self._optimizer_ops = []  # During optimization (e.g., gradient clipping)
         self._process_optim_batch_ops = (
             []
@@ -532,7 +534,8 @@ class Trainer:
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
-                f"(batch_process, pre_steps, pre_step, post_loss, post_steps, "
+                f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
+                f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
                 f"pre_epoch, post_epoch)"
             )
@@ -584,10 +587,20 @@ class Trainer:
     def _process_loss_hook(
         self, sub_batch: TensorDictBase, losses_td: TensorDictBase
     ) -> TensorDictBase:
-        """Apply any registered loss post-processing hooks before optimization.
+        """Apply registered loss transformation hooks before optimization.
 
-        These hooks can be used to rescale, clip or otherwise transform the loss
-        components prior to the optimizer step.
+        Unlike ``post_loss`` hooks which operate on the batch (e.g., for priority updates),
+        ``process_loss`` hooks transform the loss TensorDict itself. These hooks receive
+        both the sub_batch and the losses, and should return the modified losses.
+
+        Use cases include loss scaling, clipping, or applying importance weights.
+
+        Args:
+            sub_batch: The batch of data used to compute the losses.
+            losses_td: The TensorDict containing loss components from the loss module.
+
+        Returns:
+            The (possibly modified) losses TensorDict.
         """
         for op, kwargs in self._process_loss_ops:
             out = op(sub_batch, losses_td, **kwargs)
