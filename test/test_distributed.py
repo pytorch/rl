@@ -253,7 +253,8 @@ class DistributedCollectorBase:
                 total += data.numel()
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
+                    with torch.no_grad():
+                        policy.weight.add_(1)
                     collector.update_policy_weights_(policy)
                 else:
                     if (data["action"] == 2).all():
@@ -399,10 +400,17 @@ class DistributedCollectorBase:
                 if i == 0:
                     first_batch = data
                     if policy is not None:
-                        policy.weight.data += 1
+                        # Avoid using `.data` (and avoid tracking in autograd).
+                        with torch.no_grad():
+                            policy.weight.add_(1)
                     else:
                         assert weights is not None
-                        weights.data += 1
+                        # `TensorDict.data` is a read-only property: `+=` would
+                        # attempt to call a setter. Mutate the underlying tensors
+                        # in-place instead.
+                        for v in weights.values(True, True):
+                            if isinstance(v, torch.Tensor):
+                                v.add_(1)
                     torchrl_logger.info("TEST -- Calling update_policy_weights_()")
                     collector.update_policy_weights_(weights)
                     torchrl_logger.info("TEST -- Done calling update_policy_weights_()")
@@ -544,7 +552,8 @@ class TestSyncCollector(DistributedCollectorBase):
                 assert data.numel() == frames_per_batch
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
+                    with torch.no_grad():
+                        policy.weight.add_(1)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
             assert first_batch is not None
@@ -703,7 +712,8 @@ class TestRayCollector(DistributedCollectorBase):
                 total += data.numel()
                 if i == 0:
                     first_batch = data
-                    policy.weight.data += 1
+                    with torch.no_grad():
+                        policy.weight.add_(1)
                     collector.update_policy_weights_(policy)
                 else:
                     if (data["action"] == 2).all():
@@ -815,10 +825,13 @@ class TestRayCollector(DistributedCollectorBase):
                 if i == 0:
                     first_batch = data
                     if policy is not None:
-                        policy.weight.data += 1
+                        with torch.no_grad():
+                            policy.weight.add_(1)
                     else:
                         assert weights is not None
-                        weights.data += 1
+                        for v in weights.values(True, True):
+                            if isinstance(v, torch.Tensor):
+                                v.add_(1)
                     collector.update_policy_weights_(weights)
                 elif total == total_frames - frames_per_batch:
                     last_batch = data
@@ -890,8 +903,10 @@ class TestRayCollector(DistributedCollectorBase):
         p = policy_constructor()
         # p(env().reset())
         weights = TensorDict.from_module(p)
-        weights["module", "1", "module", "weight"].data.fill_(0)
-        weights["module", "1", "module", "bias"].data.fill_(2)
+        # `TensorDict.__getitem__` returns tensors; use in-place ops directly.
+        with torch.no_grad():
+            weights["module", "1", "module", "weight"].fill_(0)
+            weights["module", "1", "module", "bias"].fill_(2)
         collector.update_policy_weights_(weights)
         try:
             for data in collector:
