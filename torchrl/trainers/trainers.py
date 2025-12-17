@@ -261,7 +261,9 @@ class Trainer:
         # Optimization-related hook collections
         self._pre_optim_ops = []  # Before optimization steps (e.g., cache clearing)
         self._post_loss_ops = []  # After loss computation (e.g., priority updates)
-        self._process_loss_ops = []  # Process losses before optimizer (e.g., normalization)
+        self._process_loss_ops = (
+            []
+        )  # Process losses before optimizer (e.g., normalization)
         self._optimizer_ops = []  # During optimization (e.g., gradient clipping)
         self._process_optim_batch_ops = (
             []
