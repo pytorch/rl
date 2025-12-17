@@ -1078,17 +1078,18 @@ class TestProcessLossHook:
     def test_scale_loss(self, factor):
         trainer = mocking_trainer()
         td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"sub_batch": torch.tensor(1.0)}, [])
 
         class ScaleLoss:
             def __init__(self, scale):
                 self.scale = scale
 
-            def __call__(self, losses):
+            def __call__(self, sub_batch, losses):
                 return losses.apply(lambda t: t * self.scale)
 
         scale_hook = ScaleLoss(factor)
         trainer.register_op("process_loss", scale_hook)
-        td_out = trainer._process_loss_hook(td_loss.clone())
+        td_out = trainer._process_loss_hook(td_sub_batch.clone(), td_loss.clone())
         assert torch.allclose(td_out["loss_a"], torch.tensor(factor))
 
 

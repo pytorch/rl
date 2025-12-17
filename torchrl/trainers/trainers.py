@@ -581,14 +581,16 @@ class Trainer:
                 batch = out
         return batch
 
-    def _process_loss_hook(self, losses_td: TensorDictBase) -> TensorDictBase:
+    def _process_loss_hook(
+        self, sub_batch: TensorDictBase, losses_td: TensorDictBase
+    ) -> TensorDictBase:
         """Apply any registered loss post-processing hooks before optimization.
 
         These hooks can be used to rescale, clip or otherwise transform the loss
         components prior to the optimizer step.
         """
         for op, kwargs in self._process_loss_ops:
-            out = op(losses_td, **kwargs)
+            out = op(sub_batch, losses_td, **kwargs)
             if isinstance(out, TensorDictBase):
                 losses_td = out
         return losses_td
@@ -777,7 +779,7 @@ class Trainer:
                 losses_td = self.loss_module(sub_batch)
                 self._post_loss_hook(sub_batch)
 
-                losses_td = self._process_loss_hook(losses_td)
+                losses_td = self._process_loss_hook(sub_batch, losses_td)
 
                 losses_detached = self._optimizer_hook(losses_td)
                 self._post_optim_hook()
