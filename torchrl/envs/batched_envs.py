@@ -2512,12 +2512,15 @@ def _run_worker_pipe_shared_mem(
                 event.synchronize()
 
             if _non_tensor_keys:
+                # Set event BEFORE sending to avoid deadlocks when the pipe buffer
+                # is full (the parent will start reading as soon as it observes
+                # the event).
+                mp_event.set()
                 child_pipe.send(
                     ("non_tensor", cur_td.select(*_non_tensor_keys, strict=False))
                 )
-
-            # Set event only after non-tensor data is sent to avoid race condition
-            mp_event.set()
+            else:
+                mp_event.set()
 
             del cur_td
 
@@ -2549,13 +2552,15 @@ def _run_worker_pipe_shared_mem(
             root_shared_tensordict.update_(env._step_mdp(input))
 
             if _non_tensor_keys:
+                # Set event BEFORE sending to avoid deadlocks when the pipe buffer
+                # is full (the parent will start reading as soon as it observes
+                # the event).
+                mp_event.set()
                 child_pipe.send(
                     ("non_tensor", next_td.select(*_non_tensor_keys, strict=False))
                 )
-
-            # Signal completion only after all side-channel sends are done to avoid races
-            # with the parent waiting on the event and immediately calling recv().
-            mp_event.set()
+            else:
+                mp_event.set()
 
             del next_td
 
@@ -2593,10 +2598,13 @@ def _run_worker_pipe_shared_mem(
             if _non_tensor_keys:
                 ntd = root_next_td.select(*_non_tensor_keys)
                 ntd.set("next", td_next.select(*_non_tensor_keys))
+                # Set event BEFORE sending to avoid deadlocks when the pipe buffer
+                # is full (the parent will start reading as soon as it observes
+                # the event).
+                mp_event.set()
                 child_pipe.send(("non_tensor", ntd))
-
-            # Signal completion only after all side-channel sends are done.
-            mp_event.set()
+            else:
+                mp_event.set()
 
             del td, root_next_td
 
