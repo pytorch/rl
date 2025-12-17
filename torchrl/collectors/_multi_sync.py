@@ -333,7 +333,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if self.replay_buffer is not None:
                 yield
                 self._frames += sum(
-                    self.frames_per_batch_worker(worker_idx)
+                    self.frames_per_batch_worker(worker_idx=worker_idx)
                     for worker_idx in range(self.num_workers)
                 )
                 continue
