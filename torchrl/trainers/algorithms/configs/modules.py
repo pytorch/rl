@@ -324,6 +324,29 @@ class ValueModelConfig(ModelConfig):
         super().__post_init__()
 
 
+@dataclass
+class TanhModuleConfig(ModelConfig):
+    """A class to configure a TanhModule.
+
+    Example:
+        >>> cfg = TanhModuleConfig(in_keys=["action"], out_keys=["action"], low=-1.0, high=1.0)
+        >>> module = instantiate(cfg)
+        >>> assert isinstance(module, TanhModule)
+
+    .. seealso:: :class:`torchrl.modules.TanhModule`
+    """
+
+    spec: Any = None
+    low: Any = None
+    high: Any = None
+    clamp: bool = False
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_tanh_module"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for TanhModule configurations."""
+        super().__post_init__()
+
+
 def _make_tensordict_module(*args, **kwargs):
     """Helper function to create a TensorDictModule."""
     from hydra.utils import instantiate
@@ -472,3 +495,19 @@ def _make_value_model(*args, **kwargs):
         value_operator = value_operator.share_memory()
 
     return value_operator
+
+
+def _make_tanh_module(*args, **kwargs):
+    """Helper function to create a TanhModule."""
+    from omegaconf import ListConfig
+
+    from torchrl.modules import TanhModule
+
+    kwargs.pop("shared", False)
+
+    if "in_keys" in kwargs and isinstance(kwargs["in_keys"], ListConfig):
+        kwargs["in_keys"] = list(kwargs["in_keys"])
+    if "out_keys" in kwargs and isinstance(kwargs["out_keys"], ListConfig):
+        kwargs["out_keys"] = list(kwargs["out_keys"])
+
+    return TanhModule(**kwargs)

@@ -217,7 +217,7 @@ class MultiSyncCollector(MultiCollector):
         if cat_results is None:
             cat_results = "stack"
 
-        self.buffers = {}
+        self.buffers = [None for _ in range(self.num_workers)]
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
@@ -237,7 +237,6 @@ class MultiSyncCollector(MultiCollector):
                     msg = "continue_random"
                 else:
                     msg = "continue"
-                # Debug: sending 'continue'
                 self.pipes[idx].send((None, msg))
 
             self._iter += 1
@@ -300,8 +299,11 @@ class MultiSyncCollector(MultiCollector):
                 if preempt:
                     # mask buffers if cat, and create a mask if stack
                     if cat_results != "stack":
-                        buffers = {}
-                        for worker_idx, buffer in self.buffers.items():
+                        buffers = [None] * self.num_workers
+                        for worker_idx, buffer in enumerate(self.buffers):
+                            # Skip pre-empted envs:
+                            if buffer is None:
+                                continue
                             valid = buffer.get(("collector", "traj_ids")) != -1
                             if valid.ndim > 2:
                                 valid = valid.flatten(0, -2)
@@ -309,7 +311,7 @@ class MultiSyncCollector(MultiCollector):
                                 valid = valid.any(0)
                             buffers[worker_idx] = buffer[..., valid]
                     else:
-                        for buffer in self.buffers.values():
+                        for buffer in filter(lambda x: x is not None, self.buffers):
                             with buffer.unlock_():
                                 buffer.set(
                                     ("collector", "mask"),
@@ -321,7 +323,7 @@ class MultiSyncCollector(MultiCollector):
 
                 # Skip frame counting if this worker didn't send data this iteration
                 # (happens when reusing buffers or on first iteration with some workers)
-                if idx not in buffers:
+                if self.buffers[idx] is None:
                     continue
 
                 workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
@@ -332,18 +334,18 @@ class MultiSyncCollector(MultiCollector):
             if self.replay_buffer is not None:
                 yield
                 self._frames += sum(
-                    [
-                        self.frames_per_batch_worker(worker_idx=worker_idx)
-                        for worker_idx in range(self.num_workers)
-                    ]
+                    self.frames_per_batch_worker(worker_idx=worker_idx)
+                    for worker_idx in range(self.num_workers)
                 )
                 continue
 
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
             n_collected = 0
-            for idx in buffers.keys():
+            for idx in range(self.num_workers):
                 buffer = buffers[idx]
+                if buffer is None:
+                    continue
                 traj_ids = buffer.get(("collector", "traj_ids"))
                 if preempt:
                     if cat_results == "stack":
@@ -357,7 +359,7 @@ class MultiSyncCollector(MultiCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in self.buffers.values():
+                for item in filter(lambda x: x is not None, self.buffers):
                     if prev_device is None:
                         prev_device = item.device
                     else:
@@ -368,10 +370,12 @@ class MultiSyncCollector(MultiCollector):
                     torch.stack if self._use_buffers else TensorDict.maybe_dense_stack
                 )
                 if same_device:
-                    self.out_buffer = stack(list(buffers.values()), 0)
+                    self.out_buffer = stack(
+                        [item for item in buffers if item is not None], 0
+                    )
                 else:
                     self.out_buffer = stack(
-                        [item.cpu() for item in buffers.values()], 0
+                        [item.cpu() for item in buffers if item is not None], 0
                     )
             else:
                 if self._use_buffers is None:
@@ -384,10 +388,13 @@ class MultiSyncCollector(MultiCollector):
                     )
                 try:
                     if same_device:
-                        self.out_buffer = torch.cat(list(buffers.values()), cat_results)
+                        self.out_buffer = torch.cat(
+                            [item for item in buffers if item is not None], cat_results
+                        )
                     else:
                         self.out_buffer = torch.cat(
-                            [item.cpu() for item in buffers.values()], cat_results
+                            [item.cpu() for item in buffers if item is not None],
+                            cat_results,
                         )
                 except RuntimeError as err:
                     if (
