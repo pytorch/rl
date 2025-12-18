@@ -1,6 +1,6 @@
 channels:
-  - pytorch
   - defaults
+  - pytorch
 dependencies:
   - pip
   - protobuf
