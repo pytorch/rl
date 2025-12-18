@@ -9,10 +9,20 @@ import warnings
 
 from packaging.version import parse
 
+__version__ = None  # type: ignore
 try:
-    from .version import __version__, pytorch_version
+    try:
+        from importlib.metadata import version as _dist_version
+    except ImportError:  # pragma: no cover
+        from importlib_metadata import version as _dist_version  # type: ignore
+
+    __version__ = _dist_version("torchrl")
+except Exception:
+    __version__ = None  # type: ignore
+
+try:
+    from .version import pytorch_version
 except ImportError:
-    __version__ = None
     pytorch_version = "unknown"
 
 

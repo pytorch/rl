@@ -1,12 +1,20 @@
+import contextlib
 import glob
+import importlib.util
 import logging
 import os
+import re
+import subprocess
 import sys
+from pathlib import Path
 
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 logger = logging.getLogger(__name__)
+
+ROOT_DIR = Path(__file__).parent.resolve()
+_RELEASE_BRANCH_RE = re.compile(r"^release/v(?P<release_id>.+)$")
 
 
 def get_extensions():
@@ -91,20 +99,86 @@ def get_extensions():
     return ext_modules
 
 
+def _git_output(args) -> str | None:
+    try:
+        return (
+            subprocess.check_output(["git", *args], cwd=str(ROOT_DIR))
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        return None
+
+
+def _branch_name() -> str | None:
+    for key in (
+        "GITHUB_REF_NAME",
+        "GIT_BRANCH",
+        "BRANCH_NAME",
+        "CI_COMMIT_REF_NAME",
+    ):
+        val = os.environ.get(key)
+        if val:
+            return val
+    branch = _git_output(["rev-parse", "--abbrev-ref", "HEAD"])
+    if not branch or branch == "HEAD":
+        return None
+    return branch
+
+
+def _short_sha() -> str | None:
+    return _git_output(["rev-parse", "--short", "HEAD"])
+
+
+def _version_with_local_sha(base_version: str) -> str:
+    # Do not append local version on the matching release branch.
+    branch = _branch_name()
+    if branch:
+        m = _RELEASE_BRANCH_RE.match(branch)
+        if m and m.group("release_id").strip() == base_version.strip():
+            return base_version
+    sha = _short_sha()
+    if not sha:
+        return base_version
+    return f"{base_version}+g{sha}"
+
+
+@contextlib.contextmanager
+def set_version():
+    # Prefer explicit build version if provided by build tooling.
+    if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
+        override = os.environ.get("TORCHRL_BUILD_VERSION")
+        if override:
+            os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = override.strip()
+        else:
+            base_version = (ROOT_DIR / "version.txt").read_text().strip()
+            full_version = _version_with_local_sha(base_version)
+            os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = full_version
+        yield
+        del os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"]
+        return
+    yield
+
+
 def main():
     """Main setup function for building TorchRL with C++ extensions."""
-    setup_kwargs = {
-        "ext_modules": get_extensions(),
-        "cmdclass": {"build_ext": BuildExtension.with_options()},
-        "packages": ["torchrl"],
-        "package_data": {
-            "torchrl": ["version.py"],
-        },
-        "include_package_data": True,
-        "zip_safe": False,
-    }
+    with set_version():
+        pretend_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION")
+        _has_setuptools_scm = importlib.util.find_spec("setuptools_scm") is not None
 
-    setup(**setup_kwargs)
+        setup_kwargs = {
+            "ext_modules": get_extensions(),
+            "cmdclass": {"build_ext": BuildExtension.with_options()},
+            "zip_safe": False,
+            **(
+                {"setup_requires": ["setuptools_scm"], "use_scm_version": True}
+                if _has_setuptools_scm
+                # pretend_version already includes +g<sha> (computed in set_version)
+                else {"version": pretend_version}
+            ),
+        }
+
+        setup(**setup_kwargs)
 
 
 if __name__ == "__main__":
