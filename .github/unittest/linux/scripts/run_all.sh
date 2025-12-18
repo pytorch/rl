@@ -143,6 +143,12 @@ if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   uv_pip_install ray
 fi
 
+# Install trackio for Python < 3.14 (trackio wheels may not be available for Python 3.14 yet)
+if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing trackio"
+  uv_pip_install trackio
+fi
+
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
