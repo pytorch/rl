@@ -23,6 +23,25 @@ permissions:
   contents: read
 
 jobs:
+  test-setup-minimal:
+    strategy:
+      matrix:
+        python_version: ["3.9", "3.14"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.4xlarge
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      timeout: 90
+      script: |
+        set -euo pipefail
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+        bash .github/unittest/linux/scripts/run_setup_test.sh
+
   tests-cpu:
     strategy:
       matrix:
