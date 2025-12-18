@@ -46,6 +46,8 @@ uv_pip_install \
   setuptools \
   wheel \
   packaging \
+  cloudpickle \
+  pyvers \
   numpy \
   ninja \
   "pybind11[global]>=2.13"

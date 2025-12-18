@@ -101,6 +101,7 @@ uv_pip_install \
   hypothesis \
   future \
   cloudpickle \
+  pyvers \
   packaging \
   pygame \
   "moviepy<2.0.0" \
