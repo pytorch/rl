@@ -23,14 +23,22 @@ if torch.cuda.device_count() > 1:
 
 from ._extension import _init_extension  # noqa: E402
 
-
+__version__ = None  # type: ignore
 try:
-    from .version import __version__
-except ImportError:
+    try:
+        from importlib.metadata import version as _dist_version
+    except ImportError:  # pragma: no cover
+        from importlib_metadata import version as _dist_version  # type: ignore
+
+    __version__ = _dist_version("torchrl")
+except Exception:
     try:
         from ._version import __version__
-    except ImportError:
-        __version__ = "0.0.0+unknown"
+    except Exception:
+        try:
+            from .version import __version__
+        except Exception:
+            __version__ = None  # type: ignore
 
 try:
     from torch.compiler import is_dynamo_compiling
