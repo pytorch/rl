@@ -13804,6 +13804,10 @@ class TestActionDiscretizer(TransformBase):
     def test_transform_env(self, env_cls, interval_as_tensor, categorical, sampling):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if env_cls == "cheetah":
+            if not _has_mujoco:
+                pytest.skip(
+                    "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+                )
             base_env = GymEnv(
                 HALFCHEETAH_VERSIONED(),
                 device=device,
