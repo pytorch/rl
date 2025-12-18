@@ -44,16 +44,16 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install git+https://github.com/pytorch/tensordict.git
+  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  uv pip install tensordict
+  uv pip install --no-deps tensordict
 fi
 
 # smoke test
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+uv pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"

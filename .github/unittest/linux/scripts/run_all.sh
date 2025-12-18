@@ -222,16 +222,16 @@ export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation git+https://github.com/pytorch/tensordict.git
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  uv_pip_install tensordict
+  uv_pip_install --no-deps tensordict
 fi
 
 printf "* Installing torchrl\n"
 if [[ "$RELEASE" == 0 ]]; then
   uv_pip_install -e . --no-build-isolation --no-deps
 else
-  uv_pip_install -e . --no-build-isolation
+  uv_pip_install -e . --no-build-isolation --no-deps
 fi
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
