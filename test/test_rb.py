@@ -451,6 +451,10 @@ class TestComposableBuffers:
     # <https://github.com/pytorch/pytorch/blob/8231180147a096a703d8891756068c89365292e0/torch/_inductor/cpp_builder.py#L143>
     # Our Windows CI jobs do not have "cl", so skip this test.
     @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="torch.compile is not supported on Python 3.14+",
+    )
     @pytest.mark.parametrize("avoid_max_size", [False, True])
     def test_extend_sample_recompile(
         self, rb_type, sampler, writer, storage, size, datatype, avoid_max_size
@@ -860,6 +864,10 @@ class TestStorages:
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
     )
     @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="torch.compile is not supported on Python 3.14+",
+    )
     # This test checks if the `torch._dynamo.disable` wrapper around
     # `TensorStorage._rand_given_ndim` is still necessary.
     def test__rand_given_ndim_recompile(self):

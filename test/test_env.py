@@ -100,6 +100,9 @@ pytestmark = [
     pytest.mark.filterwarnings("ignore:unclosed file"),
 ]
 
+_has_ale = importlib.util.find_spec("ale_py") is not None
+_has_mujoco = importlib.util.find_spec("mujoco") is not None
+
 
 @pytest.fixture(autouse=False)  # Turn to True to enable
 def check_no_lingering_multiprocessing_resources(request):
@@ -887,6 +890,8 @@ class TestRollout:
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [1, 4])
     def test_rollout(self, env_name, frame_skip, seed=0):
+        if env_name is PONG_VERSIONED and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
         if env_name is PONG_VERSIONED and version.parse(
             gym_backend().__version__
         ) < version.parse("0.19"):
@@ -2577,6 +2582,10 @@ class TestInfoDict:
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_info_dict_reader(self, device, seed=0):
+        if not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         try:
             import gymnasium as gym
         except ModuleNotFoundError:
@@ -2613,6 +2622,10 @@ class TestInfoDict:
             ),
             [Unbounded((), dtype=torch.float64)],
         ):
+            if not _has_mujoco:
+                pytest.skip(
+                    "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+                )
             env2 = GymWrapper(gym.make("HalfCheetah-v5"))
             env2.set_info_dict_reader(
                 default_info_dict_reader(["x_position"], spec=spec)
@@ -2635,6 +2648,10 @@ class TestInfoDict:
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_auto_register(self, device, maybe_fork_ParallelEnv):
+        if not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         try:
             import gymnasium as gym
         except ModuleNotFoundError:

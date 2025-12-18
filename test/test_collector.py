@@ -3683,6 +3683,9 @@ class TestDynamicEnvs:
     TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
 )
 @pytest.mark.skipif(IS_WINDOWS, reason="windows is not supported for compile tests.")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14), reason="torch.compile is not supported on Python 3.14+"
+)
 class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",

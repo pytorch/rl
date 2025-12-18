@@ -134,6 +134,8 @@ from torchrl.modules import (
 )
 
 _has_ray = importlib.util.find_spec("ray") is not None
+_has_ale = importlib.util.find_spec("ale_py") is not None
+_has_mujoco = importlib.util.find_spec("mujoco") is not None
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         _make_multithreaded_env,
@@ -820,6 +822,13 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
+        if env_name == PONG_VERSIONED() and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
@@ -937,6 +946,13 @@ class TestGym:
         ],
     )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
+        if env_name == PONG_VERSIONED() and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             return
@@ -1069,6 +1085,13 @@ class TestGym:
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         with set_gym_backend("gymnasium"):
             self._test_vecenvs_wrapper(
                 envname,
@@ -1083,6 +1106,13 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
+
         with set_gym_backend("gymnasium"):
             self._test_vecenvs_wrapper(envname)
 
@@ -1116,6 +1146,12 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         self._test_vecenvs_env(envname)
 
     @implement_for("gymnasium", None, "1.0.0")
@@ -1127,6 +1163,12 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa
+        if envname.startswith("ALE/") and not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if "HalfCheetah" in envname and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         self._test_vecenvs_env(envname)
 
     def _test_vecenvs_env(self, envname):
@@ -1990,11 +2032,15 @@ if _has_dmc:
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
     ]
 if _has_gym:
-    params += [
-        # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
-        [GymEnv, (HALFCHEETAH_VERSIONED(),), {"from_pixels": False}],
-        [GymEnv, (PONG_VERSIONED(),), {}],
-    ]
+    if _has_mujoco:
+        params += [
+            # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
+            [GymEnv, (HALFCHEETAH_VERSIONED(),), {"from_pixels": False}],
+        ]
+    if _has_ale:
+        params += [
+            [GymEnv, (PONG_VERSIONED(),), {}],
+        ]
 
 
 @pytest.mark.skipif(
@@ -2037,11 +2083,12 @@ if _has_dmc:
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
     ]
 if _has_gym:
-    params += [
-        # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
-        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
-        # [GymEnv, (PONG_VERSIONED,), {}],  # 1226: skipping
-    ]
+    if _has_mujoco:
+        params += [
+            # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
+            [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
+            # [GymEnv, (PONG_VERSIONED,), {}],  # 1226: skipping
+        ]
 
 
 # @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")

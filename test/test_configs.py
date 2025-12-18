@@ -1287,6 +1287,10 @@ class TestTrainerConfigs:
 @pytest.mark.skipif(
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="hydra-core argparse integration is not compatible with Python 3.14+",
+)
 class TestHydraParsing:
     @pytest.fixture(autouse=True, scope="module")
     def init_hydra(self):

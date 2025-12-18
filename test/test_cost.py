@@ -17875,6 +17875,9 @@ class TestBuffer:
     TORCH_VERSION < version.parse("2.5.0"), reason="requires torch>=2.5"
 )
 @pytest.mark.skipif(IS_WINDOWS, reason="windows tests do not support compile")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14), reason="torch.compile is not supported on Python 3.14+"
+)
 @set_composite_lp_aggregate(False)
 def test_exploration_compile():
     try:

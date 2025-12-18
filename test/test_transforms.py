@@ -193,6 +193,8 @@ from torchrl.testing.mocking_classes import (
 )
 
 _has_ray = importlib.util.find_spec("ray") is not None
+_has_ale = importlib.util.find_spec("ale_py") is not None
+_has_mujoco = importlib.util.find_spec("mujoco") is not None
 
 IS_WIN = platform == "win32"
 if IS_WIN:
@@ -3684,6 +3686,8 @@ class TestCrop(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No Gym detected")
     @pytest.mark.parametrize("out_key", [None, ["outkey"], [("out", "key")]])
     def test_transform_env(self, out_key):
+        if not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
         keys = ["pixels"]
         ct = Compose(ToTensorImage(), Crop(out_keys=out_key, w=20, h=20, in_keys=keys))
         env = TransformedEnv(GymEnv(PONG_VERSIONED()), ct)
@@ -3893,6 +3897,8 @@ class TestCenterCrop(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No Gym detected")
     @pytest.mark.parametrize("out_key", [None, ["outkey"], [("out", "key")]])
     def test_transform_env(self, out_key):
+        if not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
         keys = ["pixels"]
         ct = Compose(
             ToTensorImage(), CenterCrop(out_keys=out_key, w=20, h=20, in_keys=keys)
@@ -4932,6 +4938,8 @@ class TestFlattenObservation(TransformBase):
         "out_keys", [None, ["stuff"], [("some_other", "nested_key")]]
     )
     def test_transform_env(self, out_keys):
+        if not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
         env = TransformedEnv(
             GymEnv(PONG_VERSIONED()), FlattenObservation(-3, -1, out_keys=out_keys)
         )
@@ -6135,6 +6143,8 @@ class TestResize(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     @pytest.mark.parametrize("out_key", ["pixels", ("agents", "pixels")])
     def test_transform_env(self, out_key):
+        if not _has_ale:
+            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
         env = TransformedEnv(
             GymEnv(PONG_VERSIONED()),
             Compose(
@@ -7311,6 +7321,10 @@ class TestUnsqueezeTransform(TransformBase):
     )
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     def test_transform_inverse(self):
+        if not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         env = TransformedEnv(
             GymEnv(HALFCHEETAH_VERSIONED()),
             # the order is inverted
@@ -7595,6 +7609,10 @@ class TestSqueezeTransform(TransformBase):
     )
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_inverse(self):
+        if not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         env = TransformedEnv(
             GymEnv(HALFCHEETAH_VERSIONED()), self._inv_circular_transform
         )
@@ -12592,6 +12610,10 @@ class TestPermuteTransform(TransformBase):
     not _has_gymnasium,
     reason="EndOfLifeTransform can only be tested when Gym is present.",
 )
+@pytest.mark.skipif(
+    not _has_ale,
+    reason="ALE not available (missing ale_py); skipping Atari gym tests.",
+)
 class TestEndOfLife(TransformBase):
     pytest.mark.filterwarnings("ignore:The base_env is not a gym env")
 
@@ -15008,6 +15030,7 @@ class TestModuleTransform(TransformBase):
                 ray.stop()
 
 
+@pytest.mark.skipif(not _has_ray, reason="ray required")
 class TestRayModuleTransform:
     @pytest.fixture(autouse=True, scope="function")
     def start_ray(self):
