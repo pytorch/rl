@@ -1807,8 +1807,7 @@ if __name__ == "__main__":
             for i in range(num_envs)
         ]
 
-        # Initialize MultiSyncDataCollector
-        collector = MultiSyncDataCollector(
+        collector = MultiSyncCollector(
             create_env_fn=env_factories,
             frames_per_batch=num_envs * n_steps,
             total_frames=num_envs * n_steps,
