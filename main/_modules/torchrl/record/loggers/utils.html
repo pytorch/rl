@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9c84bc5) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
     </div>
     
 
@@ -457,7 +457,7 @@
 <span class="sd">            If empty, ``None`` is returned.</span>
 <span class="sd">        logger_name (str): Name to be used as a log_dir</span>
 <span class="sd">        experiment_name (str): Name of the experiment</span>
-<span class="sd">        kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`</span>
+<span class="sd">        kwargs (dict[str]): might contain either `wandb_kwargs`, `mlflow_kwargs` or `trackio_kwargs`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">logger_type</span> <span class="o">==</span> <span class="s2">&quot;tensorboard&quot;</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.tensorboard</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorboardLogger</span>
@@ -484,6 +484,14 @@
             <span class="n">tracking_uri</span><span class="o">=</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">logger_name</span><span class="p">))</span><span class="o">.</span><span class="n">as_uri</span><span class="p">(),</span>
             <span class="n">exp_name</span><span class="o">=</span><span class="n">experiment_name</span><span class="p">,</span>
             <span class="o">**</span><span class="n">mlflow_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">logger_type</span> <span class="o">==</span> <span class="s2">&quot;trackio&quot;</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.trackio</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrackioLogger</span>
+
+        <span class="n">trackio_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;trackio_kwargs&quot;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">project</span> <span class="o">=</span> <span class="n">trackio_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;project&quot;</span><span class="p">,</span> <span class="s2">&quot;torchrl&quot;</span><span class="p">)</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">TrackioLogger</span><span class="p">(</span>
+            <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="n">experiment_name</span><span class="p">,</span> <span class="o">**</span><span class="n">trackio_kwargs</span>
         <span class="p">)</span>
     <span class="k">elif</span> <span class="n">logger_type</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">None</span>
