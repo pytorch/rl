@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import tempfile
 from argparse import Namespace
@@ -53,6 +54,8 @@ from torchrl.trainers.trainers import (
     SelectKeys,
     UpdateWeights,
 )
+
+_has_ale = importlib.util.find_spec("ale_py") is not None
 
 
 def _fun_checker(fun, checker):
@@ -843,6 +846,10 @@ class TestSubSampler:
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
+@pytest.mark.skipif(
+    not _has_ale,
+    reason="ALE not available (missing ale_py); skipping Atari gym tests.",
+)
 class TestRecorder:
     def _get_args(self):
         args = Namespace()

@@ -395,6 +395,10 @@ def test_rng_decorator(device):
 @pytest.mark.skipif(
     TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
 )
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="torch.compile is not supported on Python 3.14+",
+)
 def test_capture_log_records_recompile():
     torch.compiler.reset()
 
