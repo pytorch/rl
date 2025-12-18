@@ -437,6 +437,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">wait</span> <span class="k">as</span> <span class="n">connection_wait</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing.synchronize</span><span class="w"> </span><span class="kn">import</span> <span class="n">Lock</span> <span class="k">as</span> <span class="n">MpLock</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
@@ -1988,7 +1989,11 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
-                    <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                    <span class="c1"># share_memory=False: avoid resource_sharer which causes</span>
+                    <span class="c1"># progressive slowdown with fork on Linux</span>
+                    <span class="n">share_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
@@ -2224,34 +2229,78 @@
         <span class="k">return</span> <span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workers_range</span><span class="p">):</span>
-        <span class="n">workers_range_consume</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for all workers to signal completion via their events.</span>
+
+<span class="sd">        Uses multiprocessing.connection.wait() for efficient OS-level</span>
+<span class="sd">        waiting on multiple pipes simultaneously.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BATCHED_PIPE_TIMEOUT</span>
         <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="k">while</span> <span class="p">(</span>
-            <span class="nb">len</span><span class="p">(</span><span class="n">workers_range_consume</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">BATCHED_PIPE_TIMEOUT</span>
-        <span class="p">):</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">workers_range_consume</span><span class="p">:</span>
-                    <span class="k">continue</span>
-                <span class="n">worker</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">worker</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
-                    <span class="n">event</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-                    <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
-                        <span class="n">workers_range_consume</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
-                        <span class="n">event</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="k">continue</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_workers</span><span class="p">()</span>
-                    <span class="k">finally</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot proceed, worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> dead.&quot;</span><span class="p">)</span>
-                <span class="c1"># event.wait(self.BATCHED_PIPE_TIMEOUT)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">workers_range_consume</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Failed to run all workers within the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">BATCHED_PIPE_TIMEOUT</span><span class="si">}</span><span class="s2"> sec time limit. This &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable.&quot;</span>
-            <span class="p">)</span>
+
+        <span class="c1"># In shared-memory/buffer mode, workers signal completion by setting</span>
+        <span class="c1"># their `mp_event` (they may not send anything back on the pipe).</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
+            <span class="n">pending</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
+            <span class="n">n_iter</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">while</span> <span class="n">pending</span><span class="p">:</span>
+                <span class="n">n_iter</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">remaining</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">-</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">remaining</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Failed to run all workers within the </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2"> sec time limit. This &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable.&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="c1"># Wait in short slices so we can both harvest multiple events and</span>
+                <span class="c1"># periodically check for dead workers without blocking forever.</span>
+                <span class="n">slice_timeout</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">remaining</span><span class="p">)</span>
+                <span class="n">progressed</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">for</span> <span class="n">wi</span> <span class="ow">in</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">pending</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">slice_timeout</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                        <span class="n">pending</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">wi</span><span class="p">)</span>
+                        <span class="n">progressed</span> <span class="o">=</span> <span class="kc">True</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">progressed</span> <span class="ow">and</span> <span class="p">(</span><span class="n">n_iter</span> <span class="o">%</span> <span class="mi">50</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">wi</span> <span class="ow">in</span> <span class="n">pending</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                            <span class="k">try</span><span class="p">:</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_workers</span><span class="p">()</span>
+                            <span class="k">finally</span><span class="p">:</span>
+                                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot proceed, worker </span><span class="si">{</span><span class="n">wi</span><span class="si">}</span><span class="s2"> dead.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># No-buffer mode: workers send back data on the pipe, so we can efficiently</span>
+        <span class="c1"># block on readability.</span>
+        <span class="n">pipes_pending</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">}</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">pipes_pending</span><span class="p">:</span>
+            <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">should_check_for_dead_workers</span> <span class="o">=</span> <span class="p">(</span><span class="n">i</span> <span class="o">%</span> <span class="mi">20</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+            <span class="n">remaining</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">-</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">remaining</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Failed to run all workers within the </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2"> sec time limit. This &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Wait for any pipes to become readable (OS-level select/poll)</span>
+            <span class="n">ready</span> <span class="o">=</span> <span class="n">connection_wait</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">pipes_pending</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span> <span class="n">timeout</span><span class="o">=</span><span class="n">remaining</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">ready</span> <span class="ow">and</span> <span class="n">should_check_for_dead_workers</span><span class="p">:</span>
+                <span class="c1"># Timeout with no pipes ready - check for dead workers</span>
+                <span class="k">for</span> <span class="n">wi</span> <span class="ow">in</span> <span class="n">pipes_pending</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_workers</span><span class="p">()</span>
+                        <span class="k">finally</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot proceed, worker </span><span class="si">{</span><span class="n">wi</span><span class="si">}</span><span class="s2"> dead.&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Clear events for ready workers (best-effort)</span>
+            <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="n">ready</span><span class="p">:</span>
+                <span class="n">wi</span> <span class="o">=</span> <span class="n">pipes_pending</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">wi</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_step_no_buffers</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
@@ -2270,7 +2319,11 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
-                    <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                    <span class="c1"># share_memory=False: avoid resource_sharer which causes</span>
+                    <span class="c1"># progressive slowdown with fork on Linux</span>
+                    <span class="n">share_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
@@ -2289,8 +2342,6 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">local_data</span> <span class="o">=</span> <span class="n">local_data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">env_device</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="n">local_data</span><span class="p">))</span>
-        <span class="c1"># for i in range(data.shape[0]):</span>
-        <span class="c1">#     self.parent_channels[i].send((&quot;step&quot;, (data, i)))</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_workers</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
 
@@ -2433,6 +2484,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
 
@@ -2498,11 +2550,13 @@
         <span class="n">needs_resetting</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">tensordict</span><span class="p">):</span>
-            <span class="c1"># tensordict = tensordict.consolidate(share_memory=True, num_threads=1)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">consolidate</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
-                        <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                        <span class="c1"># share_memory=False: avoid resource_sharer which causes</span>
+                        <span class="c1"># progressive slowdown with fork on Linux</span>
+                        <span class="n">share_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                        <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
@@ -2880,12 +2934,15 @@
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
+                <span class="c1"># Set event BEFORE sending to avoid deadlocks when the pipe buffer</span>
+                <span class="c1"># is full (the parent will start reading as soon as it observes</span>
+                <span class="c1"># the event).</span>
+                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
                     <span class="p">(</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">cur_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
                 <span class="p">)</span>
-
-            <span class="c1"># Set event only after non-tensor data is sent to avoid race condition</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">cur_td</span>
 
@@ -2916,14 +2973,16 @@
             <span class="c1"># Make sure the root is updated</span>
             <span class="n">root_shared_tensordict</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="nb">input</span><span class="p">))</span>
 
-            <span class="c1"># Set event before sending non-tensor data so parent knows worker is done</span>
-            <span class="c1"># The recv() call itself will provide synchronization for the pipe</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
+                <span class="c1"># Set event BEFORE sending to avoid deadlocks when the pipe buffer</span>
+                <span class="c1"># is full (the parent will start reading as soon as it observes</span>
+                <span class="c1"># the event).</span>
+                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
                     <span class="p">(</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">next_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
                 <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">next_td</span>
 
@@ -2958,14 +3017,16 @@
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
-            <span class="c1"># Set event before sending non-tensor data so parent knows worker is done</span>
-            <span class="c1"># The recv() call itself will provide synchronization for the pipe</span>
-            <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-
             <span class="k">if</span> <span class="n">_non_tensor_keys</span><span class="p">:</span>
                 <span class="n">ntd</span> <span class="o">=</span> <span class="n">root_next_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">)</span>
                 <span class="n">ntd</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">td_next</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">_non_tensor_keys</span><span class="p">))</span>
+                <span class="c1"># Set event BEFORE sending to avoid deadlocks when the pipe buffer</span>
+                <span class="c1"># is full (the parent will start reading as soon as it observes</span>
+                <span class="c1"># the event).</span>
+                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                 <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="n">ntd</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
             <span class="k">del</span> <span class="n">td</span><span class="p">,</span> <span class="n">root_next_td</span>
 
@@ -3108,8 +3169,6 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;call &#39;init&#39; before resetting&quot;</span><span class="p">)</span>
             <span class="c1"># we use &#39;data&#39; to pass the keys that we need to pass to reset,</span>
             <span class="c1"># because passing the entire buffer may have unwanted consequences</span>
-            <span class="c1"># data, idx, reset_kwargs = data</span>
-            <span class="c1"># data = data[idx]</span>
             <span class="n">data</span><span class="p">,</span> <span class="n">reset_kwargs</span> <span class="o">=</span> <span class="n">data</span>
             <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">()</span>
@@ -3125,18 +3184,19 @@
                 <span class="n">event</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">consolidate</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
-                        <span class="n">cur_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
-                            <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
-                        <span class="p">)</span>
+                    <span class="n">cur_td</span> <span class="o">=</span> <span class="n">cur_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
+                        <span class="c1"># share_memory=False: avoid resource_sharer which causes</span>
+                        <span class="c1"># progressive slowdown with fork on Linux</span>
+                        <span class="n">share_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                        <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">cur_td</span><span class="p">)</span>
-            <span class="c1"># Set event after successfully sending through pipe to avoid race condition</span>
-            <span class="c1"># where event is set but pipe send fails (BrokenPipeError)</span>
+            <span class="c1"># Set event BEFORE send so parent starts reading, which unblocks send</span>
+            <span class="c1"># if pipe buffer was full (prevents deadlock)</span>
             <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">cur_td</span><span class="p">)</span>
 
             <span class="k">del</span> <span class="n">cur_td</span>
 
@@ -3144,8 +3204,6 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="n">initialized</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;called &#39;init&#39; before step&quot;</span><span class="p">)</span>
             <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="c1"># data, idx = data</span>
-            <span class="c1"># data = data[idx]</span>
             <span class="n">next_td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
@@ -3153,14 +3211,18 @@
             <span class="k">if</span> <span class="n">consolidate</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">next_td</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span>
-                        <span class="n">share_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span>
+                        <span class="c1"># share_memory=False: avoid resource_sharer which causes</span>
+                        <span class="c1"># progressive slowdown with fork on Linux</span>
+                        <span class="n">share_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                        <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">_CONSOLIDATE_ERR_CAPTURE</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
-            <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">next_td</span><span class="p">)</span>
-            <span class="c1"># Set event after successfully sending through pipe to avoid race condition</span>
-            <span class="c1"># where event is set but pipe send fails (BrokenPipeError)</span>
+            <span class="c1"># Set event BEFORE send so parent starts reading, which unblocks send</span>
+            <span class="c1"># if pipe buffer was full (prevents deadlock)</span>
             <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">next_td</span><span class="p">)</span>
 
             <span class="k">del</span> <span class="n">next_td</span>
 

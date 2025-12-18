@@ -442,6 +442,12 @@
 <span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_close_mp_queue</span><span class="p">(</span><span class="n">queue</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Close a multiprocessing Queue and wait for its feeder thread to exit.&quot;&quot;&quot;</span>
+    <span class="n">queue</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">queue</span><span class="o">.</span><span class="n">join_thread</span><span class="p">()</span>
+
+
 <div class="viewcode-block" id="SharedMemTransport"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">SharedMemTransport</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Shared memory transport for in-place weight updates.</span>
 
@@ -1308,25 +1314,34 @@
 
 <div class="viewcode-block" id="SharedMemWeightSyncScheme.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the background receiver thread and clean up.&quot;&quot;&quot;</span>
-        <span class="c1"># Signal all workers to stop</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;stop&quot;</span><span class="p">)</span>
-                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-                    <span class="k">pass</span>
+        <span class="c1"># Check if already shutdown</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_is_shutdown&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_shutdown</span> <span class="o">=</span> <span class="kc">True</span>
 
-        <span class="c1"># Stop local background thread if running</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_background_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_background_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_background_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="s2">&quot;SharedMemWeightSyncScheme: Background thread did not stop gracefully&quot;</span>
-                <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_background_thread</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span> <span class="o">=</span> <span class="kc">None</span></div></div>
+        <span class="c1"># Signal all workers to stop</span>
+        <span class="n">instruction_queues</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_instruction_queues&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">instruction_queues</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">queue</span> <span class="ow">in</span> <span class="n">instruction_queues</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;stop&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Let base class handle background thread cleanup</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+
+        <span class="c1"># Close all multiprocessing queues created by the scheme.</span>
+        <span class="n">queues_to_close</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;_weight_init_queues&quot;</span><span class="p">,</span> <span class="s2">&quot;_instruction_queues&quot;</span><span class="p">,</span> <span class="s2">&quot;_ack_queues&quot;</span><span class="p">):</span>
+            <span class="n">mapping</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">mapping</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">queues_to_close</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">mapping</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="p">{})</span>
+
+        <span class="n">unique</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">queues_to_close</span><span class="p">:</span>
+            <span class="n">unique</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">q</span><span class="p">)]</span> <span class="o">=</span> <span class="n">q</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">unique</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">_close_mp_queue</span><span class="p">(</span><span class="n">q</span><span class="p">)</span></div></div>
 </pre></div>
 
              </article>

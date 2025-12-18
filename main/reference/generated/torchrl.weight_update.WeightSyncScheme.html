@@ -665,6 +665,16 @@ before returning.</p>
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.weight_update.WeightSyncScheme.shutdown">
+<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSyncScheme.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.WeightSyncScheme.shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Shutdown the scheme and release resources.</p>
+<p>This method stops any background threads and cleans up connections.
+It is safe to call multiple times. Subclasses should override this
+method to add custom cleanup logic, but should call super().shutdown()
+to ensure base cleanup is performed.</p>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.weight_update.WeightSyncScheme.weights">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">weights</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.weight_update.WeightSyncScheme.weights" title="Permalink to this definition">¶</a></dt>
