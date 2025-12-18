@@ -361,6 +361,7 @@ def make_replay_buffer(
     grayscale=True,
     image_size,
     use_autocast,
+    compile: bool | dict = False,
 ):
     with (
         tempfile.TemporaryDirectory()
@@ -403,7 +404,7 @@ def make_replay_buffer(
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
                 cache_values=True,
-                compile=True,
+                compile=compile,
             ),
             transform=transforms,
             batch_size=batch_size,

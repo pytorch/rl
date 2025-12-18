@@ -116,6 +116,11 @@ def main(cfg: DictConfig):  # noqa: F821
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
         use_autocast=cfg.optimization.use_autocast,
+        compile=(
+            {"backend": cfg.optimization.compile_backend}
+            if cfg.optimization.compile
+            else False
+        ),
     )
 
     # Training loop

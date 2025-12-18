@@ -19,7 +19,7 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import implement_for
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     _minmax_dtype,
     Binary,
@@ -1819,6 +1819,13 @@ class GymEnv(GymWrapper):
             # to find the config that works.
             try:
                 with warnings.catch_warnings(record=True) as w:
+                    if env_name.startswith("ALE/"):
+                        try:
+                            import ale_py  # noqa: F401
+                        except ImportError as err:
+                            torchrl_logger.warning(
+                                f"ale_py not found, this may cause issues with ALE environments: {err}"
+                            )
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
                     if len(w) and "frameskip" in str(w[-1].message):
