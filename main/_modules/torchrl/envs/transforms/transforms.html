@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g66a48f3) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9c84bc5) &#x25BC</span></a>
     </div>
     
 
@@ -1036,13 +1036,11 @@
         <span class="n">in_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">}</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out_keys</span> <span class="o">-</span> <span class="n">in_keys</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">output_spec_keys</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;The key &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; is unaccounted for by the transform (expected keys </span><span class="si">{</span><span class="n">output_spec_keys</span><span class="si">}</span><span class="s2">). &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;Every new entry in the tensordict resulting from a call to a transform must be &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;registered in the specs for torchrl rollouts to be consistently built. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;Make sure transform_output_spec/transform_observation_spec/... is coded correctly. &quot;</span>
-                    <span class="s2">&quot;This warning will trigger a KeyError in v0.9, make sure to adapt your code accordingly.&quot;</span><span class="p">,</span>
-                    <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s2">&quot;Make sure transform_output_spec/transform_observation_spec/... is coded correctly.&quot;</span>
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">output_spec</span></div>
 
