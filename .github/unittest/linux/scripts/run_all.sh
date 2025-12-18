@@ -258,6 +258,8 @@ fi
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
 
+TORCHRL_TEST_SUITE="${TORCHRL_TEST_SUITE:-all}" # all|distributed|nondistributed
+
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
@@ -269,27 +271,45 @@ pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_contro
 # Track if any tests fail
 EXIT_STATUS=0
 
-# Run distributed tests first (GPU only) to surface errors early
-if [ "${CU_VERSION:-}" != cpu ] ; then
+run_distributed_tests() {
+  # Distributed tests are GPU-only in our CI.
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+    echo "TORCHRL_TEST_SUITE=${TORCHRL_TEST_SUITE}: distributed tests require GPU (CU_VERSION != cpu)."
+    return 1
+  fi
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py \
     --instafail --durations 200 -vv --capture no \
-    --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
-fi
+    --timeout=120 --mp_fork_if_no_cuda
+}
 
-# Run remaining tests (always run even if distributed tests failed)
-if [ "${CU_VERSION:-}" != cpu ] ; then
+run_non_distributed_tests() {
+  # Note: we always ignore distributed tests here (they can be run in a separate job).
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
     --ignore test/test_distributed.py \
     --ignore test/llm \
-    --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
-else
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
-    --ignore test/test_distributed.py \
-    --ignore test/llm \
-    --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
-fi
+    --timeout=120 --mp_fork_if_no_cuda
+}
+
+case "${TORCHRL_TEST_SUITE}" in
+  all)
+    # Run distributed tests first (GPU only) to surface errors early, then the rest.
+    if [ "${CU_VERSION:-}" != cpu ] ; then
+      run_distributed_tests || EXIT_STATUS=$?
+    fi
+    run_non_distributed_tests || EXIT_STATUS=$?
+    ;;
+  distributed)
+    run_distributed_tests || EXIT_STATUS=$?
+    ;;
+  nondistributed)
+    run_non_distributed_tests || EXIT_STATUS=$?
+    ;;
+  *)
+    echo "Unknown TORCHRL_TEST_SUITE='${TORCHRL_TEST_SUITE}'. Expected: all|distributed|nondistributed."
+    exit 2
+    ;;
+esac
 
 # Fail the workflow if any tests failed
 if [ $EXIT_STATUS -ne 0 ]; then
