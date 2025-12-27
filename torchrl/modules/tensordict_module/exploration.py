@@ -284,7 +284,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        spec: TensorSpec,
+        spec: TensorSpec | None = None,
         sigma_init: float = 1.0,
         sigma_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -315,11 +315,11 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             "sigma", torch.tensor(sigma_init, dtype=torch.float32, device=device)
         )
 
+        # spec can be None for delayed initialization
+        # In this case, spec must be set before forward() is called
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
                 spec = Composite({action_key: spec}, shape=spec.shape[:-1])
-        else:
-            raise RuntimeError("spec cannot be None.")
         self._spec = spec
         self.safe = safe
         if self.safe:
@@ -328,6 +328,23 @@ class AdditiveGaussianModule(TensorDictModuleBase):
     @property
     def spec(self):
         return self._spec
+
+    @spec.setter
+    def spec(self, value: TensorSpec) -> None:
+        """Set the action spec.
+
+        This setter allows delayed initialization of the spec, which is useful
+        when the spec depends on environment information that is not available
+        at module construction time.
+
+        Args:
+            value (TensorSpec): The action spec to set. Cannot be None.
+        """
+        if value is None:
+            raise RuntimeError("spec cannot be set to None.")
+        if not isinstance(value, Composite) and len(self.out_keys) >= 1:
+            value = Composite({self.action_key: value}, shape=value.shape[:-1])
+        self._spec = value
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -350,6 +367,11 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             )
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
+        if self._spec is None:
+            raise RuntimeError(
+                "spec has not been set. The spec must be provided either at construction "
+                "time or set via the `spec` property before calling forward(). "
+            )
         sigma = self.sigma
         mean = self.mean.expand(action.shape)
         std = self.std.expand(action.shape)

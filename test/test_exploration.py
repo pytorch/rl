@@ -621,8 +621,34 @@ class TestAdditiveGaussian:
         return
 
     def test_no_spec_error(self, device):
-        with pytest.raises(RuntimeError, match="spec cannot be None."):
-            AdditiveGaussianModule(spec=None).to(device)
+        # Test that forward() raises error if spec is None and not set via setter
+        module = AdditiveGaussianModule(spec=None, device=device)
+        action = torch.randn(10, 6, device=device)
+        with pytest.raises(RuntimeError, match="spec has not been set"):
+            module._add_noise(action)
+
+    def test_delayed_spec_initialization(self, device):
+        """Test that spec can be set via property setter after initialization."""
+        torch.manual_seed(0)
+        d_act = 6
+        action_spec = Bounded(
+            -torch.ones(d_act, device=device),
+            torch.ones(d_act, device=device),
+            (d_act,),
+            device=device,
+        )
+
+        module = AdditiveGaussianModule(spec=None, device=device)
+        assert module._spec is None
+
+        # Set spec via property setter
+        module.spec = action_spec
+        assert module._spec is not None
+
+        # Verify it works with forward
+        action = torch.randn(100, d_act, device=device)
+        noisy_action = module._add_noise(action)
+        assert action_spec.is_in(noisy_action)
 
 
 @pytest.mark.parametrize("state_dim", [7])
