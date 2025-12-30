@@ -243,8 +243,7 @@ class RSSMRollout(TensorDictModuleBase):
             which amends to q(s_{t+1} | s_t, a_t, o_{t+1})
 
         """
-        from torchrl.envs.utils import step_mdp
-
+        # from torchrl.envs.utils import step_mdp
         tensordict_out = []
         *batch, time_steps = tensordict.shape
 
@@ -262,9 +261,9 @@ class RSSMRollout(TensorDictModuleBase):
                 self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
+            # _tensordict = step_mdp(_tensordict, keep_other=True)
             if t < time_steps - 1:
                 # Translate ("next", *) to the non-next key required for the current step input
-                _tensordict = step_mdp(_tensordict, keep_other=True)
                 _tensordict = _tensordict.select(*self.in_keys, strict=False)
                 _tensordict = update_values[t + 1].update(_tensordict)
 
