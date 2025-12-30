@@ -84,6 +84,7 @@ uv pip install \
   pybind11 \
   pyyaml \
   scipy \
+  psutil \
   hydra-core \
   "imageio==2.26.0" \
   dm_control \

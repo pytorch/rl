@@ -159,7 +159,6 @@ class RayTransport:
         future = self._remote_actor._receive_weights_scheme.remote()
 
         # Step 2: Send weights via torch.distributed (async)
-        torchrl_logger.debug(f"RayTransport: Sending weights to rank {self._rank}")
         weights.isend(dst=self._rank)
 
         # Step 3: Wait for the Ray call to complete (receiver has applied weights)
@@ -177,14 +176,10 @@ class RayTransport:
             return
 
         # Step 1: Signal the actor via Ray to start receiving (async)
-        torchrl_logger.debug(
-            f"RayTransport: Sending weights async to rank {self._rank}"
-        )
         self._pending_future = self._remote_actor._receive_weights_scheme.remote()
 
         # Step 2: Send weights via torch.distributed (async)
         self._pending_isend = weights.isend(dst=self._rank, return_early=True)
-        torchrl_logger.debug("RayTransport: Async send initiated")
 
     def wait_ack(self) -> None:
         """Wait for Ray actor to finish applying weights.
@@ -194,13 +189,7 @@ class RayTransport:
                 was not called before this method).
         """
         if self._pending_future is not None:
-            torchrl_logger.debug(
-                f"RayTransport: Waiting for ack from rank {self._rank}"
-            )
             self.ray.get(self._pending_future)
-            torchrl_logger.debug(
-                f"RayTransport: Ack received from rank {self._rank}. Waiting for isend to complete."
-            )
             if self._pending_isend is not None:
                 for fut in self._pending_isend:
                     fut.wait()
@@ -251,10 +240,6 @@ class RayTransport:
             self._weights_buffer = weights_buffer
 
         # Receive weights from rank 0
-        torchrl_logger.debug(
-            f"RayTransport: Receiving weights from rank 0: {type(weights_buffer)=}"
-        )
-
         if timeout is None:
             # Blocking receive
             weights_buffer.irecv(src=0)
@@ -272,9 +257,6 @@ class RayTransport:
                     elapsed = time.monotonic() - start_time
                     if elapsed >= timeout:
                         # Timeout expired before receiving all weights
-                        torchrl_logger.debug(
-                            f"RayTransport: Timeout ({timeout}s) expired waiting for weights"
-                        )
                         return None
                     # Small sleep to avoid busy-waiting
                     time.sleep(0.001)
@@ -285,7 +267,6 @@ class RayTransport:
                 raise RuntimeError(
                     f"Cannot cast weights to model type: {type(model)} with weights: {weights_buffer}."
                 )
-            torchrl_logger.debug("RayTransport: No weights to apply to model")
             return None
 
         if strategy is not None:
@@ -293,7 +274,6 @@ class RayTransport:
         else:
             weights_buffer.to_module(model)
 
-        torchrl_logger.debug("RayTransport: Weights applied to model")
         return weights_buffer
 
     # ========================================================================
@@ -359,10 +339,6 @@ class RayTransport:
             except ValueError:
                 i += 1
                 time.sleep(0.1)
-                if i % 50 == 0:
-                    torchrl_logger.debug(
-                        f"RayTransport: Waiting for connection info (attempt {i}) on {worker_idx=}/{rank=}"
-                    )
                 continue
             break
 
@@ -374,11 +350,6 @@ class RayTransport:
         )
         self._stateful_model = stateful_model
 
-        torchrl_logger.debug(
-            f"RayTransport: Worker {worker_idx} joining process group with "
-            f"rank={rank}, master_addr={master_addr}, master_port={master_port} -- blocking"
-        )
-
         # Set environment variables for torch.distributed
         os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = str(master_port)
@@ -389,7 +360,6 @@ class RayTransport:
             rank=rank,
             world_size=world_size,
         )
-        torchrl_logger.debug(f"RayTransport: Worker {worker_idx} joined process group")
         self._dist_initialized = True
 
         # Receive initial weights if model is stateful
@@ -462,12 +432,9 @@ class RayWeightSyncScheme(WeightSyncScheme):
             model = _resolve_model(self.context, self._model_id)
             if model is None:
                 if self._model_id == "policy":
-                    torchrl_logger.debug(
-                        f"Creating policy from factory and setting in collector {type(self.context)}"
-                    )
+                    torchrl_logger.debug("Creating policy from factory.")
                     model = self.context.policy_factory[0]()
                     self.context.policy = model
-                    torchrl_logger.debug(f"{self.context.policy=}")
                 else:
                     raise AttributeError(
                         f"Model {self._model_id} was `None` in context {self.context}"
@@ -666,11 +633,6 @@ class RayWeightSyncScheme(WeightSyncScheme):
         master_port = self._find_free_port()
         world_size = self._num_workers + 1  # +1 for the sender (rank 0)
 
-        torchrl_logger.debug(
-            f"RayWeightSyncScheme: Setting up distributed connection with "
-            f"master_addr={master_addr}, master_port={master_port}, world_size={world_size}"
-        )
-
         try:
             self.weights
             stateful_model = True
@@ -697,9 +659,6 @@ class RayWeightSyncScheme(WeightSyncScheme):
         # Note: Workers will call init_process_group in their transport's
         # setup_connection_and_weights_on_receiver. The init_process_group is
         # a collective operation, so all ranks must call it together.
-        torchrl_logger.debug(
-            "RayWeightSyncScheme: Initializing process group on sender (rank 0) -- blocking."
-        )
         torch.distributed.init_process_group(
             backend=self._backend,
             rank=0,
@@ -707,10 +666,6 @@ class RayWeightSyncScheme(WeightSyncScheme):
             timeout=_DIST_TIMEOUT,
         )
         self._dist_initialized = True
-
-        torchrl_logger.debug(
-            "RayWeightSyncScheme: Distributed connection setup complete -- all workers at rendez-vous"
-        )
 
     def _setup_connection_and_weights_on_sender_impl(
         self,
@@ -734,9 +689,6 @@ class RayWeightSyncScheme(WeightSyncScheme):
         """
         # Set up distributed connection (with wait for workers to be ready)
         if not self._dist_initialized:
-            torchrl_logger.debug(
-                "RayWeightSyncScheme: Setting up distributed connection (sender)"
-            )
             self._setup_distributed_connection_sender()
 
         # Send the initial weights
@@ -758,7 +710,6 @@ class RayWeightSyncScheme(WeightSyncScheme):
         futures = []
         for worker_idx in range(self._num_workers):
             rank = worker_idx + 1
-            torchrl_logger.debug(f"RayWeightSyncScheme: Sending weights to rank {rank}")
             futures.extend(weights.isend(dst=rank, return_early=True))
         # Wait for all sends to complete
         for future in futures:
@@ -1001,11 +952,6 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
         master_port = self._find_free_port()
         world_size = 2  # Sender (rank 0) + Transform (rank 1)
 
-        torchrl_logger.debug(
-            f"RayModuleTransformScheme: Setting up distributed connection with "
-            f"master_addr={master_addr}, master_port={master_port}, world_size={world_size}"
-        )
-
         # Check if model has weights
         try:
             w = self.weights
@@ -1031,9 +977,6 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
 
         # Now initialize process group on sender (rank 0)
         # The receiver is concurrently joining via the Ray call above
-        torchrl_logger.debug(
-            "RayModuleTransformScheme: Initializing process group on sender (rank 0) -- blocking."
-        )
         torch.distributed.init_process_group(
             backend=self._backend,
             rank=0,
@@ -1041,10 +984,6 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
             timeout=_DIST_TIMEOUT,
         )
         self._dist_initialized = True
-
-        torchrl_logger.debug(
-            "RayModuleTransformScheme: Distributed connection setup complete"
-        )
 
     def _setup_connection_and_weights_on_sender_impl(
         self,
@@ -1060,26 +999,16 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
             weights (optional): Pre-extracted weights to send. If None, weights
                 are extracted from the model.
         """
-        torchrl_logger.debug(
-            "RayModuleTransformScheme: Signaling receiver to join process group"
-        )
         receiver_future = self._ray_transform._actor._init_weight_sync_scheme.remote(
             scheme=self, model_id=self.model_id
         )
 
         if not self._dist_initialized:
-            torchrl_logger.debug(
-                "RayModuleTransformScheme: Setting up distributed connection (sender)"
-            )
             self._setup_distributed_connection_sender()
 
         if self._stateful_model:
-            torchrl_logger.debug(
-                "RayModuleTransformScheme: Sending first batch of weights (sender)"
-            )
             self._send_weights_distributed(weights=weights)
 
-        torchrl_logger.debug("Waiting for receiver to join process group...")
         self.ray.get(receiver_future)
 
     def _send_weights_distributed(self, weights: Any | None = None) -> None:
@@ -1098,7 +1027,6 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
             raise RuntimeError("No weights available to send")
 
         # Send weights to the transform (rank 1)
-        torchrl_logger.debug("RayModuleTransformScheme: Sending weights to rank 1")
         futures = weights.isend(dst=1, return_early=True)
         for future in futures:
             future.wait()

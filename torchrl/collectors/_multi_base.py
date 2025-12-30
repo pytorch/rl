@@ -19,7 +19,7 @@ from torchrl import logger as torchrl_logger
 from torchrl._utils import (
     _check_for_faulty_process,
     _get_mp_ctx,
-    _ProcessNoWarn,
+    _make_process_no_warn_cls,
     _set_mp_start_method_if_unset,
     RL_WARNINGS,
 )
@@ -956,6 +956,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Extract parent pipes for external use (e.g., polling, receiving messages)
         self.pipes = [pipe_parent for pipe_parent, _ in pipe_pairs]
 
+        _ProcessNoWarnCtx = _make_process_no_warn_cls(ctx)
         # Initialize all weight sync schemes now that pipes are available
         # Both SharedMemWeightSyncScheme (uses queues) and MultiProcessWeightSyncScheme (uses pipes)
         # can be initialized here since all required resources exist
@@ -963,9 +964,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             for model_id, scheme in self._weight_sync_schemes.items():
                 if not scheme.initialized_on_sender:
                     torchrl_logger.debug(
-                        f"Init scheme {type(scheme)} on sender side of {type(self)} with {model_id=} and model {_resolve_model(self, model_id)}."
+                        f"Init weight sync scheme {type(scheme).__name__} for {model_id=}."
                     )
-                    scheme.init_on_sender(model_id=model_id, context=self)
+                    scheme.init_on_sender(model_id=model_id, context=self, ctx=ctx)
 
         # Create a policy on the right device
         policy_factory = self.policy_factory
@@ -1072,7 +1073,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                 }
-                proc = _ProcessNoWarn(
+                proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
                     num_threads=self.num_sub_threads,
                     _start_method=ctx.get_start_method(),

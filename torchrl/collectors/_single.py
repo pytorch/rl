@@ -14,7 +14,7 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from torch import nn
-from torchrl import compile_with_warmup, logger as torchrl_logger
+from torchrl import compile_with_warmup
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
@@ -918,29 +918,23 @@ class Collector(BaseCollector):
 
         # If the policy has a valid spec, we use it
         self._policy_output_keys = set()
-        if (
-            make_rollout
-            and hasattr(
-                self._wrapped_policy_uncompiled
-                if has_meta_params
-                else self._wrapped_policy,
-                "spec",
-            )
-            and (
-                self._wrapped_policy_uncompiled
-                if has_meta_params
-                else self._wrapped_policy
-            ).spec
-            is not None
-            and all(
-                v is not None
-                for v in (
-                    self._wrapped_policy_uncompiled
-                    if has_meta_params
-                    else self._wrapped_policy
-                ).spec.values(True, True)
-            )
-        ):
+        _policy_to_check = (
+            self._wrapped_policy_uncompiled if has_meta_params else self._wrapped_policy
+        )
+        _has_spec = hasattr(_policy_to_check, "spec")
+        _spec_not_none = False
+        _all_values_not_none = False
+        if _has_spec:
+            _spec = _policy_to_check.spec
+            _spec_not_none = _spec is not None
+            if _spec_not_none:
+                _all_values_not_none = all(
+                    v is not None for v in _spec.values(True, True)
+                )
+        _condition = (
+            make_rollout and _has_spec and _spec_not_none and _all_values_not_none
+        )
+        if _condition:
             if any(
                 key not in self._final_rollout.keys(isinstance(key, tuple))
                 for key in (
@@ -1255,17 +1249,14 @@ class Collector(BaseCollector):
 
             while self._frames < self.total_frames:
                 self._iter += 1
-                torchrl_logger.debug("Collector: rollout.")
                 tensordict_out = self.rollout()
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
-                    torchrl_logger.debug("Collector: No tensordict_out. Yielding.")
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
                 tensordict_out = self._postproc(tensordict_out)
-                torchrl_logger.debug("Collector: postproc done.")
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
@@ -1276,10 +1267,6 @@ class Collector(BaseCollector):
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
                     self.replay_buffer.extend(tensordict_out)
-                    torchrl_logger.debug(
-                        f"Collector: Added {tensordict_out.numel()} frames to replay buffer. "
-                        "Buffer write count: {self.replay_buffer.write_count}. Yielding."
-                    )
                     yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
@@ -1534,17 +1521,11 @@ class Collector(BaseCollector):
                     and not self._ignore_rb
                     and not self.extend_buffer
                 ):
-                    torchrl_logger.debug(
-                        f"Collector: Adding {env_output.numel()} frames to replay buffer using add()."
-                    )
                     self.replay_buffer.add(self._carrier)
                     if self._increment_frames(self._carrier.numel()):
                         return
                 else:
                     if self.storing_device is not None:
-                        torchrl_logger.debug(
-                            f"Collector: Moving to {self.storing_device} and adding to queue."
-                        )
                         non_blocking = (
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
@@ -1570,7 +1551,6 @@ class Collector(BaseCollector):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
-                    torchrl_logger.debug("Collector: Interruptor stopped.")
                     if (
                         self.replay_buffer is not None
                         and not self._ignore_rb
@@ -1597,7 +1577,6 @@ class Collector(BaseCollector):
                     break
             else:
                 if self._use_buffers:
-                    torchrl_logger.debug("Returning final rollout within buffer.")
                     result = self._final_rollout
                     try:
                         result = torch.stack(
@@ -1620,9 +1599,6 @@ class Collector(BaseCollector):
                 ):
                     return
                 else:
-                    torchrl_logger.debug(
-                        "Returning final rollout with NO buffer (maybe_dense_stack)."
-                    )
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 

@@ -83,7 +83,6 @@ class SharedMemTransport:
         Each worker reads from its own dedicated queue, to avoid race conditions.
 
         """
-        torchrl_logger.debug("Sending shared memory weights to workers.")
         if self._weight_queues is None:
             raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
 
@@ -114,9 +113,6 @@ class SharedMemTransport:
         Returns:
             The shared memory weights TensorDict.
         """
-        torchrl_logger.debug(
-            f"Receiving shared memory weights from worker {worker_idx}."
-        )
         if self._weight_queues is None:
             raise RuntimeError("Queues not created yet. Call init_on_sender() first.")
 
@@ -187,14 +183,9 @@ class SharedMemTransport:
         """
         # Apply weights to model if provided (same pattern as other transports)
         if model is not None and strategy is not None and weights is not None:
-            torchrl_logger.debug(
-                f"Applying shared memory weights {type(weights)=} to model {model} with {strategy=}."
-            )
+            torchrl_logger.debug("Applying shared memory weights to model.")
             strategy.apply_weights(model, weights)
             return weights
-        torchrl_logger.debug(
-            f"Not applying shared memory weights {type(weights)=} to model {model} with {strategy=}."
-        )
         return None
 
     def send_ack(self, message: str = "updated") -> None:
@@ -257,6 +248,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         devices: list[torch.device] | None = None,
         device_map_fn: Callable[[int, TensorDictBase], TensorDictBase] | None = None,
         num_workers: int | None = None,
+        ctx: Any = None,
     ) -> None:
         """Initialize on the main process (sender side).
 
@@ -279,6 +271,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             devices: List of devices for each worker
             device_map_fn: Custom function to map worker_idx and weights to device-specific weights
             num_workers: Number of workers (required with device_map_fn)
+            ctx: Multiprocessing context. Defaults to `mp.get_context()`.
 
         Examples:
             Simple usage with collector context (stateful policy):
@@ -347,15 +340,17 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # Collect all unique worker indices
         all_workers = list(params_map.keys())
 
+        if ctx is None:
+            ctx = mp.get_context()
         for worker_idx in all_workers:
             if worker_idx not in self._weight_init_queues:
-                self._weight_init_queues[worker_idx] = mp.Queue()
+                self._weight_init_queues[worker_idx] = ctx.Queue()
             # Create instruction queues for background receiver
             if worker_idx not in self._instruction_queues:
-                self._instruction_queues[worker_idx] = mp.Queue()
+                self._instruction_queues[worker_idx] = ctx.Queue()
             # Create ack queues for synchronous mode
             if worker_idx not in self._ack_queues:
-                self._ack_queues[worker_idx] = mp.Queue()
+                self._ack_queues[worker_idx] = ctx.Queue()
 
         # Set worker info in transport
         self.shared_transport.register_weights(params_map, self._weight_init_queues)
@@ -689,13 +684,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
 
         # Update the shared memory buffer in-place so workers see the change
         if self._shared_transport is not None and self.shared_transport.unique_weights:
-            torchrl_logger.debug("Updating shared memory buffer in-place")
             shared_weights = self.shared_transport.unique_weights[0]
             # In-place update of shared memory buffer with fresh weights
             shared_weights.data.update_(fresh_weights.data)
             return shared_weights
 
-        torchrl_logger.debug("No shared transport, returning fresh weights")
         # If no shared transport, just return the fresh weights
         return fresh_weights
 
@@ -721,9 +714,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             raise RuntimeError("Must be synchronized on sender before sending weights")
 
         # prepare_weights updates the shared buffer in-place
-        torchrl_logger.debug(
-            "Sending weights via shared memory -- calling prepare_weights()"
-        )
         self.prepare_weights(
             weights=weights,
             model_id=self._model_id,
@@ -732,12 +722,10 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         )
 
         # Send instruction to workers' background threads to apply the weights
-        torchrl_logger.debug("Sending 'receive' instruction to workers")
         self._send_instruction(instruction="receive", worker_ids=worker_ids)
 
         # Wait for acknowledgments if in synchronous mode
         if self.sync:
-            torchrl_logger.debug("Waiting for acknowledgments from workers")
             self._wait_for_ack(worker_ids=worker_ids)
 
     @property
@@ -823,9 +811,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         3. Sends an acknowledgment back to the sender
         4. Repeats until stop event is set or "stop" instruction received
         """
-        torchrl_logger.debug(
-            f"SharedMemWeightSyncScheme: Background receiver started for worker {self._worker_idx}"
-        )
         while not self._stop_event.is_set():
             try:
                 instruction = self._wait_for_instruction()
@@ -833,9 +818,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                     # Stop event was set or timeout
                     continue
                 if instruction == "receive":
-                    torchrl_logger.debug(
-                        f"SharedMemWeightSyncScheme: Worker {self._worker_idx} received 'receive' instruction"
-                    )
                     # Apply the current shared memory weights to the model
                     # The weights are already updated in shared memory by the sender
                     if (
@@ -845,18 +827,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         self._strategy.apply_weights(
                             self.model, self._receiver_shared_weights, inplace=True
                         )
-                        torchrl_logger.debug(
-                            f"SharedMemWeightSyncScheme: Worker {self._worker_idx} applied weights"
-                        )
 
                     # Cascade weight update to sub-collectors if context supports it
                     model_id = self._model_id or "policy"
                     if self.context is not None and hasattr(
                         self.context, "update_policy_weights_"
                     ):
-                        torchrl_logger.debug(
-                            f"SharedMemWeightSyncScheme: Cascading weight update to sub-collectors for {model_id=}"
-                        )
                         self.context.update_policy_weights_(
                             model_id=model_id,
                             policy_or_weights=self._receiver_shared_weights,
@@ -865,9 +841,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                     # Send acknowledgment
                     self._send_ack("updated")
                 elif instruction == "stop":
-                    torchrl_logger.debug(
-                        f"SharedMemWeightSyncScheme: Worker {self._worker_idx} received 'stop' instruction"
-                    )
                     break
                 else:
                     torchrl_logger.warning(
@@ -878,10 +851,6 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                     torchrl_logger.warning(
                         f"SharedMemWeightSyncScheme: Background receiver error: {e}"
                     )
-
-        torchrl_logger.debug(
-            f"SharedMemWeightSyncScheme: Background receiver stopped for worker {self._worker_idx}"
-        )
 
     def __getstate__(self):
         """Prepare the scheme for pickling."""

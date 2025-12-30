@@ -23,6 +23,7 @@ import torch
 import torchrl.collectors._multi_base
 import torchrl.collectors._runner
 from packaging import version
+from pyvers import implement_for
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -145,6 +146,16 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+@implement_for("torch", "2.5")
+def has_mps():
+    return torch.mps.is_available()
+
+
+@implement_for("torch", None, "2.5")
+def has_mps():  # noqa: F811
+    return torch.backends.mps.is_available()
 
 
 class WrappablePolicy(nn.Module):
@@ -485,8 +496,6 @@ class TestCollectorGeneric:
     def test_collector_output_keys(
         self, collector_class, init_random_frames, explicit_spec, split_trajs
     ):
-        from torchrl.envs.libs.gym import GymEnv
-
         out_features = 1
         hidden_size = 12
         total_frames = 200
@@ -636,8 +645,6 @@ class TestCollectorGeneric:
         are modified after the collector is run for more steps.
 
         """
-        from torchrl.envs.libs.gym import GymEnv
-
         num_envs = 4
         env_make = EnvCreator(
             lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
@@ -730,7 +737,7 @@ class TestCollectorGeneric:
                 return env
 
         policy = make_policy(env_name)
-
+        torchrl_logger.info("Sync")
         collector = Collector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
@@ -740,6 +747,7 @@ class TestCollectorGeneric:
             total_frames=20000,
             device="cpu",
         )
+        torchrl_logger.info("Loop")
         try:
             assert collector._use_buffers
             for i, d in enumerate(collector):
@@ -753,8 +761,10 @@ class TestCollectorGeneric:
             with pytest.raises(AssertionError):
                 assert_allclose_td(b1, b2)
         finally:
+            torchrl_logger.info("Shutting down sync")
             collector.shutdown()
 
+        torchrl_logger.info("Concurrent")
         ccollector = AsyncCollector(
             create_env_fn=env_fn,
             create_env_kwargs={"seed": seed},
@@ -763,6 +773,7 @@ class TestCollectorGeneric:
             max_frames_per_traj=2000,
             total_frames=20000,
         )
+        torchrl_logger.info("Loop")
         for i, d in enumerate(ccollector):
             if i == 0:
                 b1c = d
@@ -781,6 +792,7 @@ class TestCollectorGeneric:
             assert_allclose_td(b1c, b1)
             assert_allclose_td(b2c, b2)
         finally:
+            torchrl_logger.info("Shutting down concurrent")
             ccollector.shutdown()
             del ccollector
 
@@ -1062,10 +1074,23 @@ if __name__ == "__main__":
 
         # warnings.warn("Tensordict is registered in PyTree", category=UserWarning)
 
+        # Skip multi-collectors on macOS with older PyTorch when MPS is available.
+        # On macOS: "fork" causes segfaults after MPS initialization (even with CPU tensors),
+        # and "spawn" on older PyTorch (<2.5) can't handle some multiprocessing scenarios.
+        is_multi_collector = collector_type is not Collector
+        is_macos = sys.platform == "darwin"
+        is_old_pytorch = version.parse(torch.__version__).base_version < "2.5.0"
+        mps_available = torch.backends.mps.is_available()
+        if is_multi_collector and is_macos and is_old_pytorch and mps_available:
+            pytest.skip(
+                "Multi-collectors are not supported on macOS with MPS available and PyTorch < 2.5.0 "
+                "due to multiprocessing compatibility issues with MPS initialization."
+            )
+
         shared_device = torch.device("cpu")
         if torch.cuda.is_available():
             original_device = torch.device("cuda:0")
-        elif torch.mps.is_available():
+        elif has_mps():
             original_device = torch.device("mps")
         else:
             pytest.skip("No GPU or MPS device")
@@ -2457,8 +2482,6 @@ class TestCollectorDevices:
 class TestAutoWrap:
     @pytest.fixture
     def env_maker(self):
-        from torchrl.envs.libs.gym import GymEnv
-
         return lambda: GymEnv(PENDULUM_VERSIONED())
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy, num_envs):
@@ -2740,17 +2763,6 @@ class TestNestedEnvsCollector:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
-        if os.getenv("PYTORCH_TEST_FBCODE"):
-            from torchrl.testing.mocking_classes import (
-                CountingEnvCountPolicy,
-                NestedCountingEnv,
-            )
-        else:
-            from torchrl.testing.mocking_classes import (
-                CountingEnvCountPolicy,
-                NestedCountingEnv,
-            )
-
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         torch.manual_seed(0)
@@ -2962,7 +2974,7 @@ class TestMultiKeyEnvsCollector:
 
 
 @pytest.mark.skipif(
-    not torch.cuda.is_available() and not torch.mps.is_available(),
+    not torch.cuda.is_available() and (not has_mps()),
     reason="No casting if no cuda",
 )
 class TestUpdateParams:
@@ -3105,6 +3117,19 @@ class TestUpdateParams:
     def test_param_sync_mixed_device(
         self, give_weights, collector, policy_device, env_device, weight_sync_scheme
     ):
+        # Skip multi-collectors on macOS with older PyTorch when MPS is available.
+        # On macOS: "fork" causes segfaults after MPS initialization (even with CPU tensors),
+        # and "spawn" on older PyTorch (<2.5) can't handle some multiprocessing scenarios.
+        is_multi_collector = collector is not Collector
+        is_macos = sys.platform == "darwin"
+        is_old_pytorch = version.parse(torch.__version__).base_version < "2.5.0"
+        mps_available = torch.backends.mps.is_available()
+        if is_multi_collector and is_macos and is_old_pytorch and mps_available:
+            pytest.skip(
+                "Multi-collectors are not supported on macOS with MPS available and PyTorch < 2.5.0 "
+                "due to multiprocessing compatibility issues with MPS initialization."
+            )
+
         with torch.device("cpu"):
             policy = TestUpdateParams.Policy()
         policy.param = nn.Parameter(policy.param.data.to(policy_device))
@@ -4051,6 +4076,17 @@ class TestCollectorRB:
         3. Postproc is not applied when replay buffer is used with extend_buffer=False
         4. The behavior is consistent across Sync, MultiaSync, and MultiSync collectors
         """
+        # Skip multi-collectors with replay buffer on older Python.
+        # There's a known shared memory visibility race condition with Python < 3.10 and the
+        # "spawn" multiprocessing start method. The child process writes to shared memory,
+        # but the main process may sample before the writes are fully visible.
+        is_multi_collector = collector_class != Collector
+        if is_multi_collector and use_replay_buffer and sys.version_info < (3, 10):
+            pytest.skip(
+                "Multi-collectors with replay buffer are not supported on Python < 3.10 "
+                "due to shared memory visibility issues with the 'spawn' start method."
+            )
+
         # Create a simple dummy environment
         def make_env():
             env = DiscreteActionVecMockEnv()

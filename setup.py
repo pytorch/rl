@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import contextlib
 import glob
 import importlib.util
+import json
 import logging
 import os
 import re
@@ -8,6 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import torch
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
@@ -15,6 +19,67 @@ logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent.resolve()
 _RELEASE_BRANCH_RE = re.compile(r"^release/v(?P<release_id>.+)$")
+_BUILD_INFO_FILE = ROOT_DIR / "build" / ".torchrl_build_info.json"
+
+
+def _check_and_clean_stale_builds():
+    """Check if existing build was made with a different PyTorch version and clean if so.
+
+    This prevents ABI incompatibility issues when switching between PyTorch versions.
+    """
+    current_torch_version = torch.__version__
+    current_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+
+    if _BUILD_INFO_FILE.exists():
+        try:
+            with open(_BUILD_INFO_FILE) as f:
+                build_info = json.load(f)
+            old_torch = build_info.get("torch_version")
+            old_python = build_info.get("python_version")
+
+            if (
+                old_torch != current_torch_version
+                or old_python != current_python_version
+            ):
+                logger.warning(
+                    f"Detected PyTorch/Python version change: "
+                    f"PyTorch {old_torch} -> {current_torch_version}, "
+                    f"Python {old_python} -> {current_python_version}. "
+                    f"Cleaning stale build artifacts..."
+                )
+                # Clean stale .so files for current Python version
+                so_pattern = (
+                    ROOT_DIR
+                    / "torchrl"
+                    / f"_torchrl.cpython-{sys.version_info.major}{sys.version_info.minor}*.so"
+                )
+                for so_file in glob.glob(str(so_pattern)):
+                    logger.warning(f"Removing stale: {so_file}")
+                    os.remove(so_file)
+                # Clean build directory
+                build_dir = ROOT_DIR / "build"
+                if build_dir.exists():
+                    import shutil
+
+                    for item in build_dir.iterdir():
+                        if item.name.startswith("temp.") or item.name.startswith(
+                            "lib."
+                        ):
+                            logger.warning(f"Removing stale build dir: {item}")
+                            shutil.rmtree(item)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Could not read build info: {e}")
+
+    # Write current build info
+    _BUILD_INFO_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_BUILD_INFO_FILE, "w") as f:
+        json.dump(
+            {
+                "torch_version": current_torch_version,
+                "python_version": current_python_version,
+            },
+            f,
+        )
 
 
 def get_extensions():
@@ -162,6 +227,9 @@ def set_version():
 
 def main():
     """Main setup function for building TorchRL with C++ extensions."""
+    # Check for stale builds from different PyTorch/Python versions
+    _check_and_clean_stale_builds()
+
     with set_version():
         pretend_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION")
         _has_setuptools_scm = importlib.util.find_spec("setuptools_scm") is not None

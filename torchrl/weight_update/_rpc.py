@@ -93,12 +93,9 @@ class RPCWeightSyncScheme(WeightSyncScheme):
             model = _resolve_model(self.context, self._model_id)
             if model is None:
                 if self._model_id == "policy":
-                    torchrl_logger.debug(
-                        f"Creating policy from factory and setting in collector {type(self.context)}"
-                    )
+                    torchrl_logger.debug("Creating policy from factory.")
                     model = self.context.policy_factory[0]()
                     self.context.policy = model
-                    torchrl_logger.debug(f"{self.context.policy=}")
                 else:
                     raise AttributeError(
                         f"Model {self._model_id} was `None` in context {self.context}"

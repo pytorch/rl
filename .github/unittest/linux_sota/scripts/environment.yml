@@ -20,6 +20,7 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
+    - psutil
     - hydra-core
     - imageio==2.26.0
     - dm_control

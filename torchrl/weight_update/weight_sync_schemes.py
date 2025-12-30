@@ -474,6 +474,10 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             context: Optional context object (e.g., inner collector)
             **kwargs: Alternative to context (model, etc.)
         """
+        if self.initialized_on_sender:
+            # emulate pickling to erase the current state
+            self.__setstate__(self.__getstate__())
+
         self._initialized_on_receiver = True
         try:
             result = self._init_on_receiver_impl(
@@ -788,7 +792,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         context = self.context
 
         # Let the scheme prepare the weights
-        torchrl_logger.debug("Preparing weights")
         prepared_weights = self.prepare_weights(
             weights=weights,
             model_id=self._model_id,
@@ -802,22 +805,14 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             raise RuntimeError("No transports available.")
 
         # Send to all workers first (non-blocking if transport supports it)
-        torchrl_logger.debug(f"Sending over transports {transports}")
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
-                torchrl_logger.debug(
-                    f"Sending {type(prepared_weights)=} through {type(transport)=} asynchronously."
-                )
                 transport.send_weights_async(prepared_weights)
             else:
                 # Fallback for transports that don't support async send
-                torchrl_logger.debug(
-                    f"Sending {type(prepared_weights)=} through {type(transport)=} synchronously."
-                )
                 transport.send_weights(prepared_weights)
 
         # Wait for all acknowledgments
-        torchrl_logger.debug("Waiting for acknowledgement")
         for transport in transports:
             if hasattr(transport, "wait_ack"):
                 transport.wait_ack()
@@ -913,7 +908,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             return None
 
         # Try to receive weights - transport handles receiving and applying
-        torchrl_logger.debug(f"Calling receive_weights on transport {transport}")
         result = transport.receive_weights(
             timeout=timeout,
             weights=self.weights,
@@ -925,20 +919,15 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
 
         weights = result
         model_id = self._model_id or "policy"
-        torchrl_logger.debug(f"Received weights for {model_id=}")
 
         # Cascade weight update to sub-collectors if context supports it
         if self.context is not None and hasattr(self.context, "update_policy_weights_"):
-            torchrl_logger.debug(
-                f"Cascading weight update to sub-collectors for {model_id=}"
-            )
             self.context.update_policy_weights_(
                 model_id=model_id, policy_or_weights=weights
             )
 
         # Send acknowledgment if transport supports it
         if hasattr(transport, "send_ack"):
-            torchrl_logger.debug(f"Sending acknowledgement on {model_id=}")
             transport.send_ack("updated")
 
         return weights
@@ -994,7 +983,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         if self.synchronized_on_receiver or self.synchronized_on_sender:
             raise RuntimeError("Cannot synchronize weights on sender twice.")
         if self._initialized_on_sender:
-            torchrl_logger.debug("Synchronizing weights on sender")
             if worker_idx is not None:
                 # Safety check, we can consider removing this in the future.
                 raise RuntimeError(
@@ -1007,7 +995,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
                 self.synchronized_on_sender = False
                 raise
         elif self._initialized_on_receiver:
-            torchrl_logger.debug(f"Synchronizing weights on receiver -- {worker_idx=}")
             if weights is not None:
                 # safety check: weights are passed to sender, not receiver for initial sync
                 raise RuntimeError(
@@ -1118,9 +1105,6 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
             name=f"WeightReceiver-{self._worker_idx}",
         )
         self._background_thread.start()
-        torchrl_logger.debug(
-            f"{type(self).__name__}: Started background receiver thread for worker {self._worker_idx}"
-        )
 
     def _background_receive_loop(self):
         """Background thread loop that waits for instructions and receives weights.

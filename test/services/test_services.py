@@ -5,16 +5,14 @@
 
 from __future__ import annotations
 
-import pytest
-
-pytest.importorskip("ray")
+import importlib.util
 
 # Import from mocking_classes which is a proper module
 import sys
 from pathlib import Path
 
-import ray
-from ray.util.state import get_actor as get_actor_by_id
+import pytest
+
 from torchrl._utils import logger
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -23,11 +21,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_services_fixtures import SimpleService, TokenizerService
 from torchrl.services import get_services, RayService
 
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("ray"), reason="Ray not available"
+)
+
 
 @pytest.fixture(scope="module", autouse=True)
 def ray_init():
     """Initialize Ray once for the entire test module."""
     import os
+
+    import ray
 
     if ray.is_initialized():
         ray.shutdown(raise_on_error=False)
@@ -48,6 +52,9 @@ def ray_init():
 @pytest.fixture(scope="function", autouse=True)
 def kill_all_actors():
     """Kill all actors after each test."""
+    import ray
+    from ray.util.state import get_actor as get_actor_by_id
+
     yield
     if not ray.is_initialized():
         return
@@ -102,6 +109,8 @@ class TestRayService:
 
     def test_register_service(self):
         """Test registering a new service."""
+        import ray
+
         services = RayService(namespace="test_register")
         try:
             actor = services.register("simple", SimpleService, value=42)
@@ -115,6 +124,8 @@ class TestRayService:
 
     def test_register_with_ray_options(self):
         """Test registering a service with Ray options."""
+        import ray
+
         services = RayService(namespace="test_options")
         try:
             actor = services.register(
@@ -142,8 +153,9 @@ class TestRayService:
 
     def test_get_service(self):
         """Test retrieving a registered service."""
-        services = RayService(namespace="test_get")
+        import ray
 
+        services = RayService(namespace="test_get")
         try:
             # Register a service
             original_actor = services.register("simple", SimpleService, value=100)
@@ -168,6 +180,8 @@ class TestRayService:
 
     def test_getitem_access(self):
         """Test dict-like access with []."""
+        import ray
+
         services = RayService(namespace="test_getitem")
 
         try:
@@ -211,6 +225,8 @@ class TestRayService:
 
     def test_cross_worker_visibility(self):
         """Test that services registered by one worker are visible to another."""
+        import ray
+
         namespace = "test_cross_worker"
 
         # Worker 1: Register a service
@@ -229,6 +245,8 @@ class TestRayService:
 
     def test_namespace_isolation(self):
         """Test that different namespaces isolate services."""
+        import ray
+
         # Register in namespace A
         services_a = RayService(namespace="namespace_a")
         services_a.register("service", SimpleService, value=111)
@@ -253,6 +271,8 @@ class TestRayService:
 
     def test_options_method(self):
         """Test the register_with_options() method for explicit configuration."""
+        import ray
+
         services = RayService(namespace="test_options_method")
 
         try:
@@ -273,6 +293,8 @@ class TestRayService:
 
     def test_service_persistence(self):
         """Test that services persist across RayService instances."""
+        import ray
+
         namespace = "test_persistence"
 
         # Create first instance and register
@@ -394,6 +416,8 @@ class TestIntegrationScenarios:
 
     def test_tokenizer_sharing(self):
         """Test sharing a tokenizer across workers."""
+        import ray
+
         namespace = "test_tokenizer_integration"
 
         # Setup: Register tokenizer
@@ -421,6 +445,8 @@ class TestIntegrationScenarios:
 
     def test_stateful_service(self):
         """Test that services maintain state across calls."""
+        import ray
+
         services = RayService(namespace="test_stateful")
 
         services.register("counter", SimpleService, value=0)
@@ -444,6 +470,8 @@ class TestIntegrationScenarios:
 
     def test_conditional_registration(self):
         """Test pattern: register only if not exists."""
+        import ray
+
         namespace = "test_conditional"
 
         services1 = get_services(backend="ray", namespace=namespace)
@@ -480,6 +508,8 @@ class TestIntegrationScenarios:
 
     def test_multiple_services_management(self):
         """Test managing multiple different services."""
+        import ray
+
         services = RayService(namespace="test_multiple")
 
         try:

@@ -9,6 +9,7 @@ import functools
 import gc
 import os
 import time
+import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -35,7 +36,6 @@ from torch import multiprocessing as mp
 from torchrl._utils import (
     _check_for_faulty_process,
     _make_ordinal_device,
-    _ProcessNoWarn,
     logger as torchrl_logger,
     VERBOSE,
 )
@@ -1436,16 +1436,13 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         if self._mp_start_method is not None:
             ctx = mp.get_context(self._mp_start_method)
-            proc_fun = ctx.Process
-            num_sub_threads = self.num_sub_threads
         else:
             ctx = mp.get_context("spawn")
-            proc_fun = functools.partial(
-                _ProcessNoWarn,
-                num_threads=self.num_sub_threads,
-                _start_method=self._mp_start_method,
-            )
-            num_sub_threads = None
+        # Use ctx.Process directly to ensure all multiprocessing primitives
+        # (Queue, Pipe, Process, Event) come from the same context.
+        # Warning filtering and num_threads are handled in the worker functions.
+        proc_fun = ctx.Process
+        num_sub_threads = self.num_sub_threads
 
         _num_workers = self.num_workers
 
@@ -1481,6 +1478,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
                     env_fun = CloudpickleWrapper(env_fun)
+                import torchrl
+
                 kwargs[idx].update(
                     {
                         "parent_pipe": parent_pipe,
@@ -1490,6 +1489,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
+                        "filter_warnings": torchrl.filter_warnings_subprocess,
                     }
                 )
                 if self._use_buffers:
@@ -2410,7 +2410,12 @@ def _run_worker_pipe_shared_mem(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
+    filter_warnings: bool = False,
 ) -> None:
+    pid = os.getpid()
+    # Handle warning filtering (moved from _ProcessNoWarn)
+    if filter_warnings:
+        warnings.filterwarnings("ignore")
     if num_threads is not None:
         torch.set_num_threads(num_threads)
     device = shared_tensordict.device
@@ -2430,7 +2435,6 @@ def _run_worker_pipe_shared_mem(
     else:
         event = None
     parent_pipe.close()
-    pid = os.getpid()
     if not isinstance(env_fun, EnvBase):
         env = env_fun(**env_fun_kwargs)
     else:
@@ -2673,7 +2677,11 @@ def _run_worker_pipe_direct(
     verbose: bool = False,
     num_threads: int | None = None,  # for fork start method
     consolidate: bool = True,
+    filter_warnings: bool = False,
 ) -> None:
+    # Handle warning filtering (moved from _ProcessNoWarn)
+    if filter_warnings:
+        warnings.filterwarnings("ignore")
     if num_threads is not None:
         torch.set_num_threads(num_threads)
 

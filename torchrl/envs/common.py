@@ -3871,7 +3871,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         fake_obs = observation_spec.zero()
         fake_reward = reward_spec.zero()
         fake_done = full_done_spec.zero()
-
         fake_state = state_spec.zero()
         fake_action = action_spec.zero()
 

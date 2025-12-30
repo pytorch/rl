@@ -118,6 +118,7 @@ uv_pip_install \
   "pybind11[global]>=2.13" \
   pyyaml \
   scipy \
+  psutil \
   hydra-core \
   tensorboard \
   "imageio==2.26.0" \

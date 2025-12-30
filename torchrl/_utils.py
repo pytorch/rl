@@ -644,8 +644,48 @@ def get_trace():
     traceback.print_stack()
 
 
+def _make_process_no_warn_cls(ctx=None):
+    """Create a _ProcessNoWarn class that inherits from the appropriate Process class.
+
+    When using multiprocessing contexts (e.g., fork or spawn), the Process class
+    used must match the context to ensure synchronization primitives like locks
+    work correctly. This factory function creates a _ProcessNoWarn class that
+    inherits from the context's Process class.
+
+    Args:
+        ctx: A multiprocessing context (e.g., from mp.get_context('fork')).
+            If None, uses the default mp.Process.
+
+    Returns:
+        A _ProcessNoWarn class that inherits from the appropriate Process base.
+
+    .. note::
+        For the "spawn" start method, this returns pre-defined module-level classes
+        to ensure they can be pickled correctly.
+    """
+    if ctx is None:
+        return _ProcessNoWarn
+
+    start_method = ctx.get_start_method()
+    if start_method == "fork":
+        return _ProcessNoWarnFork
+    elif start_method == "spawn":
+        return _ProcessNoWarnSpawn
+    elif start_method == "forkserver":
+        return _ProcessNoWarnForkserver
+    else:
+        # For unknown start methods, fall back to default
+        return _ProcessNoWarn
+
+
+# Keep the old class name as a default for backwards compatibility
 class _ProcessNoWarn(mp.Process):
-    """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess."""
+    """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess.
+
+    .. note::
+        When using multiprocessing contexts with synchronization primitives (locks, etc.),
+        use :func:`_make_process_no_warn_cls` with the context to ensure compatibility.
+    """
 
     @wraps(mp.Process.__init__)
     def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
@@ -667,6 +707,81 @@ class _ProcessNoWarn(mp.Process):
                 warnings.simplefilter("ignore")
                 return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
+
+
+# Pre-defined _ProcessNoWarn classes for different multiprocessing start methods.
+# These must be defined at module level to be picklable with the "spawn" start method.
+#
+# We use a mixin pattern to avoid code duplication while still having
+# distinct module-level classes that can be pickled.
+
+
+class _ProcessNoWarnMixin:
+    """Mixin class providing the common functionality for _ProcessNoWarn variants."""
+
+    def _init_process_no_warn(self, num_threads=None, _start_method=None):
+        import torchrl
+
+        self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        self.num_threads = num_threads
+        if _start_method is not None:
+            self._start_method = _start_method
+
+    def run(self, *args, **kwargs):
+        if self.num_threads is not None:
+            torch.set_num_threads(self.num_threads)
+        if self.filter_warnings_subprocess:
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return super().run(*args, **kwargs)
+        return super().run(*args, **kwargs)
+
+
+# Spawn-specific class (for macOS default and Windows)
+try:
+    _spawn_ctx = mp.get_context("spawn")
+
+    class _ProcessNoWarnSpawn(_ProcessNoWarnMixin, _spawn_ctx.Process):
+        """_ProcessNoWarn for the 'spawn' multiprocessing context."""
+
+        def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
+            self._init_process_no_warn(num_threads, _start_method)
+            super().__init__(*args, **kwargs)
+
+except ValueError:
+    _ProcessNoWarnSpawn = _ProcessNoWarn
+
+
+# Fork-specific class (for Linux default, not available on Windows)
+try:
+    _fork_ctx = mp.get_context("fork")
+
+    class _ProcessNoWarnFork(_ProcessNoWarnMixin, _fork_ctx.Process):
+        """_ProcessNoWarn for the 'fork' multiprocessing context."""
+
+        def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
+            self._init_process_no_warn(num_threads, _start_method)
+            super().__init__(*args, **kwargs)
+
+except ValueError:
+    _ProcessNoWarnFork = _ProcessNoWarn
+
+
+# Forkserver-specific class (not available on Windows)
+try:
+    _forkserver_ctx = mp.get_context("forkserver")
+
+    class _ProcessNoWarnForkserver(_ProcessNoWarnMixin, _forkserver_ctx.Process):
+        """_ProcessNoWarn for the 'forkserver' multiprocessing context."""
+
+        def __init__(self, *args, num_threads=None, _start_method=None, **kwargs):
+            self._init_process_no_warn(num_threads, _start_method)
+            super().__init__(*args, **kwargs)
+
+except ValueError:
+    _ProcessNoWarnForkserver = _ProcessNoWarn
 
 
 def print_directory_tree(path, indent="", display_metadata=True):
