@@ -53,18 +53,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         self._store_info = None
         self._num_workers = None
 
-    def _clear_for_worker(self) -> None:
-        """Reset scheme state for use in a worker process.
-
-        Extends base implementation to also clear distributed-specific state.
-        """
-        super()._clear_for_worker()
-        # TCPStore cannot be used in forked child
-        self._store = None
-        # Transports contain references to store/groups - clear them
-        self._sender_transports = {}
-        self._receiver_transport = None
-
     def __getstate__(self):
         """Custom serialization - exclude non-picklable objects."""
         state = super().__getstate__()

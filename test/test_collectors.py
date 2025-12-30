@@ -496,8 +496,6 @@ class TestCollectorGeneric:
     def test_collector_output_keys(
         self, collector_class, init_random_frames, explicit_spec, split_trajs
     ):
-        from torchrl.envs.libs.gym import GymEnv
-
         out_features = 1
         hidden_size = 12
         total_frames = 200
@@ -647,8 +645,6 @@ class TestCollectorGeneric:
         are modified after the collector is run for more steps.
 
         """
-        from torchrl.envs.libs.gym import GymEnv
-
         num_envs = 4
         env_make = EnvCreator(
             lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED()), VecNorm())
@@ -1077,9 +1073,6 @@ if __name__ == "__main__":
         # can trust that the user knows what to do).
 
         # warnings.warn("Tensordict is registered in PyTree", category=UserWarning)
-        import sys
-
-        from packaging import version
 
         # Skip multi-collectors on macOS with older PyTorch when MPS is available.
         # On macOS: "fork" causes segfaults after MPS initialization (even with CPU tensors),
@@ -2489,8 +2482,6 @@ class TestCollectorDevices:
 class TestAutoWrap:
     @pytest.fixture
     def env_maker(self):
-        from torchrl.envs.libs.gym import GymEnv
-
         return lambda: GymEnv(PENDULUM_VERSIONED())
 
     def _create_collector_kwargs(self, env_maker, collector_class, policy, num_envs):
@@ -2772,17 +2763,6 @@ class TestNestedEnvsCollector:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
-        if os.getenv("PYTORCH_TEST_FBCODE"):
-            from torchrl.testing.mocking_classes import (
-                CountingEnvCountPolicy,
-                NestedCountingEnv,
-            )
-        else:
-            from torchrl.testing.mocking_classes import (
-                CountingEnvCountPolicy,
-                NestedCountingEnv,
-            )
-
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         torch.manual_seed(0)
@@ -3137,10 +3117,6 @@ class TestUpdateParams:
     def test_param_sync_mixed_device(
         self, give_weights, collector, policy_device, env_device, weight_sync_scheme
     ):
-        import sys
-
-        from packaging import version
-
         # Skip multi-collectors on macOS with older PyTorch when MPS is available.
         # On macOS: "fork" causes segfaults after MPS initialization (even with CPU tensors),
         # and "spawn" on older PyTorch (<2.5) can't handle some multiprocessing scenarios.
@@ -4100,8 +4076,6 @@ class TestCollectorRB:
         3. Postproc is not applied when replay buffer is used with extend_buffer=False
         4. The behavior is consistent across Sync, MultiaSync, and MultiSync collectors
         """
-        import sys
-
         # Skip multi-collectors with replay buffer on older Python.
         # There's a known shared memory visibility race condition with Python < 3.10 and the
         # "spawn" multiprocessing start method. The child process writes to shared memory,

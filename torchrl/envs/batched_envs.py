@@ -1478,7 +1478,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
                     env_fun = CloudpickleWrapper(env_fun)
-                import torchrl as _torchrl_module
+                import torchrl
 
                 kwargs[idx].update(
                     {
@@ -1489,7 +1489,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
-                        "filter_warnings": _torchrl_module.filter_warnings_subprocess,
+                        "filter_warnings": torchrl.filter_warnings_subprocess,
                     }
                 )
                 if self._use_buffers:
@@ -2681,8 +2681,6 @@ def _run_worker_pipe_direct(
 ) -> None:
     # Handle warning filtering (moved from _ProcessNoWarn)
     if filter_warnings:
-        import warnings
-
         warnings.filterwarnings("ignore")
     if num_threads is not None:
         torch.set_num_threads(num_threads)
