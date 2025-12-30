@@ -19,7 +19,6 @@ from torch import nn
 # from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
 from torchrl._utils import timeit
-from torchrl.envs.utils import step_mdp
 
 from torchrl.modules.models.models import MLP
 
@@ -244,6 +243,8 @@ class RSSMRollout(TensorDictModuleBase):
             which amends to q(s_{t+1} | s_t, a_t, o_{t+1})
 
         """
+        from torchrl.envs.utils import step_mdp
+
         tensordict_out = []
         *batch, time_steps = tensordict.shape
 
