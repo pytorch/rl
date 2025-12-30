@@ -88,6 +88,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         devices: list[torch.device] | None = None,
         device_map_fn: Callable[[int, TensorDictBase], TensorDictBase] | None = None,
         num_workers: int | None = None,
+        ctx: Any = None,
         **kwargs,
     ) -> None:
         """Initialize on the main process (sender side).
@@ -119,6 +120,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                 Allows full control over device mapping. Requires num_workers.
             num_workers: Number of workers. Required with device_map_fn, inferred
                 from devices length otherwise.
+            ctx: The multiprocessing context to use. Defaults to `multiprocessing.get_context()`.
             **kwargs: Reserved for future use.
 
         Examples:
@@ -186,15 +188,17 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         if not hasattr(self, "_weight_init_queues"):
             self._weight_init_queues = {}
 
+        if ctx is None:
+            ctx = mp.get_context()
         for worker_idx in all_workers:
             if worker_idx not in self._weight_init_queues:
-                self._weight_init_queues[worker_idx] = mp.Queue()
+                self._weight_init_queues[worker_idx] = ctx.Queue()
             # Create instruction queues for background receiver
             if worker_idx not in self._instruction_queues:
-                self._instruction_queues[worker_idx] = mp.Queue()
+                self._instruction_queues[worker_idx] = ctx.Queue()
             # Create ack queues for synchronous mode
             if worker_idx not in self._ack_queues:
-                self._ack_queues[worker_idx] = mp.Queue()
+                self._ack_queues[worker_idx] = ctx.Queue()
 
         # Store model_id and context on scheme
         self.model_id = model_id
@@ -294,8 +298,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         Note: If sync=True (default), this is a blocking call that ensures
         specified workers are updated before returning.
         """
-        from torchrl._utils import logger as torchrl_logger
-
         if not self.initialized_on_sender:
             raise RuntimeError("Must be initialized on sender before sending weights")
         if not self.synchronized_on_sender:
@@ -315,7 +317,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         transports = list(self._iterate_transports(worker_ids))
 
         # Send weights to all workers first via queue (non-blocking)
-        torchrl_logger.debug("Sending weights to queues")
         for transport in transports:
             if hasattr(transport, "send_weights_async"):
                 # For MPTransport, pass model_id; other transports don't need it
@@ -325,12 +326,10 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                 transport.send_weights(prepared_weights)
 
         # Send instruction to workers' background threads to receive the weights
-        torchrl_logger.debug("Sending 'receive' instruction to workers")
         self._send_instruction(instruction="receive", worker_ids=worker_ids)
 
         # Wait for all acknowledgments if in synchronous mode
         if self.sync:
-            torchrl_logger.debug("Waiting for acknowledgments from workers")
             self._wait_for_ack(worker_ids=worker_ids)
 
     def _setup_connection_and_weights_on_sender_impl(
@@ -415,8 +414,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         Args:
             worker_idx: The worker index.
         """
-        from torchrl._utils import logger as torchrl_logger
-
         # Use stored worker_idx if not provided
         if worker_idx is None:
             worker_idx = self._worker_idx
@@ -444,9 +441,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         # Apply weights to model
         if weights is not None and self.model is not None:
             self._strategy.apply_weights(self.model, weights, inplace=False)
-            torchrl_logger.debug(
-                f"MultiProcessWeightSyncScheme: Worker {worker_idx} applied initial weights"
-            )
 
         # Start background receiver thread
         self._start_background_receiver()
@@ -463,9 +457,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         """
         from torchrl._utils import logger as torchrl_logger
 
-        torchrl_logger.debug(
-            f"MultiProcessWeightSyncScheme: Background receiver started for worker {self._worker_idx}"
-        )
         while not self._stop_event.is_set():
             try:
                 instruction = self._wait_for_instruction()
@@ -473,10 +464,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                     # Stop event was set or timeout
                     continue
                 if instruction == "receive":
-                    torchrl_logger.debug(
-                        f"MultiProcessWeightSyncScheme: Worker {self._worker_idx} received 'receive' instruction"
-                    )
-
                     # Receive weights from transport (blocking)
                     if self._receiver_transport is not None:
                         weights = self._receiver_transport.receive_weights(
@@ -485,18 +472,11 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                         )
 
                         if weights is not None:
-                            torchrl_logger.debug(
-                                f"MultiProcessWeightSyncScheme: Worker {self._worker_idx} received and applied weights"
-                            )
-
                             # Cascade weight update to sub-collectors if context supports it
                             model_id = self._model_id or "policy"
                             if self.context is not None and hasattr(
                                 self.context, "update_policy_weights_"
                             ):
-                                torchrl_logger.debug(
-                                    f"MultiProcessWeightSyncScheme: Cascading weight update to sub-collectors for {model_id=}"
-                                )
                                 self.context.update_policy_weights_(
                                     model_id=model_id, policy_or_weights=weights
                                 )
@@ -505,9 +485,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                     self._send_ack("updated")
 
                 elif instruction == "stop":
-                    torchrl_logger.debug(
-                        f"MultiProcessWeightSyncScheme: Worker {self._worker_idx} received 'stop' instruction"
-                    )
                     break
                 else:
                     torchrl_logger.warning(
@@ -518,10 +495,6 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                     torchrl_logger.warning(
                         f"MultiProcessWeightSyncScheme: Background receiver error: {e}"
                     )
-
-        torchrl_logger.debug(
-            f"MultiProcessWeightSyncScheme: Background receiver stopped for worker {self._worker_idx}"
-        )
 
     def create_transport(self, **kwargs) -> TransportBackend:
         """Create an MPTransport using the provided queue.

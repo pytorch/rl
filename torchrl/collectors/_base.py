@@ -16,7 +16,6 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
-from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.utils import _map_weight
 
 from torchrl.collectors.weight_update import WeightUpdaterBase
@@ -484,9 +483,6 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 weights_dict = {model_id: policy_or_weights}
             elif weights_dict is None:
                 weights_dict = {model_id: policy_or_weights}
-            torchrl_logger.debug(
-                f"Calling weight update with {model_id=} and {weights_dict.keys()=}"
-            )
             for target_model_id, weights in weights_dict.items():
                 if target_model_id not in self._weight_sync_schemes:
                     raise KeyError(
@@ -497,13 +493,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     weights, target_model_id
                 )
                 # Use new send() API with worker_ids support
-                torchrl_logger.debug("weight update -- getting scheme")
                 scheme = self._weight_sync_schemes.get(target_model_id)
                 if not isinstance(scheme, WeightSyncScheme):
                     raise TypeError(f"Expected WeightSyncScheme, got {target_model_id}")
-                torchrl_logger.debug(
-                    f"calling send() on scheme {type(scheme).__name__}"
-                )
                 self._send_weights_scheme(
                     scheme=scheme,
                     processed_weights=processed_weights,
@@ -515,7 +507,6 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             raise RuntimeError
         else:
             # No weight updater configured, try fallback
-            torchrl_logger.debug("No weight update configured, trying fallback.")
             self._maybe_fallback_update(policy_or_weights, model_id=model_id)
 
     def _maybe_fallback_update(
@@ -543,12 +534,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if not hasattr(self, "_receiver_schemes"):
             raise RuntimeError("No receiver schemes registered.")
 
-        for model_id, scheme in self._receiver_schemes.items():
-            torchrl_logger.debug(
-                f"Receiving weights for scheme {type(scheme).__name__} for model '{model_id}' on worker {self._worker_idx}"
-            )
-            received_weights = scheme.receive()
-            torchrl_logger.debug(f"Received weights: {type(received_weights)=}")
+        for scheme in self._receiver_schemes.values():
+            scheme.receive()
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload
@@ -723,11 +710,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         # Perform initial synchronization
         if synchronize_weights:
-            for model_id, scheme in weight_recv_schemes.items():
+            for scheme in weight_recv_schemes.values():
                 if not scheme.synchronized_on_receiver:
-                    torchrl_logger.debug(
-                        f"Synchronizing weights for scheme {type(scheme).__name__} for model '{model_id}'"
-                    )
                     scheme.connect(worker_idx=self.worker_idx)
 
     def __iter__(self) -> Iterator[TensorDictBase]:

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 
 from functools import partial
 
@@ -16,7 +17,9 @@ from torchrl.envs import SerialEnv
 from torchrl.envs.llm import make_mlgym
 from torchrl.modules.llm import TransformersWrapper
 
-pytest.importorskip("mlgym")
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("mlgym"), reason="mlgym not available"
+)
 
 
 class TestMLGYM:

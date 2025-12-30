@@ -29,7 +29,6 @@ from torchrl.envs.llm import (
 )
 
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-from transformers import AutoTokenizer
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -41,6 +40,11 @@ _has_ifeval = (
     and (importlib.util.find_spec("langdetect") is not None)
     and (importlib.util.find_spec("nltk") is not None)
     and (importlib.util.find_spec("immutabledict") is not None)
+)
+
+pytestmark = pytest.mark.skipif(
+    not (_has_datasets & _has_transformers & _has_vllm & _has_ray),
+    reason="requires datasets, transformers, vllm, and ray",
 )
 
 
@@ -75,6 +79,8 @@ def set_list_to_stack_for_test():
 class TestChatEnv:
     @pytest.fixture
     def tokenizer(self):
+        from transformers import AutoTokenizer
+
         return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
 
     @pytest.mark.parametrize("input_mode", ["text", "tokens", "history"])
@@ -789,6 +795,7 @@ class TestTools:
     @classmethod
     def make_env(cls):
         from torchrl.envs.llm.transforms.tools import SimpleToolTransform
+        from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
         env = ChatEnv(
@@ -871,6 +878,7 @@ class TestTools:
     def test_mcp_python_execution(self):
         """Test actual MCP Python execution with mcp-run-python server."""
         from torchrl.envs.llm.transforms import MCPToolTransform
+        from transformers import AutoTokenizer
 
         # Setup environment for MCP (Deno needs to be in PATH)
         environ = os.environ.copy()

@@ -1,12 +1,15 @@
 """Tests for PythonExecutorService with Ray service registry."""
 from __future__ import annotations
 
+# Skip all tests if Ray is not available
+import importlib.util
+
 import pytest
 
-# Skip all tests if Ray is not available
-pytest.importorskip("ray")
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("ray"), reason="Ray not available"
+)
 
-import ray
 from torchrl.envs.llm.transforms import PythonExecutorService, PythonInterpreter
 from torchrl.services import get_services
 
@@ -14,6 +17,8 @@ from torchrl.services import get_services
 @pytest.fixture
 def ray_init():
     """Initialize Ray for tests."""
+    import ray
+
     if not ray.is_initialized():
         ray.init()
     yield
@@ -73,6 +78,8 @@ y = 20
 result = x + y
 print(f"Result: {result}")
 """
+            import ray
+
             result = ray.get(executor.execute.remote(code), timeout=10)
 
             assert result["success"] is True
@@ -84,6 +91,8 @@ print(f"Result: {result}")
 
     def test_service_execution_error(self, ray_init):
         """Test that the service handles execution errors."""
+        import ray
+
         namespace = "test_executor_error"
         services = get_services(backend="ray", namespace=namespace)
 
@@ -111,6 +120,8 @@ print(f"Result: {result}")
 
     def test_multiple_executions(self, ray_init):
         """Test multiple concurrent executions."""
+        import ray
+
         namespace = "test_executor_multi"
         services = get_services(backend="ray", namespace=namespace)
 

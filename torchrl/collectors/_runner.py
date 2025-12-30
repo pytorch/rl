@@ -159,9 +159,6 @@ def _main_async_collector(
                 if verbose:
                     torchrl_logger.debug(f"mp worker {idx} received {msg}")
             except EOFError:
-                torchrl_logger.debug(
-                    f"Failed to receive data. Last message received: {msg}"
-                )
                 raise
         elif not run_free:
             if verbose:
@@ -198,8 +195,6 @@ def _main_async_collector(
                 continue
         else:
             # placeholder, will be checked after
-            if msg != "continue":
-                torchrl_logger.debug(f"mp worker {idx} will reset {msg} to 'continue'")
             msg = "continue"
         if msg == "run_free":
             run_free = True
@@ -208,9 +203,6 @@ def _main_async_collector(
             # Capture shutdown / update / seed signal, but continue should not be expected
             if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
-                torchrl_logger.debug(
-                    f"mp worker {idx} received {msg} while running free"
-                )
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
@@ -270,8 +262,6 @@ def _main_async_collector(
                     has_timed_out = False
                     continue
                 except queue.Full:
-                    if verbose:
-                        torchrl_logger.debug(f"mp worker {idx} has timed out")
                     has_timed_out = True
                     continue
 

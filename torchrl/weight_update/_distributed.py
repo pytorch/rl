@@ -53,6 +53,18 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         self._store_info = None
         self._num_workers = None
 
+    def _clear_for_worker(self) -> None:
+        """Reset scheme state for use in a worker process.
+
+        Extends base implementation to also clear distributed-specific state.
+        """
+        super()._clear_for_worker()
+        # TCPStore cannot be used in forked child
+        self._store = None
+        # Transports contain references to store/groups - clear them
+        self._sender_transports = {}
+        self._receiver_transport = None
+
     def __getstate__(self):
         """Custom serialization - exclude non-picklable objects."""
         state = super().__getstate__()
@@ -177,10 +189,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                     self._store_port = initial_port
 
                 try:
-                    torchrl_logger.debug(
-                        f"DistributedWeightSyncScheme: Creating TCPStore on {host}:{self._store_port} "
-                        f"(attempt {attempt + 1}/{max_retries})"
-                    )
                     store = torch.distributed.TCPStore(
                         host_name=host,
                         port=self._store_port,
@@ -189,9 +197,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                         wait_for_workers=False,  # Don't block - workers may not be started yet
                     )
                     self._store_info = {"host": host, "port": self._store_port}
-                    torchrl_logger.debug(
-                        f"DistributedWeightSyncScheme: TCPStore created successfully: {self._store_info}"
-                    )
                     return store
                 except (RuntimeError, OSError) as e:
                     error_msg = str(e).lower()
@@ -199,10 +204,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                         "address already in use" in error_msg
                         or "eaddrinuse" in error_msg
                     ):
-                        torchrl_logger.debug(
-                            f"DistributedWeightSyncScheme: Port {self._store_port} already in use, "
-                            f"retrying ({attempt + 1}/{max_retries})..."
-                        )
                         last_error = e
                         # Add small random delay to reduce collision probability
                         time.sleep(random.uniform(0.01, 0.1))
@@ -218,10 +219,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             # Connect as client
             if store_info is None:
                 raise ValueError("store_info is required when connecting as client")
-            torchrl_logger.debug(
-                f"DistributedWeightSyncScheme: Connecting to TCPStore at "
-                f"{store_info['host']}:{store_info['port']}"
-            )
             store = torch.distributed.TCPStore(
                 host_name=store_info["host"],
                 port=store_info["port"],
@@ -414,20 +411,12 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         3. Sends an acknowledgment back
         4. Repeats until stop event is set
         """
-        torchrl_logger.debug(
-            f"DistributedWeightSyncScheme: Background receiver started for worker {self._worker_idx}"
-        )
         while not self._stop_event.is_set():
             try:
                 instruction = self._wait_for_instruction()
                 if instruction is None:
                     continue
                 if instruction in ("receive", "update_weights"):
-                    torchrl_logger.debug(
-                        f"DistributedWeightSyncScheme: Worker {self._worker_idx} "
-                        "received 'receive' instruction"
-                    )
-
                     # Receive weights via torch.distributed
                     weights = self._receiver_transport.receive_weights(
                         model=self.model,
@@ -440,9 +429,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                         if self.context is not None and hasattr(
                             self.context, "update_policy_weights_"
                         ):
-                            torchrl_logger.debug(
-                                f"DistributedWeightSyncScheme: Cascading weight update to sub-collectors for {model_id=}"
-                            )
                             self.context.update_policy_weights_(
                                 model_id=model_id, policy_or_weights=weights
                             )
@@ -450,15 +436,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                     # Send acknowledgment
                     self._send_ack("updated")
 
-                    torchrl_logger.debug(
-                        f"DistributedWeightSyncScheme: Worker {self._worker_idx} "
-                        "received and applied weights"
-                    )
-
                 elif instruction == "stop":
-                    torchrl_logger.debug(
-                        f"DistributedWeightSyncScheme: Worker {self._worker_idx} received 'stop' instruction"
-                    )
                     break
                 else:
                     torchrl_logger.warning(
@@ -470,10 +448,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                     torchrl_logger.warning(
                         f"DistributedWeightSyncScheme: Background receiver error: {e}"
                     )
-
-        torchrl_logger.debug(
-            f"DistributedWeightSyncScheme: Background receiver stopped for worker {self._worker_idx}"
-        )
 
     def _setup_connection_and_weights_on_sender_impl(
         self, *, worker_idx: int | None = None, weights: Any | None = None
@@ -489,10 +463,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         # Initialize torch.distributed process group if not already done
         # This is a collective operation - all workers must call it
         if not torch.distributed.is_initialized():
-            torchrl_logger.debug(
-                f"DistributedWeightSyncScheme: Initializing process group on sender "
-                f"(world_size={self._num_workers + 1})"
-            )
             torch.distributed.init_process_group(
                 backend=self.backend,
                 rank=0,  # Sender is always rank 0
@@ -502,9 +472,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
         # Check if we have weights to send
         if weights is None and getattr(self, "model", None) is None:
-            torchrl_logger.debug(
-                "DistributedWeightSyncScheme: No model on sender, skipping initial weight sync"
-            )
             self._store.set("STATELESS_MODEL", b"1")
             return
 
@@ -512,14 +479,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         # Prepare weights from model
         weights = self._get_weights_buffer_from_model(self.model)
         if weights is None or weights.is_empty():
-            torchrl_logger.debug(
-                "DistributedWeightSyncScheme: Empty weights, skipping initial weight sync"
-            )
             return
-
-        torchrl_logger.debug(
-            f"DistributedWeightSyncScheme: Sending initial weights to {self._num_workers} workers"
-        )
 
         # Send to all workers using direct torch.distributed (no TCPStore signaling)
         for i, transport in enumerate(self._iterate_transports()):
@@ -542,10 +502,6 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
         # Initialize torch.distributed process group if not already done
         # This is a collective operation - sender and all workers must call it
         if not torch.distributed.is_initialized():
-            torchrl_logger.debug(
-                f"DistributedWeightSyncScheme: Initializing process group on worker {worker_idx} "
-                f"(world_size={self._num_workers + 1})"
-            )
             torch.distributed.init_process_group(
                 backend=self.backend,
                 rank=worker_idx,
@@ -559,28 +515,14 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             )
             return
 
-        torchrl_logger.debug(
-            f"DistributedWeightSyncScheme: Worker {worker_idx} waiting for STATELESS_MODEL key"
-        )
         stateless_model = self.receiver_transport._store.get("STATELESS_MODEL")
         if stateless_model not in (b"0", b"1"):
             raise RuntimeError(f"Invalid STATELESS_MODEL value: {stateless_model}")
-        if stateless_model == b"1":
-            torchrl_logger.debug(
-                "DistributedWeightSyncScheme: Skipping initial weight sync on receiver because of stateless model."
-            )
-        else:
-            torchrl_logger.debug(
-                f"DistributedWeightSyncScheme: Worker {worker_idx} waiting for initial weights"
-            )
-
+        if stateless_model != b"1":
             # Receive initial weights (blocking, no TCPStore coordination)
             weights = self._receiver_transport.receive_initial_weights()
             if weights is not None and self.model is not None:
                 self._strategy.apply_weights(self.model, weights, inplace=False)
-                torchrl_logger.debug(
-                    f"DistributedWeightSyncScheme: Worker {worker_idx} received and applied initial weights"
-                )
 
         # Start background receiver thread AFTER initial weight sync is complete
         # This prevents the background thread from consuming the initial sync messages
@@ -610,12 +552,9 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             model = _resolve_model(self.context, self._model_id)
             if model is None:
                 if self._model_id == "policy":
-                    torchrl_logger.debug(
-                        f"Creating policy from factory and setting in collector {type(self.context)}"
-                    )
+                    torchrl_logger.debug("Creating policy from factory.")
                     model = self.context.policy_factory[0]()
                     self.context.policy = model
-                    torchrl_logger.debug(f"{self.context.policy=}")
                 else:
                     raise AttributeError(
                         f"Model {self._model_id} was `None` in context {self.context}"
@@ -674,18 +613,15 @@ class DistributedTransport:
             return
 
         # Instruct worker to expect weight update
-        torchrl_logger.debug("RANK 0 -- Setting weight sync instructions to store")
         self._store.set(f"NODE_{self._rank}_in", b"update_weights")
 
         # Send weights via torch.distributed
-        torchrl_logger.debug(f"RANK 0 -- Send {type(weights)=} to rank {self._rank}")
         if self._sync:
             weights.send(self._rank)
         else:
             weights.isend(self._rank)
 
         # Wait for acknowledgment
-        torchrl_logger.debug("RANK 0 -- Receiving acknowledgement from store")
         status = self._store.get(f"NODE_{self._rank}_out")
         if status != b"updated":
             raise RuntimeError(f"Expected 'updated' but got status {status}.")
@@ -700,20 +636,13 @@ class DistributedTransport:
             return
 
         # Instruct worker to expect weight update
-        torchrl_logger.debug(
-            f"RANK 0 -- Setting weight sync instructions to store for rank {self._rank}"
-        )
         self._store.set(f"NODE_{self._rank}_in", b"update_weights")
 
         # Send weights via torch.distributed
-        torchrl_logger.debug(
-            f"RANK 0 -- Send {type(weights)=} to rank {self._rank} with sync={self._sync}"
-        )
         if self._sync:
             weights.send(self._rank)
         else:
             weights.isend(self._rank)
-        torchrl_logger.debug(f"RANK 0 -- Weights successfully sent to {self._rank}")
 
     def wait_ack(self) -> None:
         """Wait for acknowledgment from distributed worker."""
@@ -760,16 +689,11 @@ class DistributedTransport:
         if self._sync or timeout is None:
             # Blocking receive - no timeout support
             if self._sync:
-                torchrl_logger.debug(f"Rank {self._rank} -- calling recv")
                 weights_buffer.recv(src=0)
             else:
-                torchrl_logger.debug(f"Rank {self._rank} -- calling irecv")
                 weights_buffer.irecv(src=0)
         else:
             # Non-blocking receive with timeout support
-            torchrl_logger.debug(
-                f"Rank {self._rank} -- calling irecv with premature return"
-            )
             futures = weights_buffer.irecv(src=0, return_premature=True)
             if futures:
                 start_time = time.monotonic()
@@ -790,7 +714,6 @@ class DistributedTransport:
         if model is not None and strategy is not None:
             strategy.apply_weights(model, weights_buffer)
 
-        torchrl_logger.debug(f"Rank {self._rank} -- closing receive_weights")
         return weights_buffer
 
     def send_initial_weights(self, weights: Any) -> None:
@@ -802,9 +725,6 @@ class DistributedTransport:
         if self._rank is None:
             return
 
-        torchrl_logger.debug(
-            f"DistributedTransport: Sending initial weights to rank {self._rank}"
-        )
         # Note: No TCPStore signaling for initial sync - just direct send/recv
         if self._sync:
             weights.send(self._rank)
@@ -820,9 +740,6 @@ class DistributedTransport:
         Returns:
             The received weights TensorDict.
         """
-        torchrl_logger.debug(
-            "DistributedTransport: Receiving initial weights from rank 0"
-        )
         if self._sync:
             self._weights_buffer.recv(src=0)
         else:

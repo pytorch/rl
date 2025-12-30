@@ -12,6 +12,7 @@ expecttest
 pybind11[global]
 pyyaml
 scipy
+psutil
 hydra-core
 minari[gcs,hdf5,hf,create]
 gymnasium>=1.2.0

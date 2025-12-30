@@ -38,7 +38,7 @@ def test_non_tensor_env_rollout_speed(
 ):
     """Benchmarks a single rollout, after a warmup rollout, for non-tensor stacking envs.
 
-    Mirrors `test/test_env.py::TestNonTensorEnv`'s option matrix (single/serial/parallel,
+    Mirrors `test/test_envs.py::TestNonTensorEnv`'s option matrix (single/serial/parallel,
     break_when_any_done, use_buffers).
     """
     with set_capture_non_tensor_stack(False):

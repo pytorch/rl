@@ -221,7 +221,6 @@ def _run_collector(
             warnings.warn(_NON_NN_POLICY_WEIGHTS)
         policy_weights = TensorDict(lock=True)
 
-    torchrl_logger.debug(f"RANK {rank} -- init collector")
     # NOTE:
     # - `weight_sync_schemes` here are the *distributed* schemes used to send
     #   weights from the main process to this node.
@@ -242,7 +241,6 @@ def _run_collector(
 
     if weight_sync_schemes is not None:
         for model_id, scheme in weight_sync_schemes.items():
-            torchrl_logger.debug(f"RANK {rank} -- init receiver for model '{model_id}'")
             # Provide both collector context and distributed store / rank so the
             # scheme can wire its transport correctly.
             scheme.init_on_receiver(
@@ -251,15 +249,7 @@ def _run_collector(
                 # store=_store,
                 worker_idx=rank,
             )
-            torchrl_logger.debug(f"RANK {rank} -- initial weight sync (if any)")
             scheme.connect()
-            torchrl_logger.debug(
-                f"RANK {rank} -- initial weight sync for '{model_id}' completed"
-            )
-    else:
-        torchrl_logger.debug(
-            f"RANK {rank} -- {collector_class.__name__} without weight_sync_schemes \n\n"
-        )
 
     total_frames = 0
     while True:
@@ -280,13 +270,8 @@ def _run_collector(
                     f"RANK {rank} -- got data, total frames = {total_frames}"
                 )
                 torchrl_logger.debug(
-                    f"RANK {rank} -- data batch_size={data.batch_size}, "
-                    f"keys={list(data.keys(False, True))}"
-                )
-                torchrl_logger.debug(
                     f"RANK {rank} -- sending TensorDict payload to rank 0"
                 )
-                torchrl_logger.debug(f"RANK {rank} -- {data=}")
 
             if _store.get("TRAINER_status") == b"alive":
                 data.isend(dst=0)
