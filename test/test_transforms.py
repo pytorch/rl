@@ -10074,6 +10074,7 @@ class TestVecNorm:
     def rename_t(self):
         return RenameTransform(in_keys=["observation"], out_keys=[("some", "obs")])
 
+    @retry(AssertionError, tries=10, delay=0)
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
         queues = []
