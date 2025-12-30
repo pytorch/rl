@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -896,6 +896,10 @@
 <span class="sd">            context: Optional context object (e.g., inner collector)</span>
 <span class="sd">            **kwargs: Alternative to context (model, etc.)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
+            <span class="c1"># emulate pickling to erase the current state</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">())</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_initialized_on_receiver</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_on_receiver_impl</span><span class="p">(</span>
@@ -1210,7 +1214,6 @@
         <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span>
 
         <span class="c1"># Let the scheme prepare the weights</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Preparing weights&quot;</span><span class="p">)</span>
         <span class="n">prepared_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
             <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
             <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">,</span>
@@ -1224,22 +1227,14 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No transports available.&quot;</span><span class="p">)</span>
 
         <span class="c1"># Send to all workers first (non-blocking if transport supports it)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sending over transports </span><span class="si">{</span><span class="n">transports</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">transport</span> <span class="ow">in</span> <span class="n">transports</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;send_weights_async&quot;</span><span class="p">):</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Sending </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">)</span><span class="si">=}</span><span class="s2"> through </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">transport</span><span class="p">)</span><span class="si">=}</span><span class="s2"> asynchronously.&quot;</span>
-                <span class="p">)</span>
                 <span class="n">transport</span><span class="o">.</span><span class="n">send_weights_async</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Fallback for transports that don&#39;t support async send</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Sending </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">)</span><span class="si">=}</span><span class="s2"> through </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">transport</span><span class="p">)</span><span class="si">=}</span><span class="s2"> synchronously.&quot;</span>
-                <span class="p">)</span>
                 <span class="n">transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">)</span>
 
         <span class="c1"># Wait for all acknowledgments</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Waiting for acknowledgement&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">transport</span> <span class="ow">in</span> <span class="n">transports</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;wait_ack&quot;</span><span class="p">):</span>
                 <span class="n">transport</span><span class="o">.</span><span class="n">wait_ack</span><span class="p">()</span></div>
@@ -1335,7 +1330,6 @@
             <span class="k">return</span> <span class="kc">None</span>
 
         <span class="c1"># Try to receive weights - transport handles receiving and applying</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calling receive_weights on transport </span><span class="si">{</span><span class="n">transport</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span>
@@ -1347,20 +1341,15 @@
 
         <span class="n">weights</span> <span class="o">=</span> <span class="n">result</span>
         <span class="n">model_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="ow">or</span> <span class="s2">&quot;policy&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received weights for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="c1"># Cascade weight update to sub-collectors if context supports it</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;update_policy_weights_&quot;</span><span class="p">):</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Cascading weight update to sub-collectors for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
                 <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">weights</span>
             <span class="p">)</span>
 
         <span class="c1"># Send acknowledgment if transport supports it</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;send_ack&quot;</span><span class="p">):</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sending acknowledgement on </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">transport</span><span class="o">.</span><span class="n">send_ack</span><span class="p">(</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">weights</span></div>
@@ -1416,7 +1405,6 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_receiver</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_sender</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot synchronize weights on sender twice.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized_on_sender</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Synchronizing weights on sender&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="c1"># Safety check, we can consider removing this in the future.</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1429,7 +1417,6 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_sender</span> <span class="o">=</span> <span class="kc">False</span>
                 <span class="k">raise</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized_on_receiver</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Synchronizing weights on receiver -- </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="c1"># safety check: weights are passed to sender, not receiver for initial sync</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1540,9 +1527,6 @@
             <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;WeightReceiver-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_background_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: Started background receiver thread for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_background_receive_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Background thread loop that waits for instructions and receives weights.</span>

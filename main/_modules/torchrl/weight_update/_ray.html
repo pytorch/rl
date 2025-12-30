@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -581,7 +581,6 @@
         <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_actor</span><span class="o">.</span><span class="n">_receive_weights_scheme</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
 
         <span class="c1"># Step 2: Send weights via torch.distributed (async)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RayTransport: Sending weights to rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span>
 
         <span class="c1"># Step 3: Wait for the Ray call to complete (receiver has applied weights)</span>
@@ -599,14 +598,10 @@
             <span class="k">return</span>
 
         <span class="c1"># Step 1: Signal the actor via Ray to start receiving (async)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RayTransport: Sending weights async to rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pending_future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_actor</span><span class="o">.</span><span class="n">_receive_weights_scheme</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
 
         <span class="c1"># Step 2: Send weights via torch.distributed (async)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_isend</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">,</span> <span class="n">return_early</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RayTransport: Async send initiated&quot;</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_isend</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">,</span> <span class="n">return_early</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="RayTransport.wait_ack"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.wait_ack">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">wait_ack</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for Ray actor to finish applying weights.</span>
@@ -616,13 +611,7 @@
 <span class="sd">                was not called before this method).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_future</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;RayTransport: Waiting for ack from rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pending_future</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;RayTransport: Ack received from rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">. Waiting for isend to complete.&quot;</span>
-            <span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_isend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_isend</span><span class="p">:</span>
                     <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
@@ -673,10 +662,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_weights_buffer</span> <span class="o">=</span> <span class="n">weights_buffer</span>
 
         <span class="c1"># Receive weights from rank 0</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RayTransport: Receiving weights from rank 0: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights_buffer</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
         <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Blocking receive</span>
             <span class="n">weights_buffer</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
@@ -694,9 +679,6 @@
                     <span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span>
                     <span class="k">if</span> <span class="n">elapsed</span> <span class="o">&gt;=</span> <span class="n">timeout</span><span class="p">:</span>
                         <span class="c1"># Timeout expired before receiving all weights</span>
-                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;RayTransport: Timeout (</span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">s) expired waiting for weights&quot;</span>
-                        <span class="p">)</span>
                         <span class="k">return</span> <span class="kc">None</span>
                     <span class="c1"># Small sleep to avoid busy-waiting</span>
                     <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.001</span><span class="p">)</span>
@@ -707,7 +689,6 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Cannot cast weights to model type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2"> with weights: </span><span class="si">{</span><span class="n">weights_buffer</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RayTransport: No weights to apply to model&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -715,7 +696,6 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">weights_buffer</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RayTransport: Weights applied to model&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">weights_buffer</span></div>
 
     <span class="c1"># ========================================================================</span>
@@ -781,10 +761,6 @@
             <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
                 <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">50</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;RayTransport: Waiting for connection info (attempt </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">) on </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">=}</span><span class="s2">/</span><span class="si">{</span><span class="n">rank</span><span class="si">=}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
                 <span class="k">continue</span>
             <span class="k">break</span>
 
@@ -796,11 +772,6 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stateful_model</span> <span class="o">=</span> <span class="n">stateful_model</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RayTransport: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> joining process group with &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;rank=</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">, master_addr=</span><span class="si">{</span><span class="n">master_addr</span><span class="si">}</span><span class="s2">, master_port=</span><span class="si">{</span><span class="n">master_port</span><span class="si">}</span><span class="s2"> -- blocking&quot;</span>
-        <span class="p">)</span>
-
         <span class="c1"># Set environment variables for torch.distributed</span>
         <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_ADDR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">master_addr</span>
         <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">master_port</span><span class="p">)</span>
@@ -811,7 +782,6 @@
             <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
             <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RayTransport: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> joined process group&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dist_initialized</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="c1"># Receive initial weights if model is stateful</span>
@@ -884,12 +854,9 @@
             <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Creating policy from factory and setting in collector </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Creating policy from factory.&quot;</span><span class="p">)</span>
                     <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">model</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">policy</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Model </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="si">}</span><span class="s2"> was `None` in context </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -1088,11 +1055,6 @@
         <span class="n">master_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_free_port</span><span class="p">()</span>
         <span class="n">world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># +1 for the sender (rank 0)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RayWeightSyncScheme: Setting up distributed connection with &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;master_addr=</span><span class="si">{</span><span class="n">master_addr</span><span class="si">}</span><span class="s2">, master_port=</span><span class="si">{</span><span class="n">master_port</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">weights</span>
             <span class="n">stateful_model</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1119,9 +1081,6 @@
         <span class="c1"># Note: Workers will call init_process_group in their transport&#39;s</span>
         <span class="c1"># setup_connection_and_weights_on_receiver. The init_process_group is</span>
         <span class="c1"># a collective operation, so all ranks must call it together.</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;RayWeightSyncScheme: Initializing process group on sender (rank 0) -- blocking.&quot;</span>
-        <span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
             <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
             <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -1129,10 +1088,6 @@
             <span class="n">timeout</span><span class="o">=</span><span class="n">_DIST_TIMEOUT</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dist_initialized</span> <span class="o">=</span> <span class="kc">True</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;RayWeightSyncScheme: Distributed connection setup complete -- all workers at rendez-vous&quot;</span>
-        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_setup_connection_and_weights_on_sender_impl</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1156,9 +1111,6 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Set up distributed connection (with wait for workers to be ready)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_initialized</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;RayWeightSyncScheme: Setting up distributed connection (sender)&quot;</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_setup_distributed_connection_sender</span><span class="p">()</span>
 
         <span class="c1"># Send the initial weights</span>
@@ -1180,7 +1132,6 @@
         <span class="n">futures</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="p">):</span>
             <span class="n">rank</span> <span class="o">=</span> <span class="n">worker_idx</span> <span class="o">+</span> <span class="mi">1</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RayWeightSyncScheme: Sending weights to rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">futures</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">return_early</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
         <span class="c1"># Wait for all sends to complete</span>
         <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
@@ -1423,11 +1374,6 @@
         <span class="n">master_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_free_port</span><span class="p">()</span>
         <span class="n">world_size</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Sender (rank 0) + Transform (rank 1)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RayModuleTransformScheme: Setting up distributed connection with &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;master_addr=</span><span class="si">{</span><span class="n">master_addr</span><span class="si">}</span><span class="s2">, master_port=</span><span class="si">{</span><span class="n">master_port</span><span class="si">}</span><span class="s2">, world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
         <span class="c1"># Check if model has weights</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights</span>
@@ -1453,9 +1399,6 @@
 
         <span class="c1"># Now initialize process group on sender (rank 0)</span>
         <span class="c1"># The receiver is concurrently joining via the Ray call above</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;RayModuleTransformScheme: Initializing process group on sender (rank 0) -- blocking.&quot;</span>
-        <span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
             <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">,</span>
             <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -1463,10 +1406,6 @@
             <span class="n">timeout</span><span class="o">=</span><span class="n">_DIST_TIMEOUT</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dist_initialized</span> <span class="o">=</span> <span class="kc">True</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;RayModuleTransformScheme: Distributed connection setup complete&quot;</span>
-        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_setup_connection_and_weights_on_sender_impl</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1482,26 +1421,16 @@
 <span class="sd">            weights (optional): Pre-extracted weights to send. If None, weights</span>
 <span class="sd">                are extracted from the model.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;RayModuleTransformScheme: Signaling receiver to join process group&quot;</span>
-        <span class="p">)</span>
         <span class="n">receiver_future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray_transform</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">_init_weight_sync_scheme</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
             <span class="n">scheme</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_id</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_initialized</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;RayModuleTransformScheme: Setting up distributed connection (sender)&quot;</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_setup_distributed_connection_sender</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateful_model</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;RayModuleTransformScheme: Sending first batch of weights (sender)&quot;</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_send_weights_distributed</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Waiting for receiver to join process group...&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">receiver_future</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_send_weights_distributed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1520,7 +1449,6 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No weights available to send&quot;</span><span class="p">)</span>
 
         <span class="c1"># Send weights to the transform (rank 1)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RayModuleTransformScheme: Sending weights to rank 1&quot;</span><span class="p">)</span>
         <span class="n">futures</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">return_early</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
             <span class="n">future</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>

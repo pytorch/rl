@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -441,7 +441,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_check_for_faulty_process</span><span class="p">,</span>
     <span class="n">_get_mp_ctx</span><span class="p">,</span>
-    <span class="n">_ProcessNoWarn</span><span class="p">,</span>
+    <span class="n">_make_process_no_warn_cls</span><span class="p">,</span>
     <span class="n">_set_mp_start_method_if_unset</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
 <span class="p">)</span>
@@ -1378,6 +1378,7 @@
         <span class="c1"># Extract parent pipes for external use (e.g., polling, receiving messages)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span> <span class="o">=</span> <span class="p">[</span><span class="n">pipe_parent</span> <span class="k">for</span> <span class="n">pipe_parent</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">pipe_pairs</span><span class="p">]</span>
 
+        <span class="n">_ProcessNoWarnCtx</span> <span class="o">=</span> <span class="n">_make_process_no_warn_cls</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
         <span class="c1"># Initialize all weight sync schemes now that pipes are available</span>
         <span class="c1"># Both SharedMemWeightSyncScheme (uses queues) and MultiProcessWeightSyncScheme (uses pipes)</span>
         <span class="c1"># can be initialized here since all required resources exist</span>
@@ -1385,9 +1386,9 @@
             <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">scheme</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Init scheme </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">scheme</span><span class="p">)</span><span class="si">}</span><span class="s2"> on sender side of </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2"> and model </span><span class="si">{</span><span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">model_id</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Init weight sync scheme </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">scheme</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">.&quot;</span>
                     <span class="p">)</span>
-                    <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">(</span><span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span>
+                    <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_sender</span><span class="p">(</span><span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="o">=</span><span class="n">ctx</span><span class="p">)</span>
 
         <span class="c1"># Create a policy on the right device</span>
         <span class="n">policy_factory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span>
@@ -1494,7 +1495,7 @@
                     <span class="s2">&quot;weight_sync_schemes&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
                     <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>  <span class="c1"># Worker index for queue-based weight distribution</span>
                 <span class="p">}</span>
-                <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span><span class="p">(</span>
+                <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarnCtx</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_main_async_collector</span><span class="p">,</span>
                     <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_sub_threads</span><span class="p">,</span>
                     <span class="n">_start_method</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">(),</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -1066,8 +1066,48 @@
     <span class="n">traceback</span><span class="o">.</span><span class="n">print_stack</span><span class="p">()</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_process_no_warn_cls</span><span class="p">(</span><span class="n">ctx</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a _ProcessNoWarn class that inherits from the appropriate Process class.</span>
+
+<span class="sd">    When using multiprocessing contexts (e.g., fork or spawn), the Process class</span>
+<span class="sd">    used must match the context to ensure synchronization primitives like locks</span>
+<span class="sd">    work correctly. This factory function creates a _ProcessNoWarn class that</span>
+<span class="sd">    inherits from the context&#39;s Process class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ctx: A multiprocessing context (e.g., from mp.get_context(&#39;fork&#39;)).</span>
+<span class="sd">            If None, uses the default mp.Process.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A _ProcessNoWarn class that inherits from the appropriate Process base.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        For the &quot;spawn&quot; start method, this returns pre-defined module-level classes</span>
+<span class="sd">        to ensure they can be pickled correctly.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">ctx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_ProcessNoWarn</span>
+
+    <span class="n">start_method</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">start_method</span> <span class="o">==</span> <span class="s2">&quot;fork&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_ProcessNoWarnFork</span>
+    <span class="k">elif</span> <span class="n">start_method</span> <span class="o">==</span> <span class="s2">&quot;spawn&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_ProcessNoWarnSpawn</span>
+    <span class="k">elif</span> <span class="n">start_method</span> <span class="o">==</span> <span class="s2">&quot;forkserver&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_ProcessNoWarnForkserver</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># For unknown start methods, fall back to default</span>
+        <span class="k">return</span> <span class="n">_ProcessNoWarn</span>
+
+
+<span class="c1"># Keep the old class name as a default for backwards compatibility</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">_ProcessNoWarn</span><span class="p">(</span><span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        When using multiprocessing contexts with synchronization primitives (locks, etc.),</span>
+<span class="sd">        use :func:`_make_process_no_warn_cls` with the context to ensure compatibility.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@wraps</span><span class="p">(</span><span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_start_method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -1089,6 +1129,81 @@
                 <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="c1"># Pre-defined _ProcessNoWarn classes for different multiprocessing start methods.</span>
+<span class="c1"># These must be defined at module level to be picklable with the &quot;spawn&quot; start method.</span>
+<span class="c1">#</span>
+<span class="c1"># We use a mixin pattern to avoid code duplication while still having</span>
+<span class="c1"># distinct module-level classes that can be pickled.</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_ProcessNoWarnMixin</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mixin class providing the common functionality for _ProcessNoWarn variants.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_process_no_warn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_start_method</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torchrl</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">filter_warnings_subprocess</span> <span class="o">=</span> <span class="n">torchrl</span><span class="o">.</span><span class="n">filter_warnings_subprocess</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
+        <span class="k">if</span> <span class="n">_start_method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_start_method</span> <span class="o">=</span> <span class="n">_start_method</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_warnings_subprocess</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+            <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="c1"># Spawn-specific class (for macOS default and Windows)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">_spawn_ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">&quot;spawn&quot;</span><span class="p">)</span>
+
+    <span class="k">class</span><span class="w"> </span><span class="nc">_ProcessNoWarnSpawn</span><span class="p">(</span><span class="n">_ProcessNoWarnMixin</span><span class="p">,</span> <span class="n">_spawn_ctx</span><span class="o">.</span><span class="n">Process</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;_ProcessNoWarn for the &#39;spawn&#39; multiprocessing context.&quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_start_method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_process_no_warn</span><span class="p">(</span><span class="n">num_threads</span><span class="p">,</span> <span class="n">_start_method</span><span class="p">)</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+    <span class="n">_ProcessNoWarnSpawn</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span>
+
+
+<span class="c1"># Fork-specific class (for Linux default, not available on Windows)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">_fork_ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">&quot;fork&quot;</span><span class="p">)</span>
+
+    <span class="k">class</span><span class="w"> </span><span class="nc">_ProcessNoWarnFork</span><span class="p">(</span><span class="n">_ProcessNoWarnMixin</span><span class="p">,</span> <span class="n">_fork_ctx</span><span class="o">.</span><span class="n">Process</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;_ProcessNoWarn for the &#39;fork&#39; multiprocessing context.&quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_start_method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_process_no_warn</span><span class="p">(</span><span class="n">num_threads</span><span class="p">,</span> <span class="n">_start_method</span><span class="p">)</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+    <span class="n">_ProcessNoWarnFork</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span>
+
+
+<span class="c1"># Forkserver-specific class (not available on Windows)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">_forkserver_ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">&quot;forkserver&quot;</span><span class="p">)</span>
+
+    <span class="k">class</span><span class="w"> </span><span class="nc">_ProcessNoWarnForkserver</span><span class="p">(</span><span class="n">_ProcessNoWarnMixin</span><span class="p">,</span> <span class="n">_forkserver_ctx</span><span class="o">.</span><span class="n">Process</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;_ProcessNoWarn for the &#39;forkserver&#39; multiprocessing context.&quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_start_method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_process_no_warn</span><span class="p">(</span><span class="n">num_threads</span><span class="p">,</span> <span class="n">_start_method</span><span class="p">)</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+    <span class="n">_ProcessNoWarnForkserver</span> <span class="o">=</span> <span class="n">_ProcessNoWarn</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">print_directory_tree</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">display_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>

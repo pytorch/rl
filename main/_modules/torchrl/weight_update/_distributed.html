@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -599,10 +599,6 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_store_port</span> <span class="o">=</span> <span class="n">initial_port</span>
 
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Creating TCPStore on </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_store_port</span><span class="si">}</span><span class="s2"> &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;(attempt </span><span class="si">{</span><span class="n">attempt</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">max_retries</span><span class="si">}</span><span class="s2">)&quot;</span>
-                    <span class="p">)</span>
                     <span class="n">store</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">TCPStore</span><span class="p">(</span>
                         <span class="n">host_name</span><span class="o">=</span><span class="n">host</span><span class="p">,</span>
                         <span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_store_port</span><span class="p">,</span>
@@ -611,9 +607,6 @@
                         <span class="n">wait_for_workers</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Don&#39;t block - workers may not be started yet</span>
                     <span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_store_info</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;host&quot;</span><span class="p">:</span> <span class="n">host</span><span class="p">,</span> <span class="s2">&quot;port&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store_port</span><span class="p">}</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: TCPStore created successfully: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_store_info</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
                     <span class="k">return</span> <span class="n">store</span>
                 <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="n">error_msg</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
@@ -621,10 +614,6 @@
                         <span class="s2">&quot;address already in use&quot;</span> <span class="ow">in</span> <span class="n">error_msg</span>
                         <span class="ow">or</span> <span class="s2">&quot;eaddrinuse&quot;</span> <span class="ow">in</span> <span class="n">error_msg</span>
                     <span class="p">):</span>
-                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Port </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_store_port</span><span class="si">}</span><span class="s2"> already in use, &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;retrying (</span><span class="si">{</span><span class="n">attempt</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">max_retries</span><span class="si">}</span><span class="s2">)...&quot;</span>
-                        <span class="p">)</span>
                         <span class="n">last_error</span> <span class="o">=</span> <span class="n">e</span>
                         <span class="c1"># Add small random delay to reduce collision probability</span>
                         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">))</span>
@@ -640,10 +629,6 @@
             <span class="c1"># Connect as client</span>
             <span class="k">if</span> <span class="n">store_info</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;store_info is required when connecting as client&quot;</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Connecting to TCPStore at &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">store_info</span><span class="p">[</span><span class="s1">&#39;host&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">store_info</span><span class="p">[</span><span class="s1">&#39;port&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
             <span class="n">store</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">TCPStore</span><span class="p">(</span>
                 <span class="n">host_name</span><span class="o">=</span><span class="n">store_info</span><span class="p">[</span><span class="s2">&quot;host&quot;</span><span class="p">],</span>
                 <span class="n">port</span><span class="o">=</span><span class="n">store_info</span><span class="p">[</span><span class="s2">&quot;port&quot;</span><span class="p">],</span>
@@ -836,20 +821,12 @@
 <span class="sd">        3. Sends an acknowledgment back</span>
 <span class="sd">        4. Repeats until stop event is set</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Background receiver started for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">instruction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_instruction</span><span class="p">()</span>
                 <span class="k">if</span> <span class="n">instruction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="n">instruction</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="s2">&quot;update_weights&quot;</span><span class="p">):</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> &quot;</span>
-                        <span class="s2">&quot;received &#39;receive&#39; instruction&quot;</span>
-                    <span class="p">)</span>
-
                     <span class="c1"># Receive weights via torch.distributed</span>
                     <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span>
                         <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
@@ -862,9 +839,6 @@
                         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;update_policy_weights_&quot;</span>
                         <span class="p">):</span>
-                            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Cascading weight update to sub-collectors for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span>
-                            <span class="p">)</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
                                 <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">weights</span>
                             <span class="p">)</span>
@@ -872,15 +846,7 @@
                     <span class="c1"># Send acknowledgment</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_send_ack</span><span class="p">(</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
 
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> &quot;</span>
-                        <span class="s2">&quot;received and applied weights&quot;</span>
-                    <span class="p">)</span>
-
                 <span class="k">elif</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;stop&#39; instruction&quot;</span>
-                    <span class="p">)</span>
                     <span class="k">break</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -892,10 +858,6 @@
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Background receiver error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Background receiver stopped for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_setup_connection_and_weights_on_sender_impl</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -911,10 +873,6 @@
         <span class="c1"># Initialize torch.distributed process group if not already done</span>
         <span class="c1"># This is a collective operation - all workers must call it</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Initializing process group on sender &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;(world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">)&quot;</span>
-            <span class="p">)</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
                 <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="p">,</span>
                 <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># Sender is always rank 0</span>
@@ -924,9 +882,6 @@
 
         <span class="c1"># Check if we have weights to send</span>
         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;DistributedWeightSyncScheme: No model on sender, skipping initial weight sync&quot;</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;STATELESS_MODEL&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;1&quot;</span><span class="p">)</span>
             <span class="k">return</span>
 
@@ -934,14 +889,7 @@
         <span class="c1"># Prepare weights from model</span>
         <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_buffer_from_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">weights</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;DistributedWeightSyncScheme: Empty weights, skipping initial weight sync&quot;</span>
-            <span class="p">)</span>
             <span class="k">return</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Sending initial weights to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="si">}</span><span class="s2"> workers&quot;</span>
-        <span class="p">)</span>
 
         <span class="c1"># Send to all workers using direct torch.distributed (no TCPStore signaling)</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">transport</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterate_transports</span><span class="p">()):</span>
@@ -964,10 +912,6 @@
         <span class="c1"># Initialize torch.distributed process group if not already done</span>
         <span class="c1"># This is a collective operation - sender and all workers must call it</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Initializing process group on worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;(world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">)&quot;</span>
-            <span class="p">)</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>
                 <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">backend</span><span class="p">,</span>
                 <span class="n">rank</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">,</span>
@@ -981,28 +925,14 @@
             <span class="p">)</span>
             <span class="k">return</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> waiting for STATELESS_MODEL key&quot;</span>
-        <span class="p">)</span>
         <span class="n">stateless_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">receiver_transport</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;STATELESS_MODEL&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">stateless_model</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="sa">b</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;1&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid STATELESS_MODEL value: </span><span class="si">{</span><span class="n">stateless_model</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">stateless_model</span> <span class="o">==</span> <span class="sa">b</span><span class="s2">&quot;1&quot;</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;DistributedWeightSyncScheme: Skipping initial weight sync on receiver because of stateless model.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> waiting for initial weights&quot;</span>
-            <span class="p">)</span>
-
+        <span class="k">if</span> <span class="n">stateless_model</span> <span class="o">!=</span> <span class="sa">b</span><span class="s2">&quot;1&quot;</span><span class="p">:</span>
             <span class="c1"># Receive initial weights (blocking, no TCPStore coordination)</span>
             <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span><span class="o">.</span><span class="n">receive_initial_weights</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;DistributedWeightSyncScheme: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> received and applied initial weights&quot;</span>
-                <span class="p">)</span>
 
         <span class="c1"># Start background receiver thread AFTER initial weight sync is complete</span>
         <span class="c1"># This prevents the background thread from consuming the initial sync messages</span>
@@ -1032,12 +962,9 @@
             <span class="n">model</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Creating policy from factory and setting in collector </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Creating policy from factory.&quot;</span><span class="p">)</span>
                     <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">model</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">policy</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Model </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="si">}</span><span class="s2"> was `None` in context </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -1096,18 +1023,15 @@
             <span class="k">return</span>
 
         <span class="c1"># Instruct worker to expect weight update</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RANK 0 -- Setting weight sync instructions to store&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">_in&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;update_weights&quot;</span><span class="p">)</span>
 
         <span class="c1"># Send weights via torch.distributed</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RANK 0 -- Send </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2"> to rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
             <span class="n">weights</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span>
 
         <span class="c1"># Wait for acknowledgment</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RANK 0 -- Receiving acknowledgement from store&quot;</span><span class="p">)</span>
         <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">_out&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">status</span> <span class="o">!=</span> <span class="sa">b</span><span class="s2">&quot;updated&quot;</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected &#39;updated&#39; but got status </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
@@ -1122,20 +1046,13 @@
             <span class="k">return</span>
 
         <span class="c1"># Instruct worker to expect weight update</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RANK 0 -- Setting weight sync instructions to store for rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">_in&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;update_weights&quot;</span><span class="p">)</span>
 
         <span class="c1"># Send weights via torch.distributed</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RANK 0 -- Send </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2"> to rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2"> with sync=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
             <span class="n">weights</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RANK 0 -- Weights successfully sent to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+            <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="DistributedTransport.wait_ack"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.wait_ack">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">wait_ack</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Wait for acknowledgment from distributed worker.&quot;&quot;&quot;</span>
@@ -1182,16 +1099,11 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="ow">or</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Blocking receive - no timeout support</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2"> -- calling recv&quot;</span><span class="p">)</span>
                 <span class="n">weights_buffer</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2"> -- calling irecv&quot;</span><span class="p">)</span>
                 <span class="n">weights_buffer</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Non-blocking receive with timeout support</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2"> -- calling irecv with premature return&quot;</span>
-            <span class="p">)</span>
             <span class="n">futures</span> <span class="o">=</span> <span class="n">weights_buffer</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">return_premature</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">futures</span><span class="p">:</span>
                 <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
@@ -1212,7 +1124,6 @@
         <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weights_buffer</span><span class="p">)</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2"> -- closing receive_weights&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">weights_buffer</span></div>
 
 <div class="viewcode-block" id="DistributedTransport.send_initial_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.DistributedTransport.html#torchrl.weight_update.DistributedTransport.send_initial_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">send_initial_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1224,9 +1135,6 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rank</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;DistributedTransport: Sending initial weights to rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="c1"># Note: No TCPStore signaling for initial sync - just direct send/recv</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
             <span class="n">weights</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">)</span>
@@ -1242,9 +1150,6 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            The received weights TensorDict.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;DistributedTransport: Receiving initial weights from rank 0&quot;</span>
-        <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_weights_buffer</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>

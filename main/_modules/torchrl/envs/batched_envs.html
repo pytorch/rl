@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -431,6 +431,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
@@ -457,7 +458,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_check_for_faulty_process</span><span class="p">,</span>
     <span class="n">_make_ordinal_device</span><span class="p">,</span>
-    <span class="n">_ProcessNoWarn</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
@@ -1858,16 +1858,13 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mp_start_method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mp_start_method</span><span class="p">)</span>
-            <span class="n">proc_fun</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Process</span>
-            <span class="n">num_sub_threads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_sub_threads</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">&quot;spawn&quot;</span><span class="p">)</span>
-            <span class="n">proc_fun</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
-                <span class="n">_ProcessNoWarn</span><span class="p">,</span>
-                <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_sub_threads</span><span class="p">,</span>
-                <span class="n">_start_method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_mp_start_method</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">num_sub_threads</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Use ctx.Process directly to ensure all multiprocessing primitives</span>
+        <span class="c1"># (Queue, Pipe, Process, Event) come from the same context.</span>
+        <span class="c1"># Warning filtering and num_threads are handled in the worker functions.</span>
+        <span class="n">proc_fun</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Process</span>
+        <span class="n">num_sub_threads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_sub_threads</span>
 
         <span class="n">_num_workers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
 
@@ -1903,6 +1900,8 @@
                 <span class="n">env_fun</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_fun</span><span class="p">,</span> <span class="p">(</span><span class="n">EnvCreator</span><span class="p">,</span> <span class="n">CloudpickleWrapper</span><span class="p">)):</span>
                     <span class="n">env_fun</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">env_fun</span><span class="p">)</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">torchrl</span>
+
                 <span class="n">kwargs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
                     <span class="p">{</span>
                         <span class="s2">&quot;parent_pipe&quot;</span><span class="p">:</span> <span class="n">parent_pipe</span><span class="p">,</span>
@@ -1912,6 +1911,7 @@
                         <span class="s2">&quot;has_lazy_inputs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_lazy_inputs</span><span class="p">,</span>
                         <span class="s2">&quot;num_threads&quot;</span><span class="p">:</span> <span class="n">num_sub_threads</span><span class="p">,</span>
                         <span class="s2">&quot;non_blocking&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">,</span>
+                        <span class="s2">&quot;filter_warnings&quot;</span><span class="p">:</span> <span class="n">torchrl</span><span class="o">.</span><span class="n">filter_warnings_subprocess</span><span class="p">,</span>
                     <span class="p">}</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
@@ -2832,7 +2832,12 @@
     <span class="n">has_lazy_inputs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># for fork start method</span>
+    <span class="n">filter_warnings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
+    <span class="c1"># Handle warning filtering (moved from _ProcessNoWarn)</span>
+    <span class="k">if</span> <span class="n">filter_warnings</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">num_threads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="n">num_threads</span><span class="p">)</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">shared_tensordict</span><span class="o">.</span><span class="n">device</span>
@@ -2852,7 +2857,6 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">parent_pipe</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-    <span class="n">pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_fun</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">):</span>
         <span class="n">env</span> <span class="o">=</span> <span class="n">env_fun</span><span class="p">(</span><span class="o">**</span><span class="n">env_fun_kwargs</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
@@ -3095,7 +3099,11 @@
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># for fork start method</span>
     <span class="n">consolidate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">filter_warnings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Handle warning filtering (moved from _ProcessNoWarn)</span>
+    <span class="k">if</span> <span class="n">filter_warnings</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">num_threads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="n">num_threads</span><span class="p">)</span>
 

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -643,7 +643,6 @@
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
         <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- init collector&quot;</span><span class="p">)</span>
     <span class="c1"># NOTE:</span>
     <span class="c1"># - `weight_sync_schemes` here are the *distributed* schemes used to send</span>
     <span class="c1">#   weights from the main process to this node.</span>
@@ -664,7 +663,6 @@
 
     <span class="k">if</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">scheme</span> <span class="ow">in</span> <span class="n">weight_sync_schemes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- init receiver for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
             <span class="c1"># Provide both collector context and distributed store / rank so the</span>
             <span class="c1"># scheme can wire its transport correctly.</span>
             <span class="n">scheme</span><span class="o">.</span><span class="n">init_on_receiver</span><span class="p">(</span>
@@ -673,15 +671,7 @@
                 <span class="c1"># store=_store,</span>
                 <span class="n">worker_idx</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- initial weight sync (if any)&quot;</span><span class="p">)</span>
             <span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- initial weight sync for &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39; completed&quot;</span>
-            <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- </span><span class="si">{</span><span class="n">collector_class</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> without weight_sync_schemes </span><span class="se">\n\n</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
 
     <span class="n">total_frames</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
@@ -702,13 +692,8 @@
                     <span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- got data, total frames = </span><span class="si">{</span><span class="n">total_frames</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- data batch_size=</span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">, &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;keys=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span><span class="w"> </span><span class="kc">True</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- sending TensorDict payload to rank 0&quot;</span>
                 <span class="p">)</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RANK </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- </span><span class="si">{</span><span class="n">data</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="n">_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;TRAINER_status&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="sa">b</span><span class="s2">&quot;alive&quot;</span><span class="p">:</span>
                 <span class="n">data</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">dst</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>

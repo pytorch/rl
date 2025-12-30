@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -505,7 +505,6 @@
 <span class="sd">        Each worker reads from its own dedicated queue, to avoid race conditions.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Sending shared memory weights to workers.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Queues not created yet. Call init_on_sender() first.&quot;</span><span class="p">)</span>
 
@@ -536,9 +535,6 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            The shared memory weights TensorDict.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Receiving shared memory weights from worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">.&quot;</span>
-        <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_queues</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Queues not created yet. Call init_on_sender() first.&quot;</span><span class="p">)</span>
 
@@ -609,14 +605,9 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Apply weights to model if provided (same pattern as other transports)</span>
         <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Applying shared memory weights </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2"> to model </span><span class="si">{</span><span class="n">model</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">strategy</span><span class="si">=}</span><span class="s2">.&quot;</span>
-            <span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Applying shared memory weights to model.&quot;</span><span class="p">)</span>
             <span class="n">strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">weights</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Not applying shared memory weights </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="si">=}</span><span class="s2"> to model </span><span class="si">{</span><span class="n">model</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">strategy</span><span class="si">=}</span><span class="s2">.&quot;</span>
-        <span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span></div>
 
 <div class="viewcode-block" id="SharedMemTransport.send_ack"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.send_ack">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">send_ack</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;updated&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -679,6 +670,7 @@
         <span class="n">devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device_map_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize on the main process (sender side).</span>
 
@@ -701,6 +693,7 @@
 <span class="sd">            devices: List of devices for each worker</span>
 <span class="sd">            device_map_fn: Custom function to map worker_idx and weights to device-specific weights</span>
 <span class="sd">            num_workers: Number of workers (required with device_map_fn)</span>
+<span class="sd">            ctx: Multiprocessing context. Defaults to `mp.get_context()`.</span>
 
 <span class="sd">        Examples:</span>
 <span class="sd">            Simple usage with collector context (stateful policy):</span>
@@ -769,15 +762,17 @@
         <span class="c1"># Collect all unique worker indices</span>
         <span class="n">all_workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
+        <span class="k">if</span> <span class="n">ctx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">all_workers</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
             <span class="c1"># Create instruction queues for background receiver</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
             <span class="c1"># Create ack queues for synchronous mode</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
 
         <span class="c1"># Set worker info in transport</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">register_weights</span><span class="p">(</span><span class="n">params_map</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">)</span>
@@ -1111,13 +1106,11 @@
 
         <span class="c1"># Update the shared memory buffer in-place so workers see the change</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Updating shared memory buffer in-place&quot;</span><span class="p">)</span>
             <span class="n">shared_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
             <span class="c1"># In-place update of shared memory buffer with fresh weights</span>
             <span class="n">shared_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">fresh_weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">shared_weights</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No shared transport, returning fresh weights&quot;</span><span class="p">)</span>
         <span class="c1"># If no shared transport, just return the fresh weights</span>
         <span class="k">return</span> <span class="n">fresh_weights</span></div>
 
@@ -1143,9 +1136,6 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be synchronized on sender before sending weights&quot;</span><span class="p">)</span>
 
         <span class="c1"># prepare_weights updates the shared buffer in-place</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">&quot;Sending weights via shared memory -- calling prepare_weights()&quot;</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prepare_weights</span><span class="p">(</span>
             <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
             <span class="n">model_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span><span class="p">,</span>
@@ -1154,12 +1144,10 @@
         <span class="p">)</span>
 
         <span class="c1"># Send instruction to workers&#39; background threads to apply the weights</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Sending &#39;receive&#39; instruction to workers&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_send_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
 
         <span class="c1"># Wait for acknowledgments if in synchronous mode</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Waiting for acknowledgments from workers&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_ack</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span></div>
 
     <span class="nd">@property</span>
@@ -1245,9 +1233,6 @@
 <span class="sd">        3. Sends an acknowledgment back to the sender</span>
 <span class="sd">        4. Repeats until stop event is set or &quot;stop&quot; instruction received</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Background receiver started for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">instruction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_instruction</span><span class="p">()</span>
@@ -1255,9 +1240,6 @@
                     <span class="c1"># Stop event was set or timeout</span>
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;receive&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;receive&#39; instruction&quot;</span>
-                    <span class="p">)</span>
                     <span class="c1"># Apply the current shared memory weights to the model</span>
                     <span class="c1"># The weights are already updated in shared memory by the sender</span>
                     <span class="k">if</span> <span class="p">(</span>
@@ -1267,18 +1249,12 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span>
                         <span class="p">)</span>
-                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> applied weights&quot;</span>
-                        <span class="p">)</span>
 
                     <span class="c1"># Cascade weight update to sub-collectors if context supports it</span>
                     <span class="n">model_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="ow">or</span> <span class="s2">&quot;policy&quot;</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;update_policy_weights_&quot;</span>
                     <span class="p">):</span>
-                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Cascading weight update to sub-collectors for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
                             <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
                             <span class="n">policy_or_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_receiver_shared_weights</span><span class="p">,</span>
@@ -1287,9 +1263,6 @@
                     <span class="c1"># Send acknowledgment</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_send_ack</span><span class="p">(</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
                 <span class="k">elif</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;stop&#39; instruction&quot;</span>
-                    <span class="p">)</span>
                     <span class="k">break</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -1300,10 +1273,6 @@
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Background receiver error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;SharedMemWeightSyncScheme: Background receiver stopped for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare the scheme for pickling.&quot;&quot;&quot;</span>

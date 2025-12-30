@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -510,6 +510,7 @@
         <span class="n">devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device_map_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize on the main process (sender side).</span>
@@ -541,6 +542,7 @@
 <span class="sd">                Allows full control over device mapping. Requires num_workers.</span>
 <span class="sd">            num_workers: Number of workers. Required with device_map_fn, inferred</span>
 <span class="sd">                from devices length otherwise.</span>
+<span class="sd">            ctx: The multiprocessing context to use. Defaults to `multiprocessing.get_context()`.</span>
 <span class="sd">            **kwargs: Reserved for future use.</span>
 
 <span class="sd">        Examples:</span>
@@ -608,15 +610,17 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_weight_init_queues&quot;</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span> <span class="o">=</span> <span class="p">{}</span>
 
+        <span class="k">if</span> <span class="n">ctx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="n">all_workers</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_weight_init_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
             <span class="c1"># Create instruction queues for background receiver</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_instruction_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
             <span class="c1"># Create ack queues for synchronous mode</span>
             <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ack_queues</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
 
         <span class="c1"># Store model_id and context on scheme</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span> <span class="o">=</span> <span class="n">model_id</span>
@@ -716,8 +720,6 @@
 <span class="sd">        Note: If sync=True (default), this is a blocking call that ensures</span>
 <span class="sd">        specified workers are updated before returning.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_on_sender</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must be initialized on sender before sending weights&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">synchronized_on_sender</span><span class="p">:</span>
@@ -737,7 +739,6 @@
         <span class="n">transports</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterate_transports</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">))</span>
 
         <span class="c1"># Send weights to all workers first via queue (non-blocking)</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Sending weights to queues&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">transport</span> <span class="ow">in</span> <span class="n">transports</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">transport</span><span class="p">,</span> <span class="s2">&quot;send_weights_async&quot;</span><span class="p">):</span>
                 <span class="c1"># For MPTransport, pass model_id; other transports don&#39;t need it</span>
@@ -747,12 +748,10 @@
                 <span class="n">transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="n">prepared_weights</span><span class="p">)</span>
 
         <span class="c1"># Send instruction to workers&#39; background threads to receive the weights</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Sending &#39;receive&#39; instruction to workers&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_send_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;receive&quot;</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
 
         <span class="c1"># Wait for all acknowledgments if in synchronous mode</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Waiting for acknowledgments from workers&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_ack</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_setup_connection_and_weights_on_sender_impl</span><span class="p">(</span>
@@ -837,8 +836,6 @@
 <span class="sd">        Args:</span>
 <span class="sd">            worker_idx: The worker index.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-
         <span class="c1"># Use stored worker_idx if not provided</span>
         <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">worker_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span>
@@ -866,9 +863,6 @@
         <span class="c1"># Apply weights to model</span>
         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2"> applied initial weights&quot;</span>
-            <span class="p">)</span>
 
         <span class="c1"># Start background receiver thread</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_start_background_receiver</span><span class="p">()</span>
@@ -885,9 +879,6 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Background receiver started for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
         <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">instruction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_instruction</span><span class="p">()</span>
@@ -895,10 +886,6 @@
                     <span class="c1"># Stop event was set or timeout</span>
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;receive&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;receive&#39; instruction&quot;</span>
-                    <span class="p">)</span>
-
                     <span class="c1"># Receive weights from transport (blocking)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_receiver_transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span>
@@ -907,18 +894,11 @@
                         <span class="p">)</span>
 
                         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received and applied weights&quot;</span>
-                            <span class="p">)</span>
-
                             <span class="c1"># Cascade weight update to sub-collectors if context supports it</span>
                             <span class="n">model_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_id</span> <span class="ow">or</span> <span class="s2">&quot;policy&quot;</span>
                             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
                                 <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;update_policy_weights_&quot;</span>
                             <span class="p">):</span>
-                                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                                    <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Cascading weight update to sub-collectors for </span><span class="si">{</span><span class="n">model_id</span><span class="si">=}</span><span class="s2">&quot;</span>
-                                <span class="p">)</span>
                                 <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
                                     <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span> <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">weights</span>
                                 <span class="p">)</span>
@@ -927,9 +907,6 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_send_ack</span><span class="p">(</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
 
                 <span class="k">elif</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2"> received &#39;stop&#39; instruction&quot;</span>
-                    <span class="p">)</span>
                     <span class="k">break</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -940,10 +917,6 @@
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Background receiver error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;MultiProcessWeightSyncScheme: Background receiver stopped for worker </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker_idx</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
 
 <div class="viewcode-block" id="MultiProcessWeightSyncScheme.create_transport"><a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.MultiProcessWeightSyncScheme.html#torchrl.weight_update.MultiProcessWeightSyncScheme.create_transport">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransportBackend</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an MPTransport using the provided queue.</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g2f57561) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
     </div>
     
 
@@ -436,7 +436,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_with_warmup</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_with_warmup</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_ends_with</span><span class="p">,</span>
     <span class="n">_make_ordinal_device</span><span class="p">,</span>
@@ -1340,29 +1340,23 @@
 
         <span class="c1"># If the policy has a valid spec, we use it</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">make_rollout</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span>
-                <span class="k">if</span> <span class="n">has_meta_params</span>
-                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span>
-                <span class="s2">&quot;spec&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="ow">and</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span>
-                <span class="k">if</span> <span class="n">has_meta_params</span>
-                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">spec</span>
-            <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
-                <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span>
-                    <span class="k">if</span> <span class="n">has_meta_params</span>
-                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">):</span>
+        <span class="n">_policy_to_check</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span> <span class="k">if</span> <span class="n">has_meta_params</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span>
+        <span class="p">)</span>
+        <span class="n">_has_spec</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_policy_to_check</span><span class="p">,</span> <span class="s2">&quot;spec&quot;</span><span class="p">)</span>
+        <span class="n">_spec_not_none</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">_all_values_not_none</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">_has_spec</span><span class="p">:</span>
+            <span class="n">_spec</span> <span class="o">=</span> <span class="n">_policy_to_check</span><span class="o">.</span><span class="n">spec</span>
+            <span class="n">_spec_not_none</span> <span class="o">=</span> <span class="n">_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">_spec_not_none</span><span class="p">:</span>
+                <span class="n">_all_values_not_none</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span>
+                    <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_spec</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+                <span class="p">)</span>
+        <span class="n">_condition</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">make_rollout</span> <span class="ow">and</span> <span class="n">_has_spec</span> <span class="ow">and</span> <span class="n">_spec_not_none</span> <span class="ow">and</span> <span class="n">_all_values_not_none</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">_condition</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
                 <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
                 <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span>
@@ -1677,17 +1671,14 @@
 
             <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Collector: rollout.&quot;</span><span class="p">)</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">()</span>
                 <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="c1"># if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out</span>
                     <span class="c1">#  frames are updated within the rollout function</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Collector: No tensordict_out. Yielding.&quot;</span><span class="p">)</span>
                     <span class="k">yield</span>
                     <span class="k">continue</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_increment_frames</span><span class="p">(</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Collector: postproc done.&quot;</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_same_td</span><span class="p">:</span>
                     <span class="c1"># This is used with multiprocessed collectors to use the buffers</span>
                     <span class="c1"># stored in the tensordict.</span>
@@ -1698,10 +1689,6 @@
                     <span class="k">yield</span> <span class="n">tensordict_out</span>
                 <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Collector: Added </span><span class="si">{</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> frames to replay buffer. &quot;</span>
-                        <span class="s2">&quot;Buffer write count: </span><span class="si">{self.replay_buffer.write_count}</span><span class="s2">. Yielding.&quot;</span>
-                    <span class="p">)</span>
                     <span class="k">yield</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># we must clone the values, as the tensordict is updated in-place.</span>
@@ -1956,17 +1943,11 @@
                     <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span>
                     <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">extend_buffer</span>
                 <span class="p">):</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Collector: Adding </span><span class="si">{</span><span class="n">env_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> frames to replay buffer using add().&quot;</span>
-                    <span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_increment_frames</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">numel</span><span class="p">()):</span>
                         <span class="k">return</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Collector: Moving to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="si">}</span><span class="s2"> and adding to queue.&quot;</span>
-                        <span class="p">)</span>
                         <span class="n">non_blocking</span> <span class="o">=</span> <span class="p">(</span>
                             <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
                         <span class="p">)</span>
@@ -1992,7 +1973,6 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                     <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span><span class="o">.</span><span class="n">collection_stopped</span><span class="p">()</span>
                 <span class="p">):</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Collector: Interruptor stopped.&quot;</span><span class="p">)</span>
                     <span class="k">if</span> <span class="p">(</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                         <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore_rb</span>
@@ -2019,7 +1999,6 @@
                     <span class="k">break</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Returning final rollout within buffer.&quot;</span><span class="p">)</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span>
                     <span class="k">try</span><span class="p">:</span>
                         <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
@@ -2042,9 +2021,6 @@
                 <span class="p">):</span>
                     <span class="k">return</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="s2">&quot;Returning final rollout with NO buffer (maybe_dense_stack).&quot;</span>
-                    <span class="p">)</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
                     <span class="n">result</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)</span>
 
