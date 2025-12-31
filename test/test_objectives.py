@@ -10,7 +10,6 @@ import functools
 import importlib.util
 import itertools
 import operator
-import os
 import sys
 import warnings
 from copy import deepcopy
@@ -155,22 +154,13 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (  # noqa
-        _call_value_nets,
-        dtype_fixture,
-        get_available_devices,
-        get_default_devices,
-        PENDULUM_VERSIONED,
-    )
-else:
-    from _utils_internal import (  # noqa
-        _call_value_nets,
-        dtype_fixture,
-        get_available_devices,
-        get_default_devices,
-        PENDULUM_VERSIONED,
-    )
+from torchrl.testing import (  # noqa
+    call_value_nets as _call_value_nets,
+    dtype_fixture,
+    get_available_devices,
+    get_default_devices,
+    PENDULUM_VERSIONED,
+)
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 
 _has_functorch = True

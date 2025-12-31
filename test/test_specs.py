@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import os
 
 import numpy as np
 import pytest
@@ -42,18 +41,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
-else:
-    from _utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
+from torchrl.testing import get_available_devices, get_default_devices, set_global_var
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),

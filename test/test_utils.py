@@ -11,21 +11,21 @@ from copy import copy
 from importlib import import_module
 from unittest import mock
 
-import _utils_internal
 import pytest
 
 import torch
-
-from torchrl.objectives.utils import _pseudo_vmap
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import capture_log_records, get_default_devices
-else:
-    from _utils_internal import capture_log_records, get_default_devices
 from packaging import version
 from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
 
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
+
+from torchrl.objectives.utils import _pseudo_vmap
+
+from torchrl.testing import (
+    capture_log_records,
+    get_default_devices,
+    gym_helpers as _gym_helpers,
+)
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -105,25 +105,25 @@ class implement_for_test_functions:
     """
 
     @staticmethod
-    @implement_for(lambda: import_module("_utils_internal"), "0.3")
+    @implement_for(lambda: import_module("torchrl.testing.utils"), "0.3")
     def select_correct_version():
         """To test from+ range and that this function is not selected as the implementation."""
         return "0.3+V1"
 
     @staticmethod
-    @implement_for("_utils_internal", "0.3")
+    @implement_for("torchrl.testing.utils", "0.3")
     def select_correct_version():  # noqa: F811
         """To test that this function is selected as the implementation (last implementation)."""
         return "0.3+"
 
     @staticmethod
-    @implement_for(lambda: import_module("_utils_internal"), "0.2", "0.3")
+    @implement_for(lambda: import_module("torchrl.testing.utils"), "0.2", "0.3")
     def select_correct_version():  # noqa: F811
         """To test that right bound is not included."""
         return "0.2-0.3"
 
     @staticmethod
-    @implement_for("_utils_internal", "0.1", "0.2")
+    @implement_for("torchrl.testing.utils", "0.1", "0.2")
     def select_correct_version():  # noqa: F811
         """To test that function with missing from-to range is ignored."""
         return "0.1-0.2"
@@ -135,12 +135,12 @@ class implement_for_test_functions:
         return "missing"
 
     @staticmethod
-    @implement_for("_utils_internal", None, "0.3")
+    @implement_for("torchrl.testing.utils", None, "0.3")
     def missing_version():
         return "0-0.3"
 
     @staticmethod
-    @implement_for("_utils_internal", "0.4")
+    @implement_for("torchrl.testing.utils", "0.4")
     def missing_version():  # noqa: F811
         return "0.4+"
 
@@ -259,17 +259,17 @@ def test_set_gym_environments(
 
     with set_gym_backend(gymnasium):
         assert (
-            _utils_internal._set_gym_environments is expected_fn_gymnasium
+            _gym_helpers._set_gym_environments is expected_fn_gymnasium
         ), expected_fn_gym
 
     with set_gym_backend(gym):
         assert (
-            _utils_internal._set_gym_environments is expected_fn_gym
+            _gym_helpers._set_gym_environments is expected_fn_gym
         ), expected_fn_gymnasium
 
     with set_gym_backend(gymnasium):
         assert (
-            _utils_internal._set_gym_environments is expected_fn_gymnasium
+            _gym_helpers._set_gym_environments is expected_fn_gymnasium
         ), expected_fn_gym
 
 
@@ -290,7 +290,7 @@ def test_set_gym_environments_no_version_gymnasium_found():
     msg = f"could not set anything related to gym backend {gymnasium_name} with version={gymnasium_version}."
     with pytest.raises(ImportError, match=msg):
         with set_gym_backend(gymnasium):
-            _utils_internal._set_gym_environments()
+            _gym_helpers._set_gym_environments()
 
 
 def test_set_gym_backend_types():

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
 
 import pytest
 import torch
@@ -36,10 +35,7 @@ from torchrl.modules.distributions.discrete import (
     LLMMaskedCategorical,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-else:
-    from _utils_internal import get_default_devices
+from torchrl.testing import get_default_devices
 
 _has_scipy = importlib.util.find_spec("scipy", None) is not None
 

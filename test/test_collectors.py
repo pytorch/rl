@@ -8,7 +8,6 @@ import argparse
 import contextlib
 import functools
 import gc
-import os
 import subprocess
 import sys
 import time
@@ -88,37 +87,17 @@ from torchrl.modules import (
     RandomPolicy,
     SafeModule,
 )
-from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
-from torchrl.testing.mp_helpers import decorate_thread_sub_func
-from torchrl.weight_update import (
-    MultiProcessWeightSyncScheme,
-    SharedMemWeightSyncScheme,
-)
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    IS_FB = True
-    from pytorch.rl.test._utils_internal import (
-        CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        generate_seeds,
-        get_available_devices,
-        get_default_devices,
-        LSTMNet,
-        PENDULUM_VERSIONED,
-        retry,
-    )
-else:
-    IS_FB = False
-    from _utils_internal import (
-        CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        generate_seeds,
-        get_available_devices,
-        get_default_devices,
-        LSTMNet,
-        PENDULUM_VERSIONED,
-        retry,
-    )
+from torchrl.testing import (
+    CARTPOLE_VERSIONED,
+    check_rollout_consistency_multikey_env,
+    generate_seeds,
+    get_available_devices,
+    get_default_devices,
+    LSTMNet,
+    PENDULUM_VERSIONED,
+    retry,
+)
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -136,6 +115,12 @@ from torchrl.testing.mocking_classes import (
     MultiKeyCountingEnv,
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
+)
+from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
+from torchrl.testing.mp_helpers import decorate_thread_sub_func
+from torchrl.weight_update import (
+    MultiProcessWeightSyncScheme,
+    SharedMemWeightSyncScheme,
 )
 
 # torch.set_default_dtype(torch.double)
@@ -864,7 +849,6 @@ class TestCollectorGeneric:
                 break
 
     @retry(AssertionError, tries=10, delay=0)
-    @pytest.mark.skipif(IS_FB, reason="Not compatible with fbcode")
     @pytest.mark.parametrize("to", [3, 10])
     @pytest.mark.parametrize(
         "collector_cls", ["MultiSyncCollector", "MultiAsyncCollector"]

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
 
 import pytest
 import torch
@@ -33,10 +32,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-else:
-    from _utils_internal import get_default_devices
+from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import NestedCountingEnv
 
 _has_vllm = importlib.util.find_spec("vllm") is not None

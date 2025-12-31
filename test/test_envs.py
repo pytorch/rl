@@ -174,28 +174,16 @@ except FileNotFoundError:
     _atari_found = False
     atari_confs = defaultdict(str)
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        _make_envs,
-        CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-    )
-else:
-    from _utils_internal import (
-        _make_envs,
-        CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-    )
+from torchrl.testing import (
+    CARTPOLE_VERSIONED,
+    check_rollout_consistency_multikey_env,
+    get_default_devices,
+    HALFCHEETAH_VERSIONED,
+    make_envs as _make_envs,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+    rand_reset,
+)
 from torchrl.testing.mocking_classes import (
     ActionObsMergeLinear,
     AutoResetHeteroCountingEnv,
