@@ -200,6 +200,8 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:The PyTorch API of nested tensors is in prototype"
     ),
+    pytest.mark.filterwarnings("ignore:unclosed event loop:ResourceWarning"),
+    pytest.mark.filterwarnings("ignore:unclosed.*socket:ResourceWarning"),
 ]
 
 
