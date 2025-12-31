@@ -93,6 +93,19 @@ def _set_mp_start_method_if_unset(start_method: str | None = None) -> str | None
     return current
 
 
+@implement_for("torch", None, "2.8")
+def _mp_sharing_strategy_for_spawn() -> str | None:
+    # On older torch stacks, pickling Process objects for "spawn" can end up
+    # passing file descriptors for shared storages; using "file_system" reduces
+    # FD passing and avoids spawn-time failures on some old Python versions.
+    return "file_system"
+
+
+@implement_for("torch", "2.8")
+def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
+    return None
+
+
 def strtobool(val: Any) -> bool:
     """Convert a string representation of truth to a boolean.
 
