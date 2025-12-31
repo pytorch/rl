@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 
 from numbers import Number
@@ -58,12 +57,9 @@ from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
 
-from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
+from torchrl.testing import get_default_devices, retry
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices, retry
-else:
-    from _utils_internal import get_default_devices, retry
+from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
 
 
 @pytest.fixture

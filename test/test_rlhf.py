@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -34,10 +33,7 @@ from torchrl.data.llm.reward import PairwiseDataset, pre_tokenization_hook
 from torchrl.data.llm.utils import RolloutFromModel
 from torchrl.modules.models.llm import GPT2RewardModel
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-else:
-    from _utils_internal import get_default_devices
+from torchrl.testing import get_default_devices
 
 HERE = Path(__file__).parent
 

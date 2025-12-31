@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import os
 import pathlib
 import sys
 from time import sleep
@@ -24,6 +23,15 @@ from torchrl.envs.transforms.transforms import (
     FlattenObservation,
     TransformedEnv,
 )
+
+from torchrl.testing import generate_seeds, get_default_devices
+from torchrl.testing.mocking_classes import (
+    ContinuousActionConvMockEnvNumpy,
+    ContinuousActionVecMockEnv,
+    DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
+    MockSerialEnv,
+)
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
     EnvConfig,
@@ -34,18 +42,6 @@ from torchrl.trainers.helpers.models import (
     DiscreteModelConfig,
     DreamerConfig,
     make_dqn_actor,
-)
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import generate_seeds, get_default_devices
-else:
-    from _utils_internal import generate_seeds, get_default_devices
-from torchrl.testing.mocking_classes import (
-    ContinuousActionConvMockEnvNumpy,
-    ContinuousActionVecMockEnv,
-    DiscreteActionConvMockEnvNumpy,
-    DiscreteActionVecMockEnv,
-    MockSerialEnv,
 )
 
 try:

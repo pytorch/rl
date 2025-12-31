@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import functools
 import importlib.util
-import os
 import sys
 
 import pytest
@@ -25,10 +24,7 @@ from torchrl.data.map import (
 )
 from torchrl.envs import GymEnv
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
-else:
-    from _utils_internal import PENDULUM_VERSIONED
+from torchrl.testing import PENDULUM_VERSIONED
 
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None

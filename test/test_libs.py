@@ -136,34 +136,19 @@ from torchrl.modules import (
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_ale = importlib.util.find_spec("ale_py") is not None
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        CLIFFWALKING_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
-else:
-    from _utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        CLIFFWALKING_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
+from torchrl.testing import (
+    CARTPOLE_VERSIONED,
+    CLIFFWALKING_VERSIONED,
+    get_available_devices,
+    get_default_devices,
+    HALFCHEETAH_VERSIONED,
+    make_multithreaded_env as _make_multithreaded_env,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+    rand_reset,
+    retry,
+    rollout_consistency_assertion,
+)
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 

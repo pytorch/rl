@@ -15,17 +15,14 @@ import _utils_internal
 import pytest
 
 import torch
-
-from torchrl.objectives.utils import _pseudo_vmap
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import capture_log_records, get_default_devices
-else:
-    from _utils_internal import capture_log_records, get_default_devices
 from packaging import version
 from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
 
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
+
+from torchrl.objectives.utils import _pseudo_vmap
+
+from torchrl.testing import capture_log_records, get_default_devices
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 

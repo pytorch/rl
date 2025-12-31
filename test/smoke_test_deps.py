@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import tempfile
 
@@ -65,10 +64,7 @@ def test_gym():
         import ale_py  # noqa: F401
     except Exception:  # pragma: no cover
         pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
-    if os.getenv("PYTORCH_TEST_FBCODE"):
-        from pytorch.rl.test._utils_internal import PONG_VERSIONED
-    else:
-        from _utils_internal import PONG_VERSIONED
+    from torchrl.testing import PONG_VERSIONED
 
     try:
         env = GymEnv(PONG_VERSIONED())
