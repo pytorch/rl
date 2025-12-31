@@ -172,7 +172,7 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --ignore test/llm \
   --timeout=120 --mp_fork_if_no_cuda
 
-coverage combine
+coverage combine -q
 coverage xml -i
 
 # ==================================================================================== #
