@@ -14,25 +14,8 @@ from collections import defaultdict
 import pytest
 import torch
 
-import torchrl._utils as torchrl_utils
-from packaging import version
-
 CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"
-_FORCE_SPAWN_FOR_TESTS = version.parse(torch.__version__).base_version < "2.8.0"
-
-if _FORCE_SPAWN_FOR_TESTS:
-    # PyTorch < 2.8 has a long tail of CUDA + multiprocessing corner-cases,
-    # especially with the "fork" start method.
-    #
-    # For the test suite, enforce "spawn" for TorchRL multiprocessing contexts
-    # (collectors, distributed collectors, etc.) and keep the global start method
-    # aligned when it hasn't been set yet.
-    def _get_default_mp_start_method_for_tests() -> str:
-        return "spawn"
-
-    torchrl_utils._get_default_mp_start_method = _get_default_mp_start_method_for_tests  # type: ignore[assignment]
-    torchrl_utils._set_mp_start_method_if_unset("spawn")
 
 
 def pytest_sessionfinish(maxprint=50):
@@ -167,11 +150,6 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def maybe_fork_ParallelEnv(request):
     from torchrl.envs import ParallelEnv
-
-    if _FORCE_SPAWN_FOR_TESTS:
-        # ParallelEnv already defaults to "spawn" when mp_start_method is unset.
-        # On PyTorch < 2.8 we explicitly avoid opting into "fork" in the test suite.
-        return ParallelEnv
 
     if not IS_OSX and (
         request.config.getoption("--mp_fork")

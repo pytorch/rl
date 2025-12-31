@@ -298,6 +298,33 @@ def _make_meta_policy(policy: nn.Module):
     return param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy)
 
 
+@implement_for("torch", None, "2.8")
+def _make_meta_policy_cm(
+    policy: nn.Module, *, mp_start_method: str
+) -> contextlib.AbstractContextManager:
+    """Return the context manager used to make a policy 'stateless' for worker pickling.
+
+    On older PyTorch versions (<2.8), pickling meta-device storages when using the
+    ``spawn`` start method may fail (e.g., triggering ``_share_filename_: only available on CPU``).
+    In that case, we avoid converting parameters/buffers to meta and simply return a no-op
+    context manager.
+    """
+    if mp_start_method == "spawn":
+        return contextlib.nullcontext()
+    return _make_meta_policy(policy)
+
+
+@implement_for("torch", "2.8")
+def _make_meta_policy_cm(  # noqa: F811
+    policy: nn.Module, *, mp_start_method: str
+) -> contextlib.AbstractContextManager:
+    """Return the context manager used to make a policy 'stateless' for worker pickling.
+
+    On PyTorch >= 2.8, meta-device policy structures can be pickled reliably under ``spawn``.
+    """
+    return _make_meta_policy(policy)
+
+
 @implement_for("torch", None, "2.5.0")
 def _cast(  # noqa
     p: nn.Parameter | torch.Tensor,

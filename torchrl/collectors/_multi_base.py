@@ -33,7 +33,7 @@ from torchrl.collectors._constants import (
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _make_meta_policy, _TrajectoryPool
+from torchrl.collectors.utils import _make_meta_policy_cm, _TrajectoryPool
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -945,7 +945,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         ctx = _get_mp_ctx()
         # Best-effort global init (only if unset) to keep other mp users consistent.
         _set_mp_start_method_if_unset(ctx.get_start_method())
-
         queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
@@ -1004,9 +1003,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     policy_to_send = None
                     cm = contextlib.nullcontext()
                 elif policy is not None:
-                    # Send policy with meta-device parameters (empty structure) - schemes apply weights
+                    # Send a stateless policy down to workers: schemes apply weights.
                     policy_to_send = policy
-                    cm = _make_meta_policy(policy)
+                    cm = _make_meta_policy_cm(
+                        policy, mp_start_method=ctx.get_start_method()
+                    )
                 else:
                     policy_to_send = None
                     cm = contextlib.nullcontext()
