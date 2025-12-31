@@ -21,7 +21,7 @@ import torch
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import timeit
+from torchrl._utils import get_available_device, timeit
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
@@ -63,15 +63,9 @@ def main(cfg: DictConfig):  # noqa: F821
     # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
-    device = cfg.optim.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        elif torch.npu.is_available():
-            device = "npu:0"
-        else:
-            device = "cpu"
-    device = torch.device(device)
+    device = (
+        torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()
+    )
 
     # Create environments
     train_env, eval_env = make_environment(

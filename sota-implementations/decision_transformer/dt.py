@@ -17,7 +17,7 @@ import torch
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl._utils import get_available_device, logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
@@ -38,15 +38,9 @@ from utils import (
 def main(cfg: DictConfig):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 
-    model_device = cfg.optim.device
-    if model_device in ("", None):
-        if torch.cuda.is_available():
-            model_device = "cuda:0"
-        elif torch.npu.is_available():
-            model_device = "npu:0"
-        else:
-            model_device = "cpu"
-    model_device = torch.device(model_device)
+    model_device = (
+        torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()
+    )
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)

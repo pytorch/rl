@@ -21,7 +21,7 @@ import torch.cuda
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import timeit
+from torchrl._utils import get_available_device, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -39,25 +39,14 @@ from utils import (
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg: DictConfig):  # noqa: F821
-    device = cfg.optim.device
-    if device in ("", None):
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        elif torch.npu.is_available():
-            device = "npu:0"
-        else:
-            device = "cpu"
-    device = torch.device(device)
-
-    collector_device = cfg.collector.device
-    if collector_device in ("", None):
-        if torch.cuda.is_available():
-            collector_device = "cuda:0"
-        elif torch.npu.is_available():
-            collector_device = "npu:0"
-        else:
-            collector_device = "cpu"
-    collector_device = torch.device(collector_device)
+    device = (
+        torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()
+    )
+    collector_device = (
+        torch.device(cfg.collector.device)
+        if cfg.collector.device
+        else get_available_device()
+    )
 
     # Create logger
     exp_name = generate_exp_name("DDPG", cfg.logger.exp_name)

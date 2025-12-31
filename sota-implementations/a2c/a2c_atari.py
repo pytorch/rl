@@ -22,7 +22,7 @@ def main(cfg: DictConfig):  # noqa: F821
     from tensordict import from_module
     from tensordict.nn import CudaGraphModule
 
-    from torchrl._utils import timeit
+    from torchrl._utils import get_available_device, timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -33,16 +33,9 @@ def main(cfg: DictConfig):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_atari import eval_model, make_parallel_env, make_ppo_models
 
-    device = cfg.loss.device
-    if not device:
-        if torch.cuda.is_available():
-            device = torch.device("cuda:0")
-        elif torch.npu.is_available():
-            device = torch.device("npu:0")
-        else:
-            device = torch.device("cpu")
-    else:
-        device = torch.device(device)
+    device = (
+        torch.device(cfg.loss.device) if cfg.loss.device else get_available_device()
+    )
 
     # Correct for frame_skip
     frame_skip = 4
