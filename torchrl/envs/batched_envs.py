@@ -1418,11 +1418,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _start_workers(self) -> None:
         import torchrl
+        from torchrl.envs.env_creator import EnvCreator
 
         self._timeout = 10.0
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
-
-        from torchrl.envs.env_creator import EnvCreator
 
         num_threads = max(
             1, torch.get_num_threads() - self.num_workers
@@ -1478,8 +1477,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
                     env_fun = CloudpickleWrapper(env_fun)
-                import torchrl
-
                 kwargs[idx].update(
                     {
                         "parent_pipe": parent_pipe,
