@@ -37,6 +37,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _make_ordinal_device,
     logger as torchrl_logger,
+    rl_warnings,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
@@ -154,18 +155,36 @@ class _PEnvMeta(_EnvPostInit):
         # be serialized with standard pickle, but EnvCreator uses cloudpickle.
         auto_wrap_envs = kwargs.pop("auto_wrap_envs", True)
 
+        def _warn_lambda():
+            if rl_warnings():
+                warnings.warn(
+                    "A lambda function was passed to ParallelEnv and will be wrapped "
+                    "in an EnvCreator. This causes the environment to be instantiated "
+                    "in the main process to extract metadata. Consider using "
+                    "functools.partial instead, which is natively serializable and "
+                    "avoids this overhead. To suppress this warning, set the "
+                    "RL_WARNINGS=0 environment variable.",
+                    category=UserWarning,
+                    stacklevel=4,
+                )
+
         def _wrap_lambdas(create_env_fn):
             if callable(create_env_fn) and _is_unpicklable_lambda(create_env_fn):
+                _warn_lambda()
                 return EnvCreator(create_env_fn)
             if isinstance(create_env_fn, Sequence):
                 # Reuse EnvCreator for identical function objects to preserve
                 # _single_task detection (e.g., when [lambda_fn] * 3 is passed)
                 wrapped = {}
                 result = []
+                warned = False
                 for fn in create_env_fn:
                     if _is_unpicklable_lambda(fn):
                         fn_id = id(fn)
                         if fn_id not in wrapped:
+                            if not warned:
+                                _warn_lambda()
+                                warned = True
                             wrapped[fn_id] = EnvCreator(fn)
                         result.append(wrapped[fn_id])
                     else:
