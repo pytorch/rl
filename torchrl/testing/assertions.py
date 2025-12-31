@@ -177,4 +177,3 @@ def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
         == td["nested_2", "observation"][~action_is_count]
     ).all()
     assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
-

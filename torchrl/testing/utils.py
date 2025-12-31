@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+# Version for testing implement_for decorator
+__version__ = "0.3"
+
 import contextlib
 import logging
 import sys
@@ -185,4 +188,3 @@ def make_tc(td):
     for key in td.keys():
         MyClass.__annotations__[key] = torch.Tensor
     return tensorclass(MyClass)
-

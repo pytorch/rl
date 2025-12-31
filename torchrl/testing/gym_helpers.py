@@ -154,4 +154,3 @@ def _set_gym_environments():  # noqa: F811
 
 if _has_gym:
     _set_gym_environments()
-

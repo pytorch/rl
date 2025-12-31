@@ -19,10 +19,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.testing.gym_helpers import (
-    HALFCHEETAH_VERSIONED,
-    PONG_VERSIONED,
-)
+from torchrl.testing.gym_helpers import HALFCHEETAH_VERSIONED, PONG_VERSIONED
 from torchrl.testing.utils import mp_ctx
 
 __all__ = [
@@ -228,4 +225,3 @@ def get_transform_out(env_name, transformed_in, obs_key=None):
             )
 
     return t_out
-
