@@ -342,7 +342,7 @@ class TestBinarizeReward(TransformBase):
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
             BinarizeReward(),
         )
         try:
@@ -842,7 +842,7 @@ class TestCatFrames(TransformBase):
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
             CatFrames(dim=-1, N=3, in_keys=["observation"]),
         )
         try:
@@ -1481,7 +1481,7 @@ class TestR3M(TransformBase):
             tensor_pixels_keys=tensor_pixels_key,
         )
         transformed_env = TransformedEnv(
-            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), r3m
+            ParallelEnv(2, partial(DiscreteActionConvMockEnvNumpy, device=device)), r3m
         )
         try:
             check_env_specs(transformed_env)
@@ -1639,7 +1639,9 @@ class TestR3M(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        base_env = ParallelEnv(
+            4, partial(DiscreteActionConvMockEnvNumpy, device=device)
+        )
         transformed_env = TransformedEnv(base_env, r3m)
         td = transformed_env.reset()
         assert td.device == device
@@ -8503,7 +8505,7 @@ class TestTimeMaxPool(TransformBase):
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
             TimeMaxPool(
                 in_keys=["observation"],
                 T=3,
@@ -8830,7 +8832,7 @@ class TestVIP(TransformBase):
             tensor_pixels_keys=tensor_pixels_key,
         )
         transformed_env = TransformedEnv(
-            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), vip
+            ParallelEnv(2, partial(DiscreteActionConvMockEnvNumpy, device=device)), vip
         )
         try:
             check_env_specs(transformed_env)
@@ -9056,7 +9058,9 @@ class TestVIP(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        base_env = ParallelEnv(
+            4, partial(DiscreteActionConvMockEnvNumpy, device=device)
+        )
         transformed_env = TransformedEnv(base_env, vip)
         td = transformed_env.reset()
         assert td.device == device
@@ -9093,7 +9097,9 @@ class TestVIP(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        base_env = ParallelEnv(
+            4, partial(DiscreteActionConvMockEnvNumpy, device=device)
+        )
         transformed_env = TransformedEnv(base_env, vip)
         tensordict_reset = TensorDict(
             {"goal_image": torch.randint(0, 255, (4, 7, 7, 3), dtype=torch.uint8)},
@@ -9296,7 +9302,7 @@ class TestVC1(TransformBase):
             model_name="default",
         )
         transformed_env = TransformedEnv(
-            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), vc1
+            ParallelEnv(2, partial(DiscreteActionConvMockEnvNumpy, device=device)), vc1
         )
         try:
             check_env_specs(transformed_env)
@@ -9452,7 +9458,9 @@ class TestVC1(TransformBase):
             del_keys=del_keys,
             model_name="default",
         )
-        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        base_env = ParallelEnv(
+            4, partial(DiscreteActionConvMockEnvNumpy, device=device)
+        )
         transformed_env = TransformedEnv(base_env, vc1)
         td = transformed_env.reset()
         assert td.device == device
@@ -14763,7 +14771,7 @@ class TestTimer(TransformBase):
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
             Timer(),
         )
         try:
