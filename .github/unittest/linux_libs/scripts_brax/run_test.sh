@@ -65,5 +65,5 @@ except Exception as e:
 python -c 'import torch;t = torch.ones([2,2], device="cuda:0");print(t);print("tensor device:" + str(t.device))'
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestBrax --error-for-skips
-coverage combine
+coverage combine -q
 coverage xml -i

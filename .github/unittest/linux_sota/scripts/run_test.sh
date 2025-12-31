@@ -31,5 +31,5 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_te
 
 coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py --instafail --durations 200 -vvv --capture no
 
-coverage combine
+coverage combine -q
 coverage xml -i

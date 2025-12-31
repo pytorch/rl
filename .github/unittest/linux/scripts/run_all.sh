@@ -323,7 +323,7 @@ if [ $EXIT_STATUS -ne 0 ]; then
   echo "Some tests failed with exit status $EXIT_STATUS"
 fi
 
-coverage combine
+coverage combine -q
 coverage xml -i
 
 # ==================================================================================== #

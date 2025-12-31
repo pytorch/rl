@@ -39,5 +39,5 @@ CKPT_BACKEND=torch MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_pa
 
 #pytest --instafail -v --durations 200
 #python test/test_libs.py
-coverage combine
+coverage combine -q
 coverage xml -i
