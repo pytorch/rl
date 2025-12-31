@@ -243,7 +243,6 @@ class RSSMRollout(TensorDictModuleBase):
             which amends to q(s_{t+1} | s_t, a_t, o_{t+1})
 
         """
-        # from torchrl.envs.utils import step_mdp
         tensordict_out = []
         *batch, time_steps = tensordict.shape
 
@@ -261,11 +260,19 @@ class RSSMRollout(TensorDictModuleBase):
                 self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
-            # _tensordict = step_mdp(_tensordict, keep_other=True)
             if t < time_steps - 1:
-                # Translate ("next", *) to the non-next key required for the current step input
-                _tensordict = _tensordict.select(*self.in_keys, strict=False)
-                _tensordict = update_values[t + 1].update(_tensordict)
+                # Propagate the posterior state and belief to the next timestep.
+                # The prior needs "state" and "belief" at root, but they were written
+                # to ("next", "state") and ("next", "belief") by the current step.
+                next_state = _tensordict.get(("next", "state"))
+                next_belief = _tensordict.get(("next", "belief"))
+
+                # Start with the next timestep's data (action, encoded_latents, etc.)
+                _tensordict = update_values[t + 1].clone()
+
+                # Set the propagated state and belief for the next iteration
+                _tensordict.set("state", next_state)
+                _tensordict.set("belief", next_belief)
 
         out = torch.stack(tensordict_out, tensordict.ndim - 1)
         return out
@@ -330,7 +337,15 @@ class RSSMPrior(nn.Module):
                 belief = belief.unsqueeze(0)
             action_state = action_state.unsqueeze(0)
             unsqueeze = True
-        belief = self.rnn(action_state, belief)
+        # GRUCell can have issues with bfloat16 autocast on some GPU/cuBLAS combinations.
+        # Run the RNN in full precision to avoid CUBLAS_STATUS_INVALID_VALUE errors.
+        dtype = action_state.dtype
+        device_type = action_state.device.type
+        with torch.amp.autocast(device_type=device_type, enabled=False):
+            belief = self.rnn(
+                action_state.float(), belief.float() if belief is not None else None
+            )
+        belief = belief.to(dtype)
         if unsqueeze:
             belief = belief.squeeze(0)
 
