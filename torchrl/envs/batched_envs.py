@@ -1450,7 +1450,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _start_workers(self) -> None:
         import torchrl
-        from torchrl.envs.env_creator import EnvCreator
 
         self._timeout = 10.0
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
