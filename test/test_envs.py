@@ -179,7 +179,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         _make_envs,
         CARTPOLE_VERSIONED,
         check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
         PENDULUM_VERSIONED,
@@ -191,7 +190,6 @@ else:
         _make_envs,
         CARTPOLE_VERSIONED,
         check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
         PENDULUM_VERSIONED,
@@ -1267,6 +1265,32 @@ class TestParallel:
                 mp_start_method=start_method,
             )
             assert isinstance(env, ParallelEnv)
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_lambda_wrapping(self, maybe_fork_ParallelEnv):
+        """Test that ParallelEnv automatically wraps lambda functions with EnvCreator.
+
+        Lambda functions cannot be pickled with standard pickle (required for spawn
+        start method), but EnvCreator uses cloudpickle which can handle them.
+        This test verifies that lambda functions work correctly with ParallelEnv.
+        """
+        # Test single lambda function
+        env = maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv())
+        try:
+            rollout = env.rollout(3)
+            assert rollout.shape[0] == 2
+            assert rollout.shape[1] == 3
+        finally:
+            env.close(raise_if_closed=False)
+
+        # Test list of lambda functions (heterogeneous envs)
+        env1 = lambda: ContinuousActionVecMockEnv()
+        env2 = lambda: ContinuousActionVecMockEnv()
+        env = maybe_fork_ParallelEnv(2, [env1, env2])
+        try:
+            rollout = env.rollout(3)
+            assert rollout.shape[0] == 2
         finally:
             env.close(raise_if_closed=False)
 
@@ -3405,25 +3429,23 @@ class TestLibThreading:
     )
     def test_num_threads(self):
         gc.collect()
-        from torchrl.envs import batched_envs
-
-        _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
-        batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
-            batched_envs._run_worker_pipe_shared_mem, num_threads=3
-        )
         num_threads = torch.get_num_threads()
         try:
-            env = ParallelEnv(
-                2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
-            )
+            # Wrap the env factory to check thread count inside the subprocess.
+            # The env is created AFTER torch.set_num_threads() is called in the worker.
+            def make_env():
+                assert (
+                    torch.get_num_threads() == 3
+                ), f"Expected 3 threads, got {torch.get_num_threads()}"
+                return ContinuousActionVecMockEnv()
+
+            env = ParallelEnv(2, make_env, num_sub_threads=3, num_threads=7)
             # We could test that the number of threads isn't changed until we start the procs.
             # Even though it's unlikely that we have 7 threads, we still disable this for safety
             # assert torch.get_num_threads() != 7
             env.rollout(3)
             assert torch.get_num_threads() == 7
         finally:
-            # reset vals
-            batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
             torch.set_num_threads(num_threads)
 
     @pytest.mark.skipif(

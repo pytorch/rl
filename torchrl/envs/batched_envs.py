@@ -42,7 +42,8 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import Composite, NonTensor
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
-from torchrl.envs.env_creator import get_env_metadata
+
+from torchrl.envs.env_creator import EnvCreator, get_env_metadata
 
 # legacy
 from torchrl.envs.libs.envpool import (  # noqa: F401
@@ -123,6 +124,18 @@ def lazy(fun):
     return new_fun
 
 
+def _is_unpicklable_lambda(fn: Callable) -> bool:
+    """Check if a callable is a lambda function that needs cloudpickle wrapping.
+
+    Lambda functions cannot be pickled with standard pickle, so they need to be
+    wrapped with EnvCreator (which uses CloudpickleWrapper) for multiprocessing.
+    functools.partial objects are picklable, so they don't need wrapping.
+    """
+    if isinstance(fn, functools.partial):
+        return False
+    return callable(fn) and getattr(fn, "__name__", None) == "<lambda>"
+
+
 class _PEnvMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         serial_for_single = kwargs.pop("serial_for_single", False)
@@ -135,6 +148,25 @@ class _PEnvMeta(_EnvPostInit):
             if num_workers == 1:
                 # We still use a serial to keep the shape unchanged
                 return SerialEnv(*args, **kwargs)
+
+        # Wrap lambda functions with EnvCreator so they can be pickled for
+        # multiprocessing with the spawn start method. Lambda functions cannot
+        # be serialized with standard pickle, but EnvCreator uses cloudpickle.
+        def _wrap_lambdas(create_env_fn):
+            if callable(create_env_fn) and _is_unpicklable_lambda(create_env_fn):
+                return EnvCreator(create_env_fn)
+            if isinstance(create_env_fn, Sequence):
+                return [
+                    EnvCreator(fn) if _is_unpicklable_lambda(fn) else fn
+                    for fn in create_env_fn
+                ]
+            return create_env_fn
+
+        if "create_env_fn" in kwargs:
+            kwargs["create_env_fn"] = _wrap_lambdas(kwargs["create_env_fn"])
+        elif len(args) >= 2:
+            args = (args[0], _wrap_lambdas(args[1])) + args[2:]
+
         return super().__call__(*args, **kwargs)
 
 
@@ -1418,11 +1450,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _start_workers(self) -> None:
         import torchrl
+        from torchrl.envs.env_creator import EnvCreator
 
         self._timeout = 10.0
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
-
-        from torchrl.envs.env_creator import EnvCreator
 
         num_threads = max(
             1, torch.get_num_threads() - self.num_workers
@@ -1478,7 +1509,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 env_fun = self.create_env_fn[idx]
                 if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
                     env_fun = CloudpickleWrapper(env_fun)
-                import torchrl
 
                 kwargs[idx].update(
                     {
@@ -1489,7 +1519,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
-                        "filter_warnings": torchrl.filter_warnings_subprocess,
+                        "filter_warnings": self._filter_warnings_subprocess(),
                     }
                 )
                 if self._use_buffers:
@@ -1524,6 +1554,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             channel.send(("init", None))
         self.is_closed = False
         self.set_spec_lock_()
+
+    def _filter_warnings_subprocess(self) -> bool:
+        from torchrl import filter_warnings_subprocess
+
+        return filter_warnings_subprocess
 
     @_check_start
     def state_dict(self) -> OrderedDict:

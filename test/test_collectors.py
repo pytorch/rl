@@ -89,6 +89,7 @@ from torchrl.modules import (
     SafeModule,
 )
 from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
+from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
@@ -99,7 +100,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         CARTPOLE_VERSIONED,
         check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
         generate_seeds,
         get_available_devices,
         get_default_devices,
@@ -112,7 +112,6 @@ else:
     from _utils_internal import (
         CARTPOLE_VERSIONED,
         check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
         generate_seeds,
         get_available_devices,
         get_default_devices,
@@ -1843,54 +1842,55 @@ if __name__ == "__main__":
             use_buffers=True,
         )
 
-        # Collect one batch
-        for batch in collector:
-            # Verify that each environment's observations match its env_id
-            # batch has shape [num_envs, frames_per_env]
-            # In the pre-emption case, we have that envs with odd ids are order of magnitude slower.
-            # These should be skipped by pre-emption (since they are the 50% slowest)
+        try:
+            # Collect one batch
+            for batch in collector:
+                # Verify that each environment's observations match its env_id
+                # batch has shape [num_envs, frames_per_env]
+                # In the pre-emption case, we have that envs with odd ids are order of magnitude slower.
+                # These should be skipped by pre-emption (since they are the 50% slowest)
 
-            # Recover rectangular shape of batch to uniform checks
-            if cat_results != "stack":
-                if not with_preempt:
-                    batch = batch.reshape(num_envs, n_steps)
-                else:
-                    traj_ids = batch["collector", "traj_ids"]
-                    traj_ids[traj_ids == 0] = 99  # avoid using traj_ids = 0
-                    # Split trajectories to recover correct shape
-                    # thanks to having a single trajectory per env
-                    # Pads with zeros!
-                    batch = split_trajectories(
-                        batch, trajectory_key=("collector", "traj_ids")
+                # Recover rectangular shape of batch to uniform checks
+                if cat_results != "stack":
+                    if not with_preempt:
+                        batch = batch.reshape(num_envs, n_steps)
+                    else:
+                        traj_ids = batch["collector", "traj_ids"]
+                        traj_ids[traj_ids == 0] = 99  # avoid using traj_ids = 0
+                        # Split trajectories to recover correct shape
+                        # thanks to having a single trajectory per env
+                        # Pads with zeros!
+                        batch = split_trajectories(
+                            batch, trajectory_key=("collector", "traj_ids")
+                        )
+                        # Use -1 for padding to uniform with other preemption
+                        is_padded = batch["collector", "traj_ids"] == 0
+                        batch[is_padded] = -1
+
+                #
+                for env_idx in range(num_envs):
+                    if with_preempt and env_idx % 2 == 1:
+                        # This is a slow env, should have been preempted after first step
+                        assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
+                        continue
+                    # This is a fast env, no preemption happened
+                    assert (batch["collector", "traj_ids"][env_idx] != -1).all()
+
+                    env_data = batch[env_idx]
+                    observations = env_data["observation"]
+                    # All observations from this environment should equal its env_id
+                    expected_id = float(env_idx)
+                    actual_ids = observations.flatten().unique()
+
+                    assert len(actual_ids) == 1, (
+                        f"Env {env_idx} should only produce observations with value {expected_id}, "
+                        f"but got {actual_ids.tolist()}"
                     )
-                    # Use -1 for padding to uniform with other preemption
-                    is_padded = batch["collector", "traj_ids"] == 0
-                    batch[is_padded] = -1
-
-            #
-            for env_idx in range(num_envs):
-                if with_preempt and env_idx % 2 == 1:
-                    # This is a slow env, should have been preempted after first step
-                    assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
-                    continue
-                # This is a fast env, no preemption happened
-                assert (batch["collector", "traj_ids"][env_idx] != -1).all()
-
-                env_data = batch[env_idx]
-                observations = env_data["observation"]
-                # All observations from this environment should equal its env_id
-                expected_id = float(env_idx)
-                actual_ids = observations.flatten().unique()
-
-                assert len(actual_ids) == 1, (
-                    f"Env {env_idx} should only produce observations with value {expected_id}, "
-                    f"but got {actual_ids.tolist()}"
-                )
-                assert (
-                    actual_ids[0].item() == expected_id
-                ), f"Environment {env_idx} should produce observation {expected_id}, but got {actual_ids[0].item()}"
-
-        collector.shutdown()
+                    assert (
+                        actual_ids[0].item() == expected_id
+                    ), f"Environment {env_idx} should produce observation {expected_id}, but got {actual_ids[0].item()}"
+        finally:
+            collector.shutdown()
 
 
 class TestCollectorDevices:
