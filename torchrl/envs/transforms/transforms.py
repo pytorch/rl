@@ -6872,6 +6872,22 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
             category=FutureWarning,
         )
 
+        # Warn about shared memory limitations on older PyTorch
+        from packaging.version import parse as parse_version
+
+        if (
+            parse_version(torch.__version__).base_version < "2.8.0"
+            and shared_td is not None
+        ):
+            warnings.warn(
+                "VecNorm with shared memory (shared_td) may not synchronize correctly "
+                "across processes on PyTorch < 2.8 when using the 'spawn' multiprocessing "
+                "start method. This is due to limitations in PyTorch's shared memory "
+                "implementation with the 'file_system' sharing strategy. "
+                "Consider upgrading to PyTorch >= 2.8 for full shared memory support.",
+                category=UserWarning,
+            )
+
         if lock is None:
             lock = mp.Lock()
         if in_keys is None:
