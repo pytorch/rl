@@ -34,7 +34,6 @@ from torchrl.weight_update import WeightSyncScheme
 
 
 def _main_async_collector(
-    pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
     create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],  # noqa: F821
@@ -68,7 +67,6 @@ def _main_async_collector(
 ) -> None:
     if collector_class is None:
         collector_class = Collector
-    pipe_parent.close()
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
 

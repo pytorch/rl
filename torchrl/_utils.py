@@ -36,7 +36,6 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 
-@implement_for("torch", "2.5.0")
 def _get_default_mp_start_method() -> str:
     """Returns TorchRL's preferred multiprocessing start method for this torch version.
 
@@ -44,20 +43,6 @@ def _get_default_mp_start_method() -> str:
     backends and to avoid known issues with ``fork`` in multi-threaded programs.
     """
     return "spawn"
-
-
-@implement_for("torch", None, "2.5.0")
-def _get_default_mp_start_method() -> str:  # noqa: F811
-    """Returns TorchRL's preferred multiprocessing start method for this torch version.
-
-    On older PyTorch versions we prefer ``"fork"`` when available to avoid failures
-    when spawning workers with non-CPU storages that must be pickled at process start.
-    """
-    try:
-        mp.get_context("fork")
-    except ValueError:
-        return "spawn"
-    return "fork"
 
 
 def _get_mp_ctx(start_method: str | None = None):
