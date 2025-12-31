@@ -1418,11 +1418,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _start_workers(self) -> None:
         import torchrl
+        from torchrl.envs.env_creator import EnvCreator
 
         self._timeout = 10.0
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
-
-        from torchrl.envs.env_creator import EnvCreator
 
         num_threads = max(
             1, torch.get_num_threads() - self.num_workers
@@ -1488,7 +1487,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "has_lazy_inputs": self.has_lazy_inputs,
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
-                        "filter_warnings": self._filter_warnings_subprocess,
+                        "filter_warnings": self._filter_warnings_subprocess(),
                     }
                 )
                 if self._use_buffers:
