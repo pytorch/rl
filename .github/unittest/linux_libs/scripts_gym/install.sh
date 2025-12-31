@@ -49,16 +49,16 @@ pip install -U charset-normalizer
 if [[ "$RELEASE" == 0 ]]; then
   conda install "anaconda::cmake>=3.22" -y
   pip3 install "pybind11[global]"
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip3 install git+https://github.com/pytorch/tensordict.git --no-deps
 else
-  pip3 install tensordict
+  pip3 install tensordict --no-deps
 fi
 
 # smoke test
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 python -c "import torchrl"
 
 ## Reinstalling pytorch with specific version
