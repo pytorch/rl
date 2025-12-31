@@ -23,7 +23,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y vim git wget cmake
 
   apt-get install -y libglfw3 libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2
+  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     # solves version `GLIBCXX_3.4.29' not found for tensorboard
