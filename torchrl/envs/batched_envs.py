@@ -123,6 +123,18 @@ def lazy(fun):
     return new_fun
 
 
+def _is_unpicklable_lambda(fn: Callable) -> bool:
+    """Check if a callable is a lambda function that needs cloudpickle wrapping.
+
+    Lambda functions cannot be pickled with standard pickle, so they need to be
+    wrapped with EnvCreator (which uses CloudpickleWrapper) for multiprocessing.
+    functools.partial objects are picklable, so they don't need wrapping.
+    """
+    if isinstance(fn, functools.partial):
+        return False
+    return callable(fn) and getattr(fn, "__name__", None) == "<lambda>"
+
+
 class _PEnvMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         serial_for_single = kwargs.pop("serial_for_single", False)
@@ -135,6 +147,36 @@ class _PEnvMeta(_EnvPostInit):
             if num_workers == 1:
                 # We still use a serial to keep the shape unchanged
                 return SerialEnv(*args, **kwargs)
+
+        # Wrap lambda functions with EnvCreator so they can be pickled for
+        # multiprocessing with the spawn start method. Lambda functions cannot
+        # be serialized with standard pickle, but EnvCreator uses cloudpickle.
+        from torchrl.envs.env_creator import EnvCreator
+
+        create_env_fn = kwargs.get("create_env_fn")
+        if create_env_fn is None and args:
+            # create_env_fn is the second positional argument (after num_workers)
+            if len(args) >= 2:
+                create_env_fn = args[1]
+                if callable(create_env_fn):
+                    if _is_unpicklable_lambda(create_env_fn):
+                        args = (args[0], EnvCreator(create_env_fn)) + args[2:]
+                elif isinstance(create_env_fn, Sequence):
+                    wrapped = [
+                        EnvCreator(fn) if _is_unpicklable_lambda(fn) else fn
+                        for fn in create_env_fn
+                    ]
+                    args = (args[0], wrapped) + args[2:]
+        elif create_env_fn is not None:
+            if callable(create_env_fn):
+                if _is_unpicklable_lambda(create_env_fn):
+                    kwargs["create_env_fn"] = EnvCreator(create_env_fn)
+            elif isinstance(create_env_fn, Sequence):
+                kwargs["create_env_fn"] = [
+                    EnvCreator(fn) if _is_unpicklable_lambda(fn) else fn
+                    for fn in create_env_fn
+                ]
+
         return super().__call__(*args, **kwargs)
 
 
