@@ -1038,7 +1038,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             with cm:
                 kwargs = {
                     "policy_factory": policy_factory[i],
-                    "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
                     "queue_out": queue_out,
                     "create_env_fn": env_fun,
