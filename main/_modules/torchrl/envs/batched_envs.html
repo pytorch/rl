@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g7dd1e61) &#x25BC</span></a>
     </div>
     
 
@@ -464,7 +464,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span><span class="p">,</span> <span class="n">contains_lazy_spec</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_do_nothing</span><span class="p">,</span> <span class="n">_EnvPostInit</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvMetaData</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_env_metadata</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span><span class="p">,</span> <span class="n">get_env_metadata</span>
 
 <span class="c1"># legacy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.envpool</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: F401</span>
@@ -545,6 +546,18 @@
     <span class="k">return</span> <span class="n">new_fun</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_unpicklable_lambda</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if a callable is a lambda function that needs cloudpickle wrapping.</span>
+
+<span class="sd">    Lambda functions cannot be pickled with standard pickle, so they need to be</span>
+<span class="sd">    wrapped with EnvCreator (which uses CloudpickleWrapper) for multiprocessing.</span>
+<span class="sd">    functools.partial objects are picklable, so they don&#39;t need wrapping.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="nb">callable</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;&lt;lambda&gt;&quot;</span>
+
+
 <span class="k">class</span><span class="w"> </span><span class="nc">_PEnvMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">serial_for_single</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;serial_for_single&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
@@ -557,6 +570,25 @@
             <span class="k">if</span> <span class="n">num_workers</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="c1"># We still use a serial to keep the shape unchanged</span>
                 <span class="k">return</span> <span class="n">SerialEnv</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Wrap lambda functions with EnvCreator so they can be pickled for</span>
+        <span class="c1"># multiprocessing with the spawn start method. Lambda functions cannot</span>
+        <span class="c1"># be serialized with standard pickle, but EnvCreator uses cloudpickle.</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_wrap_lambdas</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_is_unpicklable_lambda</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+                <span class="k">return</span> <span class="p">[</span>
+                    <span class="n">EnvCreator</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="k">if</span> <span class="n">_is_unpicklable_lambda</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="k">else</span> <span class="n">fn</span>
+                    <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">create_env_fn</span>
+                <span class="p">]</span>
+            <span class="k">return</span> <span class="n">create_env_fn</span>
+
+        <span class="k">if</span> <span class="s2">&quot;create_env_fn&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_wrap_lambdas</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">_wrap_lambdas</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">+</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
@@ -1844,8 +1876,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="mf">10.0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">BATCHED_PIPE_TIMEOUT</span> <span class="o">=</span> <span class="n">torchrl</span><span class="o">.</span><span class="n">_utils</span><span class="o">.</span><span class="n">BATCHED_PIPE_TIMEOUT</span>
 
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
-
         <span class="n">num_threads</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
             <span class="mi">1</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_num_threads</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
         <span class="p">)</span>  <span class="c1"># 1 more thread for this proc</span>
@@ -1900,7 +1930,6 @@
                 <span class="n">env_fun</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_fun</span><span class="p">,</span> <span class="p">(</span><span class="n">EnvCreator</span><span class="p">,</span> <span class="n">CloudpickleWrapper</span><span class="p">)):</span>
                     <span class="n">env_fun</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">env_fun</span><span class="p">)</span>
-                <span class="kn">import</span><span class="w"> </span><span class="nn">torchrl</span>
 
                 <span class="n">kwargs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
                     <span class="p">{</span>
@@ -1911,7 +1940,7 @@
                         <span class="s2">&quot;has_lazy_inputs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_lazy_inputs</span><span class="p">,</span>
                         <span class="s2">&quot;num_threads&quot;</span><span class="p">:</span> <span class="n">num_sub_threads</span><span class="p">,</span>
                         <span class="s2">&quot;non_blocking&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">,</span>
-                        <span class="s2">&quot;filter_warnings&quot;</span><span class="p">:</span> <span class="n">torchrl</span><span class="o">.</span><span class="n">filter_warnings_subprocess</span><span class="p">,</span>
+                        <span class="s2">&quot;filter_warnings&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_warnings_subprocess</span><span class="p">(),</span>
                     <span class="p">}</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
@@ -1946,6 +1975,11 @@
             <span class="n">channel</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">&quot;init&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">is_closed</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_spec_lock_</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_filter_warnings_subprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_warnings_subprocess</span>
+
+        <span class="k">return</span> <span class="n">filter_warnings_subprocess</span>
 
 <div class="viewcode-block" id="ParallelEnv.state_dict"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv.state_dict">[docs]</a>    <span class="nd">@_check_start</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>

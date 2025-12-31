@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+geb2aaeb) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g7dd1e61) &#x25BC</span></a>
     </div>
     
 
@@ -466,6 +466,20 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_model</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cuda_sync_if_initialized</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Synchronize CUDA only if it has been initialized.</span>
+
+<span class="sd">    This is a safe alternative to calling `torch.cuda.synchronize()` directly.</span>
+<span class="sd">    In forked subprocesses on machines with CUDA, calling `synchronize()` will</span>
+<span class="sd">    fail with &quot;Cannot re-initialize CUDA in forked subprocess&quot; if CUDA was</span>
+<span class="sd">    initialized in the parent process before fork.  By checking</span>
+<span class="sd">    `is_initialized()` first, we skip the sync in such cases since no CUDA</span>
+<span class="sd">    operations have occurred in this process.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
 
 <div class="viewcode-block" id="Collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector">[docs]</a><span class="nd">@accept_remote_rref_udf_invocation</span>
@@ -940,9 +954,14 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_sync_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the appropriate synchronization function for a device.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
-            <span class="c1"># Cuda handles sync</span>
+            <span class="c1"># When destination is not CUDA, we may need to sync to wait for</span>
+            <span class="c1"># async GPU→CPU transfers to complete before proceeding.</span>
             <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-                <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span>
+                <span class="c1"># Return a safe wrapper that only syncs if CUDA was actually</span>
+                <span class="c1"># initialized.  This avoids &quot;Cannot re-initialize CUDA in forked</span>
+                <span class="c1"># subprocess&quot; errors when using fork start method on GPU machines</span>
+                <span class="c1"># with CPU-only collectors.</span>
+                <span class="k">return</span> <span class="n">_cuda_sync_if_initialized</span>
             <span class="k">elif</span> <span class="n">torch</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">mps</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;mps&quot;</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">mps</span><span class="o">.</span><span class="n">synchronize</span>
             <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;npu&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">npu</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
