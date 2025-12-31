@@ -25,7 +25,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y libfreetype6-dev pkg-config
 
   apt-get install -y libglfw3 libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb
+  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     apt-get upgrade -y libstdc++6
@@ -205,15 +205,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv_pip_install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+      uv_pip_install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      uv_pip_install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      uv_pip_install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv_pip_install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      uv_pip_install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+      uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"

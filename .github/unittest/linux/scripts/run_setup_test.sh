@@ -66,9 +66,9 @@ else
 fi
 
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  uv_pip_install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+  uv_pip_install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
 else
-  uv_pip_install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+  uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
 fi
 
 # tensordict is a hard dependency of torchrl; install it explicitly since we test

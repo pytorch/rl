@@ -115,15 +115,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/cpu
+      uv pip install --upgrade --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      uv pip install --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      uv pip install --upgrade --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/cpu
+      uv pip install --upgrade torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/cpu
   else
-      uv pip install torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/$CU_VERSION
+      uv pip install --upgrade torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
