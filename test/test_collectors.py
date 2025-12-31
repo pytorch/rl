@@ -89,6 +89,7 @@ from torchrl.modules import (
     SafeModule,
 )
 from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
+from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
@@ -99,7 +100,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         CARTPOLE_VERSIONED,
         check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
         generate_seeds,
         get_available_devices,
         get_default_devices,
@@ -112,7 +112,6 @@ else:
     from _utils_internal import (
         CARTPOLE_VERSIONED,
         check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
         generate_seeds,
         get_available_devices,
         get_default_devices,
