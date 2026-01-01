@@ -4,6 +4,7 @@ import _pickle
 import abc
 
 import contextlib
+import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -20,6 +21,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _get_mp_ctx,
     _make_process_no_warn_cls,
+    _mp_sharing_strategy_for_spawn,
     _set_mp_start_method_if_unset,
     RL_WARNINGS,
 )
@@ -33,7 +35,7 @@ from torchrl.collectors._constants import (
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _make_meta_policy, _TrajectoryPool
+from torchrl.collectors.utils import _make_meta_policy_cm, _TrajectoryPool
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -945,7 +947,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         ctx = _get_mp_ctx()
         # Best-effort global init (only if unset) to keep other mp users consistent.
         _set_mp_start_method_if_unset(ctx.get_start_method())
-
+        if (
+            sys.platform == "linux"
+            and sys.version_info < (3, 10)
+            and ctx.get_start_method() == "spawn"
+        ):
+            strategy = _mp_sharing_strategy_for_spawn()
+            if strategy is not None:
+                mp.set_sharing_strategy(strategy)
         queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
@@ -1004,9 +1013,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     policy_to_send = None
                     cm = contextlib.nullcontext()
                 elif policy is not None:
-                    # Send policy with meta-device parameters (empty structure) - schemes apply weights
+                    # Send a stateless policy down to workers: schemes apply weights.
                     policy_to_send = policy
-                    cm = _make_meta_policy(policy)
+                    cm = _make_meta_policy_cm(
+                        policy, mp_start_method=ctx.get_start_method()
+                    )
                 else:
                     policy_to_send = None
                     cm = contextlib.nullcontext()
@@ -1037,7 +1048,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             with cm:
                 kwargs = {
                     "policy_factory": policy_factory[i],
-                    "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
                     "queue_out": queue_out,
                     "create_env_fn": env_fun,
@@ -1128,6 +1138,29 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                         ) from err
                     else:
                         raise err
+                except ValueError as err:
+                    if "bad value(s) in fds_to_keep" in str(err):
+                        # This error occurs on old Python versions (e.g., 3.9) with old PyTorch (e.g., 2.3)
+                        # when using the spawn multiprocessing start method. The spawn implementation tries to
+                        # preserve file descriptors across exec, but some descriptors may be invalid/closed.
+                        # This is a compatibility issue with old Python multiprocessing implementations.
+                        python_version = (
+                            f"{sys.version_info.major}.{sys.version_info.minor}"
+                        )
+                        raise RuntimeError(
+                            f"Failed to start collector worker process due to file descriptor issues "
+                            f"with spawn multiprocessing on Python {python_version}.\n\n"
+                            f"This is a known compatibility issue with old Python/PyTorch stacks. "
+                            f"Consider upgrading to Python >= 3.10 and PyTorch >= 2.5, or use the 'fork' "
+                            f"multiprocessing start method on Unix systems.\n\n"
+                            f"Workarounds:\n"
+                            f"- Upgrade Python to >= 3.10 and PyTorch to >= 2.5\n"
+                            f"- On Unix systems, force fork start method:\n"
+                            f"  import torch.multiprocessing as mp\n"
+                            f"  if __name__ == '__main__':\n"
+                            f"      mp.set_start_method('fork', force=True)\n\n"
+                            f"Upstream Python issue: https://github.com/python/cpython/issues/87706"
+                        ) from err
                 except _pickle.PicklingError as err:
                     if "<lambda>" in str(err):
                         raise RuntimeError(

@@ -3,15 +3,27 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
+import warnings
 import weakref
 from warnings import warn
 
 import torch
 
-from tensordict import set_lazy_legacy
+# Silence noisy dependency warning triggered at import time on older torch stacks.
+# (Emitted by tensordict when registering pytree nodes.)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r"torch\.utils\._pytree\._register_pytree_node is deprecated\.",
+)
 
-from torch import multiprocessing as mp
-from torch.distributions.transforms import _InverseTransform, ComposeTransform
+from tensordict import set_lazy_legacy  # noqa: E402
+
+from torch import multiprocessing as mp  # noqa: E402
+from torch.distributions.transforms import (  # noqa: E402
+    _InverseTransform,
+    ComposeTransform,
+)
 
 torch._C._log_api_usage_once("torchrl")
 
@@ -61,8 +73,7 @@ from torchrl._utils import (  # noqa: E402
 
 logger = logger
 
-# TorchRL's multiprocessing default:
-# We only force "spawn" on newer PyTorch versions (see `_get_default_mp_start_method`).
+# TorchRL's multiprocessing default.
 _preferred_start_method = _get_default_mp_start_method()
 if _preferred_start_method == "spawn":
     try:
