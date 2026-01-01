@@ -7,11 +7,15 @@ set -v
 
 # 1. Install system dependencies FIRST (before using git)
 printf "* Installing system dependencies\n"
-apt-get update && apt-get install -y git wget gcc g++ curl
+apt-get update && apt-get install -y git wget gcc g++ curl software-properties-common
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 apt-get install -y librhash0 x11proto-dev cmake
-apt-get install -y python3.9 python3.9-dev python3.9-venv
+
+# Add deadsnakes PPA for Python 3.9
+add-apt-repository ppa:deadsnakes/ppa -y
+apt-get update
+apt-get install -y python3.9 python3.9-dev python3.9-venv python3.9-distutils
 
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
