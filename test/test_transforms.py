@@ -9673,6 +9673,11 @@ class TestVecNormV2:
     def rename_t(self):
         return RenameTransform(in_keys=["observation"], out_keys=[("some", "obs")])
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.8.0"),
+        reason="VecNorm shared memory synchronization requires PyTorch >= 2.8 "
+        "when using spawn multiprocessing start method.",
+    )
     @retry(AssertionError, tries=10, delay=0)
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
@@ -9784,6 +9789,11 @@ class TestVecNormV2:
         sys.version_info >= (3, 11),
         reason="Nested spawned multiprocessed is currently failing in python 3.11. "
         "See https://github.com/python/cpython/pull/108568 for info and fix.",
+    )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.8.0"),
+        reason="VecNorm shared memory synchronization requires PyTorch >= 2.8 "
+        "when using spawn multiprocessing start method.",
     )
     def test_parallelenv_vecnorm(self):
         if _has_gym:
@@ -10051,6 +10061,11 @@ class TestVecNorm:
     def rename_t(self):
         return RenameTransform(in_keys=["observation"], out_keys=[("some", "obs")])
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.8.0"),
+        reason="VecNorm shared memory synchronization requires PyTorch >= 2.8 "
+        "when using spawn multiprocessing start method.",
+    )
     @retry(AssertionError, tries=10, delay=0)
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
@@ -10169,6 +10184,11 @@ class TestVecNorm:
         sys.version_info >= (3, 11),
         reason="Nested spawned multiprocessed is currently failing in python 3.11. "
         "See https://github.com/python/cpython/pull/108568 for info and fix.",
+    )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.8.0"),
+        reason="VecNorm shared memory synchronization requires PyTorch >= 2.8 "
+        "when using spawn multiprocessing start method.",
     )
     def test_parallelenv_vecnorm(self):
         if _has_gym:
