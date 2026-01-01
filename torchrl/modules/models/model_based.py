@@ -122,6 +122,8 @@ class ObsEncoder(nn.Module):
         else:
             end_dim = len(batch_sizes) - 1
         observation = torch.flatten(observation, start_dim=0, end_dim=end_dim)
+        # Ensure contiguous layout for torch.compile compatibility
+        observation = observation.contiguous()
         obs_encoded = self.encoder(observation)
         latent = obs_encoded.reshape(*batch_sizes, -1)
         return latent
@@ -192,10 +194,12 @@ class ObsDecoder(nn.Module):
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
-        latent = latent.view(-1, D, 1, 1)
+        # Ensure contiguous layout for torch.compile compatibility with transposed convs
+        latent = latent.contiguous().view(-1, D, 1, 1)
         obs_decoded = self.decoder(latent)
         _, C, H, W = obs_decoded.shape
-        obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
+        # Ensure contiguous before final reshape
+        obs_decoded = obs_decoded.contiguous().view(*batch_sizes, C, H, W)
         return obs_decoded
 
 
