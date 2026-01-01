@@ -204,6 +204,9 @@ class ObsDecoder(nn.Module):
         self._depth = channels
 
     def forward(self, state, rnn_hidden):
+        # Ensure inputs are contiguous before concat (may come from RSSM stacking)
+        state = state.contiguous()
+        rnn_hidden = rnn_hidden.contiguous()
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
         # Ensure contiguous layout for torch.compile compatibility with transposed convs
