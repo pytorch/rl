@@ -28,11 +28,11 @@ optimization:
   value_lr: 8e-5
   kl_scale: 1.0
   free_nats: 3.0
-  optim_steps_per_batch: 40
+  optim_steps_per_batch: 20
   gamma: 0.99
   lmbda: 0.95
   imagination_horizon: 15
-  compile: False
+  compile: True
   compile_backend: inductor
   # Autocast options: false, true (=bfloat16), float16, bfloat16
   autocast: bfloat16
@@ -47,7 +47,7 @@ networks:
 
 
 replay_buffer: 
-  batch_size: 5000
+  batch_size: 10000
   buffer_size: 1000000
   batch_length: 50
   scratch_dir: null

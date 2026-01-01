@@ -136,12 +136,17 @@ def main(cfg: DictConfig):  # noqa: F821
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    # Make optimizer
+    # Make optimizer (fused=True for faster GPU execution)
+    use_fused = device.type == "cuda"
     world_model_opt = torch.optim.Adam(
-        world_model.parameters(), lr=cfg.optimization.world_model_lr
+        world_model.parameters(), lr=cfg.optimization.world_model_lr, fused=use_fused
     )
-    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.actor_lr)
-    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
+    actor_opt = torch.optim.Adam(
+        actor_model.parameters(), lr=cfg.optimization.actor_lr, fused=use_fused
+    )
+    value_opt = torch.optim.Adam(
+        value_model.parameters(), lr=cfg.optimization.value_lr, fused=use_fused
+    )
 
     # Grad scaler for mixed precision training https://pytorch.org/docs/stable/amp.html
     # autocast can be: false, true (=bfloat16), float16, bfloat16
