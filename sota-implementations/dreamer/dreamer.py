@@ -168,6 +168,10 @@ def main(cfg: DictConfig):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
+    # Enable TensorFloat32 for better performance on Ampere+ GPUs
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+
     if cfg.optimization.compile:
         torch._dynamo.config.capture_scalar_outputs = True
 
@@ -177,15 +181,17 @@ def main(cfg: DictConfig):  # noqa: F821
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
         # shared with the policy used in the collector. Compiling them would cause
         # issues with the MultiCollector workers.
-        # 
+        #
         # Instead, we compile the loss modules themselves which wraps the forward pass.
+        # The encoder/decoder now use .contiguous() to ensure proper memory layout
+        # for torch.compile compatibility.
         world_model_loss = torch.compile(world_model_loss, backend=backend)
         actor_loss = torch.compile(actor_loss, backend=backend)
         value_loss = torch.compile(value_loss, backend=backend)
 
     # Throughput tracking
     t_iter_start = time.time()
-    
+
     for i, tensordict in enumerate(collector):
         # Note: Collection time is implicitly measured by the collector's iteration
         # The time between loop iterations that isn't training is effectively collection time
@@ -293,22 +299,22 @@ def main(cfg: DictConfig):  # noqa: F821
         # Compute throughput metrics
         t_iter_end = time.time()
         iter_time = t_iter_end - t_iter_start
-        
+
         # FPS: Frames (env steps) collected per second
         fps = current_frames / iter_time if iter_time > 0 else 0
-        
+
         metrics_to_log = {"reward": ep_reward.mean().item()}
         if collected_frames >= init_random_frames:
             # SPS: Samples (batch elements) processed per second
             # Each optim step processes batch_size samples
             total_samples = optim_steps_per_batch * batch_size
             sps = total_samples / iter_time if iter_time > 0 else 0
-            
+
             # UPS: Updates (gradient steps) per second
             # 3 updates per optim step (world_model, actor, value)
             total_updates = optim_steps_per_batch * 3
             ups = total_updates / iter_time if iter_time > 0 else 0
-            
+
             loss_metrics = {
                 "loss_model_kl": model_loss_td["loss_model_kl"].item(),
                 "loss_model_reco": model_loss_td["loss_model_reco"].item(),
@@ -337,7 +343,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
         # Reset timer for next iteration
         t_iter_start = time.time()
-        
+
         policy[1].step(current_frames)
         collector.update_policy_weights_()
         # Evaluation
