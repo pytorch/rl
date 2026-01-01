@@ -217,7 +217,7 @@ def main(cfg: DictConfig):  # noqa: F821
                     # Ensure all tensors are contiguous (NCHW layout) for torch.compile
                     # The image transforms may produce channels-last tensors which
                     # cause stride mismatches in the inductor's convolution backward
-                    sampled_tensordict = sampled_tensordict.contiguous()
+                    sampled_tensordict = sampled_tensordict.clone()
 
                 # update world model
                 with timeit("train/world_model-forward"):

@@ -151,9 +151,13 @@ class DreamerModelLoss(LossModule):
             tensordict.get(("next", self.tensor_keys.posterior_mean)),
             tensordict.get(("next", self.tensor_keys.posterior_std)),
         ).unsqueeze(-1)
+        # Ensure contiguous layout for torch.compile compatibility
+        # The gradient from distance_loss flows back through decoder convolutions
+        pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
+        reco_pixels = tensordict.get(("next", self.tensor_keys.reco_pixels)).contiguous()
         reco_loss = distance_loss(
-            tensordict.get(("next", self.tensor_keys.pixels)),
-            tensordict.get(("next", self.tensor_keys.reco_pixels)),
+            pixels,
+            reco_pixels,
             self.reco_loss,
         )
         if not self.global_average:
