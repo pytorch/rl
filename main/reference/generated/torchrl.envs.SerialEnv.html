@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+g7866d11) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+g9b04929) &#x25BC</span></a>
     </div>
     
 
@@ -505,9 +505,24 @@ one of the environment has dynamic specs.</p>
 <li><p><strong>daemon</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the processes should be daemonized.
 This is only applicable to parallel environments such as <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>auto_wrap_envs</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), lambda functions passed as
+<code class="docutils literal notranslate"><span class="pre">create_env_fn</span></code> will be automatically wrapped in an <a class="reference internal" href="torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator" title="torchrl.envs.EnvCreator"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvCreator</span></code></a>
+to enable pickling for multiprocessing with the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> start method.
+This wrapping causes the environment to be instantiated once in the main process
+(to extract metadata) before workers are started.
+If this is undesirable, set <code class="docutils literal notranslate"><span class="pre">auto_wrap_envs=False</span></code>. Otherwise, ensure your callable is
+serializable (e.g., use <code class="xref py py-func docutils literal notranslate"><span class="pre">functools.partial()</span></code> instead of lambdas).
+This parameter only affects <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>, it is recommended to use <code class="xref py py-func docutils literal notranslate"><span class="pre">functools.partial()</span></code>
+instead of lambda functions when possible, as <code class="docutils literal notranslate"><span class="pre">partial</span></code> objects are natively serializable
+and avoid the overhead of <a class="reference internal" href="torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator" title="torchrl.envs.EnvCreator"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvCreator</span></code></a> wrapping.</p>
+</div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>One can pass keyword arguments to each sub-environments using the following

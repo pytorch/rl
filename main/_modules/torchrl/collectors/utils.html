@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g7866d11) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9b04929) &#x25BC</span></a>
     </div>
     
 
@@ -718,6 +718,33 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">param_and_buf</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_cast</span><span class="p">,</span> <span class="n">param_and_buf</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.8&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_meta_policy_cm</span><span class="p">(</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">AbstractContextManager</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the context manager used to make a policy &#39;stateless&#39; for worker pickling.</span>
+
+<span class="sd">    On older PyTorch versions (&lt;2.8), pickling meta-device storages when using the</span>
+<span class="sd">    ``spawn`` start method may fail (e.g., triggering ``_share_filename_: only available on CPU``).</span>
+<span class="sd">    In that case, we avoid converting parameters/buffers to meta and simply return a no-op</span>
+<span class="sd">    context manager.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">mp_start_method</span> <span class="o">==</span> <span class="s2">&quot;spawn&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">_make_meta_policy</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.8&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_meta_policy_cm</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">AbstractContextManager</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the context manager used to make a policy &#39;stateless&#39; for worker pickling.</span>
+
+<span class="sd">    On PyTorch &gt;= 2.8, meta-device policy structures can be pickled reliably under ``spawn``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_make_meta_policy</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.5.0&quot;</span><span class="p">)</span>

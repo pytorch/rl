@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g7866d11) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9b04929) &#x25BC</span></a>
     </div>
     
 
@@ -459,6 +459,7 @@
     <span class="n">_check_for_faulty_process</span><span class="p">,</span>
     <span class="n">_make_ordinal_device</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
+    <span class="n">rl_warnings</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
@@ -574,20 +575,50 @@
         <span class="c1"># Wrap lambda functions with EnvCreator so they can be pickled for</span>
         <span class="c1"># multiprocessing with the spawn start method. Lambda functions cannot</span>
         <span class="c1"># be serialized with standard pickle, but EnvCreator uses cloudpickle.</span>
+        <span class="n">auto_wrap_envs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auto_wrap_envs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_warn_lambda</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">rl_warnings</span><span class="p">():</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;A lambda function was passed to ParallelEnv and will be wrapped &quot;</span>
+                    <span class="s2">&quot;in an EnvCreator. This causes the environment to be instantiated &quot;</span>
+                    <span class="s2">&quot;in the main process to extract metadata. Consider using &quot;</span>
+                    <span class="s2">&quot;functools.partial instead, which is natively serializable and &quot;</span>
+                    <span class="s2">&quot;avoids this overhead. To suppress this warning, set the &quot;</span>
+                    <span class="s2">&quot;RL_WARNINGS=0 environment variable.&quot;</span><span class="p">,</span>
+                    <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+                <span class="p">)</span>
+
         <span class="k">def</span><span class="w"> </span><span class="nf">_wrap_lambdas</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_is_unpicklable_lambda</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">):</span>
+                <span class="n">_warn_lambda</span><span class="p">()</span>
                 <span class="k">return</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
-                <span class="k">return</span> <span class="p">[</span>
-                    <span class="n">EnvCreator</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="k">if</span> <span class="n">_is_unpicklable_lambda</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="k">else</span> <span class="n">fn</span>
-                    <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">create_env_fn</span>
-                <span class="p">]</span>
+                <span class="c1"># Reuse EnvCreator for identical function objects to preserve</span>
+                <span class="c1"># _single_task detection (e.g., when [lambda_fn] * 3 is passed)</span>
+                <span class="n">wrapped</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">warned</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">create_env_fn</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">_is_unpicklable_lambda</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+                        <span class="n">fn_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">fn_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">wrapped</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="ow">not</span> <span class="n">warned</span><span class="p">:</span>
+                                <span class="n">_warn_lambda</span><span class="p">()</span>
+                                <span class="n">warned</span> <span class="o">=</span> <span class="kc">True</span>
+                            <span class="n">wrapped</span><span class="p">[</span><span class="n">fn_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+                        <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">wrapped</span><span class="p">[</span><span class="n">fn_id</span><span class="p">])</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">result</span>
             <span class="k">return</span> <span class="n">create_env_fn</span>
 
-        <span class="k">if</span> <span class="s2">&quot;create_env_fn&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_wrap_lambdas</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">])</span>
-        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">_wrap_lambdas</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">+</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+        <span class="k">if</span> <span class="n">auto_wrap_envs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;create_env_fn&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_wrap_lambdas</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;create_env_fn&quot;</span><span class="p">])</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">_wrap_lambdas</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">+</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
 
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
@@ -654,6 +685,20 @@
 <span class="sd">        daemon (bool, optional): whether the processes should be daemonized.</span>
 <span class="sd">            This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        auto_wrap_envs (bool, optional): if ``True`` (default), lambda functions passed as</span>
+<span class="sd">            ``create_env_fn`` will be automatically wrapped in an :class:`~torchrl.envs.EnvCreator`</span>
+<span class="sd">            to enable pickling for multiprocessing with the ``spawn`` start method.</span>
+<span class="sd">            This wrapping causes the environment to be instantiated once in the main process</span>
+<span class="sd">            (to extract metadata) before workers are started.</span>
+<span class="sd">            If this is undesirable, set ``auto_wrap_envs=False``. Otherwise, ensure your callable is</span>
+<span class="sd">            serializable (e.g., use :func:`functools.partial` instead of lambdas).</span>
+<span class="sd">            This parameter only affects :class:`~torchrl.envs.ParallelEnv`.</span>
+<span class="sd">            Defaults to ``True``.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        For :class:`~torchrl.envs.ParallelEnv`, it is recommended to use :func:`functools.partial`</span>
+<span class="sd">        instead of lambda functions when possible, as ``partial`` objects are natively serializable</span>
+<span class="sd">        and avoid the overhead of :class:`~torchrl.envs.EnvCreator` wrapping.</span>
 
 <span class="sd">    .. note::</span>
 <span class="sd">        One can pass keyword arguments to each sub-environments using the following</span>
