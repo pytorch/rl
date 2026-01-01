@@ -9,7 +9,7 @@ import contextlib
 import functools
 import gc
 import importlib
-import os.path
+import os
 import pickle
 import random
 import re

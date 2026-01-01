@@ -76,6 +76,11 @@ def set_warnings() -> None:
     )
     warnings.filterwarnings(
         "ignore",
+        category=UserWarning,
+        message=r"A lambda function was passed to ParallelEnv",
+    )
+    warnings.filterwarnings(
+        "ignore",
         category=DeprecationWarning,
         message=r"Deprecated call to `pkg_resources.declare_namespace",
     )
