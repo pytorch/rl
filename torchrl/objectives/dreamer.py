@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 
 import torch
@@ -12,6 +13,19 @@ from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl._utils import timeit
+
+
+def _maybe_timeit(name):
+    """Return timeit context if not compiling, nullcontext otherwise.
+
+    torch.compiler.is_compiling() returns True when inside a compiled region,
+    and timeit uses time.time() which dynamo cannot trace.
+    """
+    if torch.compiler.is_compiling():
+        return contextlib.nullcontext()
+    return timeit(name)
+
+
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
@@ -278,7 +292,7 @@ class DreamerActorLoss(LossModule):
     def forward(self, tensordict: TensorDict) -> tuple[TensorDict, TensorDict]:
         tensordict = tensordict.select("state", self.tensor_keys.belief).detach()
 
-        with timeit("actor_loss/time-rollout"), hold_out_net(
+        with _maybe_timeit("actor_loss/time-rollout"), hold_out_net(
             self.model_based_env
         ), set_exploration_type(ExplorationType.RANDOM):
             tensordict = self.model_based_env.reset(tensordict.copy())

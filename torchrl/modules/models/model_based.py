@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import warnings
 
 import torch
@@ -19,8 +20,19 @@ from torch import nn
 # from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
 from torchrl._utils import timeit
-
 from torchrl.modules.models.models import MLP
+
+
+def _maybe_timeit(name):
+    """Return timeit context if not compiling, nullcontext otherwise.
+
+    torch.compiler.is_compiling() returns True when inside a compiled region,
+    and timeit uses time.time() which dynamo cannot trace.
+    """
+    if torch.compiler.is_compiling():
+        return contextlib.nullcontext()
+    return timeit(name)
+
 
 UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
 
@@ -255,12 +267,12 @@ class RSSMRollout(TensorDictModuleBase):
         for t in range(time_steps):
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            with timeit("rssm_rollout/time-rssm_prior"):
+            with _maybe_timeit("rssm_rollout/time-rssm_prior"):
                 self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            with timeit("rssm_rollout/time-rssm_posterior"):
+            with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
                 self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)

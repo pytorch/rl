@@ -214,6 +214,10 @@ def main(cfg: DictConfig):  # noqa: F821
                     sampled_tensordict = replay_buffer.sample().reshape(
                         -1, batch_length
                     )
+                    # Ensure all tensors are contiguous (NCHW layout) for torch.compile
+                    # The image transforms may produce channels-last tensors which
+                    # cause stride mismatches in the inductor's convolution backward
+                    sampled_tensordict = sampled_tensordict.contiguous()
 
                 # update world model
                 with timeit("train/world_model-forward"):
@@ -329,7 +333,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 "throughput/sps": sps,  # Samples per second (training)
                 "throughput/ups": ups,  # Updates per second (gradient steps)
                 "throughput/iter_time": iter_time,  # Total iteration time
-                # All timing now via timeit
+                # Detailed timing from timeit (some metrics may be empty when compiling)
                 **timeit.todict(prefix="time"),
             }
             metrics_to_log.update(loss_metrics)
