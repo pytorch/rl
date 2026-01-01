@@ -118,11 +118,6 @@ def main(cfg: DictConfig):  # noqa: F821
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
-        compile=(
-            {"backend": cfg.optimization.compile_backend}
-            if cfg.optimization.compile
-            else False
-        ),
     )
 
     # Create storage transform for extend-time processing (applied once per frame)

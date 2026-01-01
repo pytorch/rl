@@ -420,12 +420,15 @@ def make_replay_buffer(
     pixel_obs=True,
     grayscale=True,
     image_size,
-    compile: bool | dict = False,
 ):
     """Create replay buffer with minimal sample-time transforms.
 
     Heavy image transforms are expected to be applied at extend-time using
     make_storage_transform(). Only DeviceCastTransform is applied at sample-time.
+
+    Note: We don't compile the SliceSampler because:
+    1. Sampler operations (index computation) happen on CPU and are already fast
+    2. torch.compile with inductor has bugs with the sampler's vectorized int64 operations
     """
     with (
         tempfile.TemporaryDirectory()
@@ -451,7 +454,7 @@ def make_replay_buffer(
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
                 cache_values=True,
-                compile=compile,
+                # Don't compile the sampler - inductor has C++ codegen bugs for int64 ops
             ),
             transform=sample_transforms,
             batch_size=batch_size,
