@@ -36,7 +36,6 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 
-@implement_for("torch", "2.5.0")
 def _get_default_mp_start_method() -> str:
     """Returns TorchRL's preferred multiprocessing start method for this torch version.
 
@@ -44,20 +43,6 @@ def _get_default_mp_start_method() -> str:
     backends and to avoid known issues with ``fork`` in multi-threaded programs.
     """
     return "spawn"
-
-
-@implement_for("torch", None, "2.5.0")
-def _get_default_mp_start_method() -> str:  # noqa: F811
-    """Returns TorchRL's preferred multiprocessing start method for this torch version.
-
-    On older PyTorch versions we prefer ``"fork"`` when available to avoid failures
-    when spawning workers with non-CPU storages that must be pickled at process start.
-    """
-    try:
-        mp.get_context("fork")
-    except ValueError:
-        return "spawn"
-    return "fork"
 
 
 def _get_mp_ctx(start_method: str | None = None):
@@ -106,6 +91,19 @@ def _set_mp_start_method_if_unset(start_method: str | None = None) -> str | None
             # override it here.
             pass
     return current
+
+
+@implement_for("torch", None, "2.8")
+def _mp_sharing_strategy_for_spawn() -> str | None:
+    # On older torch stacks, pickling Process objects for "spawn" can end up
+    # passing file descriptors for shared storages; using "file_system" reduces
+    # FD passing and avoids spawn-time failures on some old Python versions.
+    return "file_system"
+
+
+@implement_for("torch", "2.8")
+def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
+    return None
 
 
 def strtobool(val: Any) -> bool:

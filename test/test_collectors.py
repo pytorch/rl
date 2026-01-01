@@ -616,6 +616,11 @@ class TestCollectorGeneric:
         reason="Nested spawned multiprocessed is currently failing in python 3.11. "
         "See https://github.com/python/cpython/pull/108568 for info and fix.",
     )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.8.0"),
+        reason="VecNorm shared memory synchronization requires PyTorch >= 2.8 "
+        "when using spawn multiprocessing start method with file_system sharing strategy.",
+    )
     @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
     @pytest.mark.parametrize("static_seed", [True, False])
     def test_collector_vecnorm_envcreator(self, static_seed):
