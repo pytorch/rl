@@ -167,101 +167,95 @@ def main(cfg: DictConfig):  # noqa: F821
 
         world_model_loss.apply(compile_rssms)
 
-    t_collect_init = time.time()
     for i, tensordict in enumerate(collector):
-        t_collect = time.time() - t_collect_init
+        # Note: Collection time is implicitly measured by the collector's iteration
+        # The time between loop iterations that isn't training is effectively collection time
+        with timeit("collect/preproc"):
+            pbar.update(tensordict.numel())
+            current_frames = tensordict.numel()
+            collected_frames += current_frames
 
-        t_preproc_init = time.time()
-        pbar.update(tensordict.numel())
-        current_frames = tensordict.numel()
-        collected_frames += current_frames
-
-        ep_reward = tensordict.get("episode_reward")[..., -1, 0]
-        replay_buffer.extend(tensordict.cpu())
-        t_preproc = time.time() - t_preproc_init
+            ep_reward = tensordict.get("episode_reward")[..., -1, 0]
+            replay_buffer.extend(tensordict.cpu())
 
         if collected_frames >= init_random_frames:
-            t_loss_actor = 0.0
-            t_loss_critic = 0.0
-            t_loss_model = 0.0
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
-                t_sample_init = time.time()
-                sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
-                t_sample = time.time() - t_sample_init
+                with timeit("train/sample"):
+                    sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
 
-                t_loss_model_init = time.time()
                 # update world model
-                with torch.autocast(
-                    device_type=device.type,
-                    dtype=torch.bfloat16,
-                ) if use_autocast else contextlib.nullcontext():
-                    model_loss_td, sampled_tensordict = world_model_loss(
-                        sampled_tensordict
-                    )
-                    loss_world_model = (
-                        model_loss_td["loss_model_kl"]
-                        + model_loss_td["loss_model_reco"]
-                        + model_loss_td["loss_model_reward"]
-                    )
+                with timeit("train/world_model-forward"):
+                    with torch.autocast(
+                        device_type=device.type,
+                        dtype=torch.float16,
+                    ) if use_autocast else contextlib.nullcontext():
+                        model_loss_td, sampled_tensordict = world_model_loss(
+                            sampled_tensordict
+                        )
+                        loss_world_model = (
+                            model_loss_td["loss_model_kl"]
+                            + model_loss_td["loss_model_reco"]
+                            + model_loss_td["loss_model_reward"]
+                        )
 
-                world_model_opt.zero_grad()
-                if use_autocast:
-                    scaler1.scale(loss_world_model).backward()
-                    scaler1.unscale_(world_model_opt)
-                else:
-                    loss_world_model.backward()
-                world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-                if use_autocast:
-                    scaler1.step(world_model_opt)
-                    scaler1.update()
-                else:
-                    world_model_opt.step()
-                t_loss_model += time.time() - t_loss_model_init
+                with timeit("train/world_model-backward"):
+                    world_model_opt.zero_grad()
+                    if use_autocast:
+                        scaler1.scale(loss_world_model).backward()
+                        scaler1.unscale_(world_model_opt)
+                    else:
+                        loss_world_model.backward()
+                    world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
+                    if use_autocast:
+                        scaler1.step(world_model_opt)
+                        scaler1.update()
+                    else:
+                        world_model_opt.step()
 
                 # update actor network
-                t_loss_actor_init = time.time()
-                with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
-                    actor_loss_td, sampled_tensordict = actor_loss(
-                        sampled_tensordict.reshape(-1)
-                    )
+                with timeit("train/actor-forward"):
+                    with torch.autocast(
+                        device_type=device.type, dtype=torch.float16
+                    ) if use_autocast else contextlib.nullcontext():
+                        actor_loss_td, sampled_tensordict = actor_loss(
+                            sampled_tensordict.reshape(-1)
+                        )
 
-                actor_opt.zero_grad()
-                if use_autocast:
-                    scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                    scaler2.unscale_(actor_opt)
-                else:
-                    actor_loss_td["loss_actor"].backward()
-                actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-                if use_autocast:
-                    scaler2.step(actor_opt)
-                    scaler2.update()
-                else:
-                    actor_opt.step()
-                t_loss_actor += time.time() - t_loss_actor_init
+                with timeit("train/actor-backward"):
+                    actor_opt.zero_grad()
+                    if use_autocast:
+                        scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                        scaler2.unscale_(actor_opt)
+                    else:
+                        actor_loss_td["loss_actor"].backward()
+                    actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
+                    if use_autocast:
+                        scaler2.step(actor_opt)
+                        scaler2.update()
+                    else:
+                        actor_opt.step()
 
                 # update value network
-                t_loss_critic_init = time.time()
-                with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                with timeit("train/value-forward"):
+                    with torch.autocast(
+                        device_type=device.type, dtype=torch.float16
+                    ) if use_autocast else contextlib.nullcontext():
+                        value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
-                value_opt.zero_grad()
-                if use_autocast:
-                    scaler3.scale(value_loss_td["loss_value"]).backward()
-                    scaler3.unscale_(value_opt)
-                else:
-                    value_loss_td["loss_value"].backward()
-                critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-                if use_autocast:
-                    scaler3.step(value_opt)
-                    scaler3.update()
-                else:
-                    value_opt.step()
-                t_loss_critic += time.time() - t_loss_critic_init
+                with timeit("train/value-backward"):
+                    value_opt.zero_grad()
+                    if use_autocast:
+                        scaler3.scale(value_loss_td["loss_value"]).backward()
+                        scaler3.unscale_(value_opt)
+                    else:
+                        value_loss_td["loss_value"].backward()
+                    critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
+                    if use_autocast:
+                        scaler3.step(value_opt)
+                        scaler3.update()
+                    else:
+                        value_opt.step()
 
         metrics_to_log = {"reward": ep_reward.mean().item()}
         if collected_frames >= init_random_frames:
@@ -274,12 +268,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 "world_model_grad": world_model_grad,
                 "actor_model_grad": actor_model_grad,
                 "critic_model_grad": critic_model_grad,
-                "t_loss_actor": t_loss_actor,
-                "t_loss_critic": t_loss_critic,
-                "t_loss_model": t_loss_model,
-                "t_sample": t_sample,
-                "t_preproc": t_preproc,
-                "t_collect": t_collect,
+                # All timing now via timeit
                 **timeit.todict(prefix="time"),
             }
             metrics_to_log.update(loss_metrics)
@@ -324,8 +313,6 @@ def main(cfg: DictConfig):  # noqa: F821
                     eval_metrics = {"eval/simulated_reward": eval_reward}
                     if logger is not None:
                         log_metrics(logger, eval_metrics, collected_frames)
-
-        t_collect_init = time.time()
 
     if not test_env.is_closed:
         test_env.close()
