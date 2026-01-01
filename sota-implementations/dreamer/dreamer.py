@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import time
 
 import hydra
 import torch
@@ -27,7 +28,6 @@ from torch.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import RSSMRollout
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -176,23 +176,21 @@ def main(cfg: DictConfig):  # noqa: F821
     if cfg.optimization.compile:
         torch._dynamo.config.capture_scalar_outputs = True
 
-        torchrl_logger.info("Compiling")
+        torchrl_logger.info("Compiling loss modules")
         backend = cfg.optimization.compile_backend
 
-        def compile_rssms(module):
-            if isinstance(module, RSSMRollout) and not getattr(
-                module, "_compiled", False
-            ):
-                module._compiled = True
-                module.rssm_prior.module = torch.compile(
-                    module.rssm_prior.module, backend=backend
-                )
-                module.rssm_posterior.module = torch.compile(
-                    module.rssm_posterior.module, backend=backend
-                )
+        # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
+        # shared with the policy used in the collector. Compiling them would cause
+        # issues with the MultiCollector workers.
+        # 
+        # Instead, we compile the loss modules themselves which wraps the forward pass.
+        world_model_loss = torch.compile(world_model_loss, backend=backend)
+        actor_loss = torch.compile(actor_loss, backend=backend)
+        value_loss = torch.compile(value_loss, backend=backend)
 
-        world_model_loss.apply(compile_rssms)
-
+    # Throughput tracking
+    t_iter_start = time.time()
+    
     for i, tensordict in enumerate(collector):
         # Note: Collection time is implicitly measured by the collector's iteration
         # The time between loop iterations that isn't training is effectively collection time
@@ -297,8 +295,25 @@ def main(cfg: DictConfig):  # noqa: F821
                     else:
                         value_opt.step()
 
+        # Compute throughput metrics
+        t_iter_end = time.time()
+        iter_time = t_iter_end - t_iter_start
+        
+        # FPS: Frames (env steps) collected per second
+        fps = current_frames / iter_time if iter_time > 0 else 0
+        
         metrics_to_log = {"reward": ep_reward.mean().item()}
         if collected_frames >= init_random_frames:
+            # SPS: Samples (batch elements) processed per second
+            # Each optim step processes batch_size samples
+            total_samples = optim_steps_per_batch * batch_size
+            sps = total_samples / iter_time if iter_time > 0 else 0
+            
+            # UPS: Updates (gradient steps) per second
+            # 3 updates per optim step (world_model, actor, value)
+            total_updates = optim_steps_per_batch * 3
+            ups = total_updates / iter_time if iter_time > 0 else 0
+            
             loss_metrics = {
                 "loss_model_kl": model_loss_td["loss_model_kl"].item(),
                 "loss_model_reco": model_loss_td["loss_model_reco"].item(),
@@ -308,14 +323,26 @@ def main(cfg: DictConfig):  # noqa: F821
                 "world_model_grad": world_model_grad,
                 "actor_model_grad": actor_model_grad,
                 "critic_model_grad": critic_model_grad,
+                # Throughput metrics
+                "throughput/fps": fps,  # Frames per second (collection)
+                "throughput/sps": sps,  # Samples per second (training)
+                "throughput/ups": ups,  # Updates per second (gradient steps)
+                "throughput/iter_time": iter_time,  # Total iteration time
                 # All timing now via timeit
                 **timeit.todict(prefix="time"),
             }
             metrics_to_log.update(loss_metrics)
+        else:
+            # During random collection phase, only log FPS
+            metrics_to_log["throughput/fps"] = fps
+            metrics_to_log["throughput/iter_time"] = iter_time
 
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
 
+        # Reset timer for next iteration
+        t_iter_start = time.time()
+        
         policy[1].step(current_frames)
         collector.update_policy_weights_()
         # Evaluation
