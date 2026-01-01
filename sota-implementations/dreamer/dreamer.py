@@ -183,11 +183,12 @@ def main(cfg: DictConfig):  # noqa: F821
         # issues with the MultiCollector workers.
         #
         # Instead, we compile the loss modules themselves which wraps the forward pass.
-        # The encoder/decoder now use .contiguous() to ensure proper memory layout
-        # for torch.compile compatibility.
-        world_model_loss = torch.compile(world_model_loss, backend=backend)
-        actor_loss = torch.compile(actor_loss, backend=backend)
-        value_loss = torch.compile(value_loss, backend=backend)
+        # fullgraph=False allows graph breaks which can help with inductor issues.
+        world_model_loss = torch.compile(
+            world_model_loss, backend=backend, fullgraph=False
+        )
+        actor_loss = torch.compile(actor_loss, backend=backend, fullgraph=False)
+        value_loss = torch.compile(value_loss, backend=backend, fullgraph=False)
 
     # Throughput tracking
     t_iter_start = time.time()
@@ -233,6 +234,9 @@ def main(cfg: DictConfig):  # noqa: F821
                             + model_loss_td["loss_model_reco"]
                             + model_loss_td["loss_model_reward"]
                         )
+                    torchrl_logger.debug(
+                        f"world_model_loss forward OK, loss={loss_world_model.item():.4f}"
+                    )
 
                 with timeit("train/world_model-backward"):
                     world_model_opt.zero_grad()
@@ -241,6 +245,7 @@ def main(cfg: DictConfig):  # noqa: F821
                         scaler1.unscale_(world_model_opt)
                     else:
                         loss_world_model.backward()
+                    torchrl_logger.debug("world_model_loss backward OK")
                     world_model_grad = clip_grad_norm_(
                         world_model.parameters(), grad_clip
                     )
@@ -258,6 +263,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         actor_loss_td, sampled_tensordict = actor_loss(
                             sampled_tensordict.reshape(-1)
                         )
+                    torchrl_logger.debug(
+                        f"actor_loss forward OK, loss={actor_loss_td['loss_actor'].item():.4f}"
+                    )
 
                 with timeit("train/actor-backward"):
                     actor_opt.zero_grad()
@@ -266,6 +274,7 @@ def main(cfg: DictConfig):  # noqa: F821
                         scaler2.unscale_(actor_opt)
                     else:
                         actor_loss_td["loss_actor"].backward()
+                    torchrl_logger.debug("actor_loss backward OK")
                     actor_model_grad = clip_grad_norm_(
                         actor_model.parameters(), grad_clip
                     )
@@ -283,6 +292,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         value_loss_td, sampled_tensordict = value_loss(
                             sampled_tensordict
                         )
+                    torchrl_logger.debug(
+                        f"value_loss forward OK, loss={value_loss_td['loss_value'].item():.4f}"
+                    )
 
                 with timeit("train/value-backward"):
                     value_opt.zero_grad()
@@ -291,6 +303,7 @@ def main(cfg: DictConfig):  # noqa: F821
                         scaler3.unscale_(value_opt)
                     else:
                         value_loss_td["loss_value"].backward()
+                    torchrl_logger.debug("value_loss backward OK")
                     critic_model_grad = clip_grad_norm_(
                         value_model.parameters(), grad_clip
                     )
