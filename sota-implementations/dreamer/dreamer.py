@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import time
 
 import hydra
 import torch
@@ -20,6 +19,7 @@ from dreamer_utils import (
     make_dreamer,
     make_environments,
     make_replay_buffer,
+    make_storage_transform,
 )
 
 # mixed precision training
@@ -53,7 +53,8 @@ def main(cfg: DictConfig):  # noqa: F821
             wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
         )
 
-    train_env, test_env = make_environments(
+    # make_environments returns (train_env_factory, test_env) for async collection
+    train_env_factory, test_env = make_environments(
         cfg=cfg,
         parallel_envs=cfg.env.n_parallel_envs,
         logger=logger,
@@ -98,29 +99,37 @@ def main(cfg: DictConfig):  # noqa: F821
         value_model, discount_loss=True, gamma=cfg.optimization.gamma
     )
 
-    # Make collector
-    collector = make_collector(cfg, train_env, policy)
+    # Make async multi-collector (uses env factory for worker processes)
+    collector = make_collector(cfg, train_env_factory, policy)
 
-    # Make replay buffer
+    # Make replay buffer with minimal sample-time transforms
     batch_size = cfg.replay_buffer.batch_size
     batch_length = cfg.replay_buffer.batch_length
     buffer_size = cfg.replay_buffer.buffer_size
     scratch_dir = cfg.replay_buffer.scratch_dir
+    prefetch = cfg.replay_buffer.prefetch
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
         buffer_size=buffer_size,
         buffer_scratch_dir=scratch_dir,
         device=device,
+        prefetch=prefetch,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
-        use_autocast=cfg.optimization.use_autocast,
         compile=(
             {"backend": cfg.optimization.compile_backend}
             if cfg.optimization.compile
             else False
         ),
+    )
+
+    # Create storage transform for extend-time processing (applied once per frame)
+    storage_transform = make_storage_transform(
+        pixel_obs=cfg.env.from_pixels,
+        grayscale=cfg.env.grayscale,
+        image_size=cfg.env.image_size,
     )
 
     # Training loop
@@ -135,8 +144,20 @@ def main(cfg: DictConfig):  # noqa: F821
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
 
     # Grad scaler for mixed precision training https://pytorch.org/docs/stable/amp.html
-    use_autocast = cfg.optimization.use_autocast
-    if use_autocast:
+    # autocast can be: false, true (=bfloat16), float16, bfloat16
+    autocast_cfg = cfg.optimization.autocast
+    if autocast_cfg in (False, "false", "False"):
+        autocast_dtype = None
+    elif autocast_cfg in (True, "true", "True", "bfloat16"):
+        autocast_dtype = torch.bfloat16
+    elif autocast_cfg == "float16":
+        autocast_dtype = torch.float16
+    else:
+        raise ValueError(
+            f"Invalid autocast value: {autocast_cfg}. Use false, true, float16, or bfloat16."
+        )
+
+    if autocast_dtype is not None:
         scaler1 = GradScaler()
         scaler2 = GradScaler()
         scaler3 = GradScaler()
@@ -176,20 +197,26 @@ def main(cfg: DictConfig):  # noqa: F821
             collected_frames += current_frames
 
             ep_reward = tensordict.get("episode_reward")[..., -1, 0]
-            replay_buffer.extend(tensordict.cpu())
+            # Apply storage transforms (ToTensorImage, Resize, GrayScale) once at extend-time
+            tensordict_cpu = tensordict.cpu()
+            if storage_transform is not None:
+                tensordict_cpu = storage_transform(tensordict_cpu)
+            replay_buffer.extend(tensordict_cpu)
 
         if collected_frames >= init_random_frames:
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
                 with timeit("train/sample"):
-                    sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
+                    sampled_tensordict = replay_buffer.sample().reshape(
+                        -1, batch_length
+                    )
 
                 # update world model
                 with timeit("train/world_model-forward"):
                     with torch.autocast(
                         device_type=device.type,
-                        dtype=torch.float16,
-                    ) if use_autocast else contextlib.nullcontext():
+                        dtype=autocast_dtype,
+                    ) if autocast_dtype else contextlib.nullcontext():
                         model_loss_td, sampled_tensordict = world_model_loss(
                             sampled_tensordict
                         )
@@ -201,13 +228,15 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 with timeit("train/world_model-backward"):
                     world_model_opt.zero_grad()
-                    if use_autocast:
+                    if autocast_dtype:
                         scaler1.scale(loss_world_model).backward()
                         scaler1.unscale_(world_model_opt)
                     else:
                         loss_world_model.backward()
-                    world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-                    if use_autocast:
+                    world_model_grad = clip_grad_norm_(
+                        world_model.parameters(), grad_clip
+                    )
+                    if autocast_dtype:
                         scaler1.step(world_model_opt)
                         scaler1.update()
                     else:
@@ -216,21 +245,23 @@ def main(cfg: DictConfig):  # noqa: F821
                 # update actor network
                 with timeit("train/actor-forward"):
                     with torch.autocast(
-                        device_type=device.type, dtype=torch.float16
-                    ) if use_autocast else contextlib.nullcontext():
+                        device_type=device.type, dtype=autocast_dtype
+                    ) if autocast_dtype else contextlib.nullcontext():
                         actor_loss_td, sampled_tensordict = actor_loss(
                             sampled_tensordict.reshape(-1)
                         )
 
                 with timeit("train/actor-backward"):
                     actor_opt.zero_grad()
-                    if use_autocast:
+                    if autocast_dtype:
                         scaler2.scale(actor_loss_td["loss_actor"]).backward()
                         scaler2.unscale_(actor_opt)
                     else:
                         actor_loss_td["loss_actor"].backward()
-                    actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-                    if use_autocast:
+                    actor_model_grad = clip_grad_norm_(
+                        actor_model.parameters(), grad_clip
+                    )
+                    if autocast_dtype:
                         scaler2.step(actor_opt)
                         scaler2.update()
                     else:
@@ -239,19 +270,23 @@ def main(cfg: DictConfig):  # noqa: F821
                 # update value network
                 with timeit("train/value-forward"):
                     with torch.autocast(
-                        device_type=device.type, dtype=torch.float16
-                    ) if use_autocast else contextlib.nullcontext():
-                        value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                        device_type=device.type, dtype=autocast_dtype
+                    ) if autocast_dtype else contextlib.nullcontext():
+                        value_loss_td, sampled_tensordict = value_loss(
+                            sampled_tensordict
+                        )
 
                 with timeit("train/value-backward"):
                     value_opt.zero_grad()
-                    if use_autocast:
+                    if autocast_dtype:
                         scaler3.scale(value_loss_td["loss_value"]).backward()
                         scaler3.unscale_(value_opt)
                     else:
                         value_loss_td["loss_value"].backward()
-                    critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-                    if use_autocast:
+                    critic_model_grad = clip_grad_norm_(
+                        value_model.parameters(), grad_clip
+                    )
+                    if autocast_dtype:
                         scaler3.step(value_opt)
                         scaler3.update()
                     else:
@@ -316,12 +351,10 @@ def main(cfg: DictConfig):  # noqa: F821
 
     if not test_env.is_closed:
         test_env.close()
-    if not train_env.is_closed:
-        train_env.close()
+    # Note: train envs are managed by the collector workers
     collector.shutdown()
 
     del test_env
-    del train_env
     del collector
 
 
