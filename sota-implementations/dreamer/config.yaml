@@ -15,6 +15,8 @@ collector:
   total_frames: 5_000_000
   init_random_frames: 3000
   frames_per_batch: 1000
+  # Number of parallel collector workers (async mode)
+  num_collectors: 8
   device:
 
 optimization:
@@ -26,13 +28,14 @@ optimization:
   value_lr: 8e-5
   kl_scale: 1.0
   free_nats: 3.0
-  optim_steps_per_batch: 80
+  optim_steps_per_batch: 40
   gamma: 0.99
   lmbda: 0.95
   imagination_horizon: 15
   compile: False
   compile_backend: inductor
-  use_autocast: True
+  # Autocast options: false, true (=bfloat16), float16, bfloat16
+  autocast: bfloat16
 
 networks:
   exploration_noise: 0.3
@@ -44,10 +47,11 @@ networks:
 
 
 replay_buffer: 
-  batch_size: 2500
+  batch_size: 5000
   buffer_size: 1000000
   batch_length: 50
   scratch_dir: null
+  prefetch: 8
 
 logger:
   backend: wandb

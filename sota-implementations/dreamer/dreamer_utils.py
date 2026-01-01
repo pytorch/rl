@@ -19,7 +19,7 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import MultiCollector
 
 from torchrl.data import (
     Composite,
@@ -129,15 +129,28 @@ def transform_env(cfg, env):
 
 
 def make_environments(cfg, parallel_envs=1, logger=None):
-    """Make environments for training and evaluation."""
-    func = functools.partial(_make_env, cfg=cfg, device=_default_device(cfg.env.device))
-    train_env = ParallelEnv(
-        parallel_envs,
-        EnvCreator(func),
-        serial_for_single=True,
-    )
-    train_env = transform_env(cfg, train_env)
-    train_env.set_seed(cfg.env.seed)
+    """Make environments for training and evaluation.
+
+    Returns:
+        train_env_factory: A callable that creates a training environment (for MultiCollector)
+        eval_env: The evaluation environment instance
+    """
+
+    def train_env_factory():
+        """Factory function for creating training environments."""
+        func = functools.partial(
+            _make_env, cfg=cfg, device=_default_device(cfg.env.device)
+        )
+        train_env = ParallelEnv(
+            parallel_envs,
+            EnvCreator(func),
+            serial_for_single=True,
+        )
+        train_env = transform_env(cfg, train_env)
+        train_env.set_seed(cfg.env.seed)
+        return train_env
+
+    # Create eval env directly (not a factory)
     func = functools.partial(
         _make_env,
         cfg=cfg,
@@ -153,9 +166,15 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     eval_env.set_seed(cfg.env.seed + 1)
     if cfg.logger.video:
         eval_env.insert_transform(0, VideoRecorder(logger, tag="eval/video"))
-    check_env_specs(train_env)
+
+    # Check specs on a temporary train env
+    temp_train_env = train_env_factory()
+    check_env_specs(temp_train_env)
+    temp_train_env.close()
+    del temp_train_env
+
     check_env_specs(eval_env)
-    return train_env, eval_env
+    return train_env_factory, eval_env
 
 
 def dump_video(module):
@@ -332,21 +351,62 @@ def make_dreamer(
     )
 
 
-def make_collector(cfg, train_env, actor_model_explore):
-    """Make collector."""
-    collector = SyncDataCollector(
-        train_env,
-        actor_model_explore,
-        init_random_frames=cfg.collector.init_random_frames,
+def make_collector(cfg, train_env_factory, actor_model_explore):
+    """Make async multi-collector for parallel data collection.
+
+    Args:
+        cfg: Configuration object
+        train_env_factory: A callable that creates a training environment
+        actor_model_explore: The exploration policy
+
+    Returns:
+        MultiCollector in async mode with multiple worker processes
+    """
+    num_collectors = cfg.collector.num_collectors
+
+    collector = MultiCollector(
+        create_env_fn=[train_env_factory] * num_collectors,
+        policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
+        init_random_frames=cfg.collector.init_random_frames,
         policy_device=_default_device(cfg.collector.device),
-        env_device=train_env.device,
         storing_device="cpu",
+        sync=False,  # Async mode for overlapping collection with training
+        update_at_each_batch=True,
     )
     collector.set_seed(cfg.env.seed)
 
     return collector
+
+
+def make_storage_transform(
+    *,
+    pixel_obs=True,
+    grayscale=True,
+    image_size,
+):
+    """Create transforms to be applied at extend-time (once per frame).
+
+    These heavy transforms (ToTensorImage, GrayScale, Resize) are applied once
+    when data is added to the buffer, rather than on every sample.
+    """
+    if not pixel_obs:
+        return None
+
+    storage_transforms = Compose(
+        ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
+        ToTensorImage(
+            in_keys=["pixels_int", ("next", "pixels_int")],
+            out_keys=["pixels", ("next", "pixels")],
+        ),
+    )
+    if grayscale:
+        storage_transforms.append(GrayScale(in_keys=["pixels", ("next", "pixels")]))
+    storage_transforms.append(
+        Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
+    )
+    return storage_transforms
 
 
 def make_replay_buffer(
@@ -356,39 +416,26 @@ def make_replay_buffer(
     buffer_size=1000000,
     buffer_scratch_dir=None,
     device=None,
-    prefetch=3,
+    prefetch=8,
     pixel_obs=True,
     grayscale=True,
     image_size,
-    use_autocast,
     compile: bool | dict = False,
 ):
+    """Create replay buffer with minimal sample-time transforms.
+
+    Heavy image transforms are expected to be applied at extend-time using
+    make_storage_transform(). Only DeviceCastTransform is applied at sample-time.
+    """
     with (
         tempfile.TemporaryDirectory()
         if buffer_scratch_dir is None
         else nullcontext(buffer_scratch_dir)
     ) as scratch_dir:
-        transforms = Compose()
-        if pixel_obs:
-
-            def check_no_pixels(data):
-                assert "pixels" not in data.keys()
-                return data
-
-            transforms = Compose(
-                ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
-                check_no_pixels,  # will be called only during forward
-                ToTensorImage(
-                    in_keys=["pixels_int", ("next", "pixels_int")],
-                    out_keys=["pixels", ("next", "pixels")],
-                ),
-            )
-            if grayscale:
-                transforms.append(GrayScale(in_keys=["pixels", ("next", "pixels")]))
-            transforms.append(
-                Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
-            )
-        transforms.append(DeviceCastTransform(device=device))
+        # Sample-time transforms: only device transfer (fast)
+        sample_transforms = Compose(
+            DeviceCastTransform(device=device),
+        )
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
@@ -406,7 +453,7 @@ def make_replay_buffer(
                 cache_values=True,
                 compile=compile,
             ),
-            transform=transforms,
+            transform=sample_transforms,
             batch_size=batch_size,
         )
         return replay_buffer
