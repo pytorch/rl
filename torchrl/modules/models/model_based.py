@@ -139,7 +139,7 @@ class ObsEncoder(nn.Module):
         # Flatten batch dims -> encoder -> unflatten batch dims
         if batch_sizes:
             observation = observation.flatten(0, len(batch_sizes) - 1).contiguous()
-        obs_encoded = self.encoder(observation)
+        obs_encoded = self.encoder(observation.clone())
         obs_encoded = obs_encoded.flatten(1)  # flatten spatial dims
         if batch_sizes:
             obs_encoded = obs_encoded.unflatten(0, batch_sizes).contiguous()
@@ -224,7 +224,7 @@ class ObsDecoder(nn.Module):
         if batch_sizes:
             latent = latent.flatten(0, len(batch_sizes) - 1)
         latent = latent.unsqueeze(-1).unsqueeze(-1).contiguous()  # add spatial dims
-        obs_decoded = self.decoder(latent)
+        obs_decoded = self.decoder(latent.clone())
         if batch_sizes:
             obs_decoded = obs_decoded.unflatten(0, batch_sizes).contiguous()
         return obs_decoded
