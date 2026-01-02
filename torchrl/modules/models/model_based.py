@@ -17,18 +17,17 @@ from tensordict.nn import (
 )
 from torch import nn
 
+# from torchrl.modules.tensordict_module.rnn import GRUCell
+from torch.nn import GRUCell
+from torchrl._utils import timeit
+from torchrl.modules.models.models import MLP
+
 
 class _Contiguous(nn.Module):
     """Helper module to ensure contiguous memory layout for torch.compile compatibility."""
 
     def forward(self, x):
         return x.contiguous()
-
-
-# from torchrl.modules.tensordict_module.rnn import GRUCell
-from torch.nn import GRUCell
-from torchrl._utils import timeit
-from torchrl.modules.models.models import MLP
 
 
 def _maybe_timeit(name):
