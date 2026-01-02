@@ -187,8 +187,8 @@ def main(cfg: DictConfig):  # noqa: F821
         world_model_loss = torch.compile(
             world_model_loss, backend=backend, fullgraph=False
         )
-        actor_loss = torch.compile(actor_loss, backend=backend, fullgraph=False)
-        value_loss = torch.compile(value_loss, backend=backend, fullgraph=False)
+        actor_loss = torch.compile(actor_loss, backend=backend)
+        value_loss = torch.compile(value_loss, backend=backend)
 
     # Throughput tracking
     t_iter_start = time.time()

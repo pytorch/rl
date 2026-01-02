@@ -27,3 +27,4 @@ develop: rebuild
 # Run tests
 test:
 	python -m pytest test/ -v --timeout 60
+
