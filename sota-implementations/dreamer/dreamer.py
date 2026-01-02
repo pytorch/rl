@@ -11,6 +11,7 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+from omegaconf import DictConfig
 
 from dreamer_utils import (
     _default_device,
@@ -222,6 +223,8 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 # update world model
                 with timeit("train/world_model-forward"):
+                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                    torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
                         device_type=device.type,
                         dtype=autocast_dtype,
@@ -257,6 +260,8 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 # update actor network
                 with timeit("train/actor-forward"):
+                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                    torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
                         device_type=device.type, dtype=autocast_dtype
                     ) if autocast_dtype else contextlib.nullcontext():
@@ -286,6 +291,8 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 # update value network
                 with timeit("train/value-forward"):
+                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                    torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
                         device_type=device.type, dtype=autocast_dtype
                     ) if autocast_dtype else contextlib.nullcontext():
