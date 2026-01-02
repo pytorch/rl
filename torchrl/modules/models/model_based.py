@@ -273,16 +273,17 @@ class RSSMRollout(TensorDictModuleBase):
             with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
                 self.rssm_posterior(_tensordict)
 
-            tensordict_out.append(_tensordict)
+            # Clone before appending to prevent CUDAGraph memory overwrite
+            tensordict_out.append(_tensordict.clone())
             if t < time_steps - 1:
                 # Propagate the posterior state and belief to the next timestep.
                 # The prior needs "state" and "belief" at root, but they were written
                 # to ("next", "state") and ("next", "belief") by the current step.
-                next_state = _tensordict.get(("next", "state")).clone()
-                next_belief = _tensordict.get(("next", "belief")).clone()
+                next_state = _tensordict.get(("next", "state"))
+                next_belief = _tensordict.get(("next", "belief"))
 
                 # Start with the next timestep's data (action, encoded_latents, etc.)
-                _tensordict = update_values[t + 1].clone()
+                _tensordict = update_values[t + 1]
 
                 # Set the propagated state and belief for the next iteration
                 _tensordict.set("state", next_state)
