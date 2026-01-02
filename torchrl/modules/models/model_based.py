@@ -136,16 +136,14 @@ class ObsEncoder(nn.Module):
 
     def forward(self, observation):
         *batch_sizes, C, H, W = observation.shape
-        if len(batch_sizes) == 0:
-            end_dim = 0
-        else:
-            end_dim = len(batch_sizes) - 1
-        # Flatten batch dims and ensure contiguous for torch.compile
-        observation = torch.flatten(observation, start_dim=0, end_dim=end_dim).contiguous()
+        # Flatten batch dims -> encoder -> unflatten batch dims
+        if batch_sizes:
+            observation = observation.flatten(0, len(batch_sizes) - 1).contiguous()
         obs_encoded = self.encoder(observation)
-        # Reshape and ensure contiguous for torch.compile compatibility
-        latent = obs_encoded.reshape(*batch_sizes, -1).contiguous()
-        return latent
+        obs_encoded = obs_encoded.flatten(1)  # flatten spatial dims
+        if batch_sizes:
+            obs_encoded = obs_encoded.unflatten(0, batch_sizes).contiguous()
+        return obs_encoded
 
 
 class ObsDecoder(nn.Module):
@@ -222,11 +220,13 @@ class ObsDecoder(nn.Module):
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
-        # Reshape then ensure contiguous layout for torch.compile compatibility
-        latent = latent.reshape(-1, D, 1, 1).contiguous()
+        # Flatten batch dims -> decoder -> unflatten batch dims
+        if batch_sizes:
+            latent = latent.flatten(0, len(batch_sizes) - 1)
+        latent = latent.unsqueeze(-1).unsqueeze(-1).contiguous()  # add spatial dims
         obs_decoded = self.decoder(latent)
-        _, C, H, W = obs_decoded.shape
-        obs_decoded = obs_decoded.reshape(*batch_sizes, C, H, W).contiguous()
+        if batch_sizes:
+            obs_decoded = obs_decoded.unflatten(0, batch_sizes).contiguous()
         return obs_decoded
 
 
