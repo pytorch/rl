@@ -263,6 +263,9 @@ class RSSMRollout(TensorDictModuleBase):
         update_values = tensordict.exclude(*self.out_keys).unbind(-1)
         _tensordict = update_values[0]
         for t in range(time_steps):
+            # Mark step begin for CUDAGraph to prevent tensor memory reuse across iterations
+            torch.compiler.cudagraph_mark_step_begin()
+            
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
             with _maybe_timeit("rssm_rollout/time-rssm_prior"):
