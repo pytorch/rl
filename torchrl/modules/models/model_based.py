@@ -278,8 +278,8 @@ class RSSMRollout(TensorDictModuleBase):
                 # Propagate the posterior state and belief to the next timestep.
                 # The prior needs "state" and "belief" at root, but they were written
                 # to ("next", "state") and ("next", "belief") by the current step.
-                next_state = _tensordict.get(("next", "state"))
-                next_belief = _tensordict.get(("next", "belief"))
+                next_state = _tensordict.get(("next", "state")).clone()
+                next_belief = _tensordict.get(("next", "belief")).clone()
 
                 # Start with the next timestep's data (action, encoded_latents, etc.)
                 _tensordict = update_values[t + 1].clone()
