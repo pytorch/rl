@@ -274,13 +274,15 @@ class RSSMRollout(TensorDictModuleBase):
                 self.rssm_posterior(_tensordict)
 
             # Clone before appending to prevent CUDAGraph memory overwrite
-            tensordict_out.append(_tensordict.clone())
+            # Use to_tensordict() for a guaranteed deep copy of all tensors
+            tensordict_out.append(_tensordict.to_tensordict())
             if t < time_steps - 1:
                 # Propagate the posterior state and belief to the next timestep.
                 # The prior needs "state" and "belief" at root, but they were written
                 # to ("next", "state") and ("next", "belief") by the current step.
-                next_state = _tensordict.get(("next", "state"))
-                next_belief = _tensordict.get(("next", "belief"))
+                # Clone these tensors to avoid CUDAGraph memory reuse issues
+                next_state = _tensordict.get(("next", "state")).clone()
+                next_belief = _tensordict.get(("next", "belief")).clone()
 
                 # Start with the next timestep's data (action, encoded_latents, etc.)
                 # Clone to avoid modifying the original update_values
