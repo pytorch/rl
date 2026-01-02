@@ -27,7 +27,7 @@ from dreamer_utils import (
 # mixed precision training
 from torch.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -176,7 +176,7 @@ def main(cfg: DictConfig):  # noqa: F821
     if cfg.optimization.compile:
         torch._dynamo.config.capture_scalar_outputs = True
 
-        torchrl_logger.info("Compiling loss modules")
+        torchrl_logger.info("Compiling loss modules with warmup=3")
         backend = cfg.optimization.compile_backend
 
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
@@ -185,11 +185,12 @@ def main(cfg: DictConfig):  # noqa: F821
         #
         # Instead, we compile the loss modules themselves which wraps the forward pass.
         # fullgraph=False allows graph breaks which can help with inductor issues.
-        world_model_loss = torch.compile(
-            world_model_loss, backend=backend, fullgraph=False
+        # warmup=3 runs eagerly for first 3 calls before compiling.
+        world_model_loss = compile_with_warmup(
+            world_model_loss, backend=backend, fullgraph=False, warmup=3
         )
-        actor_loss = torch.compile(actor_loss, backend=backend)
-        value_loss = torch.compile(value_loss, backend=backend)
+        actor_loss = compile_with_warmup(actor_loss, backend=backend, warmup=3)
+        value_loss = compile_with_warmup(value_loss, backend=backend, warmup=3)
 
     # Throughput tracking
     t_iter_start = time.time()
