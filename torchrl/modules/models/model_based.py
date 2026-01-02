@@ -283,7 +283,8 @@ class RSSMRollout(TensorDictModuleBase):
                 next_belief = _tensordict.get(("next", "belief"))
 
                 # Start with the next timestep's data (action, encoded_latents, etc.)
-                _tensordict = update_values[t + 1]
+                # Clone to avoid modifying the original update_values
+                _tensordict = update_values[t + 1].clone()
 
                 # Set the propagated state and belief for the next iteration
                 _tensordict.set("state", next_state)
