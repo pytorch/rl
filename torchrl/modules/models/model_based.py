@@ -279,6 +279,7 @@ class RSSMRollout(TensorDictModuleBase):
         update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
         _tensordict = update_values[0]
         for t in range(time_steps):
+            torch._dynamo.graph_break()
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
             with _maybe_timeit("rssm_rollout/time-rssm_prior"):
