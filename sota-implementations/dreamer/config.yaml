@@ -33,7 +33,7 @@ optimization:
   lmbda: 0.95
   imagination_horizon: 15
   compile: True
-  compile_backend: inductor
+  compile_backend: cudagraphs
   # Autocast options: false, true (=bfloat16), float16, bfloat16
   autocast: bfloat16
 
