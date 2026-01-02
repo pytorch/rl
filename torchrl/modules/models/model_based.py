@@ -17,6 +17,14 @@ from tensordict.nn import (
 )
 from torch import nn
 
+
+class _Contiguous(nn.Module):
+    """Helper module to ensure contiguous memory layout for torch.compile compatibility."""
+
+    def forward(self, x):
+        return x.contiguous()
+
+
 # from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
 from torchrl._utils import timeit
@@ -121,15 +129,18 @@ class ObsEncoder(nn.Module):
             first_conv = nn.Conv2d(in_channels, channels, 4, stride=2)
         else:
             first_conv = nn.LazyConv2d(channels, 4, stride=2)
+        # _Contiguous after ReLU ensures NCHW layout for torch.compile inductor compatibility
         layers = [
             first_conv,
             nn.ReLU(),
+            _Contiguous(),
         ]
         k = 1
         for _ in range(1, num_layers):
             layers += [
                 nn.Conv2d(channels * k, channels * (k * 2), 4, stride=2),
                 nn.ReLU(),
+                _Contiguous(),
             ]
             k = k * 2
         self.encoder = nn.Sequential(*layers)
@@ -192,8 +203,10 @@ class ObsDecoder(nn.Module):
             kernel_sizes = 5
         if isinstance(kernel_sizes, int):
             kernel_sizes = [kernel_sizes] * num_layers
+        # _Contiguous after ReLU ensures NCHW layout for torch.compile inductor compatibility
         layers = [
             nn.ReLU(),
+            _Contiguous(),
             nn.ConvTranspose2d(channels, 3, kernel_sizes[-1], stride=2),
         ]
         kernel_sizes = kernel_sizes[:-1]
@@ -207,7 +220,7 @@ class ObsDecoder(nn.Module):
                 ] + layers
                 kernel_sizes = kernel_sizes[:-1]
                 k = k * 2
-                layers = [nn.ReLU()] + layers
+                layers = [nn.ReLU(), _Contiguous()] + layers
             else:
                 # Use explicit ConvTranspose2d - input is always channels * 8 from state_to_latent
                 layers = [
