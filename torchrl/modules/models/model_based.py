@@ -143,7 +143,8 @@ class ObsEncoder(nn.Module):
         # Flatten batch dims and ensure contiguous for torch.compile
         observation = torch.flatten(observation, start_dim=0, end_dim=end_dim).contiguous()
         obs_encoded = self.encoder(observation)
-        latent = obs_encoded.reshape(*batch_sizes, -1)
+        # Reshape and ensure contiguous for torch.compile compatibility
+        latent = obs_encoded.reshape(*batch_sizes, -1).contiguous()
         return latent
 
 
