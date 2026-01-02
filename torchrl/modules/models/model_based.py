@@ -260,7 +260,7 @@ class RSSMRollout(TensorDictModuleBase):
         tensordict_out = []
         *batch, time_steps = tensordict.shape
 
-        update_values = tensordict.exclude(*self.out_keys).unbind(-1)
+        update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
         _tensordict = update_values[0]
         for t in range(time_steps):
             # Mark step begin for CUDAGraph to prevent tensor memory reuse across iterations
@@ -276,9 +276,8 @@ class RSSMRollout(TensorDictModuleBase):
             with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
                 self.rssm_posterior(_tensordict)
 
-            # Clone before appending to prevent CUDAGraph memory overwrite
-            # Use to_tensordict() for a guaranteed deep copy of all tensors
-            tensordict_out.append(_tensordict.to_tensordict())
+            # Clone before appending to preserve state for the final stack
+            tensordict_out.append(_tensordict.clone())
             if t < time_steps - 1:
                 # Propagate the posterior state and belief to the next timestep.
                 # The prior needs "state" and "belief" at root, but they were written
