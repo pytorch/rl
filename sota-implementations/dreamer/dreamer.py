@@ -217,10 +217,9 @@ def main(cfg: DictConfig):  # noqa: F821
                     sampled_tensordict = replay_buffer.sample().reshape(
                         -1, batch_length
                     )
-                    # Ensure all tensors are contiguous (NCHW layout) for torch.compile
-                    # The image transforms may produce channels-last tensors which
-                    # cause stride mismatches in the inductor's convolution backward
-                    sampled_tensordict = sampled_tensordict.clone()
+                    # Ensure all tensors are on the correct device and contiguous
+                    # The clone() ensures NCHW layout for torch.compile compatibility
+                    sampled_tensordict = sampled_tensordict.to(device).clone()
 
                 # update world model
                 with timeit("train/world_model-forward"):
