@@ -182,7 +182,7 @@ class DreamerModelLoss(LossModule):
         self._clear_weakrefs(tensordict, td_out)
         return (
             td_out,
-            tensordict.detach(),
+            tensordict.data,
         )
 
     @staticmethod
@@ -294,7 +294,7 @@ class DreamerActorLoss(LossModule):
             )
 
     def forward(self, tensordict: TensorDict) -> tuple[TensorDict, TensorDict]:
-        tensordict = tensordict.select("state", self.tensor_keys.belief).detach()
+        tensordict = tensordict.select("state", self.tensor_keys.belief).data
 
         with _maybe_timeit("actor_loss/time-rollout"), hold_out_net(
             self.model_based_env
@@ -326,7 +326,7 @@ class DreamerActorLoss(LossModule):
             actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         self._clear_weakrefs(tensordict, loss_tensordict)
-        return loss_tensordict, fake_data.detach()
+        return loss_tensordict, fake_data.data
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
