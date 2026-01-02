@@ -182,6 +182,17 @@ def dump_video(module):
         module.dump()
 
 
+def _compute_encoder_output_size(image_size, channels=32, num_layers=4):
+    """Compute the flattened output size of ObsEncoder."""
+    # Compute spatial size after each conv layer (kernel=4, stride=2)
+    size = image_size
+    for _ in range(num_layers):
+        size = (size - 4) // 2 + 1
+    # Final channels = channels * 2^(num_layers-1)
+    final_channels = channels * (2 ** (num_layers - 1))
+    return final_channels * size * size
+
+
 def make_dreamer(
     cfg,
     device,
@@ -193,15 +204,29 @@ def make_dreamer(
 ):
     test_env = _make_env(cfg, device="cpu")
     test_env = transform_env(cfg, test_env)
+    
+    # Get dimensions for explicit module instantiation (avoids lazy modules)
+    state_dim = cfg.networks.state_dim
+    rssm_hidden_dim = cfg.networks.rssm_hidden_dim
+    action_dim = test_env.action_spec.shape[-1]
+    
     # Make encoder and decoder
     if cfg.env.from_pixels:
-        encoder = ObsEncoder()
-        decoder = ObsDecoder()
+        # Determine input channels (1 for grayscale, 3 for RGB)
+        in_channels = 1 if cfg.env.grayscale else 3
+        image_size = cfg.env.image_size
+        
+        # Compute encoder output size for explicit posterior input
+        obs_embed_dim = _compute_encoder_output_size(image_size, channels=32, num_layers=4)
+        
+        encoder = ObsEncoder(in_channels=in_channels)
+        decoder = ObsDecoder(latent_dim=state_dim + rssm_hidden_dim)
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"
     else:
+        obs_embed_dim = 1024  # MLP output size
         encoder = MLP(
-            out_features=1024,
+            out_features=obs_embed_dim,
             depth=2,
             num_cells=cfg.networks.hidden_dim,
             activation_class=get_activation(cfg.networks.activation),
@@ -215,15 +240,19 @@ def make_dreamer(
         observation_in_key = "observation"
         observation_out_key = "reco_observation"
 
-    # Make RSSM
+    # Make RSSM with explicit input sizes (no lazy modules)
     rssm_prior = RSSMPrior(
-        hidden_dim=cfg.networks.rssm_hidden_dim,
-        rnn_hidden_dim=cfg.networks.rssm_hidden_dim,
-        state_dim=cfg.networks.state_dim,
+        hidden_dim=rssm_hidden_dim,
+        rnn_hidden_dim=rssm_hidden_dim,
+        state_dim=state_dim,
         action_spec=test_env.action_spec,
+        action_dim=action_dim,
     )
     rssm_posterior = RSSMPosterior(
-        hidden_dim=cfg.networks.rssm_hidden_dim, state_dim=cfg.networks.state_dim
+        hidden_dim=rssm_hidden_dim,
+        state_dim=state_dim,
+        rnn_hidden_dim=rssm_hidden_dim,
+        obs_embed_dim=obs_embed_dim,
     )
     # Make reward module
     reward_module = MLP(

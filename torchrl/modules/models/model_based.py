@@ -100,9 +100,11 @@ class ObsEncoder(nn.Module):
         channels (int, optional): Number of hidden units in the first layer.
             Defaults to 32.
         num_layers (int, optional): Depth of the network. Defaults to 4.
+        in_channels (int, optional): Number of input channels. If None, uses LazyConv2d.
+            Defaults to None for backward compatibility.
     """
 
-    def __init__(self, channels=32, num_layers=4, depth=None):
+    def __init__(self, channels=32, num_layers=4, in_channels=None, depth=None):
         if depth is not None:
             warnings.warn(
                 f"The depth argument in {type(self)} will soon be deprecated and "
@@ -114,8 +116,13 @@ class ObsEncoder(nn.Module):
         if num_layers < 1:
             raise RuntimeError("num_layers cannot be smaller than 1.")
         super().__init__()
+        # Use explicit Conv2d if in_channels provided, else LazyConv2d for backward compat
+        if in_channels is not None:
+            first_conv = nn.Conv2d(in_channels, channels, 4, stride=2)
+        else:
+            first_conv = nn.LazyConv2d(channels, 4, stride=2)
         layers = [
-            nn.LazyConv2d(channels, 4, stride=2),
+            first_conv,
             nn.ReLU(),
         ]
         k = 1
@@ -153,9 +160,11 @@ class ObsDecoder(nn.Module):
         num_layers (int, optional): Depth of the network. Defaults to 4.
         kernel_sizes (int or list of int, optional): the kernel_size of each layer.
             Defaults to ``[5, 5, 6, 6]`` if num_layers if 4, else ``[5] * num_layers``.
+        latent_dim (int, optional): Input dimension (state_dim + rnn_hidden_dim).
+            If None, uses LazyLinear. Defaults to None for backward compatibility.
     """
 
-    def __init__(self, channels=32, num_layers=4, kernel_sizes=None, depth=None):
+    def __init__(self, channels=32, num_layers=4, kernel_sizes=None, latent_dim=None, depth=None):
         if depth is not None:
             warnings.warn(
                 f"The depth argument in {type(self)} will soon be deprecated and "
@@ -168,8 +177,14 @@ class ObsDecoder(nn.Module):
             raise RuntimeError("num_layers cannot be smaller than 1.")
 
         super().__init__()
+        # Use explicit Linear if latent_dim provided, else LazyLinear for backward compat
+        linear_out = channels * 8 * 2 * 2
+        if latent_dim is not None:
+            first_linear = nn.Linear(latent_dim, linear_out)
+        else:
+            first_linear = nn.LazyLinear(linear_out)
         self.state_to_latent = nn.Sequential(
-            nn.LazyLinear(channels * 8 * 2 * 2),
+            first_linear,
             nn.ReLU(),
         )
         if kernel_sizes is None and num_layers == 4:
@@ -195,8 +210,9 @@ class ObsDecoder(nn.Module):
                 k = k * 2
                 layers = [nn.ReLU()] + layers
             else:
+                # Use explicit ConvTranspose2d - input is always channels * 8 from state_to_latent
                 layers = [
-                    nn.LazyConvTranspose2d(channels * k, kernel_sizes[-1], stride=2)
+                    nn.ConvTranspose2d(linear_out, channels * k, kernel_sizes[-1], stride=2)
                 ] + layers
 
         self.decoder = nn.Sequential(*layers)
@@ -263,9 +279,6 @@ class RSSMRollout(TensorDictModuleBase):
         update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
         _tensordict = update_values[0]
         for t in range(time_steps):
-            # Mark step begin for CUDAGraph to prevent tensor memory reuse across iterations
-            torch.compiler.cudagraph_mark_step_begin()
-            
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
             with _maybe_timeit("rssm_rollout/time-rssm_prior"):
@@ -317,6 +330,8 @@ class RSSMPrior(nn.Module):
             Defaults to 30.
         scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution.
             Defaults to 0.1.
+        action_dim (int, optional): Dimension of the action. If provided along with state_dim,
+            uses explicit Linear instead of LazyLinear. Defaults to None for backward compatibility.
 
 
     """
@@ -328,12 +343,18 @@ class RSSMPrior(nn.Module):
         rnn_hidden_dim=200,
         state_dim=30,
         scale_lb=0.1,
+        action_dim=None,
     ):
         super().__init__()
 
-        # Prior
+        # Prior - use explicit Linear if action_dim provided, else LazyLinear
         self.rnn = GRUCell(hidden_dim, rnn_hidden_dim)
-        self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
+        if action_dim is not None:
+            projector_in = state_dim + action_dim
+            first_linear = nn.Linear(projector_in, hidden_dim)
+        else:
+            first_linear = nn.LazyLinear(hidden_dim)
+        self.action_state_projector = nn.Sequential(first_linear, nn.ELU())
         self.rnn_to_prior_projector = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ELU(),
@@ -389,13 +410,23 @@ class RSSMPosterior(nn.Module):
             Defaults to 30.
         scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution.
             Defaults to 0.1.
+        rnn_hidden_dim (int, optional): Dimension of the belief/rnn hidden state.
+            If provided along with obs_embed_dim, uses explicit Linear. Defaults to None.
+        obs_embed_dim (int, optional): Dimension of the observation embedding.
+            If provided along with rnn_hidden_dim, uses explicit Linear. Defaults to None.
 
     """
 
-    def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1):
+    def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1, rnn_hidden_dim=None, obs_embed_dim=None):
         super().__init__()
+        # Use explicit Linear if both dims provided, else LazyLinear for backward compat
+        if rnn_hidden_dim is not None and obs_embed_dim is not None:
+            projector_in = rnn_hidden_dim + obs_embed_dim
+            first_linear = nn.Linear(projector_in, hidden_dim)
+        else:
+            first_linear = nn.LazyLinear(hidden_dim)
         self.obs_rnn_to_post_projector = nn.Sequential(
-            nn.LazyLinear(hidden_dim),
+            first_linear,
             nn.ELU(),
             nn.Linear(hidden_dim, 2 * state_dim),
             NormalParamExtractor(
