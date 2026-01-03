@@ -255,19 +255,29 @@ class RSSMRollout(TensorDictModuleBase):
     Args:
         rssm_prior (TensorDictModule): Prior network.
         rssm_posterior (TensorDictModule): Posterior network.
+        use_scan (bool, optional): If ``True``, uses ``torch._higher_order_ops.scan`` instead of
+            an explicit for-loop. This enables end-to-end torch.compile without graph breaks.
+            Note that scan is a prototype feature in PyTorch and may have limitations with
+            autograd. Defaults to ``False``.
 
 
     """
 
-    def __init__(self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule):
+    def __init__(
+        self,
+        rssm_prior: TensorDictModule,
+        rssm_posterior: TensorDictModule,
+        use_scan: bool = False,
+    ):
         super().__init__()
         _module = TensorDictSequential(rssm_prior, rssm_posterior)
         self.in_keys = _module.in_keys
         self.out_keys = _module.out_keys
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
+        self.use_scan = use_scan
 
-    def forward(self, tensordict):
+    def forward(self, tensordict, *, prior_noise=None, posterior_noise=None):
         """Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.
 
         The rollout requires a belief and posterior state primer.
@@ -285,23 +295,92 @@ class RSSMRollout(TensorDictModuleBase):
         - A posterior distribution of the form q(s_{t+1} | b_{t+1}, o_{t+1})
             which amends to q(s_{t+1} | s_t, a_t, o_{t+1})
 
+        Args:
+            tensordict (TensorDict): Input tensordict with shape ``(*batch, time_steps)`` containing:
+                - ``"state"``: Initial state tensor with shape ``(*batch, time_steps, state_dim)``.
+                - ``"belief"``: Initial belief tensor with shape ``(*batch, time_steps, rnn_hidden_dim)``.
+                - ``"action"``: Action tensor with shape ``(*batch, time_steps, action_dim)``.
+                - ``("next", "encoded_latents")``: Encoded observations with shape ``(*batch, time_steps, obs_embed_dim)``.
+            prior_noise (torch.Tensor, optional): Pre-computed noise tensor for prior sampling with shape
+                ``(*batch, time_steps, state_dim)``. If ``None``, noise is sampled internally using
+                ``torch.randn_like``. Passing noise enables deterministic execution for testing.
+                Defaults to ``None``.
+            posterior_noise (torch.Tensor, optional): Pre-computed noise tensor for posterior sampling with
+                shape ``(*batch, time_steps, state_dim)``. If ``None``, noise is sampled internally using
+                ``torch.randn_like``. Passing noise enables deterministic execution for testing.
+                Defaults to ``None``.
+
+        Returns:
+            TensorDict: Output tensordict with the same batch size containing prior/posterior
+                means, stds, beliefs, and states for each timestep.
+
+        """
+        if self.use_scan:
+            return self._forward_scan(tensordict, prior_noise=prior_noise, posterior_noise=posterior_noise)
+        return self._forward_loop(tensordict, prior_noise=prior_noise, posterior_noise=posterior_noise)
+
+    def _forward_loop(self, tensordict, *, prior_noise=None, posterior_noise=None):
+        """Forward pass using explicit for-loop with graph breaks.
+
+        Args:
+            tensordict (TensorDict): Input tensordict.
+            prior_noise (torch.Tensor, optional): Noise tensor with shape ``(*batch, time_steps, state_dim)``.
+            posterior_noise (torch.Tensor, optional): Noise tensor with shape ``(*batch, time_steps, state_dim)``.
         """
         tensordict_out = []
         *batch, time_steps = tensordict.shape
+        time_dim = len(batch)
+
+        # When noise is provided, we call raw modules directly to pass the noise
+        use_raw_modules = prior_noise is not None or posterior_noise is not None
 
         update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
         _tensordict = update_values[0]
         for t in range(time_steps):
             torch._dynamo.graph_break()
-            # samples according to p(s_{t+1} | s_t, a_t, b_t)
-            # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            with _maybe_timeit("rssm_rollout/time-rssm_prior"):
-                self.rssm_prior(_tensordict)
 
-            # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
-            # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
-                self.rssm_posterior(_tensordict)
+            if use_raw_modules:
+                # Call raw modules directly to pass noise
+                rssm_prior_module = self.rssm_prior.module
+                rssm_posterior_module = self.rssm_posterior.module
+
+                state = _tensordict.get("state")
+                belief = _tensordict.get("belief")
+                action = _tensordict.get("action")
+                enc_lat = _tensordict.get(("next", "encoded_latents"))
+
+                # Get noise for this timestep
+                prior_noise_t = prior_noise.select(time_dim, t) if prior_noise is not None else None
+                posterior_noise_t = posterior_noise.select(time_dim, t) if posterior_noise is not None else None
+
+                with _maybe_timeit("rssm_rollout/time-rssm_prior"):
+                    prior_mean, prior_std, _, next_belief = rssm_prior_module(
+                        state, belief, action, noise=prior_noise_t
+                    )
+
+                with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
+                    posterior_mean, posterior_std, next_state = rssm_posterior_module(
+                        next_belief, enc_lat, noise=posterior_noise_t
+                    )
+
+                # Write outputs to tensordict
+                _tensordict.set(("next", "prior_mean"), prior_mean)
+                _tensordict.set(("next", "prior_std"), prior_std)
+                _tensordict.set(("next", "belief"), next_belief)
+                _tensordict.set(("next", "posterior_mean"), posterior_mean)
+                _tensordict.set(("next", "posterior_std"), posterior_std)
+                _tensordict.set(("next", "state"), next_state)
+            else:
+                # Use TensorDictModule wrappers (original behavior)
+                # samples according to p(s_{t+1} | s_t, a_t, b_t)
+                # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
+                with _maybe_timeit("rssm_rollout/time-rssm_prior"):
+                    self.rssm_prior(_tensordict)
+
+                # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
+                # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
+                with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
+                    self.rssm_posterior(_tensordict)
 
             # Clone before appending to preserve state for the final stack
             tensordict_out.append(_tensordict.clone())
@@ -322,6 +401,220 @@ class RSSMRollout(TensorDictModuleBase):
                 _tensordict.set("belief", next_belief)
 
         out = torch.stack(tensordict_out, tensordict.ndim - 1)
+        return out
+
+    def _forward_scan(self, tensordict, *, prior_noise=None, posterior_noise=None):
+        """Forward pass using torch._higher_order_ops.scan for torch.compile compatibility.
+
+        This implementation avoids graph breaks by using the scan higher-order op,
+        enabling end-to-end compilation of the RSSM rollout.
+
+        Args:
+            tensordict (TensorDict): Input tensordict.
+            prior_noise (torch.Tensor, optional): Noise tensor with shape ``(*batch, time_steps, state_dim)``.
+            posterior_noise (torch.Tensor, optional): Noise tensor with shape ``(*batch, time_steps, state_dim)``.
+        """
+        from tensordict import TensorDict
+        from torch._higher_order_ops.scan import scan
+
+        *batch, time_steps = tensordict.shape
+
+        # Extract the raw modules from TensorDictModule wrappers
+        rssm_prior_module = self.rssm_prior.module
+        rssm_posterior_module = self.rssm_posterior.module
+
+        # time_dim is where the time dimension sits in the data tensors
+        # tensordict.shape = (*batch, time_steps), so time is at len(batch)
+        time_dim = len(batch)
+
+        # Extract initial carry: only the FIRST timestep's state and belief
+        # Data tensors have shape (*batch, time_steps, feature_dim)
+        # We select the first timestep to get (*batch, feature_dim)
+        # Must make contiguous to match the stride/memory_format of carry output from combine_fn
+        init_state = tensordict.get("state").select(time_dim, 0).contiguous()
+        init_belief = tensordict.get("belief").select(time_dim, 0).contiguous()
+
+        # Extract inputs for each timestep (xs)
+        # These have shape (*batch, time_steps, feature_dim)
+        actions = tensordict.get("action")
+        encoded_latents = tensordict.get(("next", "encoded_latents"))
+
+        # Move time dimension to first position for scan (scan operates on dim=0 by default)
+        # From (*batch, time_steps, feature_dim) -> (time_steps, *batch, feature_dim)
+        actions_t = actions.movedim(time_dim, 0)
+        encoded_latents_t = encoded_latents.movedim(time_dim, 0)
+
+        # Prepare noise tensors if provided
+        if prior_noise is not None:
+            prior_noise_t = prior_noise.movedim(time_dim, 0)
+        else:
+            prior_noise_t = None
+
+        if posterior_noise is not None:
+            posterior_noise_t = posterior_noise.movedim(time_dim, 0)
+        else:
+            posterior_noise_t = None
+
+        # Build xs tuple - include noise if provided
+        if prior_noise_t is not None and posterior_noise_t is not None:
+            xs = (actions_t, encoded_latents_t, prior_noise_t, posterior_noise_t)
+
+            def combine_fn(carry, xs):
+                state, belief = carry
+                action, enc_lat, prior_n, posterior_n = xs
+
+                prior_mean, prior_std, _, next_belief = rssm_prior_module(
+                    state, belief, action, noise=prior_n
+                )
+                posterior_mean, posterior_std, next_state = rssm_posterior_module(
+                    next_belief, enc_lat, noise=posterior_n
+                )
+
+                next_carry = (next_state.clone(), next_belief.clone())
+                outputs = (
+                    prior_mean.clone(),
+                    prior_std.clone(),
+                    next_belief.clone(),
+                    posterior_mean.clone(),
+                    posterior_std.clone(),
+                    next_state.clone(),
+                )
+                return next_carry, outputs
+
+        elif prior_noise_t is not None:
+            xs = (actions_t, encoded_latents_t, prior_noise_t)
+
+            def combine_fn(carry, xs):
+                state, belief = carry
+                action, enc_lat, prior_n = xs
+
+                prior_mean, prior_std, _, next_belief = rssm_prior_module(
+                    state, belief, action, noise=prior_n
+                )
+                posterior_mean, posterior_std, next_state = rssm_posterior_module(
+                    next_belief, enc_lat
+                )
+
+                next_carry = (next_state.clone(), next_belief.clone())
+                outputs = (
+                    prior_mean.clone(),
+                    prior_std.clone(),
+                    next_belief.clone(),
+                    posterior_mean.clone(),
+                    posterior_std.clone(),
+                    next_state.clone(),
+                )
+                return next_carry, outputs
+
+        elif posterior_noise_t is not None:
+            xs = (actions_t, encoded_latents_t, posterior_noise_t)
+
+            def combine_fn(carry, xs):
+                state, belief = carry
+                action, enc_lat, posterior_n = xs
+
+                prior_mean, prior_std, _, next_belief = rssm_prior_module(
+                    state, belief, action
+                )
+                posterior_mean, posterior_std, next_state = rssm_posterior_module(
+                    next_belief, enc_lat, noise=posterior_n
+                )
+
+                next_carry = (next_state.clone(), next_belief.clone())
+                outputs = (
+                    prior_mean.clone(),
+                    prior_std.clone(),
+                    next_belief.clone(),
+                    posterior_mean.clone(),
+                    posterior_std.clone(),
+                    next_state.clone(),
+                )
+                return next_carry, outputs
+
+        else:
+            xs = (actions_t, encoded_latents_t)
+
+            def combine_fn(carry, xs):
+                """Combine function for scan.
+
+                Args:
+                    carry: tuple of (state, belief) tensors
+                    xs: tuple of (action, encoded_latents) tensors for current timestep
+
+                Returns:
+                    next_carry: tuple of (next_state, next_belief)
+                    outputs: tuple of all outputs for this timestep
+                """
+                state, belief = carry
+                action, enc_lat = xs
+
+                # Call raw RSSMPrior: (state, belief, action) -> (prior_mean, prior_std, _, belief)
+                prior_mean, prior_std, _, next_belief = rssm_prior_module(
+                    state, belief, action
+                )
+
+                # Call raw RSSMPosterior: (belief, encoded_latents) -> (posterior_mean, posterior_std, state)
+                posterior_mean, posterior_std, next_state = rssm_posterior_module(
+                    next_belief, enc_lat
+                )
+
+                # Clone outputs to avoid aliasing (required by scan)
+                next_carry = (next_state.clone(), next_belief.clone())
+                outputs = (
+                    prior_mean.clone(),
+                    prior_std.clone(),
+                    next_belief.clone(),
+                    posterior_mean.clone(),
+                    posterior_std.clone(),
+                    next_state.clone(),
+                )
+
+                return next_carry, outputs
+
+        # Run scan
+        init = (init_state, init_belief)
+
+        final_carry, stacked_outputs = scan(combine_fn, init, xs, dim=0)
+
+        # Unpack stacked outputs
+        # Each output has shape (time_steps, *batch, feature_dim)
+        (
+            prior_means,
+            prior_stds,
+            beliefs,
+            posterior_means,
+            posterior_stds,
+            states,
+        ) = stacked_outputs
+
+        # Move time dimension back to original position
+        # From (time_steps, *batch, feature_dim) -> (*batch, time_steps, feature_dim)
+        prior_means = prior_means.movedim(0, time_dim)
+        prior_stds = prior_stds.movedim(0, time_dim)
+        beliefs = beliefs.movedim(0, time_dim)
+        posterior_means = posterior_means.movedim(0, time_dim)
+        posterior_stds = posterior_stds.movedim(0, time_dim)
+        states = states.movedim(0, time_dim)
+
+        # Also need the original input keys in the output
+        # Get the input data excluding output keys
+        base_td = tensordict.exclude(*self.out_keys).clone()
+
+        # Construct output tensordict with the same structure as the loop version
+        out = TensorDict(
+            {
+                **base_td.to_dict(),
+                ("next", "prior_mean"): prior_means,
+                ("next", "prior_std"): prior_stds,
+                ("next", "belief"): beliefs,
+                ("next", "posterior_mean"): posterior_means,
+                ("next", "posterior_std"): posterior_stds,
+                ("next", "state"): states,
+            },
+            batch_size=tensordict.batch_size,
+            device=tensordict.device,
+        )
+
         return out
 
 
@@ -383,7 +676,24 @@ class RSSMPrior(nn.Module):
         self.rnn_hidden_dim = rnn_hidden_dim
         self.action_shape = action_spec.shape
 
-    def forward(self, state, belief, action):
+    def forward(self, state, belief, action, *, noise=None):
+        """Forward pass of the prior network.
+
+        Args:
+            state (torch.Tensor): Previous state tensor with shape ``(*batch, state_dim)``.
+            belief (torch.Tensor): Previous belief/hidden state tensor with shape ``(*batch, rnn_hidden_dim)``.
+            action (torch.Tensor): Action tensor with shape ``(*batch, action_dim)``.
+            noise (torch.Tensor, optional): Pre-computed noise tensor for sampling with shape
+                ``(*batch, state_dim)``. If ``None``, noise is sampled using ``torch.randn_like``.
+                Passing noise enables deterministic execution for testing. Defaults to ``None``.
+
+        Returns:
+            tuple: A tuple of (prior_mean, prior_std, state, belief) where:
+                - prior_mean (torch.Tensor): Mean of the prior distribution.
+                - prior_std (torch.Tensor): Standard deviation of the prior distribution.
+                - state (torch.Tensor): Sampled state from the prior.
+                - belief (torch.Tensor): Updated belief/hidden state.
+        """
         projector_input = torch.cat([state, action], dim=-1)
         action_state = self.action_state_projector(projector_input)
         unsqueeze = False
@@ -405,7 +715,9 @@ class RSSMPrior(nn.Module):
             belief = belief.squeeze(0)
 
         prior_mean, prior_std = self.rnn_to_prior_projector(belief)
-        state = prior_mean + torch.randn_like(prior_std) * prior_std
+        if noise is None:
+            noise = torch.randn_like(prior_std)
+        state = prior_mean + noise * prior_std
         return prior_mean, prior_std, state, belief
 
 
@@ -450,10 +762,28 @@ class RSSMPosterior(nn.Module):
         )
         self.hidden_dim = hidden_dim
 
-    def forward(self, belief, obs_embedding):
+    def forward(self, belief, obs_embedding, *, noise=None):
+        """Forward pass of the posterior network.
+
+        Args:
+            belief (torch.Tensor): Belief/hidden state tensor from the prior with shape
+                ``(*batch, rnn_hidden_dim)``.
+            obs_embedding (torch.Tensor): Encoded observation tensor with shape
+                ``(*batch, obs_embed_dim)``.
+            noise (torch.Tensor, optional): Pre-computed noise tensor for sampling with shape
+                ``(*batch, state_dim)``. If ``None``, noise is sampled using ``torch.randn_like``.
+                Passing noise enables deterministic execution for testing. Defaults to ``None``.
+
+        Returns:
+            tuple: A tuple of (posterior_mean, posterior_std, state) where:
+                - posterior_mean (torch.Tensor): Mean of the posterior distribution.
+                - posterior_std (torch.Tensor): Standard deviation of the posterior distribution.
+                - state (torch.Tensor): Sampled state from the posterior.
+        """
         posterior_mean, posterior_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )
-        # post_std = post_std + 0.1
-        state = posterior_mean + torch.randn_like(posterior_std) * posterior_std
+        if noise is None:
+            noise = torch.randn_like(posterior_std)
+        state = posterior_mean + noise * posterior_std
         return posterior_mean, posterior_std, state

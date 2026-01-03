@@ -271,6 +271,7 @@ def make_dreamer(
         reward_module,
         observation_in_key=observation_in_key,
         observation_out_key=observation_out_key,
+        use_scan=cfg.networks.use_scan,
     )
     world_model.to(device)
 
@@ -712,6 +713,7 @@ def _dreamer_make_world_model(
     reward_module,
     observation_in_key: NestedKey = "pixels",
     observation_out_key: NestedKey = "reco_pixels",
+    use_scan: bool = False,
 ):
     # World Model and reward model
     rssm_rollout = RSSMRollout(
@@ -734,6 +736,7 @@ def _dreamer_make_world_model(
                 ("next", "state"),
             ],
         ),
+        use_scan=use_scan,
     )
     event_dim = 3 if observation_out_key == "reco_pixels" else 1  # 3 for RGB
     decoder = ProbabilisticTensorDictSequential(
