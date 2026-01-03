@@ -642,6 +642,330 @@ class TestDreamerComponents:
             rollout["next", "posterior_std"], rollout_bis["next", "posterior_std"]
         )
 
+    @pytest.mark.parametrize("stoch_size", [10, 20])
+    @pytest.mark.parametrize("deter_size", [20, 30])
+    @pytest.mark.parametrize("temporal_size", [2, 4])
+    @pytest.mark.parametrize("action_size", [3, 6])
+    def test_rssm_rollout_scan(
+        self, device, batch_size, temporal_size, stoch_size, deter_size, action_size
+    ):
+        """Test that RSSMRollout with use_scan=True produces the same output as the loop version."""
+        action_spec = Bounded(shape=(action_size,), dtype=torch.float32, low=-1, high=1)
+
+        # Create two identical sets of modules
+        rssm_prior = RSSMPrior(
+            action_spec,
+            hidden_dim=stoch_size,
+            rnn_hidden_dim=stoch_size,
+            state_dim=deter_size,
+        ).to(device)
+        rssm_posterior = RSSMPosterior(
+            hidden_dim=stoch_size,
+            state_dim=deter_size,
+        ).to(device)
+
+        # Create rollout modules with loop and scan
+        rssm_rollout_loop = RSSMRollout(
+            SafeModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    ("next", "prior_mean"),
+                    ("next", "prior_std"),
+                    "_",
+                    ("next", "belief"),
+                ],
+            ),
+            SafeModule(
+                rssm_posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[
+                    ("next", "posterior_mean"),
+                    ("next", "posterior_std"),
+                    ("next", "state"),
+                ],
+            ),
+            use_scan=False,
+        )
+
+        rssm_rollout_scan = RSSMRollout(
+            SafeModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    ("next", "prior_mean"),
+                    ("next", "prior_std"),
+                    "_",
+                    ("next", "belief"),
+                ],
+            ),
+            SafeModule(
+                rssm_posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[
+                    ("next", "posterior_mean"),
+                    ("next", "posterior_std"),
+                    ("next", "state"),
+                ],
+            ),
+            use_scan=True,
+        )
+
+        state = torch.randn(*batch_size, temporal_size, deter_size, device=device)
+        belief = torch.randn(*batch_size, temporal_size, stoch_size, device=device)
+        action = torch.randn(*batch_size, temporal_size, action_size, device=device)
+        obs_emb = torch.randn(*batch_size, temporal_size, 1024, device=device)
+
+        # Note: belief must be at root level because rssm_prior has in_keys=["state", "belief", "action"]
+        tensordict = TensorDict(
+            {
+                "state": state.clone(),
+                "belief": belief.clone(),
+                "action": action.clone(),
+                "next": {
+                    "encoded_latents": obs_emb.clone(),
+                },
+            },
+            device=device,
+            batch_size=torch.Size([*batch_size, temporal_size]),
+        )
+
+        # Initialize lazy linears with identical data
+        _ = rssm_rollout_loop(tensordict.clone())
+        _ = rssm_rollout_scan(tensordict.clone())
+
+        # Pre-generate noise tensors for deterministic comparison
+        # Both implementations will use the same noise, eliminating RNG ordering differences
+        torch.manual_seed(0)
+        prior_noise = torch.randn(*batch_size, temporal_size, deter_size, device=device)
+        posterior_noise = torch.randn(*batch_size, temporal_size, deter_size, device=device)
+
+        # Run both implementations with the same pre-computed noise
+        rollout_loop = rssm_rollout_loop(
+            tensordict.clone(),
+            prior_noise=prior_noise.clone(),
+            posterior_noise=posterior_noise.clone(),
+        )
+        rollout_scan = rssm_rollout_scan(
+            tensordict.clone(),
+            prior_noise=prior_noise.clone(),
+            posterior_noise=posterior_noise.clone(),
+        )
+
+        # Check shapes match
+        assert rollout_scan["next", "prior_mean"].shape == (
+            *batch_size,
+            temporal_size,
+            deter_size,
+        )
+        assert rollout_scan["next", "prior_std"].shape == (
+            *batch_size,
+            temporal_size,
+            deter_size,
+        )
+        assert rollout_scan["next", "state"].shape == (
+            *batch_size,
+            temporal_size,
+            deter_size,
+        )
+        assert rollout_scan["next", "belief"].shape == (
+            *batch_size,
+            temporal_size,
+            stoch_size,
+        )
+        assert rollout_scan["next", "posterior_mean"].shape == (
+            *batch_size,
+            temporal_size,
+            deter_size,
+        )
+        assert rollout_scan["next", "posterior_std"].shape == (
+            *batch_size,
+            temporal_size,
+            deter_size,
+        )
+
+        # With pre-computed noise, ALL outputs should match EXACTLY across ALL timesteps
+        assert torch.allclose(
+            rollout_loop["next", "prior_mean"],
+            rollout_scan["next", "prior_mean"],
+            atol=1e-5,
+        ), f"prior_mean mismatch: {(rollout_loop['next', 'prior_mean'] - rollout_scan['next', 'prior_mean']).abs().max()}"
+
+        assert torch.allclose(
+            rollout_loop["next", "prior_std"],
+            rollout_scan["next", "prior_std"],
+            atol=1e-5,
+        ), f"prior_std mismatch: {(rollout_loop['next', 'prior_std'] - rollout_scan['next', 'prior_std']).abs().max()}"
+
+        assert torch.allclose(
+            rollout_loop["next", "belief"],
+            rollout_scan["next", "belief"],
+            atol=1e-5,
+        ), f"belief mismatch: {(rollout_loop['next', 'belief'] - rollout_scan['next', 'belief']).abs().max()}"
+
+        assert torch.allclose(
+            rollout_loop["next", "posterior_mean"],
+            rollout_scan["next", "posterior_mean"],
+            atol=1e-5,
+        ), f"posterior_mean mismatch: {(rollout_loop['next', 'posterior_mean'] - rollout_scan['next', 'posterior_mean']).abs().max()}"
+
+        assert torch.allclose(
+            rollout_loop["next", "posterior_std"],
+            rollout_scan["next", "posterior_std"],
+            atol=1e-5,
+        ), f"posterior_std mismatch: {(rollout_loop['next', 'posterior_std'] - rollout_scan['next', 'posterior_std']).abs().max()}"
+
+        # With deterministic noise, state should also match exactly
+        assert torch.allclose(
+            rollout_loop["next", "state"],
+            rollout_scan["next", "state"],
+            atol=1e-5,
+        ), f"state mismatch: {(rollout_loop['next', 'state'] - rollout_scan['next', 'state']).abs().max()}"
+
+        # Verify positive std values for all timesteps
+        assert torch.all(rollout_scan["next", "prior_std"] > 0)
+        assert torch.all(rollout_scan["next", "posterior_std"] > 0)
+
+        # Verify outputs are finite and reasonable
+        assert torch.all(torch.isfinite(rollout_scan["next", "prior_mean"]))
+        assert torch.all(torch.isfinite(rollout_scan["next", "posterior_mean"]))
+        assert torch.all(torch.isfinite(rollout_scan["next", "state"]))
+        assert torch.all(torch.isfinite(rollout_scan["next", "belief"]))
+
+        # Test backward pass: verify gradients flow correctly through scan
+        # Create fresh inputs with requires_grad=True
+        state_grad = torch.randn(
+            *batch_size, temporal_size, deter_size, device=device, requires_grad=True
+        )
+        belief_grad = torch.randn(
+            *batch_size, temporal_size, stoch_size, device=device, requires_grad=True
+        )
+        action_grad = torch.randn(
+            *batch_size, temporal_size, action_size, device=device, requires_grad=True
+        )
+        obs_emb_grad = torch.randn(
+            *batch_size, temporal_size, 1024, device=device, requires_grad=True
+        )
+
+        tensordict_grad = TensorDict(
+            {
+                "state": state_grad,
+                "belief": belief_grad,
+                "action": action_grad,
+                "next": {
+                    "encoded_latents": obs_emb_grad,
+                },
+            },
+            device=device,
+            batch_size=torch.Size([*batch_size, temporal_size]),
+        )
+
+        # Forward pass with scan
+        rollout_scan_grad = rssm_rollout_scan(tensordict_grad)
+
+        # Compute a scalar loss from all outputs
+        loss = (
+            rollout_scan_grad["next", "prior_mean"].sum()
+            + rollout_scan_grad["next", "posterior_mean"].sum()
+            + rollout_scan_grad["next", "state"].sum()
+            + rollout_scan_grad["next", "belief"].sum()
+        )
+
+        # Backward pass
+        loss.backward()
+
+        # Verify gradients exist and are finite for inputs
+        assert state_grad.grad is not None, "state should have gradients"
+        assert belief_grad.grad is not None, "belief should have gradients"
+        assert action_grad.grad is not None, "action should have gradients"
+        assert obs_emb_grad.grad is not None, "obs_embedding should have gradients"
+
+        assert torch.all(torch.isfinite(state_grad.grad)), "state gradients should be finite"
+        assert torch.all(torch.isfinite(belief_grad.grad)), "belief gradients should be finite"
+        assert torch.all(torch.isfinite(action_grad.grad)), "action gradients should be finite"
+        assert torch.all(
+            torch.isfinite(obs_emb_grad.grad)
+        ), "obs_embedding gradients should be finite"
+
+        # Verify gradients exist for model parameters
+        for name, param in rssm_rollout_scan.named_parameters():
+            if param.requires_grad:
+                assert param.grad is not None, f"Parameter {name} should have gradients"
+                assert torch.all(
+                    torch.isfinite(param.grad)
+                ), f"Parameter {name} gradients should be finite"
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("use_scan", [False, True])
+    def test_rssm_rollout_benchmark(self, device, batch_size, use_scan, benchmark):
+        """Benchmark RSSMRollout with loop vs scan implementations."""
+        # Fixed parameters for consistent benchmarking
+        stoch_size = 200
+        deter_size = 200
+        action_size = 6
+        temporal_size = 50  # Longer sequence for meaningful timing
+
+        action_spec = Bounded(shape=(action_size,), dtype=torch.float32, low=-1, high=1)
+        rssm_prior = RSSMPrior(
+            action_spec,
+            hidden_dim=stoch_size,
+            rnn_hidden_dim=stoch_size,
+            state_dim=deter_size,
+        ).to(device)
+        rssm_posterior = RSSMPosterior(
+            hidden_dim=stoch_size,
+            state_dim=deter_size,
+        ).to(device)
+
+        rssm_rollout = RSSMRollout(
+            SafeModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    ("next", "prior_mean"),
+                    ("next", "prior_std"),
+                    "_",
+                    ("next", "belief"),
+                ],
+            ),
+            SafeModule(
+                rssm_posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[
+                    ("next", "posterior_mean"),
+                    ("next", "posterior_std"),
+                    ("next", "state"),
+                ],
+            ),
+            use_scan=use_scan,
+        )
+
+        state = torch.randn(*batch_size, temporal_size, deter_size, device=device)
+        belief = torch.randn(*batch_size, temporal_size, stoch_size, device=device)
+        action = torch.randn(*batch_size, temporal_size, action_size, device=device)
+        obs_emb = torch.randn(*batch_size, temporal_size, 1024, device=device)
+
+        tensordict = TensorDict(
+            {
+                "state": state.clone(),
+                "belief": belief.clone(),
+                "action": action.clone(),
+                "next": {
+                    "encoded_latents": obs_emb.clone(),
+                },
+            },
+            device=device,
+            batch_size=torch.Size([*batch_size, temporal_size]),
+        )
+
+        # Warmup
+        _ = rssm_rollout(tensordict.clone())
+
+        def run():
+            return rssm_rollout(tensordict.clone())
+
+        benchmark(run)
+
 
 class TestTanh:
     def test_errors(self):

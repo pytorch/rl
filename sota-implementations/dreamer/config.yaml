@@ -44,6 +44,8 @@ networks:
   rssm_hidden_dim: 200
   hidden_dim: 400
   activation: "elu"
+  # Use torch.scan for RSSM rollout (faster, no graph breaks with torch.compile)
+  use_scan: False
 
 
 replay_buffer: 
