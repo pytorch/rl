@@ -1008,6 +1008,39 @@ class TestModuleConfigs:
         assert value_model.module.in_features == 10
         assert value_model.module.out_features == 1
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_additive_gaussian_module_config(self):
+        """Test AdditiveGaussianModuleConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            AdditiveGaussianModuleConfig,
+        )
+
+        cfg = AdditiveGaussianModuleConfig(
+            spec=None,
+            sigma_init=1.0,
+            sigma_end=0.1,
+            annealing_num_steps=1000,
+            mean=0.0,
+            std=0.1,
+            action_key="action",
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_additive_gaussian_module"
+        )
+        assert cfg.spec is None
+        assert cfg.sigma_init == 1.0
+        assert cfg.sigma_end == 0.1
+        assert cfg.action_key == "action"
+
+        module = instantiate(cfg)
+        from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+
+        assert isinstance(module, AdditiveGaussianModule)
+        assert module._spec is None
+        assert module.action_key == "action"
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
