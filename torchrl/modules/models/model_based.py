@@ -326,61 +326,40 @@ class RSSMRollout(TensorDictModuleBase):
             tensordict (TensorDict): Input tensordict.
             prior_noise (torch.Tensor, optional): Noise tensor with shape ``(*batch, time_steps, state_dim)``.
             posterior_noise (torch.Tensor, optional): Noise tensor with shape ``(*batch, time_steps, state_dim)``.
+
+        Note:
+            When noise tensors are provided, they are inserted into the tensordict at
+            ``"prior_noise"`` and ``"posterior_noise"`` keys. The TensorDictModule wrappers
+            must have these keys in their ``in_keys`` (mapped to the ``noise`` argument)
+            for the noise to be passed through. With ``strict=False`` (default), missing
+            noise keys will pass ``None`` to the underlying module.
         """
         tensordict_out = []
         *batch, time_steps = tensordict.shape
         time_dim = len(batch)
-
-        # When noise is provided, we call raw modules directly to pass the noise
-        use_raw_modules = prior_noise is not None or posterior_noise is not None
 
         update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
         _tensordict = update_values[0]
         for t in range(time_steps):
             torch._dynamo.graph_break()
 
-            if use_raw_modules:
-                # Call raw modules directly to pass noise
-                rssm_prior_module = self.rssm_prior.module
-                rssm_posterior_module = self.rssm_posterior.module
+            # Insert noise for this timestep into tensordict (TensorDictModule handles passing it)
+            if prior_noise is not None:
+                _tensordict.set("prior_noise", prior_noise.select(time_dim, t))
+            if posterior_noise is not None:
+                _tensordict.set("posterior_noise", posterior_noise.select(time_dim, t))
 
-                state = _tensordict.get("state")
-                belief = _tensordict.get("belief")
-                action = _tensordict.get("action")
-                enc_lat = _tensordict.get(("next", "encoded_latents"))
+            # samples according to p(s_{t+1} | s_t, a_t, b_t)
+            # in_keys: ["state", "belief", "action", "prior_noise"] -> noise kwarg
+            # out_keys: [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
+            with _maybe_timeit("rssm_rollout/time-rssm_prior"):
+                self.rssm_prior(_tensordict)
 
-                # Get noise for this timestep
-                prior_noise_t = prior_noise.select(time_dim, t) if prior_noise is not None else None
-                posterior_noise_t = posterior_noise.select(time_dim, t) if posterior_noise is not None else None
-
-                with _maybe_timeit("rssm_rollout/time-rssm_prior"):
-                    prior_mean, prior_std, _, next_belief = rssm_prior_module(
-                        state, belief, action, noise=prior_noise_t
-                    )
-
-                with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
-                    posterior_mean, posterior_std, next_state = rssm_posterior_module(
-                        next_belief, enc_lat, noise=posterior_noise_t
-                    )
-
-                # Write outputs to tensordict
-                _tensordict.set(("next", "prior_mean"), prior_mean)
-                _tensordict.set(("next", "prior_std"), prior_std)
-                _tensordict.set(("next", "belief"), next_belief)
-                _tensordict.set(("next", "posterior_mean"), posterior_mean)
-                _tensordict.set(("next", "posterior_std"), posterior_std)
-                _tensordict.set(("next", "state"), next_state)
-            else:
-                # Use TensorDictModule wrappers (original behavior)
-                # samples according to p(s_{t+1} | s_t, a_t, b_t)
-                # ["state", "belief", "action"] -> [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-                with _maybe_timeit("rssm_rollout/time-rssm_prior"):
-                    self.rssm_prior(_tensordict)
-
-                # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
-                # [("next", "belief"), ("next", "encoded_latents")] -> [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-                with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
-                    self.rssm_posterior(_tensordict)
+            # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
+            # in_keys: [("next", "belief"), ("next", "encoded_latents"), "posterior_noise"] -> noise kwarg
+            # out_keys: [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
+            with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
+                self.rssm_posterior(_tensordict)
 
             # Clone before appending to preserve state for the final stack
             tensordict_out.append(_tensordict.clone())

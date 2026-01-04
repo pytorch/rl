@@ -254,6 +254,17 @@ def make_dreamer(
         rnn_hidden_dim=rssm_hidden_dim,
         obs_embed_dim=obs_embed_dim,
     )
+
+    # When use_scan=True, replace C++ GRU with Python-based GRU for torch.compile compatibility.
+    # The C++ GRU (cuBLAS) cannot be traced by torch.compile when used inside scan on GPU.
+    if cfg.networks.use_scan:
+        from torchrl.modules.tensordict_module.rnn import GRUCell as PythonGRUCell
+
+        old_rnn = rssm_prior.rnn
+        python_rnn = PythonGRUCell(old_rnn.input_size, old_rnn.hidden_size)
+        python_rnn.load_state_dict(old_rnn.state_dict())
+        rssm_prior.rnn = python_rnn
+        torchrl_logger.info("Switched RSSMPrior to Python-based GRU for scan compatibility")
     # Make reward module
     reward_module = MLP(
         out_features=1,
@@ -716,25 +727,30 @@ def _dreamer_make_world_model(
     use_scan: bool = False,
 ):
     # World Model and reward model
+    # Note: in_keys uses dict form with out_to_in_map=True to map function args to tensordict keys.
+    # {"noise": "prior_noise"} means: read "prior_noise" from tensordict, pass as `noise` kwarg.
+    # With strict=False (default), missing noise keys pass None to the module.
     rssm_rollout = RSSMRollout(
         TensorDictModule(
             rssm_prior,
-            in_keys=["state", "belief", "action"],
+            in_keys={"state": "state", "belief": "belief", "action": "action", "noise": "prior_noise"},
             out_keys=[
                 ("next", "prior_mean"),
                 ("next", "prior_std"),
                 "_",
                 ("next", "belief"),
             ],
+            out_to_in_map=True,
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=[("next", "belief"), ("next", "encoded_latents")],
+            in_keys={"belief": ("next", "belief"), "obs_embedding": ("next", "encoded_latents"), "noise": "posterior_noise"},
             out_keys=[
                 ("next", "posterior_mean"),
                 ("next", "posterior_std"),
                 ("next", "state"),
             ],
+            out_to_in_map=True,
         ),
         use_scan=use_scan,
     )

@@ -562,13 +562,14 @@ class TestDreamerComponents:
         action = torch.randn(*batch_size, temporal_size, action_size, device=device)
         obs_emb = torch.randn(*batch_size, temporal_size, 1024, device=device)
 
+        # Note: belief must be at root level because rssm_prior has in_keys=["state", "belief", "action"]
         tensordict = TensorDict(
             {
                 "state": state.clone(),
+                "belief": belief.clone(),
                 "action": action.clone(),
                 "next": {
                     "encoded_latents": obs_emb.clone(),
-                    "belief": belief.clone(),
                 },
             },
             device=device,
@@ -577,7 +578,7 @@ class TestDreamerComponents:
         ## Init of lazy linears
         _ = rssm_rollout(tensordict.clone())
         torch.manual_seed(0)
-        rollout = rssm_rollout(tensordict)
+        rollout = rssm_rollout(tensordict.clone())
         assert rollout["next", "prior_mean"].shape == (
             *batch_size,
             temporal_size,
@@ -618,8 +619,9 @@ class TestDreamerComponents:
         tensordict_bis = TensorDict(
             {
                 "state": state.clone(),
+                "belief": belief.clone(),
                 "action": action.clone(),
-                "next": {"encoded_latents": obs_emb.clone(), "belief": belief.clone()},
+                "next": {"encoded_latents": obs_emb.clone()},
             },
             device=device,
             batch_size=torch.Size([*batch_size, temporal_size]),
@@ -665,48 +667,57 @@ class TestDreamerComponents:
         ).to(device)
 
         # Create rollout modules with loop and scan
+        # in_keys uses dict form with out_to_in_map=True to map function args to tensordict keys.
+        # {"noise": "prior_noise"} means: read "prior_noise" from tensordict, pass as `noise` kwarg.
+        # With strict=False (default), missing noise keys pass None to the module.
+        from tensordict.nn import TensorDictModule
+
         rssm_rollout_loop = RSSMRollout(
-            SafeModule(
+            TensorDictModule(
                 rssm_prior,
-                in_keys=["state", "belief", "action"],
+                in_keys={"state": "state", "belief": "belief", "action": "action", "noise": "prior_noise"},
                 out_keys=[
                     ("next", "prior_mean"),
                     ("next", "prior_std"),
                     "_",
                     ("next", "belief"),
                 ],
+                out_to_in_map=True,
             ),
-            SafeModule(
+            TensorDictModule(
                 rssm_posterior,
-                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                in_keys={"belief": ("next", "belief"), "obs_embedding": ("next", "encoded_latents"), "noise": "posterior_noise"},
                 out_keys=[
                     ("next", "posterior_mean"),
                     ("next", "posterior_std"),
                     ("next", "state"),
                 ],
+                out_to_in_map=True,
             ),
             use_scan=False,
         )
 
         rssm_rollout_scan = RSSMRollout(
-            SafeModule(
+            TensorDictModule(
                 rssm_prior,
-                in_keys=["state", "belief", "action"],
+                in_keys={"state": "state", "belief": "belief", "action": "action", "noise": "prior_noise"},
                 out_keys=[
                     ("next", "prior_mean"),
                     ("next", "prior_std"),
                     "_",
                     ("next", "belief"),
                 ],
+                out_to_in_map=True,
             ),
-            SafeModule(
+            TensorDictModule(
                 rssm_posterior,
-                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                in_keys={"belief": ("next", "belief"), "obs_embedding": ("next", "encoded_latents"), "noise": "posterior_noise"},
                 out_keys=[
                     ("next", "posterior_mean"),
                     ("next", "posterior_std"),
                     ("next", "state"),
                 ],
+                out_to_in_map=True,
             ),
             use_scan=True,
         )
@@ -917,25 +928,29 @@ class TestDreamerComponents:
             state_dim=deter_size,
         ).to(device)
 
+        from tensordict.nn import TensorDictModule
+
         rssm_rollout = RSSMRollout(
-            SafeModule(
+            TensorDictModule(
                 rssm_prior,
-                in_keys=["state", "belief", "action"],
+                in_keys={"state": "state", "belief": "belief", "action": "action", "noise": "prior_noise"},
                 out_keys=[
                     ("next", "prior_mean"),
                     ("next", "prior_std"),
                     "_",
                     ("next", "belief"),
                 ],
+                out_to_in_map=True,
             ),
-            SafeModule(
+            TensorDictModule(
                 rssm_posterior,
-                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                in_keys={"belief": ("next", "belief"), "obs_embedding": ("next", "encoded_latents"), "noise": "posterior_noise"},
                 out_keys=[
                     ("next", "posterior_mean"),
                     ("next", "posterior_std"),
                     ("next", "state"),
                 ],
+                out_to_in_map=True,
             ),
             use_scan=use_scan,
         )
