@@ -64,3 +64,19 @@ logger:
   eval_iter: 10
   eval_rollout_steps: 500
   video: False
+
+profiling:
+  # Enable PyTorch profiling (overrides total_frames to profiling_total_frames)
+  enabled: False
+  # Total frames to collect when profiling (default: 5005 = 5 collection iters + buffer warmup)
+  total_frames: 5005
+  # Start profiling after this many optim steps (warmup phase)
+  warmup_steps: 100
+  # Number of optim steps to profile
+  active_steps: 5
+  # Export chrome trace to this file (if set)
+  trace_file: dreamer_trace.json
+  # Profile CUDA kernels (requires CUDA)
+  profile_cuda: True
+  # Profile memory usage
+  profile_memory: True

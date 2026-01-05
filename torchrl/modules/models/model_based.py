@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import contextlib
 import warnings
 
 import torch
@@ -16,10 +15,9 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-
-# from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
-from torchrl._utils import timeit
+
+from torchrl._utils import _maybe_record_function, _maybe_timeit
 from torchrl.modules.models.models import MLP
 
 
@@ -28,17 +26,6 @@ class _Contiguous(nn.Module):
 
     def forward(self, x):
         return x.contiguous()
-
-
-def _maybe_timeit(name):
-    """Return timeit context if not compiling, nullcontext otherwise.
-
-    torch.compiler.is_compiling() returns True when inside a compiled region,
-    and timeit uses time.time() which dynamo cannot trace.
-    """
-    if torch.compiler.is_compiling():
-        return contextlib.nullcontext()
-    return timeit(name)
 
 
 UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
@@ -145,14 +132,20 @@ class ObsEncoder(nn.Module):
         self.encoder = nn.Sequential(*layers)
 
     def forward(self, observation):
-        *batch_sizes, C, H, W = observation.shape
-        # Flatten batch dims -> encoder -> unflatten batch dims
-        if batch_sizes:
-            observation = observation.flatten(0, len(batch_sizes) - 1).contiguous()
-        obs_encoded = self.encoder(observation.clone())
-        obs_encoded = obs_encoded.flatten(1)  # flatten spatial dims
-        if batch_sizes:
-            obs_encoded = obs_encoded.unflatten(0, batch_sizes).contiguous()
+        with _maybe_record_function("obs_encoder/reshape_input"):
+            *batch_sizes, C, H, W = observation.shape
+            # Flatten batch dims -> encoder -> unflatten batch dims
+            if batch_sizes:
+                observation = observation.flatten(0, len(batch_sizes) - 1).contiguous()
+
+        with _maybe_record_function("obs_encoder/conv_forward"):
+            obs_encoded = self.encoder(observation.clone())
+
+        with _maybe_record_function("obs_encoder/reshape_output"):
+            obs_encoded = obs_encoded.flatten(1)  # flatten spatial dims
+            if batch_sizes:
+                obs_encoded = obs_encoded.unflatten(0, batch_sizes).contiguous()
+
         return obs_encoded
 
 
@@ -230,15 +223,23 @@ class ObsDecoder(nn.Module):
         self._depth = channels
 
     def forward(self, state, rnn_hidden):
-        latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
-        *batch_sizes, D = latent.shape
-        # Flatten batch dims -> decoder -> unflatten batch dims
-        if batch_sizes:
-            latent = latent.flatten(0, len(batch_sizes) - 1)
-        latent = latent.unsqueeze(-1).unsqueeze(-1).contiguous()  # add spatial dims
-        obs_decoded = self.decoder(latent.clone())
-        if batch_sizes:
-            obs_decoded = obs_decoded.unflatten(0, batch_sizes).contiguous()
+        with _maybe_record_function("obs_decoder/state_to_latent"):
+            latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
+
+        with _maybe_record_function("obs_decoder/reshape_input"):
+            *batch_sizes, D = latent.shape
+            # Flatten batch dims -> decoder -> unflatten batch dims
+            if batch_sizes:
+                latent = latent.flatten(0, len(batch_sizes) - 1)
+            latent = latent.unsqueeze(-1).unsqueeze(-1).contiguous()  # add spatial dims
+
+        with _maybe_record_function("obs_decoder/deconv_forward"):
+            obs_decoded = self.decoder(latent.clone())
+
+        with _maybe_record_function("obs_decoder/reshape_output"):
+            if batch_sizes:
+                obs_decoded = obs_decoded.unflatten(0, batch_sizes).contiguous()
+
         return obs_decoded
 
 
@@ -276,6 +277,38 @@ class RSSMRollout(TensorDictModuleBase):
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
         self.use_scan = use_scan
+        
+        # Create a stable combine_fn for scan that won't trigger recompilation.
+        # This must be created once and reused - recreating it causes recompiles.
+        if use_scan:
+            self._init_scan_combine_fn()
+
+    def _init_scan_combine_fn(self):
+        """Initialize the combine_fn for scan, caching it to avoid recompilation."""
+        # Capture module references in the closure - these are stable across calls
+        rssm_prior = self.rssm_prior.module
+        rssm_posterior = self.rssm_posterior.module
+
+        def _combine_fn_no_noise(carry, xs):
+            """Combine function for scan without noise (standard training path)."""
+            state, belief = carry
+            action, enc_lat = xs
+
+            prior_mean, prior_std, _, next_belief = rssm_prior(state, belief, action)
+            posterior_mean, posterior_std, next_state = rssm_posterior(next_belief, enc_lat)
+
+            next_carry = (next_state.clone(), next_belief.clone())
+            outputs = (
+                prior_mean.clone(),
+                prior_std.clone(),
+                next_belief.clone(),
+                posterior_mean.clone(),
+                posterior_std.clone(),
+                next_state.clone(),
+            )
+            return next_carry, outputs
+
+        self._scan_combine_fn_no_noise = _combine_fn_no_noise
 
     def forward(self, tensordict, *, prior_noise=None, posterior_noise=None):
         """Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.
@@ -334,52 +367,60 @@ class RSSMRollout(TensorDictModuleBase):
             for the noise to be passed through. With ``strict=False`` (default), missing
             noise keys will pass ``None`` to the underlying module.
         """
-        tensordict_out = []
-        *batch, time_steps = tensordict.shape
-        time_dim = len(batch)
+        with _maybe_record_function("rssm_rollout/init"):
+            tensordict_out = []
+            *batch, time_steps = tensordict.shape
+            time_dim = len(batch)
 
-        update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
-        _tensordict = update_values[0]
+            update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
+            _tensordict = update_values[0]
+
         for t in range(time_steps):
             torch._dynamo.graph_break()
 
-            # Insert noise for this timestep into tensordict (TensorDictModule handles passing it)
-            if prior_noise is not None:
-                _tensordict.set("prior_noise", prior_noise.select(time_dim, t))
-            if posterior_noise is not None:
-                _tensordict.set("posterior_noise", posterior_noise.select(time_dim, t))
+            with _maybe_record_function(f"rssm_rollout/step_{t}/setup"):
+                # Insert noise for this timestep into tensordict (TensorDictModule handles passing it)
+                if prior_noise is not None:
+                    _tensordict.set("prior_noise", prior_noise.select(time_dim, t))
+                if posterior_noise is not None:
+                    _tensordict.set("posterior_noise", posterior_noise.select(time_dim, t))
 
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # in_keys: ["state", "belief", "action", "prior_noise"] -> noise kwarg
             # out_keys: [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            with _maybe_timeit("rssm_rollout/time-rssm_prior"):
-                self.rssm_prior(_tensordict)
+            with _maybe_record_function(f"rssm_rollout/step_{t}/prior"):
+                with _maybe_timeit("rssm_rollout/time-rssm_prior"):
+                    self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # in_keys: [("next", "belief"), ("next", "encoded_latents"), "posterior_noise"] -> noise kwarg
             # out_keys: [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
-                self.rssm_posterior(_tensordict)
+            with _maybe_record_function(f"rssm_rollout/step_{t}/posterior"):
+                with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
+                    self.rssm_posterior(_tensordict)
 
-            # Clone before appending to preserve state for the final stack
-            tensordict_out.append(_tensordict.clone())
-            if t < time_steps - 1:
-                # Propagate the posterior state and belief to the next timestep.
-                # The prior needs "state" and "belief" at root, but they were written
-                # to ("next", "state") and ("next", "belief") by the current step.
-                # Clone these tensors to avoid CUDAGraph memory reuse issues
-                next_state = _tensordict.get(("next", "state")).clone()
-                next_belief = _tensordict.get(("next", "belief")).clone()
+            with _maybe_record_function(f"rssm_rollout/step_{t}/propagate"):
+                # Clone before appending to preserve state for the final stack
+                tensordict_out.append(_tensordict.clone())
+                if t < time_steps - 1:
+                    # Propagate the posterior state and belief to the next timestep.
+                    # The prior needs "state" and "belief" at root, but they were written
+                    # to ("next", "state") and ("next", "belief") by the current step.
+                    # Clone these tensors to avoid CUDAGraph memory reuse issues
+                    next_state = _tensordict.get(("next", "state")).clone()
+                    next_belief = _tensordict.get(("next", "belief")).clone()
 
-                # Start with the next timestep's data (action, encoded_latents, etc.)
-                # Clone to avoid modifying the original update_values
-                _tensordict = update_values[t + 1].clone()
+                    # Start with the next timestep's data (action, encoded_latents, etc.)
+                    # Clone to avoid modifying the original update_values
+                    _tensordict = update_values[t + 1].clone()
 
-                # Set the propagated state and belief for the next iteration
-                _tensordict.set("state", next_state)
-                _tensordict.set("belief", next_belief)
+                    # Set the propagated state and belief for the next iteration
+                    _tensordict.set("state", next_state)
+                    _tensordict.set("belief", next_belief)
 
-        out = torch.stack(tensordict_out, tensordict.ndim - 1)
+        with _maybe_record_function("rssm_rollout/stack"):
+            out = torch.stack(tensordict_out, tensordict.ndim - 1)
+
         return out
 
     def _forward_scan(self, tensordict, *, prior_noise=None, posterior_noise=None):
@@ -511,44 +552,9 @@ class RSSMRollout(TensorDictModuleBase):
                 return next_carry, outputs
 
         else:
+            # Use the cached combine_fn to avoid recompilation
             xs = (actions_t, encoded_latents_t)
-
-            def combine_fn(carry, xs):
-                """Combine function for scan.
-
-                Args:
-                    carry: tuple of (state, belief) tensors
-                    xs: tuple of (action, encoded_latents) tensors for current timestep
-
-                Returns:
-                    next_carry: tuple of (next_state, next_belief)
-                    outputs: tuple of all outputs for this timestep
-                """
-                state, belief = carry
-                action, enc_lat = xs
-
-                # Call raw RSSMPrior: (state, belief, action) -> (prior_mean, prior_std, _, belief)
-                prior_mean, prior_std, _, next_belief = rssm_prior_module(
-                    state, belief, action
-                )
-
-                # Call raw RSSMPosterior: (belief, encoded_latents) -> (posterior_mean, posterior_std, state)
-                posterior_mean, posterior_std, next_state = rssm_posterior_module(
-                    next_belief, enc_lat
-                )
-
-                # Clone outputs to avoid aliasing (required by scan)
-                next_carry = (next_state.clone(), next_belief.clone())
-                outputs = (
-                    prior_mean.clone(),
-                    prior_std.clone(),
-                    next_belief.clone(),
-                    posterior_mean.clone(),
-                    posterior_std.clone(),
-                    next_state.clone(),
-                )
-
-                return next_carry, outputs
+            combine_fn = self._scan_combine_fn_no_noise
 
         # Run scan
         init = (init_state, init_belief)
@@ -673,30 +679,37 @@ class RSSMPrior(nn.Module):
                 - state (torch.Tensor): Sampled state from the prior.
                 - belief (torch.Tensor): Updated belief/hidden state.
         """
-        projector_input = torch.cat([state, action], dim=-1)
-        action_state = self.action_state_projector(projector_input)
-        unsqueeze = False
-        if UNSQUEEZE_RNN_INPUT and action_state.ndimension() == 1:
-            if belief is not None:
-                belief = belief.unsqueeze(0)
-            action_state = action_state.unsqueeze(0)
-            unsqueeze = True
-        # GRUCell can have issues with bfloat16 autocast on some GPU/cuBLAS combinations.
-        # Run the RNN in full precision to avoid CUBLAS_STATUS_INVALID_VALUE errors.
-        dtype = action_state.dtype
-        device_type = action_state.device.type
-        with torch.amp.autocast(device_type=device_type, enabled=False):
-            belief = self.rnn(
-                action_state.float(), belief.float() if belief is not None else None
-            )
-        belief = belief.to(dtype)
-        if unsqueeze:
-            belief = belief.squeeze(0)
+        with _maybe_record_function("rssm_prior/action_state_proj"):
+            projector_input = torch.cat([state, action], dim=-1)
+            action_state = self.action_state_projector(projector_input)
+            unsqueeze = False
+            if UNSQUEEZE_RNN_INPUT and action_state.ndimension() == 1:
+                if belief is not None:
+                    belief = belief.unsqueeze(0)
+                action_state = action_state.unsqueeze(0)
+                unsqueeze = True
 
-        prior_mean, prior_std = self.rnn_to_prior_projector(belief)
-        if noise is None:
-            noise = torch.randn_like(prior_std)
-        state = prior_mean + noise * prior_std
+        with _maybe_record_function("rssm_prior/gru_cell"):
+            # GRUCell can have issues with bfloat16 autocast on some GPU/cuBLAS combinations.
+            # Run the RNN in full precision to avoid CUBLAS_STATUS_INVALID_VALUE errors.
+            dtype = action_state.dtype
+            device_type = action_state.device.type
+            with torch.amp.autocast(device_type=device_type, enabled=False):
+                belief = self.rnn(
+                    action_state.float(), belief.float() if belief is not None else None
+                )
+            belief = belief.to(dtype)
+            if unsqueeze:
+                belief = belief.squeeze(0)
+
+        with _maybe_record_function("rssm_prior/prior_proj"):
+            prior_mean, prior_std = self.rnn_to_prior_projector(belief)
+
+        with _maybe_record_function("rssm_prior/sample"):
+            if noise is None:
+                noise = torch.randn_like(prior_std)
+            state = prior_mean + noise * prior_std
+
         return prior_mean, prior_std, state, belief
 
 
@@ -759,10 +772,14 @@ class RSSMPosterior(nn.Module):
                 - posterior_std (torch.Tensor): Standard deviation of the posterior distribution.
                 - state (torch.Tensor): Sampled state from the posterior.
         """
-        posterior_mean, posterior_std = self.obs_rnn_to_post_projector(
-            torch.cat([belief, obs_embedding], dim=-1)
-        )
-        if noise is None:
-            noise = torch.randn_like(posterior_std)
-        state = posterior_mean + noise * posterior_std
+        with _maybe_record_function("rssm_posterior/proj"):
+            posterior_mean, posterior_std = self.obs_rnn_to_post_projector(
+                torch.cat([belief, obs_embedding], dim=-1)
+            )
+
+        with _maybe_record_function("rssm_posterior/sample"):
+            if noise is None:
+                noise = torch.randn_like(posterior_std)
+            state = posterior_mean + noise * posterior_std
+
         return posterior_mean, posterior_std, state

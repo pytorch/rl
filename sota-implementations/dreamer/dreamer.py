@@ -11,10 +11,12 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+from torch.autograd.profiler import record_function
 from omegaconf import DictConfig
 
 from dreamer_utils import (
     _default_device,
+    DreamerProfiler,
     dump_video,
     log_metrics,
     make_collector,
@@ -195,6 +197,9 @@ def main(cfg: DictConfig):  # noqa: F821
     # Throughput tracking
     t_iter_start = time.time()
 
+    # Profiling setup (encapsulated in helper class)
+    profiler = DreamerProfiler(cfg, device, pbar)
+
     for i, tensordict in enumerate(collector):
         # Note: Collection time is implicitly measured by the collector's iteration
         # The time between loop iterations that isn't training is effectively collection time
@@ -213,7 +218,9 @@ def main(cfg: DictConfig):  # noqa: F821
         if collected_frames >= init_random_frames:
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
-                with timeit("train/sample"):
+                with timeit("train/sample"), record_function(
+                    "## train/sample ##"
+                ):
                     sampled_tensordict = replay_buffer.sample().reshape(
                         -1, batch_length
                     )
@@ -222,7 +229,9 @@ def main(cfg: DictConfig):  # noqa: F821
                     sampled_tensordict = sampled_tensordict.to(device).clone()
 
                 # update world model
-                with timeit("train/world_model-forward"):
+                with timeit("train/world_model-forward"), record_function(
+                    "## world_model/forward ##"
+                ):
                     # Mark step begin for CUDAGraph to prevent tensor overwrite issues
                     torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
@@ -241,7 +250,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         f"world_model_loss forward OK, loss={loss_world_model.item():.4f}"
                     )
 
-                with timeit("train/world_model-backward"):
+                with timeit("train/world_model-backward"), record_function(
+                    "## world_model/backward ##"
+                ):
                     world_model_opt.zero_grad()
                     if autocast_dtype:
                         scaler1.scale(loss_world_model).backward()
@@ -259,7 +270,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         world_model_opt.step()
 
                 # update actor network
-                with timeit("train/actor-forward"):
+                with timeit("train/actor-forward"), record_function(
+                    "## actor/forward ##"
+                ):
                     # Mark step begin for CUDAGraph to prevent tensor overwrite issues
                     torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
@@ -272,7 +285,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         f"actor_loss forward OK, loss={actor_loss_td['loss_actor'].item():.4f}"
                     )
 
-                with timeit("train/actor-backward"):
+                with timeit("train/actor-backward"), record_function(
+                    "## actor/backward ##"
+                ):
                     actor_opt.zero_grad()
                     if autocast_dtype:
                         scaler2.scale(actor_loss_td["loss_actor"]).backward()
@@ -290,7 +305,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         actor_opt.step()
 
                 # update value network
-                with timeit("train/value-forward"):
+                with timeit("train/value-forward"), record_function(
+                    "## value/forward ##"
+                ):
                     # Mark step begin for CUDAGraph to prevent tensor overwrite issues
                     torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
@@ -303,7 +320,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         f"value_loss forward OK, loss={value_loss_td['loss_value'].item():.4f}"
                     )
 
-                with timeit("train/value-backward"):
+                with timeit("train/value-backward"), record_function(
+                    "## value/backward ##"
+                ):
                     value_opt.zero_grad()
                     if autocast_dtype:
                         scaler3.scale(value_loss_td["loss_value"]).backward()
@@ -319,6 +338,15 @@ def main(cfg: DictConfig):  # noqa: F821
                         scaler3.update()
                     else:
                         value_opt.step()
+
+                # Step profiler (returns True if profiling complete)
+                if profiler.step():
+                    break
+
+            # Check if profiling is complete and we should exit
+            if profiler.should_exit():
+                torchrl_logger.info("Profiling complete. Exiting training loop.")
+                break
 
         # Compute throughput metrics
         t_iter_end = time.time()

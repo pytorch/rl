@@ -74,6 +74,97 @@ from torchrl.modules import (
 from torchrl.record import VideoRecorder
 
 
+class DreamerProfiler:
+    """Helper class for PyTorch profiling in Dreamer training.
+
+    Encapsulates profiler setup, stepping, and trace export logic.
+
+    Args:
+        cfg: Hydra config with profiling section.
+        device: Training device (used to determine CUDA profiling).
+        pbar: Progress bar to update total when profiling.
+    """
+
+    def __init__(self, cfg, device, pbar=None):
+        self.enabled = cfg.profiling.enabled
+        self.cfg = cfg
+        self.total_optim_steps = 0
+        self._profiler = None
+        self._stopped = False
+
+        if not self.enabled:
+            return
+
+        # Override total_frames for profiling runs
+        torchrl_logger.info(
+            f"Profiling enabled: running {cfg.profiling.total_frames} frames "
+            f"(warmup={cfg.profiling.warmup_steps}, active={cfg.profiling.active_steps})"
+        )
+        if pbar is not None:
+            pbar.total = cfg.profiling.total_frames
+
+        # Setup profiler schedule
+        profiler_schedule = torch.profiler.schedule(
+            wait=0,
+            warmup=cfg.profiling.warmup_steps,
+            active=cfg.profiling.active_steps,
+            repeat=1,
+        )
+
+        # Determine profiler activities
+        activities = [torch.profiler.ProfilerActivity.CPU]
+        if cfg.profiling.profile_cuda and device.type == "cuda":
+            activities.append(torch.profiler.ProfilerActivity.CUDA)
+
+        self._profiler = torch.profiler.profile(
+            activities=activities,
+            schedule=profiler_schedule,
+            on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler_logs")
+            if not cfg.profiling.trace_file
+            else None,
+            record_shapes=True,
+            profile_memory=cfg.profiling.profile_memory,
+            with_stack=True,
+            with_flops=True,
+        )
+        self._profiler.start()
+
+    def step(self) -> bool:
+        """Step the profiler and check if profiling is complete.
+
+        Returns:
+            True if profiling is complete and training should exit.
+        """
+        if not self.enabled or self._stopped:
+            return False
+
+        self.total_optim_steps += 1
+        self._profiler.step()
+
+        # Check if we should stop profiling
+        target_steps = self.cfg.profiling.warmup_steps + self.cfg.profiling.active_steps
+        if self.total_optim_steps >= target_steps:
+            torchrl_logger.info(
+                f"Profiling complete after {self.total_optim_steps} optim steps. "
+                f"Exporting trace to {self.cfg.profiling.trace_file}"
+            )
+            self._profiler.stop()
+            self._stopped = True
+            # Export trace if trace_file is set
+            if self.cfg.profiling.trace_file:
+                self._profiler.export_chrome_trace(self.cfg.profiling.trace_file)
+            return True
+
+        return False
+
+    def should_exit(self) -> bool:
+        """Check if training loop should exit due to profiling completion."""
+        if not self.enabled:
+            return False
+        target_steps = self.cfg.profiling.warmup_steps + self.cfg.profiling.active_steps
+        return self.total_optim_steps >= target_steps
+
+
 def _make_env(cfg, device, from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
