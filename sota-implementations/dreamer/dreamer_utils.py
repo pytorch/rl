@@ -127,10 +127,10 @@ class DreamerProfiler:
             on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler_logs")
             if not cfg.profiling.trace_file
             else None,
-            record_shapes=True,
+            record_shapes=cfg.profiling.record_shapes,
             profile_memory=cfg.profiling.profile_memory,
-            with_stack=True,
-            with_flops=True,
+            with_stack=cfg.profiling.with_stack,
+            with_flops=cfg.profiling.with_flops,
         )
         self._profiler.start()
 

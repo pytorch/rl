@@ -81,5 +81,11 @@ profiling:
   trace_file: dreamer_trace.json
   # Profile CUDA kernels (requires CUDA)
   profile_cuda: True
-  # Profile memory usage
-  profile_memory: True
+  # Record tensor shapes (adds to trace size)
+  record_shapes: False
+  # Profile memory usage (VERY heavy, ~10x trace size)
+  profile_memory: False
+  # Record Python call stacks (heavy, ~2x trace size)
+  with_stack: False
+  # Compute FLOPs (moderate overhead)
+  with_flops: True
