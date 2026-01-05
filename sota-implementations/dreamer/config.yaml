@@ -71,9 +71,11 @@ profiling:
   enabled: False
   # Total frames to collect when profiling (default: 5005 = 5 collection iters + buffer warmup)
   total_frames: 5005
-  # Start profiling after this many optim steps (warmup phase)
-  warmup_steps: 100
-  # Number of optim steps to profile
+  # Skip the first N optim steps (no profiling at all)
+  skip_first: 1
+  # Warmup steps (profiler runs but data discarded for warmup)
+  warmup_steps: 1
+  # Number of optim steps to profile (actual traced data)
   active_steps: 5
   # Export chrome trace to this file (if set)
   trace_file: dreamer_trace.json

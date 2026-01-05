@@ -98,13 +98,18 @@ class DreamerProfiler:
         # Override total_frames for profiling runs
         torchrl_logger.info(
             f"Profiling enabled: running {cfg.profiling.total_frames} frames "
-            f"(warmup={cfg.profiling.warmup_steps}, active={cfg.profiling.active_steps})"
+            f"(skip_first={cfg.profiling.skip_first}, warmup={cfg.profiling.warmup_steps}, "
+            f"active={cfg.profiling.active_steps})"
         )
         if pbar is not None:
             pbar.total = cfg.profiling.total_frames
 
         # Setup profiler schedule
+        # - skip_first: steps to skip entirely (no profiling)
+        # - warmup: steps to warm up profiler (data discarded)
+        # - active: steps to actually profile (data kept)
         profiler_schedule = torch.profiler.schedule(
+            skip_first=cfg.profiling.skip_first,
             wait=0,
             warmup=cfg.profiling.warmup_steps,
             active=cfg.profiling.active_steps,
@@ -142,7 +147,11 @@ class DreamerProfiler:
         self._profiler.step()
 
         # Check if we should stop profiling
-        target_steps = self.cfg.profiling.warmup_steps + self.cfg.profiling.active_steps
+        target_steps = (
+            self.cfg.profiling.skip_first
+            + self.cfg.profiling.warmup_steps
+            + self.cfg.profiling.active_steps
+        )
         if self.total_optim_steps >= target_steps:
             torchrl_logger.info(
                 f"Profiling complete after {self.total_optim_steps} optim steps. "
@@ -161,7 +170,11 @@ class DreamerProfiler:
         """Check if training loop should exit due to profiling completion."""
         if not self.enabled:
             return False
-        target_steps = self.cfg.profiling.warmup_steps + self.cfg.profiling.active_steps
+        target_steps = (
+            self.cfg.profiling.skip_first
+            + self.cfg.profiling.warmup_steps
+            + self.cfg.profiling.active_steps
+        )
         return self.total_optim_steps >= target_steps
 
 
