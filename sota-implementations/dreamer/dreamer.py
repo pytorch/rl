@@ -223,12 +223,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 with timeit("train/sample"), record_function(
                     "## train/sample ##"
                 ):
-                    sampled_tensordict = replay_buffer.sample().reshape(
-                        -1, batch_length
-                    )
-                    # Ensure all tensors are on the correct device and contiguous
-                    # The clone() ensures NCHW layout for torch.compile compatibility
-                    sampled_tensordict = sampled_tensordict.to(device).clone()
+                    sampled_tensordict = replay_buffer.sample()
 
                 # update world model
                 with timeit("train/world_model-forward"), record_function(

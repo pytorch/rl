@@ -710,8 +710,10 @@ class RSSMPrior(nn.Module):
                 - belief (torch.Tensor): Updated belief/hidden state.
         """
         with _maybe_record_function("rssm_prior/action_state_proj"):
-            projector_input = torch.cat([state, action], dim=-1)
-            action_state = self.action_state_projector(projector_input)
+            with _maybe_record_function("rssm_prior/cat_state_action"):
+                projector_input = torch.cat([state, action], dim=-1)
+            with _maybe_record_function("rssm_prior/action_state_projector"):
+                action_state = self.action_state_projector(projector_input)
             unsqueeze = False
             if UNSQUEEZE_RNN_INPUT and action_state.ndimension() == 1:
                 if belief is not None:
@@ -733,7 +735,14 @@ class RSSMPrior(nn.Module):
                 belief = belief.squeeze(0)
 
         with _maybe_record_function("rssm_prior/prior_proj"):
-            prior_mean, prior_std = self.rnn_to_prior_projector(belief)
+            with _maybe_record_function("rssm_prior/prior_proj_linear1"):
+                h = self.rnn_to_prior_projector[0](belief)
+            with _maybe_record_function("rssm_prior/prior_proj_elu"):
+                h = self.rnn_to_prior_projector[1](h)
+            with _maybe_record_function("rssm_prior/prior_proj_linear2"):
+                h = self.rnn_to_prior_projector[2](h)
+            with _maybe_record_function("rssm_prior/prior_proj_normal_params"):
+                prior_mean, prior_std = self.rnn_to_prior_projector[3](h)
 
         with _maybe_record_function("rssm_prior/sample"):
             if noise is None:
@@ -805,9 +814,16 @@ class RSSMPosterior(nn.Module):
                 - state (torch.Tensor): Sampled state from the posterior.
         """
         with _maybe_record_function("rssm_posterior/proj"):
-            posterior_mean, posterior_std = self.obs_rnn_to_post_projector(
-                torch.cat([belief, obs_embedding], dim=-1)
-            )
+            with _maybe_record_function("rssm_posterior/cat_belief_obs"):
+                h = torch.cat([belief, obs_embedding], dim=-1)
+            with _maybe_record_function("rssm_posterior/proj_linear1"):
+                h = self.obs_rnn_to_post_projector[0](h)
+            with _maybe_record_function("rssm_posterior/proj_elu"):
+                h = self.obs_rnn_to_post_projector[1](h)
+            with _maybe_record_function("rssm_posterior/proj_linear2"):
+                h = self.obs_rnn_to_post_projector[2](h)
+            with _maybe_record_function("rssm_posterior/proj_normal_params"):
+                posterior_mean, posterior_std = self.obs_rnn_to_post_projector[3](h)
 
         with _maybe_record_function("rssm_posterior/sample"):
             if noise is None:
