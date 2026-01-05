@@ -44,6 +44,7 @@ def main(cfg: DictConfig):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
     device = _default_device(cfg.networks.device)
+    assert device.type == "cuda", "Dreamer only supports CUDA devices"
 
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
@@ -228,6 +229,7 @@ def main(cfg: DictConfig):  # noqa: F821
                     # Ensure all tensors are on the correct device and contiguous
                     # The clone() ensures NCHW layout for torch.compile compatibility
                     sampled_tensordict = sampled_tensordict.to(device).clone()
+                    assert sampled_tensordict["next", "pixels"].device.type == "cuda", "sampled_tensordict should be on CUDA"
 
                 # update world model
                 with timeit("train/world_model-forward"), record_function(
