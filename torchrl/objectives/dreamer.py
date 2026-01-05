@@ -124,30 +124,15 @@ class DreamerModelLoss(LossModule):
         pass
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
-        # DEBUG: Log input tensordict devices
-        print(f"[DEBUG] DreamerModelLoss.forward - INPUT tensordict:")
-        for key in tensordict.keys(include_nested=True, leaves_only=True):
-            t = tensordict.get(key)
-            if hasattr(t, 'device'):
-                print(f"  {key}: device={t.device}, shape={t.shape}")
-        
         with _maybe_record_function("world_model_loss/clone_rename"):
-            tensordict = tensordict.clone(recurse=False)
+            tensordict = tensordict.copy()
             tensordict.rename_key_(
                 ("next", self.tensor_keys.reward),
                 ("next", self.tensor_keys.true_reward),
             )
 
         with _maybe_record_function("world_model_loss/world_model_forward"):
-            # DEBUG: Log world model encoder device
-            encoder = self.world_model[0][0]
-            print(f"[DEBUG] World model encoder first param device: {next(encoder.parameters()).device}")
-            
             tensordict = self.world_model(tensordict)
-            
-            # DEBUG: Log output after world model forward
-            print(f"[DEBUG] After world_model forward - encoded_latents device: {tensordict.get(('next', 'encoded_latents')).device}")
-            print(f"[DEBUG] After world_model forward - reco_pixels device: {tensordict.get(('next', self.tensor_keys.reco_pixels)).device}")
 
         # compute model loss
         with _maybe_record_function("world_model_loss/kl_loss"):
@@ -155,26 +140,17 @@ class DreamerModelLoss(LossModule):
             prior_std = tensordict.get(("next", self.tensor_keys.prior_std))
             posterior_mean = tensordict.get(("next", self.tensor_keys.posterior_mean))
             posterior_std = tensordict.get(("next", self.tensor_keys.posterior_std))
-            
-            # DEBUG: Log KL loss input devices
-            print(f"[DEBUG] KL loss inputs - prior_mean: {prior_mean.device}, prior_std: {prior_std.device}")
-            print(f"[DEBUG] KL loss inputs - posterior_mean: {posterior_mean.device}, posterior_std: {posterior_std.device}")
-            
+
             kl_loss = self.kl_loss(
                 prior_mean, prior_std, posterior_mean, posterior_std,
             ).unsqueeze(-1)
-            print(f"[DEBUG] kl_loss device: {kl_loss.device}")
 
         with _maybe_record_function("world_model_loss/reco_loss"):
             # Ensure contiguous layout for torch.compile compatibility
             # The gradient from distance_loss flows back through decoder convolutions
             pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
             reco_pixels = tensordict.get(("next", self.tensor_keys.reco_pixels)).contiguous()
-            
-            # DEBUG: Log reco loss input devices
-            print(f"[DEBUG] Reco loss - pixels: device={pixels.device}, shape={pixels.shape}")
-            print(f"[DEBUG] Reco loss - reco_pixels: device={reco_pixels.device}, shape={reco_pixels.shape}")
-            
+
             reco_loss = distance_loss(
                 pixels,
                 reco_pixels,
@@ -183,15 +159,11 @@ class DreamerModelLoss(LossModule):
             if not self.global_average:
                 reco_loss = reco_loss.sum((-3, -2, -1))
             reco_loss = reco_loss.mean().unsqueeze(-1)
-            print(f"[DEBUG] reco_loss device: {reco_loss.device}")
 
         with _maybe_record_function("world_model_loss/reward_loss"):
             true_reward = tensordict.get(("next", self.tensor_keys.true_reward))
             pred_reward = tensordict.get(("next", self.tensor_keys.reward))
-            
-            # DEBUG: Log reward loss input devices
-            print(f"[DEBUG] Reward loss - true_reward: {true_reward.device}, pred_reward: {pred_reward.device}")
-            
+
             reward_loss = distance_loss(
                 true_reward,
                 pred_reward,
@@ -200,7 +172,6 @@ class DreamerModelLoss(LossModule):
             if not self.global_average:
                 reward_loss = reward_loss.squeeze(-1)
             reward_loss = reward_loss.mean().unsqueeze(-1)
-            print(f"[DEBUG] reward_loss device: {reward_loss.device}")
 
         with _maybe_record_function("world_model_loss/build_output"):
             td_out = TensorDict(

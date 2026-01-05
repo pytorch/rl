@@ -138,10 +138,6 @@ class ObsEncoder(nn.Module):
         self.encoder = nn.Sequential(*layers)
 
     def forward(self, observation):
-        # DEBUG: Log input device and encoder weight device
-        print(f"[DEBUG] ObsEncoder.forward - input observation: device={observation.device}, shape={observation.shape}, dtype={observation.dtype}")
-        print(f"[DEBUG] ObsEncoder.forward - encoder first conv weight device: {self.encoder[0].weight.device}")
-        
         with _maybe_record_function("obs_encoder/reshape_input"):
             *batch_sizes, C, H, W = observation.shape
             # Flatten batch dims -> encoder -> unflatten batch dims
@@ -149,14 +145,13 @@ class ObsEncoder(nn.Module):
                 observation = observation.flatten(0, len(batch_sizes) - 1).contiguous()
 
         with _maybe_record_function("obs_encoder/conv_forward"):
-            obs_encoded = self.encoder(observation.clone())
+            obs_encoded = self.encoder(observation)
 
         with _maybe_record_function("obs_encoder/reshape_output"):
             obs_encoded = obs_encoded.flatten(1)  # flatten spatial dims
             if batch_sizes:
                 obs_encoded = obs_encoded.unflatten(0, batch_sizes).contiguous()
-        
-        print(f"[DEBUG] ObsEncoder.forward - output: device={obs_encoded.device}, shape={obs_encoded.shape}")
+
         return obs_encoded
 
 
@@ -236,10 +231,6 @@ class ObsDecoder(nn.Module):
         self._depth = channels
 
     def forward(self, state, rnn_hidden):
-        # DEBUG: Log input devices
-        print(f"[DEBUG] ObsDecoder.forward - state: device={state.device}, rnn_hidden: device={rnn_hidden.device}")
-        print(f"[DEBUG] ObsDecoder.forward - decoder first conv weight device: {self.decoder[0].weight.device}")
-        
         with _maybe_record_function("obs_decoder/state_to_latent"):
             latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
 
@@ -251,13 +242,12 @@ class ObsDecoder(nn.Module):
             latent = latent.unsqueeze(-1).unsqueeze(-1).contiguous()  # add spatial dims
 
         with _maybe_record_function("obs_decoder/deconv_forward"):
-            obs_decoded = self.decoder(latent.clone())
+            obs_decoded = self.decoder(latent)
 
         with _maybe_record_function("obs_decoder/reshape_output"):
             if batch_sizes:
                 obs_decoded = obs_decoded.unflatten(0, batch_sizes).contiguous()
 
-        print(f"[DEBUG] ObsDecoder.forward - output: device={obs_decoded.device}, shape={obs_decoded.shape}")
         return obs_decoded
 
 
@@ -390,8 +380,8 @@ class RSSMRollout(TensorDictModuleBase):
             *batch, time_steps = tensordict.shape
             time_dim = len(batch)
 
-            update_values = tensordict.exclude(*self.out_keys).clone().unbind(-1)
-            _tensordict = update_values[0]
+            update_values = tensordict.exclude(*self.out_keys).unbind(-1)
+            _tensordict = update_values[0].copy()
 
         for t in range(time_steps):
             torch._dynamo.graph_break()
@@ -418,19 +408,18 @@ class RSSMRollout(TensorDictModuleBase):
                     self.rssm_posterior(_tensordict)
 
             with _maybe_record_function(f"rssm_rollout/step_{t}/propagate"):
-                # Clone before appending to preserve state for the final stack
-                tensordict_out.append(_tensordict.clone())
+                # Copy before appending to preserve state for the final stack
+                tensordict_out.append(_tensordict.copy())
                 if t < time_steps - 1:
                     # Propagate the posterior state and belief to the next timestep.
                     # The prior needs "state" and "belief" at root, but they were written
                     # to ("next", "state") and ("next", "belief") by the current step.
-                    # Clone these tensors to avoid CUDAGraph memory reuse issues
-                    next_state = _tensordict.get(("next", "state")).clone()
-                    next_belief = _tensordict.get(("next", "belief")).clone()
+                    next_state = _tensordict.get(("next", "state"))
+                    next_belief = _tensordict.get(("next", "belief"))
 
                     # Start with the next timestep's data (action, encoded_latents, etc.)
-                    # Clone to avoid modifying the original update_values
-                    _tensordict = update_values[t + 1].clone()
+                    # Copy to avoid modifying the original update_values
+                    _tensordict = update_values[t + 1].copy()
 
                     # Set the propagated state and belief for the next iteration
                     _tensordict.set("state", next_state)
