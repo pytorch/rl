@@ -189,10 +189,10 @@ def main(cfg: DictConfig):  # noqa: F821
         # fullgraph=False allows graph breaks which can help with inductor issues.
         # warmup=3 runs eagerly for first 3 calls before compiling.
         world_model_loss = compile_with_warmup(
-            world_model_loss, backend=backend, fullgraph=False, warmup=3
+            world_model_loss, backend=backend, mode=cfg.optimization.compile_mode, fullgraph=False, warmup=3
         )
-        actor_loss = compile_with_warmup(actor_loss, backend=backend, warmup=3)
-        value_loss = compile_with_warmup(value_loss, backend=backend, warmup=3)
+        actor_loss = compile_with_warmup(actor_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=3)
+        value_loss = compile_with_warmup(value_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=3)
 
     # Throughput tracking
     t_iter_start = time.time()
