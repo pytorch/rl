@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9b04929) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g807e9fe) &#x25BC</span></a>
     </div>
     
 
@@ -1209,6 +1209,10 @@
         <span class="n">response_struct</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
             <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span>
         <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">response_struct</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span>
+        
         <span class="n">tokens_prompt_padded</span> <span class="o">=</span> <span class="n">response_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;input_ids&quot;</span><span class="p">,</span>
             <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
