@@ -9,6 +9,7 @@ import tempfile
 from contextlib import nullcontext
 
 import torch
+from torchrl import logger as torchrl_logger
 
 import torch.nn as nn
 from tensordict import NestedKey
