@@ -236,6 +236,10 @@ class ObsDecoder(nn.Module):
         self._depth = channels
 
     def forward(self, state, rnn_hidden):
+        # DEBUG: Log input devices
+        print(f"[DEBUG] ObsDecoder.forward - state: device={state.device}, rnn_hidden: device={rnn_hidden.device}")
+        print(f"[DEBUG] ObsDecoder.forward - decoder first conv weight device: {self.decoder[0].weight.device}")
+        
         with _maybe_record_function("obs_decoder/state_to_latent"):
             latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
 
@@ -253,6 +257,7 @@ class ObsDecoder(nn.Module):
             if batch_sizes:
                 obs_decoded = obs_decoded.unflatten(0, batch_sizes).contiguous()
 
+        print(f"[DEBUG] ObsDecoder.forward - output: device={obs_decoded.device}, shape={obs_decoded.shape}")
         return obs_decoded
 
 
