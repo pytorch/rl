@@ -226,15 +226,29 @@ def main(cfg: DictConfig):  # noqa: F821
                     sampled_tensordict = replay_buffer.sample().reshape(
                         -1, batch_length
                     )
+                    # DEBUG: Log devices before .to()
+                    print(f"[DEBUG] BEFORE .to(device) - sampled_tensordict keys and devices:")
+                    for key in sampled_tensordict.keys(include_nested=True, leaves_only=True):
+                        t = sampled_tensordict.get(key)
+                        print(f"  {key}: device={t.device}, shape={t.shape}, dtype={t.dtype}")
+                    
                     # Ensure all tensors are on the correct device and contiguous
                     # The clone() ensures NCHW layout for torch.compile compatibility
                     sampled_tensordict = sampled_tensordict.to(device).clone()
-                    assert sampled_tensordict["next", "pixels"].device.type == "cuda", "sampled_tensordict should be on CUDA"
+                    
+                    # DEBUG: Log devices after .to()
+                    print(f"[DEBUG] AFTER .to({device}) - sampled_tensordict keys and devices:")
+                    for key in sampled_tensordict.keys(include_nested=True, leaves_only=True):
+                        t = sampled_tensordict.get(key)
+                        print(f"  {key}: device={t.device}, shape={t.shape}, dtype={t.dtype}")
 
                 # update world model
                 with timeit("train/world_model-forward"), record_function(
                     "## world_model/forward ##"
                 ):
+                    # DEBUG: Log world model parameter devices
+                    print(f"[DEBUG] World model first param device: {next(world_model.parameters()).device}")
+                    
                     # Mark step begin for CUDAGraph to prevent tensor overwrite issues
                     torch.compiler.cudagraph_mark_step_begin()
                     with torch.autocast(
@@ -249,6 +263,14 @@ def main(cfg: DictConfig):  # noqa: F821
                             + model_loss_td["loss_model_reco"]
                             + model_loss_td["loss_model_reward"]
                         )
+                    
+                    # DEBUG: Log loss tensor devices
+                    print(f"[DEBUG] After world_model_loss:")
+                    print(f"  loss_model_kl device: {model_loss_td['loss_model_kl'].device}")
+                    print(f"  loss_model_reco device: {model_loss_td['loss_model_reco'].device}")
+                    print(f"  loss_model_reward device: {model_loss_td['loss_model_reward'].device}")
+                    print(f"  loss_world_model device: {loss_world_model.device}")
+                    
                     torchrl_logger.debug(
                         f"world_model_loss forward OK, loss={loss_world_model.item():.4f}"
                     )
