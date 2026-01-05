@@ -76,11 +76,11 @@ profiling:
   # Warmup steps (profiler runs but data discarded for warmup)
   warmup_steps: 1
   # Number of optim steps to profile (actual traced data)
-  active_steps: 5
+  active_steps: 1
   # Export chrome trace to this file (if set)
   trace_file: dreamer_trace.json
-  # Profile CUDA kernels (requires CUDA)
-  profile_cuda: True
+  # Profile CUDA kernels (VERY heavy on GPU, generates millions of events)
+  profile_cuda: False
   # Record tensor shapes (adds to trace size)
   record_shapes: False
   # Profile memory usage (VERY heavy, ~10x trace size)
@@ -88,4 +88,4 @@ profiling:
   # Record Python call stacks (heavy, ~2x trace size)
   with_stack: False
   # Compute FLOPs (moderate overhead)
-  with_flops: True
+  with_flops: False
