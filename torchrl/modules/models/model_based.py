@@ -557,9 +557,29 @@ class RSSMRollout(TensorDictModuleBase):
             combine_fn = self._scan_combine_fn_no_noise
 
         # Run scan
+        # Use eager backend for scan's internal compilation to avoid slow
+        # Inductor compilation that scales O(sequence_length).
+        # See: https://github.com/pytorch/pytorch/issues/...
         init = (init_state, init_belief)
 
-        final_carry, stacked_outputs = scan(combine_fn, init, xs, dim=0)
+        # Temporarily patch _maybe_compile_and_run_fn to use eager backend
+        from torch._higher_order_ops import utils as hop_utils
+
+        _orig_maybe_compile = hop_utils._maybe_compile_and_run_fn
+
+        def _eager_compile_and_run_fn(fn, *args):
+            if not torch.compiler.is_dynamo_compiling():
+                # Force eager backend to avoid slow Inductor compilation
+                with torch._dynamo.utils.disable_cache_limit():
+                    return torch.compile(fn, backend="eager", fullgraph=True)(*args)
+            else:
+                return fn(*args)
+
+        hop_utils._maybe_compile_and_run_fn = _eager_compile_and_run_fn
+        try:
+            final_carry, stacked_outputs = scan(combine_fn, init, xs, dim=0)
+        finally:
+            hop_utils._maybe_compile_and_run_fn = _orig_maybe_compile
 
         # Unpack stacked outputs
         # Each output has shape (time_steps, *batch, feature_dim)
