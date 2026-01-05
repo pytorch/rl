@@ -787,6 +787,10 @@ class TransformersWrapper(LLMWrapperBase):
         response_struct = history.apply_chat_template(
             tokenizer=self.tokenizer, **tokenizer_kwargs
         )
+
+        if self._device is not None:
+            response_struct = response_struct.to(self._device)
+        
         tokens_prompt_padded = response_struct.get(
             "input_ids",
             as_padded_tensor=True,
