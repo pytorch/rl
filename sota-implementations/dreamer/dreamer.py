@@ -103,7 +103,8 @@ def main(cfg: DictConfig):  # noqa: F821
     )
 
     # Make async multi-collector (uses env factory for worker processes)
-    collector = make_collector(cfg, train_env_factory, policy)
+    # Device allocation: cuda:0 for training, cuda:1+ for collectors (if multi-GPU)
+    collector = make_collector(cfg, train_env_factory, policy, training_device=device)
 
     # Make replay buffer with minimal sample-time transforms
     batch_size = cfg.replay_buffer.batch_size

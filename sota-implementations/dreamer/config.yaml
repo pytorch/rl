@@ -16,7 +16,8 @@ collector:
   init_random_frames: 3000
   frames_per_batch: 1000
   # Number of parallel collector workers (async mode)
-  num_collectors: 8
+  # On multi-GPU: must be <= num_gpus - 1 (cuda:0 reserved for training)
+  num_collectors: 7
   device:
 
 optimization:

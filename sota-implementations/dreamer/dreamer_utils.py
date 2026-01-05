@@ -74,6 +74,72 @@ from torchrl.modules import (
 from torchrl.record import VideoRecorder
 
 
+def allocate_collector_devices(
+    num_collectors: int, training_device: torch.device
+) -> list[torch.device]:
+    """Allocate CUDA devices for collectors, reserving cuda:0 for training.
+
+    Device allocation strategy:
+    - Training always uses cuda:0
+    - Collectors use cuda:1, cuda:2, ..., cuda:N-1 if available
+    - If only 1 CUDA device, colocate training and inference on cuda:0
+    - If num_collectors >= num_cuda_devices, raise an exception
+
+    Args:
+        num_collectors: Number of collector workers requested
+        training_device: The device used for training (determines if CUDA is used)
+
+    Returns:
+        List of devices for each collector worker
+
+    Raises:
+        ValueError: If num_collectors >= num_cuda_devices (no device left for training)
+    """
+    if training_device.type != "cuda":
+        # CPU training: all collectors on CPU
+        return [torch.device("cpu")] * num_collectors
+
+    num_cuda_devices = torch.cuda.device_count()
+
+    if num_cuda_devices == 0:
+        # No CUDA devices available, fall back to CPU
+        return [torch.device("cpu")] * num_collectors
+
+    if num_cuda_devices == 1:
+        # Single GPU: colocate training and inference
+        torchrl_logger.info(
+            f"Single CUDA device available. Colocating {num_collectors} collectors "
+            "with training on cuda:0"
+        )
+        return [torch.device("cuda:0")] * num_collectors
+
+    # Multiple GPUs available
+    # Reserve cuda:0 for training, use cuda:1..cuda:N-1 for inference
+    inference_devices = num_cuda_devices - 1  # Devices available for collectors
+
+    if num_collectors > inference_devices:
+        raise ValueError(
+            f"Requested {num_collectors} collectors but only {inference_devices} "
+            f"CUDA devices available for inference (cuda:1 to cuda:{num_cuda_devices-1}). "
+            f"cuda:0 is reserved for training. Either reduce num_collectors to "
+            f"{inference_devices} or add more GPUs."
+        )
+
+    # Distribute collectors across available inference devices (round-robin)
+    collector_devices = []
+    for i in range(num_collectors):
+        device_idx = (i % inference_devices) + 1  # +1 to skip cuda:0
+        collector_devices.append(torch.device(f"cuda:{device_idx}"))
+
+    device_str = ", ".join(str(d) for d in collector_devices)
+    torchrl_logger.info(
+        f"Allocated {num_collectors} collectors to devices: [{device_str}]. "
+        f"Training on cuda:0."
+    )
+
+    return collector_devices
+
+
 class DreamerProfiler:
     """Helper class for PyTorch profiling in Dreamer training.
 
@@ -497,18 +563,29 @@ def make_dreamer(
     )
 
 
-def make_collector(cfg, train_env_factory, actor_model_explore):
+def make_collector(
+    cfg, train_env_factory, actor_model_explore, training_device: torch.device
+):
     """Make async multi-collector for parallel data collection.
 
     Args:
         cfg: Configuration object
         train_env_factory: A callable that creates a training environment
         actor_model_explore: The exploration policy
+        training_device: Device used for training (used to allocate collector devices)
 
     Returns:
         MultiCollector in async mode with multiple worker processes
+
+    Device allocation:
+        - If training on CUDA with multiple GPUs: collectors use cuda:1, cuda:2, etc.
+        - If training on CUDA with single GPU: collectors colocate on cuda:0
+        - If training on CPU: collectors use CPU
     """
     num_collectors = cfg.collector.num_collectors
+
+    # Allocate devices for collectors (reserves cuda:0 for training if multi-GPU)
+    collector_devices = allocate_collector_devices(num_collectors, training_device)
 
     collector = MultiCollector(
         create_env_fn=[train_env_factory] * num_collectors,
@@ -516,7 +593,7 @@ def make_collector(cfg, train_env_factory, actor_model_explore):
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         init_random_frames=cfg.collector.init_random_frames,
-        policy_device=_default_device(cfg.collector.device),
+        policy_device=collector_devices,
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training
         update_at_each_batch=True,
