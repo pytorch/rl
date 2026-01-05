@@ -28,6 +28,7 @@ __all__ = [
     "INSTANTIATE_TIMEOUT",
     "_MIN_TIMEOUT",
     "_MAX_IDLE_COUNT",
+    "WEIGHT_SYNC_TIMEOUT",
     "DEFAULT_EXPLORATION_TYPE",
     "_is_osx",
     "_Interruptor",
@@ -38,6 +39,9 @@ __all__ = [
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
+# Timeout for weight synchronization during collector init.
+# Increase this when using many collectors across different CUDA devices.
+WEIGHT_SYNC_TIMEOUT = float(os.environ.get("TORCHRL_WEIGHT_SYNC_TIMEOUT", 60.0))
 # MAX_IDLE_COUNT is the maximum number of times a Dataloader worker can timeout with his queue.
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).max))
 
