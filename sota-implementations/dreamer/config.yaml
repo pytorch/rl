@@ -79,13 +79,13 @@ profiling:
   active_steps: 1
   # Export chrome trace to this file (if set)
   trace_file: dreamer_trace.json
-  # Profile CUDA kernels (VERY heavy on GPU, generates millions of events)
+  # Profile CUDA kernels (VERY heavy on GPU - 13GB vs 1GB trace!)
   profile_cuda: False
-  # Record tensor shapes (adds to trace size)
-  record_shapes: False
-  # Profile memory usage (VERY heavy, ~10x trace size)
-  profile_memory: False
-  # Record Python call stacks (heavy, ~2x trace size)
-  with_stack: False
-  # Compute FLOPs (moderate overhead)
-  with_flops: False
+  # Record tensor shapes
+  record_shapes: True
+  # Profile memory usage
+  profile_memory: True
+  # Record Python call stacks
+  with_stack: True
+  # Compute FLOPs
+  with_flops: True
