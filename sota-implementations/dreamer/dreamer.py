@@ -119,7 +119,7 @@ def main(cfg: DictConfig):  # noqa: F821
         buffer_size=buffer_size,
         buffer_scratch_dir=scratch_dir,
         device=device,
-        prefetch=prefetch,
+        prefetch=prefetch if not cfg.profiling.enabled else None,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
