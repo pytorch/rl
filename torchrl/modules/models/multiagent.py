@@ -156,7 +156,7 @@ class MultiAgentNetBase(nn.Module):
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
-                    (0, self.agent_dim),
+                    (0, agent_dim_positive),
                     (agent_dim_positive,),
                     randomness=self.vmap_randomness,
                 )(self.params, inputs)
