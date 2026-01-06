@@ -81,7 +81,7 @@ profiling:
   # Export chrome trace to this file (if set)
   trace_file: dreamer_trace.json
   # Profile CUDA kernels (VERY heavy on GPU - 13GB vs 1GB trace!)
-  profile_cuda: False
+  profile_cuda: true
   # Record tensor shapes
   record_shapes: True
   # Profile memory usage

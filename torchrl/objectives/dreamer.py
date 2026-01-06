@@ -11,7 +11,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
-from torchrl._utils import _maybe_record_function, _maybe_timeit
+from torchrl._utils import _maybe_record_function_decorator, _maybe_timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
@@ -123,68 +123,57 @@ class DreamerModelLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
 
+    @_maybe_record_function_decorator("world_model_loss/forward")
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
-        with _maybe_record_function("world_model_loss/clone_rename"):
-            tensordict = tensordict.copy()
-            tensordict.rename_key_(
-                ("next", self.tensor_keys.reward),
-                ("next", self.tensor_keys.true_reward),
-            )
-
-        with _maybe_record_function("world_model_loss/world_model_forward"):
-            tensordict = self.world_model(tensordict)
-
-        # compute model loss
-        with _maybe_record_function("world_model_loss/kl_loss"):
-            prior_mean = tensordict.get(("next", self.tensor_keys.prior_mean))
-            prior_std = tensordict.get(("next", self.tensor_keys.prior_std))
-            posterior_mean = tensordict.get(("next", self.tensor_keys.posterior_mean))
-            posterior_std = tensordict.get(("next", self.tensor_keys.posterior_std))
-
-            kl_loss = self.kl_loss(
-                prior_mean, prior_std, posterior_mean, posterior_std,
-            ).unsqueeze(-1)
-
-        with _maybe_record_function("world_model_loss/reco_loss"):
-            # Ensure contiguous layout for torch.compile compatibility
-            # The gradient from distance_loss flows back through decoder convolutions
-            pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
-            reco_pixels = tensordict.get(("next", self.tensor_keys.reco_pixels)).contiguous()
-
-            reco_loss = distance_loss(
-                pixels,
-                reco_pixels,
-                self.reco_loss,
-            )
-            if not self.global_average:
-                reco_loss = reco_loss.sum((-3, -2, -1))
-            reco_loss = reco_loss.mean().unsqueeze(-1)
-
-        with _maybe_record_function("world_model_loss/reward_loss"):
-            true_reward = tensordict.get(("next", self.tensor_keys.true_reward))
-            pred_reward = tensordict.get(("next", self.tensor_keys.reward))
-
-            reward_loss = distance_loss(
-                true_reward,
-                pred_reward,
-                self.reward_loss,
-            )
-            if not self.global_average:
-                reward_loss = reward_loss.squeeze(-1)
-            reward_loss = reward_loss.mean().unsqueeze(-1)
-
-        with _maybe_record_function("world_model_loss/build_output"):
-            td_out = TensorDict(
-                loss_model_kl=self.lambda_kl * kl_loss,
-                loss_model_reco=self.lambda_reco * reco_loss,
-                loss_model_reward=self.lambda_reward * reward_loss,
-            )
-            self._clear_weakrefs(tensordict, td_out)
-
-        return (
-            td_out,
-            tensordict.data,
+        tensordict = tensordict.copy()
+        tensordict.rename_key_(
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.true_reward),
         )
+
+        tensordict = self.world_model(tensordict)
+
+        prior_mean = tensordict.get(("next", self.tensor_keys.prior_mean))
+        prior_std = tensordict.get(("next", self.tensor_keys.prior_std))
+        posterior_mean = tensordict.get(("next", self.tensor_keys.posterior_mean))
+        posterior_std = tensordict.get(("next", self.tensor_keys.posterior_std))
+
+        kl_loss = self.kl_loss(
+            prior_mean, prior_std, posterior_mean, posterior_std,
+        ).unsqueeze(-1)
+
+        # Ensure contiguous layout for torch.compile compatibility
+        # The gradient from distance_loss flows back through decoder convolutions
+        pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
+        reco_pixels = tensordict.get(("next", self.tensor_keys.reco_pixels)).contiguous()
+        reco_loss = distance_loss(
+            pixels,
+            reco_pixels,
+            self.reco_loss,
+        )
+        if not self.global_average:
+            reco_loss = reco_loss.sum((-3, -2, -1))
+        reco_loss = reco_loss.mean().unsqueeze(-1)
+
+        true_reward = tensordict.get(("next", self.tensor_keys.true_reward))
+        pred_reward = tensordict.get(("next", self.tensor_keys.reward))
+        reward_loss = distance_loss(
+            true_reward,
+            pred_reward,
+            self.reward_loss,
+        )
+        if not self.global_average:
+            reward_loss = reward_loss.squeeze(-1)
+        reward_loss = reward_loss.mean().unsqueeze(-1)
+
+        td_out = TensorDict(
+            loss_model_kl=self.lambda_kl * kl_loss,
+            loss_model_reco=self.lambda_reco * reco_loss,
+            loss_model_reward=self.lambda_reward * reward_loss,
+        )
+        self._clear_weakrefs(tensordict, td_out)
+
+        return (td_out, tensordict.data)
 
     @staticmethod
     def normal_log_probability(x, mean, std):
@@ -294,49 +283,39 @@ class DreamerActorLoss(LossModule):
                 value=self._tensor_keys.value,
             )
 
+    @_maybe_record_function_decorator("actor_loss/forward")
     def forward(self, tensordict: TensorDict) -> tuple[TensorDict, TensorDict]:
-        with _maybe_record_function("actor_loss/select_state"):
-            tensordict = tensordict.select("state", self.tensor_keys.belief).data
+        tensordict = tensordict.select("state", self.tensor_keys.belief).data
 
-        with _maybe_record_function("actor_loss/imagination_rollout"):
-            with _maybe_timeit("actor_loss/time-rollout"), hold_out_net(
-                self.model_based_env
-            ), set_exploration_type(ExplorationType.RANDOM):
-                with _maybe_record_function("actor_loss/env_reset"):
-                    tensordict = self.model_based_env.reset(tensordict.copy())
+        with _maybe_timeit("actor_loss/time-rollout"), hold_out_net(
+            self.model_based_env
+        ), set_exploration_type(ExplorationType.RANDOM):
+            tensordict = self.model_based_env.reset(tensordict.copy())
+            fake_data = self.model_based_env.rollout(
+                max_steps=self.imagination_horizon,
+                policy=self.actor_model,
+                auto_reset=False,
+                tensordict=tensordict,
+            )
+            next_tensordict = step_mdp(fake_data, keep_other=True)
+            with hold_out_net(self.value_model):
+                next_tensordict = self.value_model(next_tensordict)
 
-                with _maybe_record_function("actor_loss/env_rollout"):
-                    fake_data = self.model_based_env.rollout(
-                        max_steps=self.imagination_horizon,
-                        policy=self.actor_model,
-                        auto_reset=False,
-                        tensordict=tensordict,
-                    )
+        reward = fake_data.get(("next", self.tensor_keys.reward))
+        next_value = next_tensordict.get(self.tensor_keys.value)
+        lambda_target = self.lambda_target(reward, next_value)
+        fake_data.set("lambda_target", lambda_target)
 
-                with _maybe_record_function("actor_loss/step_mdp"):
-                    next_tensordict = step_mdp(fake_data, keep_other=True)
-
-                with _maybe_record_function("actor_loss/value_model"):
-                    with hold_out_net(self.value_model):
-                        next_tensordict = self.value_model(next_tensordict)
-
-        with _maybe_record_function("actor_loss/lambda_target"):
-            reward = fake_data.get(("next", self.tensor_keys.reward))
-            next_value = next_tensordict.get(self.tensor_keys.value)
-            lambda_target = self.lambda_target(reward, next_value)
-            fake_data.set("lambda_target", lambda_target)
-
-        with _maybe_record_function("actor_loss/compute_loss"):
-            if self.discount_loss:
-                gamma = self.value_estimator.gamma.to(tensordict.device)
-                discount = gamma.expand(lambda_target.shape).clone()
-                discount[..., 0, :] = 1
-                discount = discount.cumprod(dim=-2)
-                actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
-            else:
-                actor_loss = -lambda_target.sum((-2, -1)).mean()
-            loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
-            self._clear_weakrefs(tensordict, loss_tensordict)
+        if self.discount_loss:
+            gamma = self.value_estimator.gamma.to(tensordict.device)
+            discount = gamma.expand(lambda_target.shape).clone()
+            discount[..., 0, :] = 1
+            discount = discount.cumprod(dim=-2)
+            actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
+        else:
+            actor_loss = -lambda_target.sum((-2, -1)).mean()
+        loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
+        self._clear_weakrefs(tensordict, loss_tensordict)
 
         return loss_tensordict, fake_data.data
 
@@ -450,46 +429,41 @@ class DreamerValueLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
 
+    @_maybe_record_function_decorator("value_loss/forward")
     def forward(self, fake_data) -> torch.Tensor:
-        with _maybe_record_function("value_loss/get_lambda_target"):
-            lambda_target = fake_data.get("lambda_target")
+        lambda_target = fake_data.get("lambda_target")
 
-        with _maybe_record_function("value_loss/select_and_forward"):
-            tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
-            self.value_model(tensordict_select)
+        tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
+        self.value_model(tensordict_select)
 
-        with _maybe_record_function("value_loss/compute_loss"):
-            if self.discount_loss:
-                discount = self.gamma * torch.ones_like(
-                    lambda_target, device=lambda_target.device
-                )
-                discount[..., 0, :] = 1
-                discount = discount.cumprod(dim=-2)
-                value_loss = (
-                    (
-                        discount
-                        * distance_loss(
-                            tensordict_select.get(self.tensor_keys.value),
-                            lambda_target,
-                            self.value_loss,
-                        )
-                    )
-                    .sum((-1, -2))
-                    .mean()
-                )
-            else:
-                value_loss = (
-                    distance_loss(
+        if self.discount_loss:
+            discount = self.gamma * torch.ones_like(lambda_target, device=lambda_target.device)
+            discount[..., 0, :] = 1
+            discount = discount.cumprod(dim=-2)
+            value_loss = (
+                (
+                    discount
+                    * distance_loss(
                         tensordict_select.get(self.tensor_keys.value),
                         lambda_target,
                         self.value_loss,
                     )
-                    .sum((-1, -2))
-                    .mean()
                 )
+                .sum((-1, -2))
+                .mean()
+            )
+        else:
+            value_loss = (
+                distance_loss(
+                    tensordict_select.get(self.tensor_keys.value),
+                    lambda_target,
+                    self.value_loss,
+                )
+                .sum((-1, -2))
+                .mean()
+            )
 
-        with _maybe_record_function("value_loss/build_output"):
-            loss_tensordict = TensorDict({"loss_value": value_loss})
-            self._clear_weakrefs(fake_data, loss_tensordict)
+        loss_tensordict = TensorDict({"loss_value": value_loss})
+        self._clear_weakrefs(fake_data, loss_tensordict)
 
         return loss_tensordict, fake_data

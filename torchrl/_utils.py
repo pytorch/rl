@@ -356,6 +356,24 @@ def _maybe_record_function(name):
     return record_function(name)
 
 
+def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable]:
+    """Decorator version of :func:`_maybe_record_function`.
+
+    This is preferred over sprinkling many context managers in hot code paths,
+    as it reduces Python overhead while keeping a useful profiler structure.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            with _maybe_record_function(name):
+                return fn(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
 def _check_for_faulty_process(processes):
     terminate = False
     for p in processes:
