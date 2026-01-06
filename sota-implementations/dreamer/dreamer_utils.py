@@ -151,12 +151,13 @@ class DreamerProfiler:
         pbar: Progress bar to update total when profiling.
     """
 
-    def __init__(self, cfg, device, pbar=None):
+    def __init__(self, cfg, device, pbar=None, *, compile_warmup: int = 0):
         self.enabled = cfg.profiling.enabled
         self.cfg = cfg
         self.total_optim_steps = 0
         self._profiler = None
         self._stopped = False
+        self._compile_warmup = compile_warmup
 
         if not self.enabled:
             return
@@ -174,8 +175,17 @@ class DreamerProfiler:
         # - skip_first: steps to skip entirely (no profiling)
         # - warmup: steps to warm up profiler (data discarded)
         # - active: steps to actually profile (data kept)
+        #
+        # When torch.compile is enabled via compile_with_warmup, the first `compile_warmup`
+        # calls run eagerly and the *next* call typically triggers compilation. Profiling
+        # these steps is usually undesirable because it captures compilation overhead and
+        # non-representative eager execution.
+        #
+        # Therefore we automatically extend skip_first by (compile_warmup + 1) optim steps.
+        extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
+        skip_first = cfg.profiling.skip_first + extra_skip
         profiler_schedule = torch.profiler.schedule(
-            skip_first=cfg.profiling.skip_first,
+            skip_first=skip_first,
             wait=0,
             warmup=cfg.profiling.warmup_steps,
             active=cfg.profiling.active_steps,
@@ -213,8 +223,10 @@ class DreamerProfiler:
         self._profiler.step()
 
         # Check if we should stop profiling
+        extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
         target_steps = (
             self.cfg.profiling.skip_first
+            + extra_skip
             + self.cfg.profiling.warmup_steps
             + self.cfg.profiling.active_steps
         )
@@ -236,8 +248,10 @@ class DreamerProfiler:
         """Check if training loop should exit due to profiling completion."""
         if not self.enabled:
             return False
+        extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
         target_steps = (
             self.cfg.profiling.skip_first
+            + extra_skip
             + self.cfg.profiling.warmup_steps
             + self.cfg.profiling.active_steps
         )

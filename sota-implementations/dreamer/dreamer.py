@@ -180,7 +180,8 @@ def main(cfg: DictConfig):  # noqa: F821
     if cfg.optimization.compile:
         torch._dynamo.config.capture_scalar_outputs = True
 
-        torchrl_logger.info("Compiling loss modules with warmup=3")
+        compile_warmup = 3
+        torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
         backend = cfg.optimization.compile_backend
 
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
@@ -189,18 +190,20 @@ def main(cfg: DictConfig):  # noqa: F821
         #
         # Instead, we compile the loss modules themselves which wraps the forward pass.
         # fullgraph=False allows graph breaks which can help with inductor issues.
-        # warmup=3 runs eagerly for first 3 calls before compiling.
+        # warmup=compile_warmup runs eagerly for first `compile_warmup` calls before compiling.
         world_model_loss = compile_with_warmup(
-            world_model_loss, backend=backend, mode=cfg.optimization.compile_mode, fullgraph=False, warmup=3
+            world_model_loss, backend=backend, mode=cfg.optimization.compile_mode, fullgraph=False, warmup=compile_warmup
         )
-        actor_loss = compile_with_warmup(actor_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=3)
-        value_loss = compile_with_warmup(value_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=3)
+        actor_loss = compile_with_warmup(actor_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=compile_warmup)
+        value_loss = compile_with_warmup(value_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=compile_warmup)
+    else:
+        compile_warmup = 0
 
     # Throughput tracking
     t_iter_start = time.time()
 
     # Profiling setup (encapsulated in helper class)
-    profiler = DreamerProfiler(cfg, device, pbar)
+    profiler = DreamerProfiler(cfg, device, pbar, compile_warmup=compile_warmup)
 
     for i, tensordict in enumerate(collector):
         # Note: Collection time is implicitly measured by the collector's iteration
