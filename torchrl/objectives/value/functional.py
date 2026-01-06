@@ -333,13 +333,15 @@ def vec_generalized_advantage_estimate(
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
 
-    first_below_thr = gammalmbdas < 1e-7
-    # if we have multiple gammas, we only want to truncate if _all_ of
-    # the geometric sequences fall below the threshold
-    first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
-    if first_below_thr.any():
-        first_below_thr = torch.where(first_below_thr)[0][0].item()
-        gammalmbdas = gammalmbdas[..., :first_below_thr, :]
+    # Skip data-dependent truncation optimization during compile (causes guards)
+    if not is_dynamo_compiling():
+        first_below_thr = gammalmbdas < 1e-7
+        # if we have multiple gammas, we only want to truncate if _all_ of
+        # the geometric sequences fall below the threshold
+        first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
+        if first_below_thr.any():
+            first_below_thr = torch.where(first_below_thr)[0][0].item()
+            gammalmbdas = gammalmbdas[..., :first_below_thr, :]
 
     not_terminated = (~terminated).to(dtype)
     td0 = reward + not_terminated * gamma * next_state_value - state_value
@@ -1004,7 +1006,8 @@ def _fast_td_lambda_return_estimate(
     # the only valid next states are those where the trajectory does not terminate
     next_state_value = (~terminated).int() * next_state_value
 
-    gamma_tensor = torch.tensor([gamma], device=device)
+    # Use torch.full to create directly on device (avoids DeviceCopy in cudagraph)
+    gamma_tensor = torch.full((1,), gamma, device=device)
     gammalmbda = gamma_tensor * lmbda
 
     num_per_traj = _get_num_per_traj(done)
@@ -1125,7 +1128,8 @@ def vec_td_lambda_return_estimate(
 
     if rolling_gamma is None:
         rolling_gamma = True
-    if not rolling_gamma:
+    if not rolling_gamma and not is_dynamo_compiling():
+        # Skip this validation during compile to avoid CUDA syncs
         terminated_follows_terminated = terminated[..., 1:, :][
             terminated[..., :-1, :]
         ].all()
