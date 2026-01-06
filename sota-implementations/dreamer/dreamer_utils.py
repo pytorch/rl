@@ -457,16 +457,16 @@ def make_dreamer(
     )
     print(f"[DEBUG] RSSMPosterior created - first param device: {next(rssm_posterior.parameters()).device}")
 
-    # When use_scan=True, replace C++ GRU with Python-based GRU for torch.compile compatibility.
-    # The C++ GRU (cuBLAS) cannot be traced by torch.compile when used inside scan on GPU.
-    if cfg.networks.use_scan:
+    # When use_scan=True or rssm_rollout.compile=True, replace C++ GRU with Python-based GRU
+    # for torch.compile compatibility. The C++ GRU (cuBLAS) cannot be traced by torch.compile.
+    if cfg.networks.use_scan or cfg.networks.rssm_rollout.compile:
         from torchrl.modules.tensordict_module.rnn import GRUCell as PythonGRUCell
 
         old_rnn = rssm_prior.rnn
         python_rnn = PythonGRUCell(old_rnn.input_size, old_rnn.hidden_size, device=device)
         python_rnn.load_state_dict(old_rnn.state_dict())
         rssm_prior.rnn = python_rnn
-        torchrl_logger.info("Switched RSSMPrior to Python-based GRU for scan compatibility")
+        torchrl_logger.info("Switched RSSMPrior to Python-based GRU for torch.compile compatibility")
     # Make reward module
     reward_module = MLP(
         out_features=1,
