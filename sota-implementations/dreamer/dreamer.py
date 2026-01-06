@@ -119,7 +119,7 @@ def main(cfg: DictConfig):  # noqa: F821
         buffer_size=buffer_size,
         buffer_scratch_dir=scratch_dir,
         device=device,
-        prefetch=prefetch if not cfg.profiling.enabled else None,
+        prefetch=prefetch if not (profiling_enabled := cfg.profiling.enabled) else None,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
@@ -226,7 +226,8 @@ def main(cfg: DictConfig):  # noqa: F821
                     sampled_tensordict = replay_buffer.sample().reshape(
                         -1, batch_length
                     )
-                    torch.cuda.synchronize()
+                    if profiling_enabled:
+                        torch.cuda.synchronize()
 
                 # update world model
                 with timeit("train/world_model-forward"), record_function(
@@ -238,6 +239,7 @@ def main(cfg: DictConfig):  # noqa: F821
                         device_type=device.type,
                         dtype=autocast_dtype,
                     ) if autocast_dtype else contextlib.nullcontext():
+                        assert sampled_tensordict.device.type == "cuda", "sampled_tensordict should be on CUDA"
                         model_loss_td, sampled_tensordict = world_model_loss(
                             sampled_tensordict
                         )

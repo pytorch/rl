@@ -379,8 +379,6 @@ class RSSMRollout(TensorDictModuleBase):
         _tensordict = update_values[0].copy()
 
         for t in range(time_steps):
-            torch._dynamo.graph_break()
-
             # Insert noise for this timestep into tensordict (TensorDictModule handles passing it)
             if prior_noise is not None:
                 _tensordict.set("prior_noise", prior_noise.select(time_dim, t))
