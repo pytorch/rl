@@ -290,13 +290,21 @@ class DreamerActorLoss(LossModule):
         with _maybe_timeit("actor_loss/time-rollout"), hold_out_net(
             self.model_based_env
         ), set_exploration_type(ExplorationType.RANDOM):
-            tensordict = self.model_based_env.reset(tensordict.copy())
-            fake_data = self.model_based_env.rollout(
-                max_steps=self.imagination_horizon,
-                policy=self.actor_model,
-                auto_reset=False,
-                tensordict=tensordict,
-            )
+            # We run a fixed-horizon imagination rollout. Unlike EnvBase.rollout(),
+            # we do not need any done/reset logic here (Dreamer imagination horizon is fixed),
+            # and avoiding done checks prevents CUDA syncs (e.g. aten::is_nonzero) from
+            # Python `if` statements on CUDA tensors.
+            tensordict_ = tensordict.copy()
+            batch_size = tensordict_.batch_size
+            tensordicts = []
+            for i in range(self.imagination_horizon):
+                # Policy writes action in-place (TensorDictModule) or via returned TD update.
+                tensordict_.update(self.actor_model(tensordict_))
+                step_td = self.model_based_env.step(tensordict_)
+                tensordicts.append(step_td)
+                if i < self.imagination_horizon - 1:
+                    tensordict_ = step_mdp(step_td, keep_other=True)
+            fake_data = torch.stack(tensordicts, len(batch_size))
             next_tensordict = step_mdp(fake_data, keep_other=True)
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
