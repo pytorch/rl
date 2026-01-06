@@ -132,15 +132,17 @@ class MultiAgentNetBase(nn.Module):
         else:
             inputs = inputs[0]
 
-        inputs = self._pre_forward_check(inputs)
-
         # Convert agent_dim to positive index for consistent output placement.
         # This ensures the agent dimension stays at the same position relative
         # to batch dimensions, even if the network changes the number of dimensions
         # (e.g., ConvNet collapses spatial dims).
+        # NOTE: Must compute this BEFORE _pre_forward_check, which may modify input shape
+        # (e.g., centralized mode flattens the agent dimension).
         agent_dim_positive = self.agent_dim
         if agent_dim_positive < 0:
             agent_dim_positive = inputs.ndim + agent_dim_positive
+
+        inputs = self._pre_forward_check(inputs)
 
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
