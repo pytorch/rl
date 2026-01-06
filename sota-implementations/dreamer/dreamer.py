@@ -223,7 +223,10 @@ def main(cfg: DictConfig):  # noqa: F821
                 with timeit("train/sample"), record_function(
                     "## train/sample ##"
                 ):
-                    sampled_tensordict = replay_buffer.sample()
+                    sampled_tensordict = replay_buffer.sample().reshape(
+                        -1, batch_length
+                    )
+                    torch.cuda.synchronize()
 
                 # update world model
                 with timeit("train/world_model-forward"), record_function(
