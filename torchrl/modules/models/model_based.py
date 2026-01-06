@@ -292,11 +292,18 @@ class RSSMRollout(TensorDictModuleBase):
         # This keeps the outer Python loop but reduces per-step overhead and can
         # fuse parts of the prior/posterior computation.
         self._loop_step = self._loop_step_impl
+        self._forward_loop = self._forward_loop_impl
         if compile_step:
             # Compile the bound method (self is captured), resulting in a callable with
             # signature: (tensordict_t, prior_n, posterior_n) -> None.
             self._loop_step = torch.compile(
                 self._loop_step_impl,
+                backend=compile_backend,
+                mode=compile_mode,
+                fullgraph=True,
+            )
+            self._forward_loop = torch.compile(
+                self._forward_loop_impl,
                 backend=compile_backend,
                 mode=compile_mode,
                 fullgraph=True,
@@ -417,7 +424,7 @@ class RSSMRollout(TensorDictModuleBase):
             return self._forward_scan(tensordict, prior_noise=prior_noise, posterior_noise=posterior_noise)
         return self._forward_loop(tensordict, prior_noise=prior_noise, posterior_noise=posterior_noise)
 
-    def _forward_loop(self, tensordict, *, prior_noise=None, posterior_noise=None):
+    def _forward_loop_impl(self, tensordict, *, prior_noise=None, posterior_noise=None):
         """Forward pass using explicit for-loop with graph breaks.
 
         Args:
