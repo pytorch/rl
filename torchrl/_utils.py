@@ -903,6 +903,46 @@ def _make_ordinal_device(device: torch.device):
     return device
 
 
+def get_available_device(return_str: bool = False) -> torch.device | str:
+    """Return the available accelerator device, or CPU if none is found.
+
+    Checks for accelerator availability in the following order: CUDA, NPU, MPS.
+    Returns the first available accelerator, or CPU if none are present.
+
+    .. note::
+        PyTorch generally assumes a single accelerator type per system.
+        Running with multiple accelerator types (e.g., both CUDA and NPU)
+        is not officially supported. This function simply returns the first
+        available accelerator it finds.
+
+    Args:
+        return_str: If ``True``, returns a string representation of the device
+            instead of a :class:`~torch.device` object. Defaults to ``False``.
+
+    Returns:
+        The available accelerator device as a :class:`~torch.device` object,
+        or as a string if ``return_str`` is ``True``. Falls back to CPU if
+        no accelerator is available.
+
+    Examples:
+        >>> from torchrl._utils import get_available_device
+        >>> device = get_available_device()
+        >>> # Use with config fallback:
+        >>> device = cfg.device or get_available_device()
+    """
+    if torch.cuda.is_available():
+        device = "cuda:0"
+    elif hasattr(torch, "npu") and torch.npu.is_available():
+        device = "npu:0"
+    elif torch.backends.mps.is_available():
+        device = "mps:0"
+    else:
+        device = "cpu"
+    if return_str:
+        return device
+    return torch.device(device)
+
+
 class _ContextManager:
     def __init__(self):
         self._mode: Any | None = None
