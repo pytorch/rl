@@ -177,12 +177,16 @@ def main(cfg: DictConfig):  # noqa: F821
     if device.type == "cuda":
         torch.set_float32_matmul_precision("high")
 
-    if cfg.optimization.compile:
+    compile_cfg = cfg.optimization.compile
+    compile_enabled = compile_cfg.enabled
+    compile_losses = set(compile_cfg.losses)
+    if compile_enabled:
         torch._dynamo.config.capture_scalar_outputs = True
 
         compile_warmup = 3
         torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
-        backend = cfg.optimization.compile_backend
+        backend = compile_cfg.backend
+        mode = compile_cfg.mode
 
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
         # shared with the policy used in the collector. Compiling them would cause
@@ -191,11 +195,22 @@ def main(cfg: DictConfig):  # noqa: F821
         # Instead, we compile the loss modules themselves which wraps the forward pass.
         # fullgraph=False allows graph breaks which can help with inductor issues.
         # warmup=compile_warmup runs eagerly for first `compile_warmup` calls before compiling.
-        world_model_loss = compile_with_warmup(
-            world_model_loss, backend=backend, mode=cfg.optimization.compile_mode, fullgraph=False, warmup=compile_warmup
-        )
-        actor_loss = compile_with_warmup(actor_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=compile_warmup)
-        value_loss = compile_with_warmup(value_loss, backend=backend, mode=cfg.optimization.compile_mode, warmup=compile_warmup)
+        if "world_model" in compile_losses:
+            world_model_loss = compile_with_warmup(
+                world_model_loss,
+                backend=backend,
+                mode=mode,
+                fullgraph=False,
+                warmup=compile_warmup,
+            )
+        if "actor" in compile_losses:
+            actor_loss = compile_with_warmup(
+                actor_loss, backend=backend, mode=mode, warmup=compile_warmup
+            )
+        if "value" in compile_losses:
+            value_loss = compile_with_warmup(
+                value_loss, backend=backend, mode=mode, warmup=compile_warmup
+            )
     else:
         compile_warmup = 0
 

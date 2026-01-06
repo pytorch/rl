@@ -33,9 +33,12 @@ optimization:
   gamma: 0.99
   lmbda: 0.95
   imagination_horizon: 15
-  compile: True
-  compile_backend: inductor # or cudagraphs
-  compile_mode: reduce-overhead
+  compile:
+    enabled: True
+    backend: inductor # or cudagraphs
+    mode: reduce-overhead
+    # Which losses to compile (subset of: world_model, actor, value)
+    losses: ["world_model", "actor", "value"]
   # Autocast options: false, true (=bfloat16), float16, bfloat16
   autocast: bfloat16
 
