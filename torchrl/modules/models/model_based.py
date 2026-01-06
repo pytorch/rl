@@ -17,7 +17,7 @@ from tensordict.nn import (
 from torch import nn
 from torch.nn import GRUCell
 
-from torchrl._utils import _maybe_record_function_decorator, _maybe_timeit
+from torchrl._utils import _maybe_record_function_decorator
 from torchrl.modules.models.models import MLP
 
 
@@ -272,6 +272,10 @@ class RSSMRollout(TensorDictModuleBase):
         rssm_prior: TensorDictModule,
         rssm_posterior: TensorDictModule,
         use_scan: bool = False,
+        *,
+        compile_step: bool = False,
+        compile_backend: str = "inductor",
+        compile_mode: str | None = "reduce-overhead",
     ):
         super().__init__()
         _module = TensorDictSequential(rssm_prior, rssm_posterior)
@@ -280,6 +284,23 @@ class RSSMRollout(TensorDictModuleBase):
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
         self.use_scan = use_scan
+        self.compile_step = compile_step
+        self.compile_backend = compile_backend
+        self.compile_mode = compile_mode
+
+        # Optionally compile the per-timestep step function (TensorDict in/out).
+        # This keeps the outer Python loop but reduces per-step overhead and can
+        # fuse parts of the prior/posterior computation.
+        self._loop_step = self._loop_step_impl
+        if compile_step:
+            # Compile the bound method (self is captured), resulting in a callable with
+            # signature: (tensordict_t, prior_n, posterior_n) -> None.
+            self._loop_step = torch.compile(
+                self._loop_step_impl,
+                backend=compile_backend,
+                mode=compile_mode,
+                fullgraph=True,
+            )
         
         # Create a stable combine_fn for scan that won't trigger recompilation.
         # This must be created once and reused - recreating it causes recompiles.
@@ -312,6 +333,46 @@ class RSSMRollout(TensorDictModuleBase):
             return next_carry, outputs
 
         self._scan_combine_fn_no_noise = _combine_fn_no_noise
+
+    def _loop_step_impl(
+        self,
+        tensordict_t,
+        next_td,
+        prior_n: torch.Tensor,
+        posterior_n: torch.Tensor,
+    ):
+        """Executes a single RSSM step for one timestep.
+
+        Args:
+            tensordict_t: Current timestep tensordict (mutated in-place).
+            next_td: Next timestep tensordict to prepare, or None if last step.
+            prior_n: Noise tensor for prior sampling.
+            posterior_n: Noise tensor for posterior sampling.
+
+        Returns:
+            Tuple of (output_td, prepared_next_td). If `next_td` is None,
+            `prepared_next_td` is also None.
+        """
+        # Set noise for TensorDictModule wrappers.
+        tensordict_t.set("prior_noise", prior_n)
+        tensordict_t.set("posterior_noise", posterior_n)
+
+        # Prior: p(s_{t+1} | s_t, a_t, b_t)
+        self.rssm_prior(tensordict_t)
+        # Posterior: q(s_{t+1} | b_{t+1}, o_{t+1})
+        self.rssm_posterior(tensordict_t)
+
+        # Copy for output (preserves this timestep's state before we propagate).
+        out = tensordict_t.copy()
+
+        # Propagate state/belief to the next tensordict for the next iteration.
+        if next_td is not None:
+            next_state = tensordict_t.get(("next", "state"))
+            next_belief = tensordict_t.get(("next", "belief"))
+            next_td.set("state", next_state)
+            next_td.set("belief", next_belief)
+
+        return out, next_td
 
     @_maybe_record_function_decorator("rssm_rollout/forward")
     def forward(self, tensordict, *, prior_noise=None, posterior_noise=None):
@@ -376,43 +437,38 @@ class RSSMRollout(TensorDictModuleBase):
         time_dim = len(batch)
 
         update_values = tensordict.exclude(*self.out_keys).unbind(-1)
-        _tensordict = update_values[0].copy()
+        _tensordict = update_values[0]
+
+        # Pre-create noise tensors if not provided, for consistency and to avoid per-timestep
+        # `select(...)`/`randn(...)` overhead.
+        state0 = _tensordict.get("state")
+        state_dim = state0.shape[-1]
+        if prior_noise is None:
+            prior_noise = torch.randn(
+                (*state0.shape[:-1], time_steps, state_dim),
+                device=state0.device,
+                dtype=state0.dtype,
+            )
+        if posterior_noise is None:
+            posterior_noise = torch.randn(
+                (*state0.shape[:-1], time_steps, state_dim),
+                device=state0.device,
+                dtype=state0.dtype,
+            )
+
+        # Unbind once: avoid calling select(time_dim, t) in the loop.
+        prior_noise_steps = prior_noise.unbind(time_dim)
+        posterior_noise_steps = posterior_noise.unbind(time_dim)
 
         for t in range(time_steps):
-            # Insert noise for this timestep into tensordict (TensorDictModule handles passing it)
-            if prior_noise is not None:
-                _tensordict.set("prior_noise", prior_noise.select(time_dim, t))
-            if posterior_noise is not None:
-                _tensordict.set("posterior_noise", posterior_noise.select(time_dim, t))
+            # Get next timestep's base tensordict (or None if last step).
+            next_td = update_values[t + 1] if t < time_steps - 1 else None
 
-            # samples according to p(s_{t+1} | s_t, a_t, b_t)
-            # in_keys: ["state", "belief", "action", "prior_noise"] -> noise kwarg
-            # out_keys: [("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief")]
-            with _maybe_timeit("rssm_rollout/time-rssm_prior"):
-                self.rssm_prior(_tensordict)
-
-            # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
-            # in_keys: [("next", "belief"), ("next", "encoded_latents"), "posterior_noise"] -> noise kwarg
-            # out_keys: [("next", "posterior_mean"), ("next", "posterior_std"), ("next", "state")]
-            with _maybe_timeit("rssm_rollout/time-rssm_posterior"):
-                self.rssm_posterior(_tensordict)
-
-            # Copy before appending to preserve state for the final stack
-            tensordict_out.append(_tensordict.copy())
-            if t < time_steps - 1:
-                # Propagate the posterior state and belief to the next timestep.
-                # The prior needs "state" and "belief" at root, but they were written
-                # to ("next", "state") and ("next", "belief") by the current step.
-                next_state = _tensordict.get(("next", "state"))
-                next_belief = _tensordict.get(("next", "belief"))
-
-                # Start with the next timestep's data (action, encoded_latents, etc.)
-                # Copy to avoid modifying the original update_values
-                _tensordict = update_values[t + 1].copy()
-
-                # Set the propagated state and belief for the next iteration
-                _tensordict.set("state", next_state)
-                _tensordict.set("belief", next_belief)
+            # Run compiled step: prior, posterior, copy output, propagate state to next_td.
+            out_td, _tensordict = self._loop_step(
+                _tensordict, next_td, prior_noise_steps[t], posterior_noise_steps[t]
+            )
+            tensordict_out.append(out_td)
 
         out = torch.stack(tensordict_out, tensordict.ndim - 1)
 

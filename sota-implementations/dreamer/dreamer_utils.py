@@ -487,6 +487,9 @@ def make_dreamer(
         observation_in_key=observation_in_key,
         observation_out_key=observation_out_key,
         use_scan=cfg.networks.use_scan,
+        rssm_rollout_compile=cfg.networks.rssm_rollout.compile,
+        rssm_rollout_compile_backend=cfg.networks.rssm_rollout.compile_backend,
+        rssm_rollout_compile_mode=cfg.networks.rssm_rollout.compile_mode,
     )
     
     # DEBUG: Log all world model component devices
@@ -949,6 +952,9 @@ def _dreamer_make_world_model(
     observation_in_key: NestedKey = "pixels",
     observation_out_key: NestedKey = "reco_pixels",
     use_scan: bool = False,
+    rssm_rollout_compile: bool = False,
+    rssm_rollout_compile_backend: str = "inductor",
+    rssm_rollout_compile_mode: str | None = "reduce-overhead",
 ):
     # World Model and reward model
     # Note: in_keys uses dict form with out_to_in_map=True to map function args to tensordict keys.
@@ -977,6 +983,9 @@ def _dreamer_make_world_model(
             out_to_in_map=True,
         ),
         use_scan=use_scan,
+        compile_step=rssm_rollout_compile,
+        compile_backend=rssm_rollout_compile_backend,
+        compile_mode=rssm_rollout_compile_mode,
     )
     event_dim = 3 if observation_out_key == "reco_pixels" else 1  # 3 for RGB
     decoder = ProbabilisticTensorDictSequential(

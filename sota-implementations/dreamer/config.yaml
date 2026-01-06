@@ -48,6 +48,11 @@ networks:
   activation: "elu"
   # Use torch.scan for RSSM rollout (faster, no graph breaks with torch.compile)
   use_scan: False
+  rssm_rollout:
+    # Compile only the per-timestep RSSM rollout step (keeps Python loop, avoids scan/unrolling).
+    compile: False
+    compile_backend: inductor
+    compile_mode: reduce-overhead
 
 
 replay_buffer: 
