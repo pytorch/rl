@@ -11,9 +11,9 @@ from functools import wraps
 import torch
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -185,7 +185,7 @@ def _geom_series_like(t, r, thr):
 
     Drops all elements which are smaller than `thr` (unless in compile mode).
     """
-    if is_dynamo_compiling():
+    if is_compiling():
         if isinstance(r, torch.Tensor):
             rs = r.expand_as(t)
         else:
@@ -217,6 +217,8 @@ def _fast_vec_gae(
     gamma: float,
     lmbda: float,
     thr: float = 1e-7,
+    *,
+    fixed_horizon: bool = False,
 ):
     """Fast vectorized Generalized Advantage Estimate when gamma and lmbda are scalars.
 
@@ -233,6 +235,9 @@ def _fast_vec_gae(
         lmbda (scalar): the lambda decay (exponential mean discount)
         thr (:obj:`float`): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
+        fixed_horizon (bool): if True, assumes no mid-trajectory dones (all trajectories have
+            the same length). This avoids data-dependent shapes and is compile-friendly.
+            Defaults to False. During torch.compile, this is implicitly set to True.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
@@ -249,6 +254,24 @@ def _fast_vec_gae(
     gammalmbda = gamma * lmbda
     not_terminated = (~terminated).int()
     td0 = reward + not_terminated * gamma * next_state_value - state_value
+
+    # Fast path: skip trajectory splitting when using fixed horizon or during compile
+    if fixed_horizon or is_compiling():
+        # Assume no mid-trajectory dones (all trajectories same length)
+        batch_shape = td0.shape[:-1]
+        td0_flat = td0.reshape(-1, td0.shape[-1])
+
+        gammalmbdas = _geom_series_like(td0_flat[0], gammalmbda, thr=thr)
+
+        advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
+        advantage = advantage.squeeze(1).reshape(*batch_shape, -1)
+
+        value_target = advantage + state_value
+
+        advantage = advantage.transpose(-1, -2)
+        value_target = value_target.transpose(-1, -2)
+
+        return advantage, value_target
 
     num_per_traj = _get_num_per_traj(done)
     td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
@@ -334,7 +357,7 @@ def vec_generalized_advantage_estimate(
     gammalmbdas = gammalmbdas.cumprod(-2)
 
     # Skip data-dependent truncation optimization during compile (causes guards)
-    if not is_dynamo_compiling():
+    if not is_compiling():
         first_below_thr = gammalmbdas < 1e-7
         # if we have multiple gammas, we only want to truncate if _all_ of
         # the geometric sequences fall below the threshold
@@ -977,6 +1000,8 @@ def _fast_td_lambda_return_estimate(
     done: torch.Tensor,
     terminated: torch.Tensor,
     thr: float = 1e-7,
+    *,
+    fixed_horizon: bool = False,
 ):
     """Fast vectorized TD lambda return estimate.
 
@@ -992,6 +1017,9 @@ def _fast_td_lambda_return_estimate(
         terminated (Tensor): boolean flag for end of episode.
         thr (:obj:`float`): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
+        fixed_horizon (bool): if True, assumes no mid-trajectory dones (all trajectories have
+            the same length). This avoids data-dependent shapes and is compile-friendly.
+            Defaults to False. During torch.compile, this is implicitly set to True.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
@@ -1009,6 +1037,28 @@ def _fast_td_lambda_return_estimate(
     # Use torch.full to create directly on device (avoids DeviceCopy in cudagraph)
     gamma_tensor = torch.full((1,), gamma, device=device)
     gammalmbda = gamma_tensor * lmbda
+
+    # Fast path: skip trajectory splitting when using fixed horizon or during compile
+    # This avoids torch.where() which creates data-dependent shapes
+    if fixed_horizon or is_compiling():
+        # Assume no mid-trajectory dones (all trajectories same length)
+        # Mark only the last step as done for proper TD computation
+        done = done.clone()
+        done[..., -1] = 1
+        not_done = (~done).int()
+
+        t = reward + next_state_value * gamma_tensor * (1 - not_done * lmbda)
+
+        # Flatten batch dims for convolution
+        batch_shape = t.shape[:-1]
+        t_flat = t.reshape(-1, t.shape[-1])
+
+        gammalmbdas = _geom_series_like(t_flat[0], gammalmbda, thr=thr)
+
+        ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
+        ret = ret_flat.squeeze(1).reshape(*batch_shape, -1)
+
+        return ret.view_as(reward).transpose(-1, -2)
 
     num_per_traj = _get_num_per_traj(done)
 
@@ -1128,7 +1178,7 @@ def vec_td_lambda_return_estimate(
 
     if rolling_gamma is None:
         rolling_gamma = True
-    if not rolling_gamma and not is_dynamo_compiling():
+    if not rolling_gamma and not is_compiling():
         # Skip this validation during compile to avoid CUDA syncs
         terminated_follows_terminated = terminated[..., 1:, :][
             terminated[..., :-1, :]
@@ -1364,6 +1414,7 @@ def reward2go(
     gamma,
     *,
     time_dim: int = -2,
+    fixed_horizon: bool = False,
 ):
     """Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.
 
@@ -1375,6 +1426,9 @@ def reward2go(
         gamma (:obj:`float`, optional): The discount factor to use for computing the
             discounted cumulative sum of rewards. Defaults to 1.0.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
+        fixed_horizon (bool): if True, assumes no mid-trajectory dones (all trajectories have
+            the same length). This avoids data-dependent shapes and is compile-friendly.
+            Defaults to False. During torch.compile, this is implicitly set to True.
 
     Returns:
         torch.Tensor: A tensor of shape [B, T] containing the discounted cumulative
@@ -1408,13 +1462,34 @@ def reward2go(
         rflip = reward.transpose(-2, -3)
         rflip_shape = rflip.shape[-2:]
         r2go = reward2go(
-            rflip.flatten(-2, -1), done.transpose(-2, -3).flatten(-2, -1), gamma=gamma
+            rflip.flatten(-2, -1), done.transpose(-2, -3).flatten(-2, -1), gamma=gamma,
+            fixed_horizon=fixed_horizon,
         ).unflatten(-1, rflip_shape)
         return r2go.transpose(-2, -3)
 
     # place time at dim -1
     reward = reward.transpose(-2, -1)
     done = done.transpose(-2, -1)
+
+    # Fast path: skip trajectory splitting when using fixed horizon or during compile
+    if fixed_horizon or is_compiling():
+        # Assume no mid-trajectory dones (all trajectories same length)
+        batch_shape = reward.shape[:-1]
+        reward_flat = reward.reshape(-1, reward.shape[-1])
+
+        gammas = _geom_series_like(reward_flat[0], gamma, thr=1e-7)
+        cumsum = _custom_conv1d(reward_flat.unsqueeze(1), gammas)
+        cumsum = cumsum.squeeze(1).reshape(*batch_shape, -1)
+        cumsum = cumsum.transpose(-2, -1)
+
+        if cumsum.shape != shape:
+            try:
+                cumsum = cumsum.reshape(shape)
+            except RuntimeError:
+                raise RuntimeError(
+                    f"Wrong shape for output reward2go: {cumsum.shape} when {shape} was expected."
+                )
+        return cumsum
 
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(reward, num_per_traj)
