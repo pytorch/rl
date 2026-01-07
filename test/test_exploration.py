@@ -651,6 +651,65 @@ class TestAdditiveGaussian:
         assert action_spec.is_in(noisy_action)
 
 
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("use_batched_env", [False, True])
+def test_set_exploration_modules_spec_from_env(device, use_batched_env):
+    """Test set_exploration_modules_spec_from_env helper configures exploration modules."""
+    from tensordict.nn import TensorDictSequential
+    from torchrl.modules.tensordict_module.exploration import (
+        set_exploration_modules_spec_from_env,
+    )
+
+    torch.manual_seed(0)
+
+    if use_batched_env:
+        env = SerialEnv(2, ContinuousActionVecMockEnv)
+        env = env.to(device)
+        expected_spec = env.action_spec_unbatched
+    else:
+        env = ContinuousActionVecMockEnv(device=device)
+        expected_spec = env.action_spec
+    env.reset()
+
+    d_obs = env.observation_spec["observation"].shape[-1]
+    d_act = expected_spec.shape[-1]
+
+    # Create a policy with exploration module that has spec=None
+    net = nn.Sequential(
+        nn.Linear(d_obs, 2 * d_act, device=device), NormalParamExtractor()
+    )
+    module = SafeModule(
+        net,
+        in_keys=["observation"],
+        out_keys=["loc", "scale"],
+    )
+    policy = ProbabilisticActor(
+        module=module,
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
+        distribution_class=TanhNormal,
+        default_interaction_type=InteractionType.RANDOM,
+    ).to(device)
+    exploration_module = AdditiveGaussianModule(spec=None, device=device)
+    exploratory_policy = TensorDictSequential(policy, exploration_module)
+
+    assert exploration_module._spec is None
+
+    set_exploration_modules_spec_from_env(exploratory_policy, env)
+
+    # Verify spec is set after configuration and matches the environment's action_spec
+    assert exploration_module._spec is not None
+    if isinstance(exploration_module._spec, Composite):
+        assert exploration_module._spec[exploration_module.action_key] == expected_spec
+    else:
+        assert exploration_module._spec == expected_spec
+
+    td = env.reset()
+    result = exploratory_policy(td)
+    assert "action" in result.keys()
+    env.close()
+
+
 @pytest.mark.parametrize("state_dim", [7])
 @pytest.mark.parametrize("action_dim", [5, 11])
 @pytest.mark.parametrize("gSDE", [True, False])

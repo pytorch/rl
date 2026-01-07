@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -21,12 +22,16 @@ from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
+if TYPE_CHECKING:
+    from torchrl.envs import EnvBase
+
 __all__ = [
     "EGreedyWrapper",
     "EGreedyModule",
     "AdditiveGaussianModule",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
+    "set_exploration_modules_spec_from_env",
 ]
 
 
@@ -793,3 +798,45 @@ class RandomPolicy:
             return td.update(self.action_spec.rand())
         else:
             return td.set(self.action_key, self.action_spec.rand())
+
+
+def set_exploration_modules_spec_from_env(
+    policy: nn.Module | None, env: EnvBase
+) -> None:
+    """Set spec on exploration modules in a policy with action_spec from environment.
+
+    This helper function automatically sets the action_spec on exploration modules
+    (like AdditiveGaussianModule) that were instantiated without a spec. This
+    enables delayed initialization when using config systems where the spec
+    depends on the environment and should be set inside the collector.
+
+    Args:
+        policy: The policy module (may contain exploration modules). Can be None.
+        env: The environment to extract action_spec from.
+
+    """
+    if policy is None:
+        return
+
+    # Only process nn.Module policies that have .modules() method
+    if not isinstance(policy, nn.Module):
+        return
+
+    if hasattr(env, "action_spec_unbatched"):
+        action_spec = env.action_spec_unbatched
+    elif hasattr(env, "action_spec"):
+        action_spec = env.action_spec
+    else:
+        return
+
+    if action_spec is None:
+        return
+
+    # Types of exploration modules that support delayed spec initialization.
+    # More exploration modules can be added when they support delayed spec setting.
+    exploration_module_types = (AdditiveGaussianModule,)
+
+    for submodule in policy.modules():
+        if isinstance(submodule, exploration_module_types):
+            if hasattr(submodule, "_spec") and submodule._spec is None:
+                submodule.spec = action_spec
