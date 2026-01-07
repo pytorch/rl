@@ -5245,6 +5245,27 @@ class TestSAC(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_sac_target_entropy_auto(self, version, action_dim):
+        """Regression test for issue #3291: target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+        if version == 1:
+            value = self._create_mock_value(action_dim=action_dim)
+        else:
+            value = None
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
+
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_reduction(self, reduction, version, composite_action_dist):

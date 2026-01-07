@@ -499,7 +499,9 @@ class SACLoss(LossModule):
             else:
                 action_container_shape = action_spec.shape
             target_entropy = -float(
-                action_spec.shape[len(action_container_shape) :].numel()
+                action_spec[self.tensor_keys.action]
+                .shape[len(action_container_shape) :]
+                .numel()
             )
         delattr(self, "_target_entropy")
         self.register_buffer(
