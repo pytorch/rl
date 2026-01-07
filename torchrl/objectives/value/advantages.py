@@ -1081,6 +1081,16 @@ class TDLambdaEstimator(ValueEstimatorBase):
         self.vectorized = vectorized
         self.time_dim = time_dim
 
+    @property
+    def vectorized(self):
+        if is_dynamo_compiling():
+            return False
+        return self._vectorized
+
+    @vectorized.setter
+    def vectorized(self, value):
+        self._vectorized = value
+
     @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
