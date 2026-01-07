@@ -528,7 +528,9 @@ def td1_return_estimate(
         single_gamma = True
         if isinstance(gamma, torch.Tensor):
             # Use expand instead of full_like to avoid .item() call which creates
-            # unbacked symbols during torch.compile tracing
+            # unbacked symbols during torch.compile tracing.
+            if gamma.device != next_state_value.device:
+                gamma = gamma.to(next_state_value.device)
             gamma = gamma.expand(next_state_value.shape)
         else:
             gamma = torch.full_like(next_state_value, gamma)
@@ -856,7 +858,9 @@ def td_lambda_return_estimate(
         single_gamma = True
         if isinstance(gamma, torch.Tensor):
             # Use expand instead of full_like to avoid .item() call which creates
-            # unbacked symbols during torch.compile tracing
+            # unbacked symbols during torch.compile tracing.
+            if gamma.device != next_state_value.device:
+                gamma = gamma.to(next_state_value.device)
             gamma = gamma.expand(next_state_value.shape)
         else:
             gamma = torch.full_like(next_state_value, gamma)
@@ -866,7 +870,9 @@ def td_lambda_return_estimate(
         single_lambda = True
         if isinstance(lmbda, torch.Tensor):
             # Use expand instead of full_like to avoid .item() call which creates
-            # unbacked symbols during torch.compile tracing
+            # unbacked symbols during torch.compile tracing.
+            if lmbda.device != next_state_value.device:
+                lmbda = lmbda.to(next_state_value.device)
             lmbda = lmbda.expand(next_state_value.shape)
         else:
             lmbda = torch.full_like(next_state_value, lmbda)

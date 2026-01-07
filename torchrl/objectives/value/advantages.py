@@ -1216,6 +1216,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
         lmbda = self.lmbda
         if self.average_rewards:
             reward = reward - reward.mean()
