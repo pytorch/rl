@@ -526,7 +526,12 @@ def td1_return_estimate(
     single_gamma = False
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
         single_gamma = True
-        gamma = torch.full_like(next_state_value, gamma)
+        if isinstance(gamma, torch.Tensor):
+            # Use expand instead of full_like to avoid .item() call which creates
+            # unbacked symbols during torch.compile tracing
+            gamma = gamma.expand(next_state_value.shape)
+        else:
+            gamma = torch.full_like(next_state_value, gamma)
 
     if rolling_gamma is None:
         rolling_gamma = True
@@ -849,12 +854,22 @@ def td_lambda_return_estimate(
     single_gamma = False
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == done.shape):
         single_gamma = True
-        gamma = torch.full_like(next_state_value, gamma)
+        if isinstance(gamma, torch.Tensor):
+            # Use expand instead of full_like to avoid .item() call which creates
+            # unbacked symbols during torch.compile tracing
+            gamma = gamma.expand(next_state_value.shape)
+        else:
+            gamma = torch.full_like(next_state_value, gamma)
 
     single_lambda = False
     if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == done.shape):
         single_lambda = True
-        lmbda = torch.full_like(next_state_value, lmbda)
+        if isinstance(lmbda, torch.Tensor):
+            # Use expand instead of full_like to avoid .item() call which creates
+            # unbacked symbols during torch.compile tracing
+            lmbda = lmbda.expand(next_state_value.shape)
+        else:
+            lmbda = torch.full_like(next_state_value, lmbda)
 
     if rolling_gamma is None:
         rolling_gamma = True
