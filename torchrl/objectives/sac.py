@@ -498,11 +498,25 @@ class SACLoss(LossModule):
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
-            target_entropy = -float(
-                action_spec[self.tensor_keys.action]
-                .shape[len(action_container_shape) :]
-                .numel()
-            )
+            action_spec_leaf = action_spec[self.tensor_keys.action]
+            if action_spec_leaf is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. The action spec "
+                    f"for key '{self.tensor_keys.action}' is None. This can happen when "
+                    "using composite action distributions. Consider providing the "
+                    "'action_spec' or 'target_entropy' argument explicitly to the loss."
+                )
+            if isinstance(action_spec_leaf, Composite):
+                # For composite action specs, sum the numel of all leaf specs
+                target_entropy = -float(
+                    self._compute_composite_spec_numel(
+                        action_spec_leaf, action_container_shape
+                    )
+                )
+            else:
+                target_entropy = -float(
+                    action_spec_leaf.shape[len(action_container_shape) :].numel()
+                )
         delattr(self, "_target_entropy")
         self.register_buffer(
             "_target_entropy", torch.tensor(target_entropy, device=device)
@@ -511,6 +525,24 @@ class SACLoss(LossModule):
 
     state_dict = _delezify(LossModule.state_dict)
     load_state_dict = _delezify(LossModule.load_state_dict)
+
+    def _compute_composite_spec_numel(
+        self, spec: Composite, container_shape: torch.Size
+    ) -> int:
+        """Compute the total number of action elements in a Composite spec.
+
+        This handles composite action distributions where multiple sub-actions
+        are grouped together.
+        """
+        total = 0
+        for subspec in spec.values():
+            if subspec is None:
+                continue
+            if isinstance(subspec, Composite):
+                total += self._compute_composite_spec_numel(subspec, container_shape)
+            else:
+                total += subspec.shape[len(container_shape) :].numel()
+        return total
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -940,7 +972,9 @@ class DiscreteSACLoss(LossModule):
             Default is None (no maximum value).
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
         target_entropy_weight (:obj:`float`, optional): weight for the target entropy term.
-        target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+        target_entropy (Union[str, Number], optional): Target entropy for the
+            stochastic policy. Default is "auto", where target entropy is
+            computed as :obj:`-target_entropy_weight * log(1 / num_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is ``False``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]

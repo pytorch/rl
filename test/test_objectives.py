@@ -4127,6 +4127,7 @@ class TestSAC(LossModuleTestBase):
         observation_key="observation",
         action_key="action",
         composite_action_dist=False,
+        return_action_spec=False,
     ):
         # Actor
         action_spec = Bounded(
@@ -4161,7 +4162,10 @@ class TestSAC(LossModuleTestBase):
             spec=action_spec,
         )
         assert actor.log_prob_keys
-        return actor.to(device)
+        actor = actor.to(device)
+        if return_action_spec:
+            return actor, action_spec
+        return actor
 
     def _create_mock_qvalue(
         self,
@@ -4419,9 +4423,19 @@ class TestSAC(LossModuleTestBase):
             device=device, composite_action_dist=composite_action_dist
         )
 
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4442,6 +4456,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
 
@@ -4684,9 +4699,19 @@ class TestSAC(LossModuleTestBase):
 
         torch.manual_seed(self.seed)
 
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4707,6 +4732,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
         sd = loss_fn.state_dict()
@@ -4716,6 +4742,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
@@ -4841,9 +4868,19 @@ class TestSAC(LossModuleTestBase):
             device=device, composite_action_dist=composite_action_dist
         )
 
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -4864,6 +4901,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            action_spec=action_spec,
             **kwargs,
         )
 
@@ -4998,7 +5036,16 @@ class TestSAC(LossModuleTestBase):
     def test_sac_tensordict_keys(self, td_est, version, composite_action_dist):
         td = self._create_mock_data_sac(composite_action_dist=composite_action_dist)
 
-        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
+            action_spec = None
         qvalue = self._create_mock_qvalue()
         if version == 1:
             value = self._create_mock_value()
@@ -5011,6 +5058,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=2,
             loss_function="l2",
+            action_spec=action_spec,
         )
 
         default_keys = {
@@ -5266,6 +5314,27 @@ class TestSAC(LossModuleTestBase):
             loss_fn.target_entropy.item() == -action_dim
         ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
+    @pytest.mark.parametrize("target_entropy", [-1.0, -2.0, -5.0, 0.0])
+    def test_sac_target_entropy_explicit(self, version, target_entropy):
+        """Regression test for explicit target_entropy values."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        if version == 1:
+            value = self._create_mock_value()
+        else:
+            value = None
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            target_entropy=target_entropy,
+        )
+        assert (
+            loss_fn.target_entropy.item() == target_entropy
+        ), f"target_entropy should be {target_entropy}, got {loss_fn.target_entropy.item()}"
+
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_sac_reduction(self, reduction, version, composite_action_dist):
@@ -5278,9 +5347,19 @@ class TestSAC(LossModuleTestBase):
         td = self._create_mock_data_sac(
             device=device, composite_action_dist=composite_action_dist
         )
-        actor = self._create_mock_actor(
-            device=device, composite_action_dist=composite_action_dist
-        )
+        # For composite action distributions, we need to pass the action_spec
+        # explicitly because ProbabilisticActor doesn't preserve it properly
+        if composite_action_dist:
+            actor, action_spec = self._create_mock_actor(
+                device=device,
+                composite_action_dist=composite_action_dist,
+                return_action_spec=True,
+            )
+        else:
+            actor = self._create_mock_actor(
+                device=device, composite_action_dist=composite_action_dist
+            )
+            action_spec = None
         qvalue = self._create_mock_qvalue(device=device)
         if version == 1:
             value = self._create_mock_value(device=device)
@@ -5295,6 +5374,7 @@ class TestSAC(LossModuleTestBase):
             delay_actor=False,
             delay_value=False,
             reduction=reduction,
+            action_spec=action_spec,
         )
         loss_fn.make_value_estimator()
         loss = loss_fn(td)
@@ -5824,6 +5904,29 @@ class TestDiscreteSAC(LossModuleTestBase):
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [2, 4, 8])
+    @pytest.mark.parametrize("target_entropy_weight", [0.5, 0.98])
+    def test_discrete_sac_target_entropy_auto(self, action_dim, target_entropy_weight):
+        """Regression test for target_entropy='auto' in DiscreteSACLoss."""
+        import numpy as np
+
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=action_dim,
+            target_entropy_weight=target_entropy_weight,
+            action_space="one-hot",
+        )
+        # target_entropy="auto" should compute -log(1/num_actions) * target_entropy_weight
+        expected = -float(np.log(1.0 / action_dim) * target_entropy_weight)
+        assert (
+            abs(loss_fn.target_entropy.item() - expected) < 1e-5
+        ), f"target_entropy should be {expected}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -6898,6 +7001,38 @@ class TestCrossQ(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_crossq_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
+
+    @pytest.mark.parametrize("target_entropy", [-1.0, -2.0, -5.0, 0.0])
+    def test_crossq_target_entropy_explicit(self, target_entropy):
+        """Regression test for issue #3309: explicit target_entropy should work."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+
+        loss_fn = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            target_entropy=target_entropy,
+        )
+        assert (
+            loss_fn.target_entropy.item() == target_entropy
+        ), f"target_entropy should be {target_entropy}, got {loss_fn.target_entropy.item()}"
+
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_crossq_reduction(self, reduction):
         torch.manual_seed(self.seed)
@@ -7300,6 +7435,22 @@ class TestREDQ(LossModuleTestBase):
             delay_qvalue=delay_qvalue,
         )
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_redq_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
@@ -8377,6 +8528,22 @@ class TestCQL(LossModuleTestBase):
             **kwargs,
         )
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_cql_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+        qvalue = self._create_mock_qvalue(action_dim=action_dim)
+
+        loss_fn = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+        )
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("n", range(1, 4))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -12389,6 +12556,18 @@ class TestOnlineDT(LossModuleTestBase):
         sd = loss_fn.state_dict()
         loss_fn2 = OnlineDTLoss(actor)
         loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
+    def test_odt_target_entropy_auto(self, action_dim):
+        """Regression test for target_entropy='auto' should be -dim(A)."""
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(action_dim=action_dim)
+
+        loss_fn = OnlineDTLoss(actor)
+        # target_entropy="auto" should compute -action_dim
+        assert (
+            loss_fn.target_entropy.item() == -action_dim
+        ), f"target_entropy should be -{action_dim}, got {loss_fn.target_entropy.item()}"
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_seq_odt(self, device):
