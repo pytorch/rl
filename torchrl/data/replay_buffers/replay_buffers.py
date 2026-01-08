@@ -1158,6 +1158,13 @@ class ReplayBuffer:
             state["_replay_lock_placeholder"] = None
         if _futures_lock is not None:
             state["_futures_lock_placeholder"] = None
+        # Remove non-picklable prefetch objects - they will be recreated on unpickle
+        _prefetch_queue = state.pop("_prefetch_queue", None)
+        _prefetch_executor = state.pop("_prefetch_executor", None)
+        if _prefetch_queue is not None:
+            state["_prefetch_queue_placeholder"] = None
+        if _prefetch_executor is not None:
+            state["_prefetch_executor_placeholder"] = None
         return state
 
     def __setstate__(self, state: dict[str, Any]):
@@ -1176,6 +1183,15 @@ class ReplayBuffer:
             state.pop("_futures_lock_placeholder")
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
+        # Recreate prefetch objects after unpickling if they were present
+        if "_prefetch_queue_placeholder" in state:
+            state.pop("_prefetch_queue_placeholder")
+            state["_prefetch_queue"] = collections.deque()
+        if "_prefetch_executor_placeholder" in state:
+            state.pop("_prefetch_executor_placeholder")
+            state["_prefetch_executor"] = ThreadPoolExecutor(
+                max_workers=state["_prefetch_cap"]
+            )
         self.__dict__.update(state)
         if rngstate is not None:
             self.set_rng(rng)
