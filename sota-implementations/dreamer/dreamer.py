@@ -111,13 +111,14 @@ def main(cfg: DictConfig):  # noqa: F821
     buffer_size = cfg.replay_buffer.buffer_size
     scratch_dir = cfg.replay_buffer.scratch_dir
     prefetch = cfg.replay_buffer.prefetch
+    profiling_enabled = cfg.profiling.enabled
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
         buffer_size=buffer_size,
         buffer_scratch_dir=scratch_dir,
         device=device,
-        prefetch=prefetch if not (profiling_enabled := cfg.profiling.enabled) else None,
+        prefetch=prefetch if not profiling_enabled else None,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
