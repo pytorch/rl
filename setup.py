@@ -18,6 +18,20 @@ from torch.utils.cpp_extension import BuildExtension, CppExtension
 logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent.resolve()
+
+
+def _check_pybind11():
+    """Check that pybind11 is installed and provide a clear error message if not."""
+    if importlib.util.find_spec("pybind11") is None:
+        raise RuntimeError(
+            "pybind11 is required to build TorchRL's C++ extensions but was not found.\n"
+            "Please install it with:\n"
+            "    pip install 'pybind11[global]'\n"
+            "Then re-run the installation."
+        )
+
+
+_check_pybind11()
 _RELEASE_BRANCH_RE = re.compile(r"^release/v(?P<release_id>.+)$")
 _BUILD_INFO_FILE = ROOT_DIR / "build" / ".torchrl_build_info.json"
 
@@ -47,13 +61,14 @@ def _check_and_clean_stale_builds():
                     f"Python {old_python} -> {current_python_version}. "
                     f"Cleaning stale build artifacts..."
                 )
-                # Clean stale .so files for current Python version
-                so_pattern = (
+                # Clean stale extension files for current Python version
+                ext = ".pyd" if sys.platform == "win32" else ".so"
+                ext_pattern = (
                     ROOT_DIR
                     / "torchrl"
-                    / f"_torchrl.cpython-{sys.version_info.major}{sys.version_info.minor}*.so"
+                    / f"_torchrl.cpython-{sys.version_info.major}{sys.version_info.minor}*{ext}"
                 )
-                for so_file in glob.glob(str(so_pattern)):
+                for so_file in glob.glob(str(ext_pattern)):
                     logger.warning(f"Removing stale: {so_file}")
                     os.remove(so_file)
                 # Clean build directory
