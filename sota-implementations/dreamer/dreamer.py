@@ -11,8 +11,6 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
-from torch.autograd.profiler import record_function
-from omegaconf import DictConfig
 
 from dreamer_utils import (
     _default_device,
@@ -25,9 +23,11 @@ from dreamer_utils import (
     make_replay_buffer,
     make_storage_transform,
 )
+from omegaconf import DictConfig
 
 # mixed precision training
 from torch.amp import GradScaler
+from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -238,9 +238,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if collected_frames >= init_random_frames:
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
-                with timeit("train/sample"), record_function(
-                    "## train/sample ##"
-                ):
+                with timeit("train/sample"), record_function("## train/sample ##"):
                     sampled_tensordict = replay_buffer.sample().reshape(
                         -1, batch_length
                     )
@@ -257,7 +255,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         device_type=device.type,
                         dtype=autocast_dtype,
                     ) if autocast_dtype else contextlib.nullcontext():
-                        assert sampled_tensordict.device.type == "cuda", "sampled_tensordict should be on CUDA"
+                        assert (
+                            sampled_tensordict.device.type == "cuda"
+                        ), "sampled_tensordict should be on CUDA"
                         model_loss_td, sampled_tensordict = world_model_loss(
                             sampled_tensordict
                         )
