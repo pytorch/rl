@@ -591,7 +591,13 @@ def make_dreamer(
 
 
 def make_collector(
-    cfg, train_env_factory, actor_model_explore, training_device: torch.device
+    cfg,
+    train_env_factory,
+    actor_model_explore,
+    training_device: torch.device,
+    replay_buffer=None,
+    storage_transform=None,
+    track_policy_version=False,
 ):
     """Make async multi-collector for parallel data collection.
 
@@ -600,6 +606,10 @@ def make_collector(
         train_env_factory: A callable that creates a training environment
         actor_model_explore: The exploration policy
         training_device: Device used for training (used to allocate collector devices)
+        replay_buffer: Optional replay buffer for true async collection with start()
+        storage_transform: Optional transform to apply before storing in buffer
+        track_policy_version: If True, track policy version using integer versioning.
+            Can also be a PolicyVersion instance for custom versioning.
 
     Returns:
         MultiCollector in async mode with multiple worker processes
@@ -624,6 +634,9 @@ def make_collector(
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training
         update_at_each_batch=True,
+        replay_buffer=replay_buffer,
+        postproc=storage_transform,
+        track_policy_version=track_policy_version,
     )
     collector.set_seed(cfg.env.seed)
 
