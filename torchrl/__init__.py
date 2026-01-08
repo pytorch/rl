@@ -29,10 +29,6 @@ torch._C._log_api_usage_once("torchrl")
 
 set_lazy_legacy(False).set()
 
-if torch.cuda.device_count() > 1:
-    n = torch.cuda.device_count() - 1
-    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
-
 from ._extension import _init_extension  # noqa: E402
 
 __version__ = None  # type: ignore
