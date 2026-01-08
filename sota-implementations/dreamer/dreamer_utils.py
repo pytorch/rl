@@ -9,7 +9,6 @@ import tempfile
 from contextlib import nullcontext
 
 import torch
-from torchrl import logger as torchrl_logger
 
 import torch.nn as nn
 from tensordict import NestedKey
@@ -20,6 +19,7 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
+from torchrl import logger as torchrl_logger
 from torchrl.collectors import MultiCollector
 
 from torchrl.data import (
@@ -120,7 +120,7 @@ def allocate_collector_devices(
     if num_collectors > inference_devices:
         raise ValueError(
             f"Requested {num_collectors} collectors but only {inference_devices} "
-            f"CUDA devices available for inference (cuda:1 to cuda:{num_cuda_devices-1}). "
+            f"CUDA devices available for inference (cuda:1 to cuda:{num_cuda_devices - 1}). "
             f"cuda:0 is reserved for training. Either reduce num_collectors to "
             f"{inference_devices} or add more GPUs."
         )
@@ -389,29 +389,26 @@ def make_dreamer(
 ):
     test_env = _make_env(cfg, device="cpu")
     test_env = transform_env(cfg, test_env)
-    
+
     # Get dimensions for explicit module instantiation (avoids lazy modules)
     state_dim = cfg.networks.state_dim
     rssm_hidden_dim = cfg.networks.rssm_hidden_dim
     action_dim = test_env.action_spec.shape[-1]
-    
+
     # Make encoder and decoder
-    print(f"[DEBUG] make_dreamer: Creating modules on device={device}")
     if cfg.env.from_pixels:
         # Determine input channels (1 for grayscale, 3 for RGB)
         in_channels = 1 if cfg.env.grayscale else 3
         image_size = cfg.env.image_size
-        
+
         # Compute encoder output size for explicit posterior input
-        obs_embed_dim = _compute_encoder_output_size(image_size, channels=32, num_layers=4)
-        
+        obs_embed_dim = _compute_encoder_output_size(
+            image_size, channels=32, num_layers=4
+        )
+
         encoder = ObsEncoder(in_channels=in_channels, device=device)
         decoder = ObsDecoder(latent_dim=state_dim + rssm_hidden_dim, device=device)
-        
-        # DEBUG: Log encoder/decoder parameter devices
-        print(f"[DEBUG] ObsEncoder created - first param device: {next(encoder.parameters()).device}")
-        print(f"[DEBUG] ObsDecoder created - first param device: {next(decoder.parameters()).device}")
-        
+
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"
     else:
@@ -430,11 +427,7 @@ def make_dreamer(
             activation_class=get_activation(cfg.networks.activation),
             device=device,
         )
-        
-        # DEBUG: Log encoder/decoder parameter devices
-        print(f"[DEBUG] MLP encoder created - first param device: {next(encoder.parameters()).device}")
-        print(f"[DEBUG] MLP decoder created - first param device: {next(decoder.parameters()).device}")
-        
+
         observation_in_key = "observation"
         observation_out_key = "reco_observation"
 
@@ -447,7 +440,6 @@ def make_dreamer(
         action_dim=action_dim,
         device=device,
     )
-    print(f"[DEBUG] RSSMPrior created - first param device: {next(rssm_prior.parameters()).device}")
     rssm_posterior = RSSMPosterior(
         hidden_dim=rssm_hidden_dim,
         state_dim=state_dim,
@@ -455,7 +447,6 @@ def make_dreamer(
         obs_embed_dim=obs_embed_dim,
         device=device,
     )
-    print(f"[DEBUG] RSSMPosterior created - first param device: {next(rssm_posterior.parameters()).device}")
 
     # When use_scan=True or rssm_rollout.compile=True, replace C++ GRU with Python-based GRU
     # for torch.compile compatibility. The C++ GRU (cuBLAS) cannot be traced by torch.compile.
@@ -463,10 +454,14 @@ def make_dreamer(
         from torchrl.modules.tensordict_module.rnn import GRUCell as PythonGRUCell
 
         old_rnn = rssm_prior.rnn
-        python_rnn = PythonGRUCell(old_rnn.input_size, old_rnn.hidden_size, device=device)
+        python_rnn = PythonGRUCell(
+            old_rnn.input_size, old_rnn.hidden_size, device=device
+        )
         python_rnn.load_state_dict(old_rnn.state_dict())
         rssm_prior.rnn = python_rnn
-        torchrl_logger.info("Switched RSSMPrior to Python-based GRU for torch.compile compatibility")
+        torchrl_logger.info(
+            "Switched RSSMPrior to Python-based GRU for torch.compile compatibility"
+        )
     # Make reward module
     reward_module = MLP(
         out_features=1,
@@ -475,7 +470,6 @@ def make_dreamer(
         activation_class=get_activation(cfg.networks.activation),
         device=device,
     )
-    print(f"[DEBUG] Reward MLP created - first param device: {next(reward_module.parameters()).device}")
 
     # Make combined world model (modules already on device)
     world_model = _dreamer_make_world_model(
@@ -491,19 +485,11 @@ def make_dreamer(
         rssm_rollout_compile_backend=cfg.networks.rssm_rollout.compile_backend,
         rssm_rollout_compile_mode=cfg.networks.rssm_rollout.compile_mode,
     )
-    
-    # DEBUG: Log all world model component devices
-    print(f"[DEBUG] World model created. Checking all parameter devices:")
-    for name, param in world_model.named_parameters():
-        if 'weight' in name and '0' in name:  # Just log first weight of each layer
-            print(f"  {name}: device={param.device}")
 
     # Initialize world model (already on device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = (
-            test_env.rollout(5, auto_cast_to_device=True)
-            .unsqueeze(-1)
-            .to(device)
+            test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1).to(device)
         )
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
@@ -728,7 +714,10 @@ def make_replay_buffer(
 
 
 def _dreamer_make_value_model(
-    hidden_dim: int = 400, activation: str = "elu", value_key: str = "state_value", device=None
+    hidden_dim: int = 400,
+    activation: str = "elu",
+    value_key: str = "state_value",
+    device=None,
 ):
     value_model = MLP(
         out_features=1,
@@ -963,7 +952,12 @@ def _dreamer_make_world_model(
     rssm_rollout = RSSMRollout(
         TensorDictModule(
             rssm_prior,
-            in_keys={"state": "state", "belief": "belief", "action": "action", "noise": "prior_noise"},
+            in_keys={
+                "state": "state",
+                "belief": "belief",
+                "action": "action",
+                "noise": "prior_noise",
+            },
             out_keys=[
                 ("next", "prior_mean"),
                 ("next", "prior_std"),
@@ -974,7 +968,11 @@ def _dreamer_make_world_model(
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys={"belief": ("next", "belief"), "obs_embedding": ("next", "encoded_latents"), "noise": "posterior_noise"},
+            in_keys={
+                "belief": ("next", "belief"),
+                "obs_embedding": ("next", "encoded_latents"),
+                "noise": "posterior_noise",
+            },
             out_keys=[
                 ("next", "posterior_mean"),
                 ("next", "posterior_std"),
