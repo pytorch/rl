@@ -117,11 +117,13 @@ class ModelBasedEnvBase(EnvBase):
         device: DEVICE_TYPING = "cpu",
         batch_size: torch.Size | None = None,
         run_type_checks: bool = False,
+        allow_done_after_reset: bool = False,
     ):
         super().__init__(
             device=device,
             batch_size=batch_size,
             run_type_checks=run_type_checks,
+            allow_done_after_reset=allow_done_after_reset,
         )
         self.world_model = world_model.to(self.device)
         self.world_model_params = params
@@ -161,12 +163,13 @@ class ModelBasedEnvBase(EnvBase):
         else:
             tensordict_out = self.world_model(tensordict_out)
         # done can be missing, it will be filled by `step`
-        tensordict_out = tensordict_out.select(
-            *self.observation_spec.keys(),
-            *self.full_done_spec.keys(),
-            *self.full_reward_spec.keys(),
-            strict=False,
+        # Convert to list for torch.compile compatibility (dynamo can't unpack _CompositeSpecKeysView)
+        keys_to_select = (
+            list(self.observation_spec.keys())
+            + list(self.full_done_spec.keys())
+            + list(self.full_reward_spec.keys())
         )
+        tensordict_out = tensordict_out.select(*keys_to_select, strict=False)
         return tensordict_out
 
     @abc.abstractmethod
