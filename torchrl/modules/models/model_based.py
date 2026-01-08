@@ -110,7 +110,9 @@ class ObsEncoder(nn.Module):
             Defaults to None (uses default device).
     """
 
-    def __init__(self, channels=32, num_layers=4, in_channels=None, depth=None, device=None):
+    def __init__(
+        self, channels=32, num_layers=4, in_channels=None, depth=None, device=None
+    ):
         if depth is not None:
             warnings.warn(
                 f"The depth argument in {type(self)} will soon be deprecated and "
@@ -145,7 +147,9 @@ class ObsEncoder(nn.Module):
         *batch_sizes, C, H, W = observation.shape
         # Flatten all batch dimensions into one for conv
         # Use contiguous() for inductor compatibility
-        observation = observation.flatten(0, len(batch_sizes) - 1 if batch_sizes else 0).contiguous()
+        observation = observation.flatten(
+            0, len(batch_sizes) - 1 if batch_sizes else 0
+        ).contiguous()
         obs_encoded = self.encoder(observation)
         # Reshape back to original batch dims + latent
         latent = obs_encoded.unflatten(0, batch_sizes) if batch_sizes else obs_encoded
@@ -171,7 +175,15 @@ class ObsDecoder(nn.Module):
             Defaults to None (uses default device).
     """
 
-    def __init__(self, channels=32, num_layers=4, kernel_sizes=None, latent_dim=None, depth=None, device=None):
+    def __init__(
+        self,
+        channels=32,
+        num_layers=4,
+        kernel_sizes=None,
+        latent_dim=None,
+        depth=None,
+        device=None,
+    ):
         if depth is not None:
             warnings.warn(
                 f"The depth argument in {type(self)} will soon be deprecated and "
@@ -210,7 +222,11 @@ class ObsDecoder(nn.Module):
             if j != num_layers - 1:
                 layers = [
                     nn.ConvTranspose2d(
-                        channels * k * 2, channels * k, kernel_sizes[-1], stride=2, device=device
+                        channels * k * 2,
+                        channels * k,
+                        kernel_sizes[-1],
+                        stride=2,
+                        device=device,
                     ),
                 ] + layers
                 kernel_sizes = kernel_sizes[:-1]
@@ -219,7 +235,13 @@ class ObsDecoder(nn.Module):
             else:
                 # Use explicit ConvTranspose2d - input is always channels * 8 from state_to_latent
                 layers = [
-                    nn.ConvTranspose2d(linear_out, channels * k, kernel_sizes[-1], stride=2, device=device)
+                    nn.ConvTranspose2d(
+                        linear_out,
+                        channels * k,
+                        kernel_sizes[-1],
+                        stride=2,
+                        device=device,
+                    )
                 ] + layers
 
         self.decoder = nn.Sequential(*layers)
@@ -231,11 +253,18 @@ class ObsDecoder(nn.Module):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
         # Flatten batch dimensions and reshape for conv
-        latent = latent.flatten(0, len(batch_sizes) - 1 if batch_sizes else 0).unsqueeze(-1).unsqueeze(-1).contiguous()
+        latent = (
+            latent.flatten(0, len(batch_sizes) - 1 if batch_sizes else 0)
+            .unsqueeze(-1)
+            .unsqueeze(-1)
+            .contiguous()
+        )
         obs_decoded = self.decoder(latent)
         _, C, H, W = obs_decoded.shape
         # Unflatten back to original batch dims
-        obs_decoded = obs_decoded.unflatten(0, batch_sizes) if batch_sizes else obs_decoded
+        obs_decoded = (
+            obs_decoded.unflatten(0, batch_sizes) if batch_sizes else obs_decoded
+        )
         return obs_decoded.contiguous()
 
 
@@ -465,7 +494,9 @@ class RSSMPrior(nn.Module):
         dtype = action_state.dtype
         device_type = action_state.device.type
         with torch.amp.autocast(device_type=device_type, enabled=False):
-            belief = self.rnn(action_state.float(), belief.float() if belief is not None else None)
+            belief = self.rnn(
+                action_state.float(), belief.float() if belief is not None else None
+            )
         belief = belief.to(dtype)
         if unsqueeze:
             belief = belief.squeeze(0)
@@ -501,7 +532,15 @@ class RSSMPosterior(nn.Module):
 
     """
 
-    def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1, rnn_hidden_dim=None, obs_embed_dim=None, device=None):
+    def __init__(
+        self,
+        hidden_dim=200,
+        state_dim=30,
+        scale_lb=0.1,
+        rnn_hidden_dim=None,
+        obs_embed_dim=None,
+        device=None,
+    ):
         super().__init__()
         # Use explicit Linear if both dims provided, else LazyLinear for backward compat
         if rnn_hidden_dim is not None and obs_embed_dim is not None:
