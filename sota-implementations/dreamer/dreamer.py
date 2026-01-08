@@ -244,9 +244,10 @@ def main(cfg: DictConfig):  # noqa: F821
     torchrl_logger.info("Starting async collection...")
     collector.start()
 
-    # Wait for enough samples to start training (at least one batch worth)
-    # Note: We don't use init_random_frames - the untrained policy is effectively random
-    min_frames_to_start = batch_size * batch_length
+    # Wait for enough samples to start training
+    # Note: We don't pass init_random_frames to collector (not supported with start()),
+    # but we still wait for it here. The untrained policy is effectively random anyway.
+    min_frames_to_start = cfg.collector.init_random_frames
     torchrl_logger.info(
         f"Waiting for {min_frames_to_start} initial frames before training..."
     )
