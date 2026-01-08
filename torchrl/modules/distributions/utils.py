@@ -32,7 +32,9 @@ def _cast_transform_device(transform, device):
         for attribute in dir(transform):
             value = getattr(transform, attribute)
             if isinstance(value, torch.Tensor):
-                setattr(transform, attribute, value.to(device, non_blocking=_non_blocking))
+                setattr(
+                    transform, attribute, value.to(device, non_blocking=_non_blocking)
+                )
         return transform
     else:
         raise TypeError(
