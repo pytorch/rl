@@ -263,6 +263,9 @@ def main(cfg: DictConfig):  # noqa: F821
         f"Collected {replay_buffer.write_count} frames. Starting training..."
     )
 
+    # Track frames for FPS calculation over logging interval
+    frames_at_log_start = prev_collected_frames
+
     # Main training loop - iterate over optimization steps
     for optim_step in range(total_optim_steps):
         # Track collected frames from buffer write count
@@ -396,8 +399,14 @@ def main(cfg: DictConfig):  # noqa: F821
             total_updates = optim_steps_per_batch * 3
             ups = total_updates / iter_time if iter_time > 0 else 0
 
-            # FPS: Frames collected per second (measured from buffer)
-            fps = frames_delta / iter_time if iter_time > 0 else 0
+            # FPS: Frames collected per second (measured from buffer over logging interval)
+            frames_collected_this_interval = collected_frames - frames_at_log_start
+            fps = frames_collected_this_interval / iter_time if iter_time > 0 else 0
+
+            # Get reward stats from sampled data (since we don't iterate over collector directly)
+            sampled_reward = sampled_tensordict.get(("next", "reward"))
+            reward_mean = sampled_reward.mean().item()
+            reward_std = sampled_reward.std().item()
 
             loss_metrics = {
                 "loss_model_kl": model_loss_td["loss_model_kl"].item(),
@@ -408,6 +417,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "world_model_grad": world_model_grad,
                 "actor_model_grad": actor_model_grad,
                 "critic_model_grad": critic_model_grad,
+                # Reward stats from sampled batch
+                "train/reward_mean": reward_mean,
+                "train/reward_std": reward_std,
                 # Throughput metrics
                 "throughput/fps": fps,  # Frames per second (collection)
                 "throughput/sps": sps,  # Samples per second (training)
@@ -422,8 +434,9 @@ def main(cfg: DictConfig):  # noqa: F821
             if logger is not None:
                 log_metrics(logger, loss_metrics, collected_frames)
 
-            # Reset timer for next iteration
+            # Reset timer and frame counter for next logging interval
             t_iter_start = time.time()
+            frames_at_log_start = collected_frames
 
             # Update policy weights in collector (for async collection)
             policy[1].step(frames_delta)

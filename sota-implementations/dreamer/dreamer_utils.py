@@ -720,7 +720,7 @@ def make_replay_buffer(
                 slice_len=batch_seq_len,
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
-                cache_values=True,
+                cache_values=False,  # Disabled for async collection (cache not synced across processes)
                 # Don't compile the sampler - inductor has C++ codegen bugs for int64 ops
             ),
             transform=sample_transforms,
