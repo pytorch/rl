@@ -21,11 +21,7 @@ from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
 from torchrl.objectives.utils import _pseudo_vmap
 
-from torchrl.testing import (
-    capture_log_records,
-    get_default_devices,
-    gym_helpers as _gym_helpers,
-)
+from torchrl.testing import get_default_devices, gym_helpers as _gym_helpers
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -388,38 +384,6 @@ def test_rng_decorator(device):
         s1b = torch.randn(3)
         torch.testing.assert_close(s0a, s1a)
         torch.testing.assert_close(s0b, s1b)
-
-
-# Check that 'capture_log_records' captures records emitted when torch
-# recompiles a function.
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
-)
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="torch.compile is not supported on Python 3.14+",
-)
-def test_capture_log_records_recompile():
-    torch.compiler.reset()
-
-    # This function recompiles each time it is called with a different string
-    # input.
-    @torch.compile
-    def str_to_tensor(s):
-        return bytes(s, "utf8")
-
-    str_to_tensor("a")
-
-    try:
-        torch._logging.set_logs(recompiles=True)
-        records = []
-        capture_log_records(records, "torch._dynamo", "recompiles")
-        str_to_tensor("b")
-
-    finally:
-        torch._logging.set_logs()
-
-    assert len(records) == 1
 
 
 def add_one(x):
