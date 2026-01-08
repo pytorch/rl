@@ -370,14 +370,15 @@ class TanhNormal(FasterTransformedDistribution):
                 if not all(high > low):
                     raise RuntimeError(err_msg)
 
+        _non_blocking = loc.device.type == "cuda"
         if not isinstance(high, torch.Tensor):
             high = torch.as_tensor(high, device=loc.device)
         elif high.device != loc.device:
-            high = high.to(loc.device)
+            high = high.to(loc.device, non_blocking=_non_blocking)
         if not isinstance(low, torch.Tensor):
             low = torch.as_tensor(low, device=loc.device)
         elif low.device != loc.device:
-            low = low.to(loc.device)
+            low = low.to(loc.device, non_blocking=_non_blocking)
         if not is_compiling() and not safe_is_current_stream_capturing():
             self.non_trivial_max = (high != 1.0).any()
             self.non_trivial_min = (low != -1.0).any()
@@ -391,10 +392,10 @@ class TanhNormal(FasterTransformedDistribution):
         self.upscale = (
             upscale
             if not isinstance(upscale, torch.Tensor)
-            else upscale.to(self.device)
+            else upscale.to(self.device, non_blocking=_non_blocking)
         )
 
-        low = low.to(loc.device)
+        low = low.to(loc.device, non_blocking=_non_blocking)
         self.low = low
         self.high = high
 
