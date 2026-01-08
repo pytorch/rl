@@ -268,19 +268,21 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Main training loop - iterate over optimization steps
     for optim_step in range(total_optim_steps):
-        # Track collected frames from buffer write count
-        collected_frames = replay_buffer.write_count
-        frames_delta = collected_frames - prev_collected_frames
-        if frames_delta > 0:
-            pbar.update(frames_delta)
-            prev_collected_frames = collected_frames
+        # Only check write_count periodically (every optim_steps_per_batch) to reduce overhead
+        if (optim_step + 1) % optim_steps_per_batch == 0:
+            # Track collected frames from buffer write count
+            collected_frames = replay_buffer.write_count
+            frames_delta = collected_frames - prev_collected_frames
+            if frames_delta > 0:
+                pbar.update(frames_delta)
+                prev_collected_frames = collected_frames
 
-        # Check if we've collected enough frames
-        if collected_frames >= total_frames:
-            torchrl_logger.info(
-                f"Collected {collected_frames} frames (target: {total_frames}). Stopping."
-            )
-            break
+            # Check if we've collected enough frames
+            if collected_frames >= total_frames:
+                torchrl_logger.info(
+                    f"Collected {collected_frames} frames (target: {total_frames}). Stopping."
+                )
+                break
 
         # sample from replay buffer
         with timeit("train/sample"), record_function("## train/sample ##"):
