@@ -18,6 +18,7 @@ from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
     INSTANTIATE_TIMEOUT,
+    WEIGHT_SYNC_TIMEOUT,
 )
 
 from torchrl.collectors._multi_async import MultiAsyncCollector, MultiaSyncDataCollector
@@ -50,6 +51,7 @@ __all__ = [
     # Constants
     "_TIMEOUT",
     "INSTANTIATE_TIMEOUT",
+    "WEIGHT_SYNC_TIMEOUT",
     "_MIN_TIMEOUT",
     "_MAX_IDLE_COUNT",
     "DEFAULT_EXPLORATION_TYPE",
