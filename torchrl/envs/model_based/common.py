@@ -117,11 +117,13 @@ class ModelBasedEnvBase(EnvBase):
         device: DEVICE_TYPING = "cpu",
         batch_size: torch.Size | None = None,
         run_type_checks: bool = False,
+        allow_done_after_reset: bool = False,
     ):
         super().__init__(
             device=device,
             batch_size=batch_size,
             run_type_checks=run_type_checks,
+            allow_done_after_reset=allow_done_after_reset,
         )
         self.world_model = world_model.to(self.device)
         self.world_model_params = params
