@@ -374,8 +374,8 @@ class CrossQLoss(LossModule):
         if "_target_entropy" in self._buffers:
             return
         target_entropy = self._target_entropy
+        device = next(self.parameters()).device
         if target_entropy == "auto":
-            device = next(self.parameters()).device
             action_spec = self.get_action_spec()
             if action_spec is None:
                 if fault_tolerant:
