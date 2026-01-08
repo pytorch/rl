@@ -28,3 +28,4 @@ dependencies:
     - av
     - h5py
     - numpy<2.0.0
+    - pybind11[global]

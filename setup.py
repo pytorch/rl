@@ -21,7 +21,14 @@ ROOT_DIR = Path(__file__).parent.resolve()
 
 
 def _check_pybind11():
-    """Check that pybind11 is installed and provide a clear error message if not."""
+    """Check that pybind11 is installed and provide a clear error message if not.
+
+    Only checks when actually building extensions, not for commands like 'clean'.
+    """
+    # Commands that don't require building C++ extensions
+    skip_commands = {"clean", "egg_info", "sdist", "--version", "--help", "-h"}
+    if skip_commands.intersection(sys.argv):
+        return
     if importlib.util.find_spec("pybind11") is None:
         raise RuntimeError(
             "pybind11 is required to build TorchRL's C++ extensions but was not found.\n"
