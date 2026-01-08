@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import weakref
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from numbers import Number
 
 import numpy as np
@@ -76,7 +76,7 @@ class IndependentNormal(D.Independent):
     def __init__(
         self,
         loc: torch.Tensor,
-        scale: torch.Tensor,
+        scale: torch.Tensor | float | Callable[[torch.Tensor], torch.Tensor],
         upscale: float = 5.0,
         tanh_loc: bool = False,
         event_dim: int = 1,
@@ -86,11 +86,25 @@ class IndependentNormal(D.Independent):
         self.upscale = upscale
         self._event_dim = event_dim
         self._kwargs = kwargs
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
         super().__init__(D.Normal(loc, scale, **kwargs), event_dim)
 
     def update(self, loc, scale):
         if self.tanh_loc:
             loc = self.upscale * (loc / self.upscale).tanh()
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
         super().__init__(D.Normal(loc, scale, **self._kwargs), self._event_dim)
 
     @property
@@ -343,7 +357,7 @@ class TanhNormal(FasterTransformedDistribution):
     def __init__(
         self,
         loc: torch.Tensor,
-        scale: torch.Tensor,
+        scale: torch.Tensor | float | Callable[[torch.Tensor], torch.Tensor],
         upscale: torch.Tensor | Number = 5.0,
         low: torch.Tensor | Number = -1.0,
         high: torch.Tensor | Number = 1.0,
@@ -353,8 +367,14 @@ class TanhNormal(FasterTransformedDistribution):
     ):
         if not isinstance(loc, torch.Tensor):
             loc = torch.as_tensor(loc, dtype=torch.get_default_dtype())
-        if not isinstance(scale, torch.Tensor):
-            scale = torch.as_tensor(scale, dtype=torch.get_default_dtype())
+        _non_blocking = loc.device.type == "cuda"
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=_non_blocking)
         if event_dims is None:
             event_dims = min(1, loc.ndim)
 
@@ -373,11 +393,11 @@ class TanhNormal(FasterTransformedDistribution):
         if not isinstance(high, torch.Tensor):
             high = torch.as_tensor(high, device=loc.device)
         elif high.device != loc.device:
-            high = high.to(loc.device)
+            high = high.to(loc.device, non_blocking=_non_blocking)
         if not isinstance(low, torch.Tensor):
             low = torch.as_tensor(low, device=loc.device)
         elif low.device != loc.device:
-            low = low.to(loc.device)
+            low = low.to(loc.device, non_blocking=_non_blocking)
         if not is_compiling() and not safe_is_current_stream_capturing():
             self.non_trivial_max = (high != 1.0).any()
             self.non_trivial_min = (low != -1.0).any()
@@ -391,10 +411,10 @@ class TanhNormal(FasterTransformedDistribution):
         self.upscale = (
             upscale
             if not isinstance(upscale, torch.Tensor)
-            else upscale.to(self.device)
+            else upscale.to(self.device, non_blocking=_non_blocking)
         )
 
-        low = low.to(loc.device)
+        low = low.to(loc.device, non_blocking=_non_blocking)
         self.low = low
         self.high = high
 
@@ -434,6 +454,13 @@ class TanhNormal(FasterTransformedDistribution):
             # loc must be rescaled if tanh_loc
             if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
                 loc = loc + (self.high - self.low) / 2 + self.low
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
         self.loc = loc
         self.scale = scale
 
