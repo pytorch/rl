@@ -629,7 +629,7 @@ def make_collector(
         policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        init_random_frames=cfg.collector.init_random_frames,
+        # Note: init_random_frames not used - the untrained policy is effectively random
         policy_device=collector_devices,
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training
