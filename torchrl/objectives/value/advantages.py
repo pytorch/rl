@@ -1081,6 +1081,16 @@ class TDLambdaEstimator(ValueEstimatorBase):
         self.vectorized = vectorized
         self.time_dim = time_dim
 
+    @property
+    def vectorized(self):
+        if is_dynamo_compiling():
+            return False
+        return self._vectorized
+
+    @vectorized.setter
+    def vectorized(self, value):
+        self._vectorized = value
+
     @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
@@ -1206,6 +1216,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
         lmbda = self.lmbda
         if self.average_rewards:
             reward = reward - reward.mean()
