@@ -139,13 +139,18 @@ class DreamerModelLoss(LossModule):
         posterior_std = tensordict.get(("next", self.tensor_keys.posterior_std))
 
         kl_loss = self.kl_loss(
-            prior_mean, prior_std, posterior_mean, posterior_std,
+            prior_mean,
+            prior_std,
+            posterior_mean,
+            posterior_std,
         ).unsqueeze(-1)
 
         # Ensure contiguous layout for torch.compile compatibility
         # The gradient from distance_loss flows back through decoder convolutions
         pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
-        reco_pixels = tensordict.get(("next", self.tensor_keys.reco_pixels)).contiguous()
+        reco_pixels = tensordict.get(
+            ("next", self.tensor_keys.reco_pixels)
+        ).contiguous()
         reco_loss = distance_loss(
             pixels,
             reco_pixels,
@@ -437,7 +442,9 @@ class DreamerValueLoss(LossModule):
         self.value_model(tensordict_select)
 
         if self.discount_loss:
-            discount = self.gamma * torch.ones_like(lambda_target, device=lambda_target.device)
+            discount = self.gamma * torch.ones_like(
+                lambda_target, device=lambda_target.device
+            )
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
             value_loss = (
