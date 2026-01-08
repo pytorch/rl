@@ -714,6 +714,7 @@ def make_replay_buffer(
                 scratch_dir=scratch_dir,
                 device="cpu",
                 ndim=2,
+                shared_init=True,  # Allow remote processes to initialize storage
             ),
             sampler=SliceSampler(
                 slice_len=batch_seq_len,
