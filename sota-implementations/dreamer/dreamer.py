@@ -11,23 +11,26 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+from torch.autograd.profiler import record_function
+from omegaconf import DictConfig
 
 from dreamer_utils import (
     _default_device,
+    DreamerProfiler,
     dump_video,
     log_metrics,
     make_collector,
     make_dreamer,
     make_environments,
     make_replay_buffer,
+    make_storage_transform,
 )
 
 # mixed precision training
 from torch.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import RSSMRollout
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -41,6 +44,7 @@ def main(cfg: DictConfig):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
     device = _default_device(cfg.networks.device)
+    assert device.type == "cuda", "Dreamer only supports CUDA devices"
 
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
@@ -53,7 +57,8 @@ def main(cfg: DictConfig):  # noqa: F821
             wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
         )
 
-    train_env, test_env = make_environments(
+    # make_environments returns (train_env_factory, test_env) for async collection
+    train_env_factory, test_env = make_environments(
         cfg=cfg,
         parallel_envs=cfg.env.n_parallel_envs,
         logger=logger,
@@ -98,45 +103,66 @@ def main(cfg: DictConfig):  # noqa: F821
         value_model, discount_loss=True, gamma=cfg.optimization.gamma
     )
 
-    # Make collector
-    collector = make_collector(cfg, train_env, policy)
+    # Make async multi-collector (uses env factory for worker processes)
+    # Device allocation: cuda:0 for training, cuda:1+ for collectors (if multi-GPU)
+    collector = make_collector(cfg, train_env_factory, policy, training_device=device)
 
-    # Make replay buffer
+    # Make replay buffer with minimal sample-time transforms
     batch_size = cfg.replay_buffer.batch_size
     batch_length = cfg.replay_buffer.batch_length
     buffer_size = cfg.replay_buffer.buffer_size
     scratch_dir = cfg.replay_buffer.scratch_dir
+    prefetch = cfg.replay_buffer.prefetch
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
         buffer_size=buffer_size,
         buffer_scratch_dir=scratch_dir,
         device=device,
+        prefetch=prefetch if not (profiling_enabled := cfg.profiling.enabled) else None,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
-        use_autocast=cfg.optimization.use_autocast,
-        compile=(
-            {"backend": cfg.optimization.compile_backend}
-            if cfg.optimization.compile
-            else False
-        ),
+    )
+
+    # Create storage transform for extend-time processing (applied once per frame)
+    storage_transform = make_storage_transform(
+        pixel_obs=cfg.env.from_pixels,
+        grayscale=cfg.env.grayscale,
+        image_size=cfg.env.image_size,
     )
 
     # Training loop
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    # Make optimizer
+    # Make optimizer (fused=True for faster GPU execution)
+    use_fused = device.type == "cuda"
     world_model_opt = torch.optim.Adam(
-        world_model.parameters(), lr=cfg.optimization.world_model_lr
+        world_model.parameters(), lr=cfg.optimization.world_model_lr, fused=use_fused
     )
-    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.actor_lr)
-    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.optimization.value_lr)
+    actor_opt = torch.optim.Adam(
+        actor_model.parameters(), lr=cfg.optimization.actor_lr, fused=use_fused
+    )
+    value_opt = torch.optim.Adam(
+        value_model.parameters(), lr=cfg.optimization.value_lr, fused=use_fused
+    )
 
     # Grad scaler for mixed precision training https://pytorch.org/docs/stable/amp.html
-    use_autocast = cfg.optimization.use_autocast
-    if use_autocast:
+    # autocast can be: false, true (=bfloat16), float16, bfloat16
+    autocast_cfg = cfg.optimization.autocast
+    if autocast_cfg in (False, "false", "False"):
+        autocast_dtype = None
+    elif autocast_cfg in (True, "true", "True", "bfloat16"):
+        autocast_dtype = torch.bfloat16
+    elif autocast_cfg == "float16":
+        autocast_dtype = torch.float16
+    else:
+        raise ValueError(
+            f"Invalid autocast value: {autocast_cfg}. Use false, true, float16, or bfloat16."
+        )
+
+    if autocast_dtype is not None:
         scaler1 = GradScaler()
         scaler2 = GradScaler()
         scaler3 = GradScaler()
@@ -147,124 +173,211 @@ def main(cfg: DictConfig):  # noqa: F821
     eval_iter = cfg.logger.eval_iter
     eval_rollout_steps = cfg.logger.eval_rollout_steps
 
-    if cfg.optimization.compile:
+    # Enable TensorFloat32 for better performance on Ampere+ GPUs
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+
+    compile_cfg = cfg.optimization.compile
+    compile_enabled = compile_cfg.enabled
+    compile_losses = set(compile_cfg.losses)
+    if compile_enabled:
         torch._dynamo.config.capture_scalar_outputs = True
 
-        torchrl_logger.info("Compiling")
-        backend = cfg.optimization.compile_backend
+        compile_warmup = 3
+        torchrl_logger.info(f"Compiling loss modules with warmup={compile_warmup}")
+        backend = compile_cfg.backend
+        mode = compile_cfg.mode
 
-        def compile_rssms(module):
-            if isinstance(module, RSSMRollout) and not getattr(
-                module, "_compiled", False
-            ):
-                module._compiled = True
-                module.rssm_prior.module = torch.compile(
-                    module.rssm_prior.module, backend=backend
-                )
-                module.rssm_posterior.module = torch.compile(
-                    module.rssm_posterior.module, backend=backend
-                )
+        # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
+        # shared with the policy used in the collector. Compiling them would cause
+        # issues with the MultiCollector workers.
+        #
+        # Instead, we compile the loss modules themselves which wraps the forward pass.
+        # fullgraph=False allows graph breaks which can help with inductor issues.
+        # warmup=compile_warmup runs eagerly for first `compile_warmup` calls before compiling.
+        if "world_model" in compile_losses:
+            world_model_loss = compile_with_warmup(
+                world_model_loss,
+                backend=backend,
+                mode=mode,
+                fullgraph=False,
+                warmup=compile_warmup,
+            )
+        if "actor" in compile_losses:
+            actor_loss = compile_with_warmup(
+                actor_loss, backend=backend, mode=mode, warmup=compile_warmup
+            )
+        if "value" in compile_losses:
+            value_loss = compile_with_warmup(
+                value_loss, backend=backend, mode=mode, warmup=compile_warmup
+            )
+    else:
+        compile_warmup = 0
 
-        world_model_loss.apply(compile_rssms)
+    # Throughput tracking
+    t_iter_start = time.time()
 
-    t_collect_init = time.time()
+    # Profiling setup (encapsulated in helper class)
+    profiler = DreamerProfiler(cfg, device, pbar, compile_warmup=compile_warmup)
+
     for i, tensordict in enumerate(collector):
-        t_collect = time.time() - t_collect_init
+        # Note: Collection time is implicitly measured by the collector's iteration
+        # The time between loop iterations that isn't training is effectively collection time
+        with timeit("collect/preproc"):
+            pbar.update(tensordict.numel())
+            current_frames = tensordict.numel()
+            collected_frames += current_frames
 
-        t_preproc_init = time.time()
-        pbar.update(tensordict.numel())
-        current_frames = tensordict.numel()
-        collected_frames += current_frames
-
-        ep_reward = tensordict.get("episode_reward")[..., -1, 0]
-        replay_buffer.extend(tensordict.cpu())
-        t_preproc = time.time() - t_preproc_init
+            ep_reward = tensordict.get("episode_reward")[..., -1, 0]
+            # Apply storage transforms (ToTensorImage, Resize, GrayScale) once at extend-time
+            tensordict_cpu = tensordict.cpu()
+            if storage_transform is not None:
+                tensordict_cpu = storage_transform(tensordict_cpu)
+            replay_buffer.extend(tensordict_cpu)
 
         if collected_frames >= init_random_frames:
-            t_loss_actor = 0.0
-            t_loss_critic = 0.0
-            t_loss_model = 0.0
             for _ in range(optim_steps_per_batch):
                 # sample from replay buffer
-                t_sample_init = time.time()
-                sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
-                t_sample = time.time() - t_sample_init
+                with timeit("train/sample"), record_function(
+                    "## train/sample ##"
+                ):
+                    sampled_tensordict = replay_buffer.sample().reshape(
+                        -1, batch_length
+                    )
+                    if profiling_enabled:
+                        torch.cuda.synchronize()
 
-                t_loss_model_init = time.time()
                 # update world model
-                with torch.autocast(
-                    device_type=device.type,
-                    dtype=torch.bfloat16,
-                ) if use_autocast else contextlib.nullcontext():
-                    model_loss_td, sampled_tensordict = world_model_loss(
-                        sampled_tensordict
-                    )
-                    loss_world_model = (
-                        model_loss_td["loss_model_kl"]
-                        + model_loss_td["loss_model_reco"]
-                        + model_loss_td["loss_model_reward"]
-                    )
+                with timeit("train/world_model-forward"), record_function(
+                    "## world_model/forward ##"
+                ):
+                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                    torch.compiler.cudagraph_mark_step_begin()
+                    with torch.autocast(
+                        device_type=device.type,
+                        dtype=autocast_dtype,
+                    ) if autocast_dtype else contextlib.nullcontext():
+                        assert sampled_tensordict.device.type == "cuda", "sampled_tensordict should be on CUDA"
+                        model_loss_td, sampled_tensordict = world_model_loss(
+                            sampled_tensordict
+                        )
+                        loss_world_model = (
+                            model_loss_td["loss_model_kl"]
+                            + model_loss_td["loss_model_reco"]
+                            + model_loss_td["loss_model_reward"]
+                        )
 
-                world_model_opt.zero_grad()
-                if use_autocast:
-                    scaler1.scale(loss_world_model).backward()
-                    scaler1.unscale_(world_model_opt)
-                else:
-                    loss_world_model.backward()
-                world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
-                if use_autocast:
-                    scaler1.step(world_model_opt)
-                    scaler1.update()
-                else:
-                    world_model_opt.step()
-                t_loss_model += time.time() - t_loss_model_init
+                with timeit("train/world_model-backward"), record_function(
+                    "## world_model/backward ##"
+                ):
+                    world_model_opt.zero_grad()
+                    if autocast_dtype:
+                        scaler1.scale(loss_world_model).backward()
+                        scaler1.unscale_(world_model_opt)
+                    else:
+                        loss_world_model.backward()
+                    torchrl_logger.debug("world_model_loss backward OK")
+                    world_model_grad = clip_grad_norm_(
+                        world_model.parameters(), grad_clip
+                    )
+                    if autocast_dtype:
+                        scaler1.step(world_model_opt)
+                        scaler1.update()
+                    else:
+                        world_model_opt.step()
 
                 # update actor network
-                t_loss_actor_init = time.time()
-                with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
-                    actor_loss_td, sampled_tensordict = actor_loss(
-                        sampled_tensordict.reshape(-1)
-                    )
+                with timeit("train/actor-forward"), record_function(
+                    "## actor/forward ##"
+                ):
+                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                    torch.compiler.cudagraph_mark_step_begin()
+                    with torch.autocast(
+                        device_type=device.type, dtype=autocast_dtype
+                    ) if autocast_dtype else contextlib.nullcontext():
+                        actor_loss_td, sampled_tensordict = actor_loss(
+                            sampled_tensordict.reshape(-1)
+                        )
 
-                actor_opt.zero_grad()
-                if use_autocast:
-                    scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                    scaler2.unscale_(actor_opt)
-                else:
-                    actor_loss_td["loss_actor"].backward()
-                actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
-                if use_autocast:
-                    scaler2.step(actor_opt)
-                    scaler2.update()
-                else:
-                    actor_opt.step()
-                t_loss_actor += time.time() - t_loss_actor_init
+                with timeit("train/actor-backward"), record_function(
+                    "## actor/backward ##"
+                ):
+                    actor_opt.zero_grad()
+                    if autocast_dtype:
+                        scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                        scaler2.unscale_(actor_opt)
+                    else:
+                        actor_loss_td["loss_actor"].backward()
+                    torchrl_logger.debug("actor_loss backward OK")
+                    actor_model_grad = clip_grad_norm_(
+                        actor_model.parameters(), grad_clip
+                    )
+                    if autocast_dtype:
+                        scaler2.step(actor_opt)
+                        scaler2.update()
+                    else:
+                        actor_opt.step()
 
                 # update value network
-                t_loss_critic_init = time.time()
-                with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                with timeit("train/value-forward"), record_function(
+                    "## value/forward ##"
+                ):
+                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+                    torch.compiler.cudagraph_mark_step_begin()
+                    with torch.autocast(
+                        device_type=device.type, dtype=autocast_dtype
+                    ) if autocast_dtype else contextlib.nullcontext():
+                        value_loss_td, sampled_tensordict = value_loss(
+                            sampled_tensordict
+                        )
 
-                value_opt.zero_grad()
-                if use_autocast:
-                    scaler3.scale(value_loss_td["loss_value"]).backward()
-                    scaler3.unscale_(value_opt)
-                else:
-                    value_loss_td["loss_value"].backward()
-                critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
-                if use_autocast:
-                    scaler3.step(value_opt)
-                    scaler3.update()
-                else:
-                    value_opt.step()
-                t_loss_critic += time.time() - t_loss_critic_init
+                with timeit("train/value-backward"), record_function(
+                    "## value/backward ##"
+                ):
+                    value_opt.zero_grad()
+                    if autocast_dtype:
+                        scaler3.scale(value_loss_td["loss_value"]).backward()
+                        scaler3.unscale_(value_opt)
+                    else:
+                        value_loss_td["loss_value"].backward()
+                    torchrl_logger.debug("value_loss backward OK")
+                    critic_model_grad = clip_grad_norm_(
+                        value_model.parameters(), grad_clip
+                    )
+                    if autocast_dtype:
+                        scaler3.step(value_opt)
+                        scaler3.update()
+                    else:
+                        value_opt.step()
+
+                # Step profiler (returns True if profiling complete)
+                if profiler.step():
+                    break
+
+            # Check if profiling is complete and we should exit
+            if profiler.should_exit():
+                torchrl_logger.info("Profiling complete. Exiting training loop.")
+                break
+
+        # Compute throughput metrics
+        t_iter_end = time.time()
+        iter_time = t_iter_end - t_iter_start
+
+        # FPS: Frames (env steps) collected per second
+        fps = current_frames / iter_time if iter_time > 0 else 0
 
         metrics_to_log = {"reward": ep_reward.mean().item()}
         if collected_frames >= init_random_frames:
+            # SPS: Samples (batch elements) processed per second
+            # Each optim step processes batch_size samples
+            total_samples = optim_steps_per_batch * batch_size
+            sps = total_samples / iter_time if iter_time > 0 else 0
+
+            # UPS: Updates (gradient steps) per second
+            # 3 updates per optim step (world_model, actor, value)
+            total_updates = optim_steps_per_batch * 3
+            ups = total_updates / iter_time if iter_time > 0 else 0
+
             loss_metrics = {
                 "loss_model_kl": model_loss_td["loss_model_kl"].item(),
                 "loss_model_reco": model_loss_td["loss_model_reco"].item(),
@@ -274,18 +387,25 @@ def main(cfg: DictConfig):  # noqa: F821
                 "world_model_grad": world_model_grad,
                 "actor_model_grad": actor_model_grad,
                 "critic_model_grad": critic_model_grad,
-                "t_loss_actor": t_loss_actor,
-                "t_loss_critic": t_loss_critic,
-                "t_loss_model": t_loss_model,
-                "t_sample": t_sample,
-                "t_preproc": t_preproc,
-                "t_collect": t_collect,
+                # Throughput metrics
+                "throughput/fps": fps,  # Frames per second (collection)
+                "throughput/sps": sps,  # Samples per second (training)
+                "throughput/ups": ups,  # Updates per second (gradient steps)
+                "throughput/iter_time": iter_time,  # Total iteration time
+                # Detailed timing from timeit (some metrics may be empty when compiling)
                 **timeit.todict(prefix="time"),
             }
             metrics_to_log.update(loss_metrics)
+        else:
+            # During random collection phase, only log FPS
+            metrics_to_log["throughput/fps"] = fps
+            metrics_to_log["throughput/iter_time"] = iter_time
 
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
+
+        # Reset timer for next iteration
+        t_iter_start = time.time()
 
         policy[1].step(current_frames)
         collector.update_policy_weights_()
@@ -325,16 +445,12 @@ def main(cfg: DictConfig):  # noqa: F821
                     if logger is not None:
                         log_metrics(logger, eval_metrics, collected_frames)
 
-        t_collect_init = time.time()
-
     if not test_env.is_closed:
         test_env.close()
-    if not train_env.is_closed:
-        train_env.close()
+    # Note: train envs are managed by the collector workers
     collector.shutdown()
 
     del test_env
-    del train_env
     del collector
 
 
