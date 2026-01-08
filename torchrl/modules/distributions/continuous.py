@@ -58,7 +58,11 @@ class IndependentNormal(D.Independent):
 
     Args:
         loc (torch.Tensor): normal distribution location parameter
-        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
+        scale (torch.Tensor, float, or callable): normal distribution sigma parameter (squared root of variance).
+            Can be a tensor, a float, or a callable that takes the ``loc`` tensor as input and returns the scale tensor.
+            Using a callable (e.g., ``torch.ones_like`` or ``functools.partial(torch.full_like, fill_value=0.1)``)
+            avoids explicit device transfers like ``torch.tensor(val, device=device)`` and prevents graph breaks
+            in :func:`torch.compile`.
         upscale (torch.Tensor or number, optional): 'a' scaling factor in the formula:
 
             .. math::
@@ -69,6 +73,20 @@ class IndependentNormal(D.Independent):
         tanh_loc (bool, optional): if ``False``, the above formula is used for
             the location scaling, otherwise the raw value
             is kept. Default is ``False``;
+
+    Example:
+        >>> import torch
+        >>> from functools import partial
+        >>> from torchrl.modules.distributions import IndependentNormal
+        >>> loc = torch.zeros(3, 4)
+        >>> # Using a callable scale avoids device transfers and graph breaks in torch.compile
+        >>> dist = IndependentNormal(loc, scale=torch.ones_like)
+        >>> # For a custom scale value, use partial to create a callable
+        >>> dist = IndependentNormal(loc, scale=partial(torch.full_like, fill_value=0.1))
+        >>> sample = dist.sample()
+        >>> sample.shape
+        torch.Size([3, 4])
+
     """
 
     num_params: int = 2
@@ -330,7 +348,11 @@ class TanhNormal(FasterTransformedDistribution):
 
     Args:
         loc (torch.Tensor): normal distribution location parameter
-        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
+        scale (torch.Tensor, float, or callable): normal distribution sigma parameter (squared root of variance).
+            Can be a tensor, a float, or a callable that takes the ``loc`` tensor as input and returns the scale tensor.
+            Using a callable (e.g., ``torch.ones_like`` or ``functools.partial(torch.full_like, fill_value=0.1)``)
+            avoids explicit device transfers like ``torch.tensor(val, device=device)`` and prevents graph breaks
+            in :func:`torch.compile`.
         upscale (torch.Tensor or number): 'a' scaling factor in the formula:
 
             .. math::
@@ -345,6 +367,20 @@ class TanhNormal(FasterTransformedDistribution):
             value is kept. Default is ``False``;
         safe_tanh (bool, optional): if ``True``, the Tanh transform is done "safely", to avoid numerical overflows.
             This will currently break with :func:`torch.compile`.
+
+    Example:
+        >>> import torch
+        >>> from functools import partial
+        >>> from torchrl.modules.distributions import TanhNormal
+        >>> loc = torch.zeros(3, 4)
+        >>> # Using a callable scale avoids device transfers and graph breaks in torch.compile
+        >>> dist = TanhNormal(loc, scale=torch.ones_like)
+        >>> # For a custom scale value, use partial to create a callable
+        >>> dist = TanhNormal(loc, scale=partial(torch.full_like, fill_value=0.1))
+        >>> sample = dist.sample()
+        >>> sample.shape
+        torch.Size([3, 4])
+
     """
 
     arg_constraints = {

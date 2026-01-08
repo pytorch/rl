@@ -15,6 +15,9 @@ collector:
   total_frames: 5_000_000
   init_random_frames: 3000
   frames_per_batch: 1000
+  # Number of parallel collector workers (async mode)
+  # On multi-GPU: must be <= num_gpus - 1 (cuda:0 reserved for training)
+  num_collectors: 7
   device:
 
 optimization:
@@ -26,13 +29,18 @@ optimization:
   value_lr: 8e-5
   kl_scale: 1.0
   free_nats: 3.0
-  optim_steps_per_batch: 80
+  optim_steps_per_batch: 20
   gamma: 0.99
   lmbda: 0.95
   imagination_horizon: 15
-  compile: False
-  compile_backend: inductor
-  use_autocast: True
+  compile:
+    enabled: True
+    backend: inductor # or cudagraphs
+    mode: reduce-overhead
+    # Which losses to compile (subset of: world_model, actor, value)
+    losses: ["world_model", "actor", "value"]
+  # Autocast options: false, true (=bfloat16), float16, bfloat16
+  autocast: bfloat16
 
 networks:
   exploration_noise: 0.3
@@ -41,13 +49,21 @@ networks:
   rssm_hidden_dim: 200
   hidden_dim: 400
   activation: "elu"
+  # Use torch.scan for RSSM rollout (faster, no graph breaks with torch.compile)
+  use_scan: False
+  rssm_rollout:
+    # Compile only the per-timestep RSSM rollout step (keeps Python loop, avoids scan/unrolling).
+    compile: False
+    compile_backend: inductor
+    compile_mode: reduce-overhead
 
 
 replay_buffer: 
-  batch_size: 2500
+  batch_size: 10000
   buffer_size: 1000000
   batch_length: 50
   scratch_dir: null
+  prefetch: 8
 
 logger:
   backend: wandb
@@ -58,3 +74,27 @@ logger:
   eval_iter: 10
   eval_rollout_steps: 500
   video: False
+
+profiling:
+  # Enable PyTorch profiling (overrides total_frames to profiling_total_frames)
+  enabled: False
+  # Total frames to collect when profiling (default: 5005 = 5 collection iters + buffer warmup)
+  total_frames: 5005
+  # Skip the first N optim steps (no profiling at all)
+  skip_first: 1
+  # Warmup steps (profiler runs but data discarded for warmup)
+  warmup_steps: 1
+  # Number of optim steps to profile (actual traced data)
+  active_steps: 1
+  # Export chrome trace to this file (if set)
+  trace_file: dreamer_trace.json
+  # Profile CUDA kernels (VERY heavy on GPU - 13GB vs 1GB trace!)
+  profile_cuda: true
+  # Record tensor shapes
+  record_shapes: True
+  # Profile memory usage
+  profile_memory: True
+  # Record Python call stacks
+  with_stack: True
+  # Compute FLOPs
+  with_flops: True
