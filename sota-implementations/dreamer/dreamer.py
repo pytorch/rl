@@ -182,7 +182,6 @@ def main(cfg: DictConfig):  # noqa: F821
         scaler2 = GradScaler()
         scaler3 = GradScaler()
 
-    init_random_frames = cfg.collector.init_random_frames
     optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
     grad_clip = cfg.optimization.grad_clip
     eval_iter = cfg.logger.eval_iter
@@ -245,12 +244,14 @@ def main(cfg: DictConfig):  # noqa: F821
     torchrl_logger.info("Starting async collection...")
     collector.start()
 
-    # Wait for enough samples to start training (init_random_frames)
+    # Wait for enough samples to start training (at least one batch worth)
+    # Note: We don't use init_random_frames - the untrained policy is effectively random
+    min_frames_to_start = batch_size * batch_length
     torchrl_logger.info(
-        f"Waiting for {init_random_frames} initial random frames before training..."
+        f"Waiting for {min_frames_to_start} initial frames before training..."
     )
     prev_collected_frames = 0
-    while replay_buffer.write_count < init_random_frames:
+    while replay_buffer.write_count < min_frames_to_start:
         time.sleep(0.1)
         collected_frames = replay_buffer.write_count
         if collected_frames > prev_collected_frames:
