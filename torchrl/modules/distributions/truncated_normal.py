@@ -35,8 +35,9 @@ class TruncatedStandardNormal(Distribution):
 
     def __init__(self, a, b, validate_args=None, device=None):
         self.a, self.b = broadcast_all(a, b)
-        self.a = self.a.to(device)
-        self.b = self.b.to(device)
+        _non_blocking = device is not None and torch.device(device).type == "cuda"
+        self.a = self.a.to(device, non_blocking=_non_blocking)
+        self.b = self.b.to(device, non_blocking=_non_blocking)
         if isinstance(a, Number) and isinstance(b, Number):
             batch_shape = torch.Size()
         else:
@@ -146,8 +147,9 @@ class TruncatedNormal(TruncatedStandardNormal):
     def __init__(self, loc, scale, a, b, validate_args=None, device=None):
         scale = scale.clamp_min(self.eps)
         self.loc, self.scale, a, b = broadcast_all(loc, scale, a, b)
-        a = a.to(device)
-        b = b.to(device)
+        _non_blocking = device is not None and torch.device(device).type == "cuda"
+        a = a.to(device, non_blocking=_non_blocking)
+        b = b.to(device, non_blocking=_non_blocking)
         self._non_std_a = a
         self._non_std_b = b
         a = (a - self.loc) / self.scale
