@@ -637,6 +637,8 @@ def make_collector(
         replay_buffer=replay_buffer,
         postproc=storage_transform,
         track_policy_version=track_policy_version,
+        # Skip fake data initialization - storage handles coordination
+        local_init_rb=True,
     )
     collector.set_seed(cfg.env.seed)
 
