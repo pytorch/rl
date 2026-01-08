@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcc917ba) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g253b8dd) &#x25BC</span></a>
     </div>
     
 
@@ -490,7 +490,8 @@
 <span class="sd">        fixed_alpha (bool, optional): whether alpha should be trained to match</span>
 <span class="sd">            a target entropy. Default is ``False``.</span>
 <span class="sd">        target_entropy (Union[str, Number], optional): Target entropy for the</span>
-<span class="sd">            stochastic policy. Default is &quot;auto&quot;.</span>
+<span class="sd">            stochastic policy. Default is &quot;auto&quot;, where target entropy is</span>
+<span class="sd">            computed as :obj:`-prod(n_actions)`.</span>
 <span class="sd">        delay_qvalue (bool, optional): Whether to separate the target Q value</span>
 <span class="sd">            networks from the Q value networks used</span>
 <span class="sd">            for data collection. Default is ``False``.</span>
