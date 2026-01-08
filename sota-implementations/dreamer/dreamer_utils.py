@@ -633,7 +633,7 @@ def make_collector(
         policy_device=collector_devices,
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training
-        update_at_each_batch=True,
+        update_at_each_batch=False,  # We manually call update_policy_weights_() in training loop
         replay_buffer=replay_buffer,
         postproc=storage_transform,
         track_policy_version=track_policy_version,
