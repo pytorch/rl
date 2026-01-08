@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+gdf00d61) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+gcc917ba) &#x25BC</span></a>
     </div>
     
 
@@ -753,6 +753,47 @@
 <span class="sd">        .. seealso:: :meth:`erase`</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">cls</span><span class="o">.</span><span class="n">erase</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_maybe_timeit</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return timeit context if not compiling, nullcontext otherwise.</span>
+
+<span class="sd">    torch.compiler.is_compiling() returns True when inside a compiled region,</span>
+<span class="sd">    and timeit uses time.time() which dynamo cannot trace.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">nullcontext</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">timeit</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_maybe_record_function</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return record_function context if not compiling, nullcontext otherwise.</span>
+
+<span class="sd">    torch.autograd.profiler.record_function cannot be used inside compiled regions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.autograd.profiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">record_function</span>
+
+    <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">nullcontext</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">record_function</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_maybe_record_function_decorator</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Callable</span><span class="p">],</span> <span class="n">Callable</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator version of :func:`_maybe_record_function`.</span>
+
+<span class="sd">    This is preferred over sprinkling many context managers in hot code paths,</span>
+<span class="sd">    as it reduces Python overhead while keeping a useful profiler structure.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+        <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">_maybe_record_function</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapped</span>
+
+    <span class="k">return</span> <span class="n">decorator</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_check_for_faulty_process</span><span class="p">(</span><span class="n">processes</span><span class="p">):</span>

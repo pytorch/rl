@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+gdf00d61) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcc917ba) &#x25BC</span></a>
     </div>
     
 
@@ -427,7 +427,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Number</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -480,7 +480,11 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        loc (torch.Tensor): normal distribution location parameter</span>
-<span class="sd">        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)</span>
+<span class="sd">        scale (torch.Tensor, float, or callable): normal distribution sigma parameter (squared root of variance).</span>
+<span class="sd">            Can be a tensor, a float, or a callable that takes the ``loc`` tensor as input and returns the scale tensor.</span>
+<span class="sd">            Using a callable (e.g., ``torch.ones_like`` or ``functools.partial(torch.full_like, fill_value=0.1)``)</span>
+<span class="sd">            avoids explicit device transfers like ``torch.tensor(val, device=device)`` and prevents graph breaks</span>
+<span class="sd">            in :func:`torch.compile`.</span>
 <span class="sd">        upscale (torch.Tensor or number, optional): &#39;a&#39; scaling factor in the formula:</span>
 
 <span class="sd">            .. math::</span>
@@ -491,6 +495,20 @@
 <span class="sd">        tanh_loc (bool, optional): if ``False``, the above formula is used for</span>
 <span class="sd">            the location scaling, otherwise the raw value</span>
 <span class="sd">            is kept. Default is ``False``;</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from functools import partial</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.distributions import IndependentNormal</span>
+<span class="sd">        &gt;&gt;&gt; loc = torch.zeros(3, 4)</span>
+<span class="sd">        &gt;&gt;&gt; # Using a callable scale avoids device transfers and graph breaks in torch.compile</span>
+<span class="sd">        &gt;&gt;&gt; dist = IndependentNormal(loc, scale=torch.ones_like)</span>
+<span class="sd">        &gt;&gt;&gt; # For a custom scale value, use partial to create a callable</span>
+<span class="sd">        &gt;&gt;&gt; dist = IndependentNormal(loc, scale=partial(torch.full_like, fill_value=0.1))</span>
+<span class="sd">        &gt;&gt;&gt; sample = dist.sample()</span>
+<span class="sd">        &gt;&gt;&gt; sample.shape</span>
+<span class="sd">        torch.Size([3, 4])</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">num_params</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
@@ -498,7 +516,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">loc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-        <span class="n">scale</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">scale</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
         <span class="n">upscale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
         <span class="n">tanh_loc</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">event_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
@@ -508,11 +526,25 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span> <span class="o">=</span> <span class="n">upscale</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_event_dim</span> <span class="o">=</span> <span class="n">event_dim</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+        <span class="c1"># Support callable scale (e.g., torch.ones_like) for compile-friendliness</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">scale</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">event_dim</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tanh_loc</span><span class="p">:</span>
             <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span> <span class="o">*</span> <span class="p">(</span><span class="n">loc</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span><span class="p">)</span><span class="o">.</span><span class="n">tanh</span><span class="p">()</span>
+        <span class="c1"># Support callable scale (e.g., torch.ones_like) for compile-friendliness</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">scale</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_kwargs</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_event_dim</span><span class="p">)</span>
 
     <span class="nd">@property</span>
@@ -738,7 +770,11 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        loc (torch.Tensor): normal distribution location parameter</span>
-<span class="sd">        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)</span>
+<span class="sd">        scale (torch.Tensor, float, or callable): normal distribution sigma parameter (squared root of variance).</span>
+<span class="sd">            Can be a tensor, a float, or a callable that takes the ``loc`` tensor as input and returns the scale tensor.</span>
+<span class="sd">            Using a callable (e.g., ``torch.ones_like`` or ``functools.partial(torch.full_like, fill_value=0.1)``)</span>
+<span class="sd">            avoids explicit device transfers like ``torch.tensor(val, device=device)`` and prevents graph breaks</span>
+<span class="sd">            in :func:`torch.compile`.</span>
 <span class="sd">        upscale (torch.Tensor or number): &#39;a&#39; scaling factor in the formula:</span>
 
 <span class="sd">            .. math::</span>
@@ -753,6 +789,20 @@
 <span class="sd">            value is kept. Default is ``False``;</span>
 <span class="sd">        safe_tanh (bool, optional): if ``True``, the Tanh transform is done &quot;safely&quot;, to avoid numerical overflows.</span>
 <span class="sd">            This will currently break with :func:`torch.compile`.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from functools import partial</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.distributions import TanhNormal</span>
+<span class="sd">        &gt;&gt;&gt; loc = torch.zeros(3, 4)</span>
+<span class="sd">        &gt;&gt;&gt; # Using a callable scale avoids device transfers and graph breaks in torch.compile</span>
+<span class="sd">        &gt;&gt;&gt; dist = TanhNormal(loc, scale=torch.ones_like)</span>
+<span class="sd">        &gt;&gt;&gt; # For a custom scale value, use partial to create a callable</span>
+<span class="sd">        &gt;&gt;&gt; dist = TanhNormal(loc, scale=partial(torch.full_like, fill_value=0.1))</span>
+<span class="sd">        &gt;&gt;&gt; sample = dist.sample()</span>
+<span class="sd">        &gt;&gt;&gt; sample.shape</span>
+<span class="sd">        torch.Size([3, 4])</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">arg_constraints</span> <span class="o">=</span> <span class="p">{</span>
@@ -765,7 +815,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">loc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-        <span class="n">scale</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">scale</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
         <span class="n">upscale</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Number</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
         <span class="n">low</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Number</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span>
         <span class="n">high</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Number</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
@@ -775,8 +825,14 @@
     <span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
             <span class="n">loc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
+        <span class="n">_non_blocking</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
+        <span class="c1"># Support callable scale (e.g., torch.ones_like) for compile-friendliness</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">scale</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">event_dims</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">event_dims</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">loc</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
 
@@ -795,11 +851,11 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">high</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
             <span class="n">high</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">high</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">high</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-            <span class="n">high</span> <span class="o">=</span> <span class="n">high</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">high</span> <span class="o">=</span> <span class="n">high</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
             <span class="n">low</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">low</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-            <span class="n">low</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">low</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">safe_is_current_stream_capturing</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">non_trivial_max</span> <span class="o">=</span> <span class="p">(</span><span class="n">high</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">non_trivial_min</span> <span class="o">=</span> <span class="p">(</span><span class="n">low</span> <span class="o">!=</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
@@ -813,10 +869,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">upscale</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">upscale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
-            <span class="k">else</span> <span class="n">upscale</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">upscale</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
         <span class="p">)</span>
 
-        <span class="n">low</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">low</span> <span class="o">=</span> <span class="n">low</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">_non_blocking</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="n">low</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="n">high</span>
 
@@ -856,6 +912,13 @@
             <span class="c1"># loc must be rescaled if tanh_loc</span>
             <span class="k">if</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">non_trivial_max</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">non_trivial_min</span><span class="p">):</span>
                 <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">high</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">low</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">low</span>
+        <span class="c1"># Support callable scale (e.g., torch.ones_like) for compile-friendliness</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">scale</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span>
 

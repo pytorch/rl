@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+gdf00d61) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+gcc917ba) &#x25BC</span></a>
     </div>
     
 
@@ -434,7 +434,7 @@
 <h1>DreamerActor<a class="headerlink" href="#dreameractor" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.DreamerActor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">DreamerActor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth=4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cells=200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activation_class=&lt;class</span> <span class="pre">'torch.nn.modules.activation.ELU'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std_bias=5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std_min_val=0.0001</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based.html#DreamerActor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.DreamerActor" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">DreamerActor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth=4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cells=200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activation_class=&lt;class</span> <span class="pre">'torch.nn.modules.activation.ELU'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std_bias=5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std_min_val=0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device=None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based.html#DreamerActor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.DreamerActor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Dreamer actor network.</p>
 <p>This network is used to predict the action distribution given the
 the stochastic state and the deterministic belief at the current
@@ -455,6 +455,8 @@ Defaults to nn.ELU.</p></li>
 Defaults to 5.0.</p></li>
 <li><p><strong>std_min_val</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – Minimum value of the standard deviation.
 Defaults to 1e-4.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em>, </em><em>optional</em>) – Device to create the module on.
+Defaults to None (uses default device).</p></li>
 </ul>
 </dd>
 </dl>
