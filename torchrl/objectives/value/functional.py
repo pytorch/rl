@@ -1028,7 +1028,11 @@ def _fast_td_lambda_return_estimate(
     next_state_value = (~terminated).int() * next_state_value
 
     # Use torch.full to create directly on device (avoids DeviceCopy in cudagraph)
-    gamma_tensor = torch.full((1,), gamma, device=device)
+    # Handle both scalar and single-element tensor gamma
+    if isinstance(gamma, torch.Tensor):
+        gamma_tensor = gamma.to(device).view(1)
+    else:
+        gamma_tensor = torch.full((1,), gamma, device=device)
     gammalmbda = gamma_tensor * lmbda
 
     num_per_traj = _get_num_per_traj(done)
