@@ -222,7 +222,7 @@ class MultiAsyncCollector(MultiCollector):
             self.update_policy_weights_()
 
         for i in range(self.num_workers):
-            if self.init_random_frames is not None and self.init_random_frames > 0:
+            if self._should_use_random_frames():
                 self.pipes[i].send((None, "continue_random"))
             else:
                 self.pipes[i].send((None, "continue"))
@@ -257,10 +257,7 @@ class MultiAsyncCollector(MultiCollector):
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
-            if (
-                self.init_random_frames is not None
-                and self._frames < self.init_random_frames
-            ):
+            if self._should_use_random_frames():
                 msg = "continue_random"
             else:
                 msg = "continue"

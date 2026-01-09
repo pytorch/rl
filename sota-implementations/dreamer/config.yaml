@@ -13,7 +13,7 @@ env:
 
 collector:
   total_frames: 5_000_000
-  init_random_frames: 3000
+  init_random_frames: 10000
   frames_per_batch: 1000
   # Number of parallel collector workers (async mode)
   # On multi-GPU: must be <= num_gpus - 1 (cuda:0 reserved for training)

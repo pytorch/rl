@@ -64,6 +64,7 @@ def _main_async_collector(
     postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
     weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     worker_idx: int | None = None,
+    init_random_frames: int | None = None,
 ) -> None:
     if collector_class is None:
         collector_class = Collector
@@ -82,6 +83,8 @@ def _main_async_collector(
         pipe=pipe_child,
     )
     policy = None
+    # Store the original init_random_frames for run_free mode logic
+    original_init_random_frames = init_random_frames if init_random_frames is not None else 0
     try:
         collector_class._ignore_rb = extend_buffer
         inner_collector = collector_class(
@@ -114,6 +117,9 @@ def _main_async_collector(
             # We don't pass the weight sync scheme as only the sender has the weight sync scheme within.
             # weight_sync_schemes=weight_sync_schemes,
             worker_idx=worker_idx,
+            # init_random_frames is passed; inner collector will use _should_use_random_frames()
+            # which checks replay_buffer.write_count when replay_buffer is provided
+            init_random_frames=init_random_frames,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
@@ -214,8 +220,15 @@ def _main_async_collector(
                     msg = "continue"
             else:
                 data_in = None
-                # TODO: this does not work with random frames
-                msg = "continue"
+                # In run_free mode, determine msg based on replay_buffer.write_count for random frames
+                if (
+                    replay_buffer is not None
+                    and original_init_random_frames > 0
+                    and replay_buffer.write_count < original_init_random_frames
+                ):
+                    msg = "continue_random"
+                else:
+                    msg = "continue"
         # Note: Weight updates are handled by background threads in weight sync schemes.
         # The scheme's background receiver thread listens for "receive" instructions.
 
@@ -232,10 +245,15 @@ def _main_async_collector(
         # applies weights automatically. No explicit message handling needed here.
 
         if msg in ("continue", "continue_random"):
-            if msg == "continue_random":
-                inner_collector.init_random_frames = float("inf")
-            else:
-                inner_collector.init_random_frames = -1
+            # When in run_free mode with a replay_buffer, the inner collector uses
+            # _should_use_random_frames() which checks replay_buffer.write_count.
+            # So we don't override init_random_frames. Otherwise, we use the message
+            # to control whether random frames are used.
+            if not run_free or replay_buffer is None:
+                if msg == "continue_random":
+                    inner_collector.init_random_frames = float("inf")
+                else:
+                    inner_collector.init_random_frames = -1
 
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):

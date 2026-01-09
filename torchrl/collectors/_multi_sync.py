@@ -230,10 +230,7 @@ class MultiSyncCollector(MultiCollector):
                 self.update_policy_weights_()
 
             for idx in range(self.num_workers):
-                if (
-                    self.init_random_frames is not None
-                    and self._frames < self.init_random_frames
-                ):
+                if self._should_use_random_frames():
                     msg = "continue_random"
                 else:
                     msg = "continue"

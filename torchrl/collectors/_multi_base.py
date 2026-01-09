@@ -815,6 +815,23 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             self.preemptive_threshold = 1.0
             self.interruptor = None
 
+    def _should_use_random_frames(self) -> bool:
+        """Determine if random frames should be used instead of the policy.
+
+        When a replay buffer is provided, uses `replay_buffer.write_count` as the
+        global step counter to support `.start()` mode where `_frames` isn't updated
+        until after collection. Otherwise, uses the internal `_frames` counter.
+
+        Returns:
+            bool: True if random frames should be used, False otherwise.
+        """
+        if self.init_random_frames is None or self.init_random_frames <= 0:
+            return False
+        # Use replay_buffer.write_count when available for accurate counting in .start() mode
+        if self.replay_buffer is not None:
+            return self.replay_buffer.write_count < self.init_random_frames
+        return self._frames < self.init_random_frames
+
     def _validate_cat_results(self, cat_results: str | int | None) -> None:
         """Validate cat_results parameter."""
         if cat_results is not None and (
@@ -1082,6 +1099,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     else None,
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
+                    "init_random_frames": self.init_random_frames,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
@@ -1315,10 +1333,6 @@ also that the state dict is synchronised across processes if needed."""
         """
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
-        if self.init_random_frames is not None and self.init_random_frames > 0:
-            raise RuntimeError(
-                "Cannot currently start() a collector that requires random frames. Please submit a feature request on github."
-            )
         self._running_free = True
         for pipe in self.pipes:
             pipe.send((None, "run_free"))

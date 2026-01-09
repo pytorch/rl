@@ -63,6 +63,7 @@ from torchrl._utils import (  # noqa: E402
     logger,
     merge_ray_runtime_env,
     set_auto_unwrap_transformed_env,
+    set_profiling_enabled,
     timeit,
 )
 
