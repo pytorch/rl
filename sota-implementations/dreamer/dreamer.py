@@ -147,9 +147,19 @@ def main(cfg: DictConfig):  # noqa: F821
         track_policy_version=policy_version,
     )
 
-    # Training loop
-    collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    # Training config
+    total_optim_steps = cfg.optimization.total_optim_steps
+    log_every = cfg.optimization.log_every
+    grad_clip = cfg.optimization.grad_clip
+    eval_every = cfg.logger.eval_every
+    eval_rollout_steps = cfg.logger.eval_rollout_steps
+
+    # Override total_optim_steps if profiling is enabled
+    if profiling_enabled:
+        total_optim_steps = cfg.profiling.total_optim_steps
+
+    # Training loop - progress bar tracks optimization steps
+    pbar = tqdm.tqdm(total=total_optim_steps, desc="Optim steps")
 
     # Make optimizer (fused=True for faster GPU execution)
     use_fused = device.type == "cuda"
@@ -181,11 +191,6 @@ def main(cfg: DictConfig):  # noqa: F821
         scaler1 = GradScaler()
         scaler2 = GradScaler()
         scaler3 = GradScaler()
-
-    optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
-    grad_clip = cfg.optimization.grad_clip
-    eval_iter = cfg.logger.eval_iter
-    eval_rollout_steps = cfg.logger.eval_rollout_steps
 
     # Enable TensorFloat32 for better performance on Ampere+ GPUs
     if device.type == "cuda":
@@ -229,16 +234,10 @@ def main(cfg: DictConfig):  # noqa: F821
         compile_warmup = 0
 
     # Throughput tracking
-    t_iter_start = time.time()
+    t_log_start = time.time()
 
     # Profiling setup (encapsulated in helper class)
     profiler = DreamerProfiler(cfg, device, pbar, compile_warmup=compile_warmup)
-
-    # Calculate total optimization steps based on total frames and collection rate
-    # We do optim_steps_per_batch optimization steps per frames_per_batch collected frames
-    frames_per_batch = cfg.collector.frames_per_batch
-    total_frames = cfg.collector.total_frames
-    total_optim_steps = (total_frames // frames_per_batch) * optim_steps_per_batch
 
     # Start async collection - collector fills the buffer in background
     torchrl_logger.info("Starting async collection...")
@@ -251,38 +250,20 @@ def main(cfg: DictConfig):  # noqa: F821
     torchrl_logger.info(
         f"Waiting for {min_frames_to_start} initial frames before training..."
     )
-    prev_collected_frames = 0
     while replay_buffer.write_count < min_frames_to_start:
         time.sleep(0.1)
-        collected_frames = replay_buffer.write_count
-        if collected_frames > prev_collected_frames:
-            pbar.update(collected_frames - prev_collected_frames)
-            prev_collected_frames = collected_frames
 
     torchrl_logger.info(
         f"Collected {replay_buffer.write_count} frames. Starting training..."
     )
 
     # Track frames for FPS calculation over logging interval
-    frames_at_log_start = prev_collected_frames
+    frames_at_log_start = replay_buffer.write_count
 
     # Main training loop - iterate over optimization steps
     for optim_step in range(total_optim_steps):
-        # Only check write_count periodically (every optim_steps_per_batch) to reduce overhead
-        if (optim_step + 1) % optim_steps_per_batch == 0:
-            # Track collected frames from buffer write count
-            collected_frames = replay_buffer.write_count
-            frames_delta = collected_frames - prev_collected_frames
-            if frames_delta > 0:
-                pbar.update(frames_delta)
-                prev_collected_frames = collected_frames
-
-            # Check if we've collected enough frames
-            if collected_frames >= total_frames:
-                torchrl_logger.info(
-                    f"Collected {collected_frames} frames (target: {total_frames}). Stopping."
-                )
-                break
+        # Update progress bar every step
+        pbar.update(1)
 
         # sample from replay buffer
         with timeit("train/sample"), record_function("## train/sample ##"):
@@ -386,31 +367,52 @@ def main(cfg: DictConfig):  # noqa: F821
             torchrl_logger.info("Profiling complete. Exiting training loop.")
             break
 
-        # Log metrics periodically (every optim_steps_per_batch steps)
-        if (optim_step + 1) % optim_steps_per_batch == 0:
+        # Log metrics periodically (every log_every optim steps)
+        if (optim_step + 1) % log_every == 0:
+            # Track collected frames from buffer write count
+            collected_frames = replay_buffer.write_count
+            frames_collected_this_interval = collected_frames - frames_at_log_start
+
             # Compute throughput metrics
-            t_iter_end = time.time()
-            iter_time = t_iter_end - t_iter_start
+            t_log_end = time.time()
+            log_interval_time = t_log_end - t_log_start
 
             # SPS: Samples (batch elements) processed per second
-            total_samples = optim_steps_per_batch * batch_size
-            sps = total_samples / iter_time if iter_time > 0 else 0
+            total_samples = log_every * batch_size
+            sps = total_samples / log_interval_time if log_interval_time > 0 else 0
 
             # UPS: Updates (gradient steps) per second
             # 3 updates per optim step (world_model, actor, value)
-            total_updates = optim_steps_per_batch * 3
-            ups = total_updates / iter_time if iter_time > 0 else 0
+            total_updates = log_every * 3
+            ups = total_updates / log_interval_time if log_interval_time > 0 else 0
 
             # FPS: Frames collected per second (measured from buffer over logging interval)
-            frames_collected_this_interval = collected_frames - frames_at_log_start
-            fps = frames_collected_this_interval / iter_time if iter_time > 0 else 0
+            fps = (
+                frames_collected_this_interval / log_interval_time
+                if log_interval_time > 0
+                else 0
+            )
+
+            # OPS: Optim steps per second
+            ops = log_every / log_interval_time if log_interval_time > 0 else 0
+
+            # OPF: Optim steps per frame (ratio of training to collection)
+            opf = (optim_step + 1) / collected_frames if collected_frames > 0 else 0
+
+            # Update progress bar with throughput metrics
+            pbar.set_postfix(
+                fps=f"{fps:.1f}",
+                ops=f"{ops:.1f}",
+                opf=f"{opf:.2f}",
+                frames=collected_frames,
+            )
 
             # Get reward stats from sampled data (since we don't iterate over collector directly)
             sampled_reward = sampled_tensordict.get(("next", "reward"))
             reward_mean = sampled_reward.mean().item()
             reward_std = sampled_reward.std().item()
 
-            loss_metrics = {
+            metrics = {
                 "loss_model_kl": model_loss_td["loss_model_kl"].item(),
                 "loss_model_reco": model_loss_td["loss_model_reco"].item(),
                 "loss_model_reward": model_loss_td["loss_model_reward"].item(),
@@ -424,9 +426,13 @@ def main(cfg: DictConfig):  # noqa: F821
                 "train/reward_std": reward_std,
                 # Throughput metrics
                 "throughput/fps": fps,  # Frames per second (collection)
+                "throughput/ops": ops,  # Optim steps per second
+                "throughput/opf": opf,  # Optim steps per frame
                 "throughput/sps": sps,  # Samples per second (training)
                 "throughput/ups": ups,  # Updates per second (gradient steps)
-                "throughput/iter_time": iter_time,  # Total iteration time
+                "throughput/log_interval_time": log_interval_time,
+                # Collection tracking (not a target, just for monitoring)
+                "collected_frames": collected_frames,
                 # Policy version tracking
                 "policy_version": policy_version.version,
                 # Detailed timing from timeit (some metrics may be empty when compiling)
@@ -434,21 +440,20 @@ def main(cfg: DictConfig):  # noqa: F821
             }
 
             if logger is not None:
-                log_metrics(logger, loss_metrics, collected_frames)
+                log_metrics(logger, metrics, collected_frames)
 
             # Reset timer and frame counter for next logging interval
-            t_iter_start = time.time()
+            t_log_start = time.time()
             frames_at_log_start = collected_frames
 
             # Update policy weights in collector (for async collection)
-            policy[1].step(frames_delta)
+            policy[1].step(frames_collected_this_interval)
             collector.update_policy_weights_()
             # Increment policy version after weight update
             collector.increment_version()
 
-        # Evaluation (every eval_iter * optim_steps_per_batch optimization steps)
-        eval_freq = eval_iter * optim_steps_per_batch
-        if (optim_step + 1) % eval_freq == 0:
+        # Evaluation (every eval_every optimization steps)
+        if (optim_step + 1) % eval_every == 0:
             # Real env
             with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_rollout = test_env.rollout(
@@ -461,7 +466,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 eval_metrics = {"eval/reward": eval_reward}
                 if logger is not None:
-                    log_metrics(logger, eval_metrics, collected_frames)
+                    log_metrics(logger, eval_metrics, replay_buffer.write_count)
             # Simulated env
             if model_based_env_eval is not None:
                 with set_exploration_type(
@@ -481,7 +486,7 @@ def main(cfg: DictConfig):  # noqa: F821
                     eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                     eval_metrics = {"eval/simulated_reward": eval_reward}
                     if logger is not None:
-                        log_metrics(logger, eval_metrics, collected_frames)
+                        log_metrics(logger, eval_metrics, replay_buffer.write_count)
 
     if not test_env.is_closed:
         test_env.close()

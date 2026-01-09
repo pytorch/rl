@@ -12,7 +12,6 @@ env:
   device: cpu
 
 collector:
-  total_frames: 5_000_000
   init_random_frames: 10000
   frames_per_batch: 1000
   # Number of parallel collector workers (async mode)
@@ -21,7 +20,10 @@ collector:
   device:
 
 optimization:
-  train_every: 1000
+  # Total number of optimization steps (the main training target)
+  total_optim_steps: 100_000
+  # Log metrics every N optim steps
+  log_every: 100
   grad_clip: 100
 
   world_model_lr: 6e-4
@@ -29,7 +31,6 @@ optimization:
   value_lr: 8e-5
   kl_scale: 1.0
   free_nats: 3.0
-  optim_steps_per_batch: 20
   gamma: 0.99
   lmbda: 0.95
   imagination_horizon: 15
@@ -70,16 +71,16 @@ logger:
   project: dreamer-v1
   exp_name: ${env.name}-${env.task}-${env.seed}
   mode: online
-  # eval interval, in collection counts
-  eval_iter: 10
+  # eval interval, in optim steps
+  eval_every: 1000
   eval_rollout_steps: 500
   video: False
 
 profiling:
-  # Enable PyTorch profiling (overrides total_frames to profiling_total_frames)
+  # Enable PyTorch profiling
   enabled: False
-  # Total frames to collect when profiling (default: 5005 = 5 collection iters + buffer warmup)
-  total_frames: 5005
+  # Total optim steps when profiling (overrides optimization.total_optim_steps)
+  total_optim_steps: 50
   # Skip the first N optim steps (no profiling at all)
   skip_first: 1
   # Warmup steps (profiler runs but data discarded for warmup)
