@@ -245,8 +245,8 @@ def main(cfg: DictConfig):  # noqa: F821
     collector.start()
 
     # Wait for enough samples to start training
-    # Note: We don't pass init_random_frames to collector (not supported with start()),
-    # but we still wait for it here. The untrained policy is effectively random anyway.
+    # The collector handles init_random_frames internally, but we also wait here
+    # to ensure the buffer has enough data before we start sampling.
     min_frames_to_start = cfg.collector.init_random_frames
     torchrl_logger.info(
         f"Waiting for {min_frames_to_start} initial frames before training..."

@@ -20,6 +20,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torchrl import logger as torchrl_logger
+from torchrl._utils import set_profiling_enabled
 from torchrl.collectors import MultiCollector
 
 from torchrl.data import (
@@ -158,6 +159,9 @@ class DreamerProfiler:
         self._profiler = None
         self._stopped = False
         self._compile_warmup = compile_warmup
+
+        # Enable detailed profiling instrumentation in torchrl when profiling
+        set_profiling_enabled(self.enabled)
 
         if not self.enabled:
             return
@@ -629,7 +633,7 @@ def make_collector(
         policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        # Note: init_random_frames not used - the untrained policy is effectively random
+        init_random_frames=cfg.collector.init_random_frames,
         policy_device=collector_devices,
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training

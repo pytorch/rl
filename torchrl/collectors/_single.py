@@ -1442,6 +1442,23 @@ class Collector(BaseCollector):
             traj_ids = traj_ids.masked_scatter(traj_sop, new_traj)
             self._carrier.set(("collector", "traj_ids"), traj_ids)
 
+    def _should_use_random_frames(self) -> bool:
+        """Determine if random frames should be used instead of the policy.
+
+        When a replay buffer is provided, uses `replay_buffer.write_count` as the
+        global step counter to support `.start()` mode where `_frames` isn't updated
+        until after collection. Otherwise, uses the internal `_frames` counter.
+
+        Returns:
+            bool: True if random frames should be used, False otherwise.
+        """
+        if self.init_random_frames is None or self.init_random_frames <= 0:
+            return False
+        # Use replay_buffer.write_count when available for accurate counting in .start() mode
+        if self.replay_buffer is not None:
+            return self.replay_buffer.write_count < self.init_random_frames
+        return self._frames < self.init_random_frames
+
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
@@ -1461,10 +1478,7 @@ class Collector(BaseCollector):
         tensordicts = []
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
-                if (
-                    self.init_random_frames is not None
-                    and self._frames < self.init_random_frames
-                ):
+                if self._should_use_random_frames():
                     self.env.rand_action(self._carrier)
                     if (
                         self.policy_device is not None

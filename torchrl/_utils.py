@@ -19,6 +19,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import nullcontext
 from functools import wraps
+from torch.autograd.profiler import record_function
 from textwrap import indent
 from typing import Any, cast, TypeVar
 
@@ -337,6 +338,29 @@ class timeit:
         cls.erase()
 
 
+# Global flag to enable detailed profiling instrumentation.
+# When False (default), _maybe_record_function returns nullcontext() immediately
+# to avoid overhead in hot code paths.
+_PROFILING_ENABLED = False
+
+# Singleton nullcontext to avoid repeated object creation
+_NULL_CONTEXT = nullcontext()
+
+
+def set_profiling_enabled(enabled: bool) -> None:
+    """Enable or disable detailed profiling instrumentation.
+
+    When disabled (default), `_maybe_record_function` and `_maybe_timeit`
+    return immediately with minimal overhead. Enable only when actively
+    profiling to avoid performance regression.
+
+    Args:
+        enabled: If True, enable profiling instrumentation.
+    """
+    global _PROFILING_ENABLED
+    _PROFILING_ENABLED = enabled
+
+
 def _maybe_timeit(name):
     """Return timeit context if not compiling, nullcontext otherwise.
 
@@ -344,19 +368,21 @@ def _maybe_timeit(name):
     and timeit uses time.time() which dynamo cannot trace.
     """
     if is_compiling():
-        return nullcontext()
+        return _NULL_CONTEXT
     return timeit(name)
 
 
 def _maybe_record_function(name):
-    """Return record_function context if not compiling, nullcontext otherwise.
+    """Return record_function context if profiling enabled and not compiling.
 
-    torch.autograd.profiler.record_function cannot be used inside compiled regions.
+    When _PROFILING_ENABLED is False (default), returns immediately with
+    minimal overhead to avoid performance regression in hot code paths.
     """
-    from torch.autograd.profiler import record_function
-
+    if not _PROFILING_ENABLED:
+        return _NULL_CONTEXT
     if is_compiling():
-        return nullcontext()
+        return _NULL_CONTEXT
+
     return record_function(name)
 
 
@@ -365,11 +391,15 @@ def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable
 
     This is preferred over sprinkling many context managers in hot code paths,
     as it reduces Python overhead while keeping a useful profiler structure.
+
+    When _PROFILING_ENABLED is False (default), the decorator is a no-op.
     """
 
     def decorator(fn: Callable) -> Callable:
         @wraps(fn)
         def wrapped(*args, **kwargs):
+            if not _PROFILING_ENABLED:
+                return fn(*args, **kwargs)
             with _maybe_record_function(name):
                 return fn(*args, **kwargs)
 
