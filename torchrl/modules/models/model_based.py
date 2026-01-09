@@ -342,9 +342,18 @@ class RSSMRollout(TensorDictModuleBase):
 
             tensordict_out.append(_tensordict)
             if t < time_steps - 1:
-                # Translate ("next", *) to the non-next key required for the current step input
-                _tensordict = _tensordict.select(*self.in_keys, strict=False)
-                _tensordict = update_values[t + 1].update(_tensordict)
+                # Propagate state/belief from ("next", ...) to root level for next iteration
+                # The posterior outputs ("next", "state") which should become "state" for t+1
+                # The prior outputs ("next", "belief") which should become "belief" for t+1
+                next_state = _tensordict.get(("next", "state"))
+                next_belief = _tensordict.get(("next", "belief"))
+
+                # Get next timestep's input data (action, encoded_latents, etc.)
+                _tensordict = update_values[t + 1]
+
+                # Set the propagated state/belief (overwriting original data's initial values)
+                _tensordict.set("state", next_state)
+                _tensordict.set("belief", next_belief)
 
         out = torch.stack(tensordict_out, tensordict.ndim - 1)
         return out
@@ -365,11 +374,27 @@ class RSSMRollout(TensorDictModuleBase):
         stacked_updates = torch.stack(list(update_values), dim=0)
 
         def scan_fn(carry, x):
-            # carry is the current tensordict, x is the update for this step
-            _td = x.update(carry.select(*self.in_keys, strict=False))
+            # carry is the current tensordict with propagated state/belief
+            # x is the next timestep's input data (action, encoded_latents, etc.)
+
+            # Get propagated state/belief from previous step's output
+            next_state = carry.get(("next", "state"), None)
+            next_belief = carry.get(("next", "belief"), None)
+
+            # Start with next timestep's data
+            _td = x
+
+            # Propagate state/belief if available (not first step)
+            if next_state is not None:
+                _td.set("state", next_state)
+            if next_belief is not None:
+                _td.set("belief", next_belief)
+
+            # Run prior and posterior
             self.rssm_prior(_td)
             self.rssm_posterior(_td)
-            # Return output and new carry
+
+            # Return output and new carry (with ("next", state/belief) for propagation)
             return _td, _td
 
         # Run scan
