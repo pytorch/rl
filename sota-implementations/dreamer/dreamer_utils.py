@@ -632,7 +632,7 @@ def make_collector(
         create_env_fn=[train_env_factory] * num_collectors,
         policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
-        total_frames=cfg.collector.total_frames,
+        total_frames=-1,  # Run indefinitely until async_shutdown() is called
         init_random_frames=cfg.collector.init_random_frames,
         policy_device=collector_devices,
         storing_device="cpu",
