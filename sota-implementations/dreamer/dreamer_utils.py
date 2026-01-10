@@ -354,7 +354,15 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     eval_env = transform_env(cfg, eval_env)
     eval_env.set_seed(cfg.env.seed + 1)
     if cfg.logger.video:
-        eval_env.insert_transform(0, VideoRecorder(logger, tag="eval/video"))
+        eval_env.insert_transform(
+            0,
+            VideoRecorder(
+                logger,
+                tag="eval/video",
+                in_keys=["pixels"],
+                skip=cfg.logger.video_skip,
+            ),
+        )
 
     # Check specs on a temporary train env
     temp_train_env = train_env_factory()
@@ -366,9 +374,16 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     return train_env_factory, eval_env
 
 
-def dump_video(module):
+def dump_video(module, step: int | None = None):
+    """Dump video from VideoRecorder transforms.
+
+    Args:
+        module: The transform module to check.
+        step: Optional step to log the video at. If not provided,
+            the VideoRecorder uses its internal counter.
+    """
     if isinstance(module, VideoRecorder):
-        module.dump()
+        module.dump(step=step)
 
 
 def _compute_encoder_output_size(image_size, channels=32, num_layers=4):
@@ -578,7 +593,10 @@ def make_dreamer(
         model_based_env_eval.append_transform(float_to_int)
         model_based_env_eval.append_transform(
             VideoRecorder(
-                logger=logger, tag="eval/simulated_rendering", in_keys=["reco_pixels"]
+                logger=logger,
+                tag="eval/simulated_video",
+                in_keys=["reco_pixels"],
+                skip=cfg.logger.video_skip,
             )
         )
 

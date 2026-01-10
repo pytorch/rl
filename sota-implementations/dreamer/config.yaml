@@ -74,7 +74,9 @@ logger:
   # eval interval, in optim steps
   eval_every: 1000
   eval_rollout_steps: 500
+  # Video recording settings
   video: False
+  video_skip: 1  # frames to skip (1 = record every frame, 2 = every other frame)
 
 profiling:
   # Enable PyTorch profiling

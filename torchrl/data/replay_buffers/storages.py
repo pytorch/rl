@@ -719,6 +719,29 @@ class TensorStorage(Storage):
         )
         self._storage = storage
         self._last_cursor = None
+        self.__dict__["_storage_keys"] = None
+
+    @property
+    def _storage_keys(self) -> list | None:
+        """Cached list of storage keys for filtering incoming data.
+
+        Returns None if storage is not a tensor collection or not initialized.
+        """
+        keys = self.__dict__.get("_storage_keys")
+        if keys is None and self.initialized and is_tensor_collection(self._storage):
+            keys = list(
+                self._storage.keys(
+                    include_nested=True,
+                    leaves_only=True,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                )
+            )
+            self.__dict__["_storage_keys"] = keys
+        return keys
+
+    @_storage_keys.setter
+    def _storage_keys(self, value):
+        self.__dict__["_storage_keys"] = value
 
     @property
     def _len(self):
@@ -1008,6 +1031,12 @@ class TensorStorage(Storage):
                 self._init(data)
 
         if is_tensor_collection(data):
+            # Filter data to only include keys present in storage
+            # This handles cases where policy outputs extra keys during some steps
+            # but not others (e.g., init_random_frames vs policy-guided collection)
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
             try:
                 self._storage[cursor] = data
             except RuntimeError as e:
@@ -1071,6 +1100,13 @@ class TensorStorage(Storage):
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
+        # Filter data to only include keys present in storage (for tensor collections)
+        # This handles cases where policy outputs extra keys during some steps
+        # but not others (e.g., init_random_frames vs policy-guided collection)
+        if is_tensor_collection(data):
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
         try:
             self._storage[cursor] = data
         except RuntimeError as e:
