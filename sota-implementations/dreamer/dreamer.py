@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import time
 
 import hydra
@@ -462,7 +463,9 @@ def main(cfg: DictConfig):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
-                test_env.apply(dump_video)
+                test_env.apply(
+                    functools.partial(dump_video, step=replay_buffer.write_count)
+                )
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 eval_metrics = {"eval/reward": eval_reward}
                 if logger is not None:
@@ -482,7 +485,9 @@ def main(cfg: DictConfig):  # noqa: F821
                         .exclude("next", "action")
                         .to(device),
                     )
-                    model_based_env_eval.apply(dump_video)
+                    model_based_env_eval.apply(
+                        functools.partial(dump_video, step=replay_buffer.write_count)
+                    )
                     eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                     eval_metrics = {"eval/simulated_reward": eval_reward}
                     if logger is not None:
