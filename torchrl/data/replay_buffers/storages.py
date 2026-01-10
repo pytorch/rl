@@ -1008,7 +1008,13 @@ class TensorStorage(Storage):
                 self._init(data)
 
         if is_tensor_collection(data):
-            self._storage[cursor] = data
+            try:
+                self._storage[cursor] = data
+            except RuntimeError as e:
+                if "locked" in str(e).lower():
+                    # Provide informative error about key differences
+                    self._raise_informative_lock_error(data, e)
+                raise
         else:
             self._set_tree_map(cursor, data, self._storage)
 
