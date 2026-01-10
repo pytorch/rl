@@ -255,7 +255,12 @@ def main(cfg: DictConfig):  # noqa: F821
         time.sleep(0.1)
 
     torchrl_logger.info(
-        f"Collected {replay_buffer.write_count} frames. Starting training..."
+        f"Collected {replay_buffer.write_count} frames (random frames phase complete: {cfg.collector.init_random_frames} frames). "
+        f"Starting training..."
+    )
+    torchrl_logger.info(
+        "NOTE: From now on, collectors will use the policy instead of random actions. "
+        "Policy outputs keys like 'encoded_latents', 'loc', 'scale' that weren't present during random collection."
     )
 
     # Track frames for FPS calculation over logging interval
