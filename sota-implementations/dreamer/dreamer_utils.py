@@ -724,8 +724,7 @@ def make_replay_buffer(
     ) as scratch_dir:
         # Sample-time transforms: only device transfer (fast)
         sample_transforms = Compose(
-            # Reshape on CPU before device transfer to avoid extra work / sync in the training loop.
-            DeviceCastTransform(device=device),
+            lambda td: td.to(device=device, non_blocking=True),
         )
 
         replay_buffer = TensorDictReplayBuffer(

@@ -64,7 +64,7 @@ replay_buffer:
   buffer_size: 1000000
   batch_length: 50
   scratch_dir: null
-  prefetch: 8
+  prefetch: 16
 
 logger:
   backend: wandb
