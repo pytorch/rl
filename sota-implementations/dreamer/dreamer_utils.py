@@ -9,7 +9,6 @@ import tempfile
 from contextlib import nullcontext
 
 import torch
-
 import torch.nn as nn
 from tensordict import NestedKey
 from tensordict.nn import (
@@ -726,7 +725,7 @@ def make_replay_buffer(
     ) as scratch_dir:
         # Sample-time transforms: only device transfer (fast)
         sample_transforms = Compose(
-            _to_device,
+            functools.partial(_to_device, device=device),
         )
 
         replay_buffer = TensorDictReplayBuffer(
