@@ -695,6 +695,8 @@ def make_storage_transform(
     )
     return storage_transforms
 
+def _to_device(td, device):
+    return td.to(device=device, non_blocking=True)
 
 def make_replay_buffer(
     *,
@@ -724,7 +726,7 @@ def make_replay_buffer(
     ) as scratch_dir:
         # Sample-time transforms: only device transfer (fast)
         sample_transforms = Compose(
-            lambda td: td.to(device=device, non_blocking=True),
+            _to_device,
         )
 
         replay_buffer = TensorDictReplayBuffer(
