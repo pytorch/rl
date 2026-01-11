@@ -2,12 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+# This makes omegaconf unhappy with typing.Any
+# Therefore we need Optional and Union
+# from __future__ import annotations
+
+import importlib.util
+from collections.abc import Callable, Sequence
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
-
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
@@ -43,11 +49,19 @@ LIBS = {
     "dm_control": DMControlEnv,
 }
 
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+if _has_omegaconf:
+    from omegaconf import DictConfig
+else:
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
+    class DictConfig:  # noqa
+        ...
+
+
+def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:  # noqa: F821
     """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
 
-    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
+    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames
     of 1M but actually collecting frame_skip * 1M frames.
 
     Args:
@@ -208,9 +222,9 @@ def get_norm_state_dict(env):
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     video_tag: str = "",
-    logger: Optional[Logger] = None,
+    logger: Optional[Logger] = None,  # noqa
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
@@ -231,7 +245,7 @@ def transformed_env_constructor(
         stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
-        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
+        use_env_creator (bool, optional): whether the `EnvCreator` class should be used. By using `EnvCreator`,
             one can make sure that running statistics will be put in shared memory and accessible for all workers
             when using a `VecNorm` transform. Default is `True`.
         custom_env_maker (callable, optional): if your env maker is not part
@@ -295,7 +309,7 @@ def transformed_env_constructor(
         elif custom_env_maker is None and custom_env is not None:
             env = custom_env
         else:
-            raise RuntimeError("cannot provive both custom_env and custom_env_maker")
+            raise RuntimeError("cannot provide both custom_env and custom_env_maker")
 
         if cfg.noops and custom_env is None:
             # this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv
@@ -326,7 +340,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs  # noqa: F821
+    cfg: DictConfig, **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -370,7 +384,7 @@ def parallel_env_constructor(
 
 @torch.no_grad()
 def get_stats_random_rollout(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     proof_environment: EnvBase = None,
     key: Optional[str] = None,
 ):
@@ -450,7 +464,7 @@ def get_stats_random_rollout(
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: Union[str, Tuple[str, ...]] = None,
+    key: Optional[Union[str, tuple[str, ...]]] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
@@ -461,7 +475,7 @@ def initialize_observation_norm_transforms(
 
     Args:
         proof_environment (EnvBase instance, optional): if provided, this env will
-            be used ot execute the rollouts. If not, it will be created using
+            be used to execute the rollouts. If not, it will be created using
             the cfg object.
         num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`
         key (str, optional): if provided, the stats of this key will be gathered.
@@ -530,7 +544,7 @@ class EnvConfig:
     # maximum steps per trajectory, frames per batch or any other factor in the algorithm,
     # e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4
     # the actual number of frames retrieved will be 200e6. Default=1.
-    reward_scaling: Optional[float] = None
+    reward_scaling: Any = None  # noqa
     # scale of the reward.
     reward_loc: float = 0.0
     # location of the reward.

@@ -17,10 +17,9 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
 
 
-def write_config(config_path: Path, argv: List[str]) -> None:
+def write_config(config_path: Path, argv: list[str]) -> None:
     """
     Write a coverage.py config that is equivalent to the command line arguments passed here.
     Args:
@@ -28,8 +27,8 @@ def write_config(config_path: Path, argv: List[str]) -> None:
         argv: Arguments passed to this script, which need to be converted to config file entries
     """
     assert not config_path.exists(), "Temporary coverage config exists already"
-    cmdline = " ".join(shlex.quote(arg) for arg in argv[1:])
-    with open(str(config_path), "wt", encoding="utf-8") as fh:
+    cmdline = shlex.join(argv[1:])
+    with open(str(config_path), "w", encoding="utf-8") as fh:
         fh.write(
             f"""# .coveragerc to control coverage.py
 [run]
@@ -42,7 +41,7 @@ command_line={cmdline}
         )
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     if len(argv) < 1:
         print(  # noqa
             "Usage: 'python coverage_run_parallel.py <command> [command arguments]'"

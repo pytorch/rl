@@ -14,7 +14,7 @@ import tempfile
 import tensordict.utils
 import torch
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import H5StorageCheckpointer, LazyMemmapStorage, ReplayBuffer
 from torchrl.envs import GymEnv, SerialEnv
 
@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as path_to_save_dir:
     env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))
     env.set_seed(0)
     torch.manual_seed(0)
-    collector = SyncDataCollector(
+    collector = Collector(
         env, policy=env.rand_step, total_frames=200, frames_per_batch=22
     )
     rb = ReplayBuffer(storage=LazyMemmapStorage(100, ndim=2))

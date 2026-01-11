@@ -9,20 +9,16 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable, List, Optional, Type, Union
+from collections.abc import Iterable
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key_list
-
 from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
-
 from torch import nn
 from torch.nn import functional as F
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
-
 from torchrl.data.utils import DEVICE_TYPING
 
 _has_functorch = importlib.util.find_spec("functorch") is not None
@@ -32,7 +28,7 @@ else:
     warnings.warn(
         "failed to import functorch. TorchRL's features that do not require "
         "functional programming should work, but functionality and performance "
-        "may be affected. Consider installing functorch and/or upgrating pytorch."
+        "may be affected. Consider installing functorch and/or upgrading pytorch."
     )
 
     class FunctionalModule:  # noqa: D101
@@ -75,24 +71,17 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         for _spec, _key in zip(values, keys):
             if _spec is None:
                 continue
-            item = tensordict_out.get(_key, None)
+            item = tensordict_out.get(_key)
             if item is None:
                 # this will happen when an exploration (e.g. OU) writes a key only
                 # during exploration, but is missing otherwise.
                 # it's fine since what we want here it to make sure that a key
                 # is within bounds if it is present
                 continue
-            if not _spec.is_in(item):
-                try:
-                    tensordict_out.set_(
-                        _key,
-                        _spec.project(tensordict_out.get(_key)),
-                    )
-                except RuntimeError:
-                    tensordict_out.set(
-                        _key,
-                        _spec.project(tensordict_out.get(_key)),
-                    )
+            tensordict_out.set(
+                _key,
+                _spec.project(item),
+            )
     except RuntimeError as err:
         if re.search(
             "attempting to use a Tensor in some data-dependent control flow", str(err)
@@ -131,6 +120,9 @@ class SafeModule(TensorDictModule):
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
+        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
+            :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
+            output preserves type, device and batch-size). Defaults to `True`.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
         be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
@@ -201,15 +193,19 @@ class SafeModule(TensorDictModule):
 
     def __init__(
         self,
-        module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-        ],
+        module: (
+            FunctionalModule
+            | FunctionalModuleWithBuffers
+            | TensorDictModule
+            | nn.Module
+        ),
         in_keys: Iterable[str],
         out_keys: Iterable[str],
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         safe: bool = False,
+        inplace: bool | str = True,
     ):
-        super().__init__(module, in_keys, out_keys)
+        super().__init__(module, in_keys, out_keys, inplace=inplace)
         self.register_spec(safe=safe, spec=spec)
 
     def register_spec(self, safe, spec):
@@ -289,14 +285,14 @@ class SafeModule(TensorDictModule):
         """See :obj:`TensorDictModule.random(...)`."""
         return self.random(tensordict)
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> TensorDictModule:
         if hasattr(self, "spec") and self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
         return out
 
 
-def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
+def is_tensordict_compatible(module: TensorDictModule | nn.Module):
     """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
 
     If the signature is misleading an error is raised.
@@ -363,13 +359,13 @@ def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
 
 
 def ensure_tensordict_compatible(
-    module: Union[
-        FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-    ],
-    in_keys: Optional[List[NestedKey]] = None,
-    out_keys: Optional[List[NestedKey]] = None,
+    module: (
+        FunctionalModule | FunctionalModuleWithBuffers | TensorDictModule | nn.Module
+    ),
+    in_keys: list[NestedKey] | None = None,
+    out_keys: list[NestedKey] | None = None,
     safe: bool = False,
-    wrapper_type: Optional[Type] = TensorDictModule,
+    wrapper_type: type | None = TensorDictModule,
     **kwargs,
 ):
     """Ensures module is compatible with TensorDictModule and, if not, it wraps it."""
@@ -444,7 +440,7 @@ class VmapModule(TensorDictModuleBase):
         >>> assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
     """
 
-    def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+    def __init__(self, module: TensorDictModuleBase, vmap_dim=None, mock: bool = False):
         if not _has_functorch:
             raise ImportError("VmapModule requires torch>=2.0.")
         super().__init__()
@@ -452,12 +448,16 @@ class VmapModule(TensorDictModuleBase):
         self.out_keys = module.out_keys
         self.module = module
         self.vmap_dim = vmap_dim
+        self.mock = mock
         if torch.__version__ >= "2.0":
             self._vmap = torch.vmap
         else:
             import functorch
 
             self._vmap = functorch.vmap
+
+    def mock_(self, value: bool = True):
+        self.mock = value
 
     def forward(self, tensordict):
         # TODO: there is a risk of segfault if input is not a tensordict.
@@ -466,7 +466,12 @@ class VmapModule(TensorDictModuleBase):
         if vmap_dim is None:
             ndim = tensordict.ndim
             vmap_dim = ndim - 1
-        td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        if self.mock:
+            td = torch.stack(
+                [self.module(_td) for _td in tensordict.unbind(vmap_dim)], vmap_dim
+            )
+        else:
+            td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
         return tensordict.update(td)
 
 

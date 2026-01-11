@@ -12,15 +12,15 @@ collector:
   init_random_frames: 25000
   frames_per_batch: 1000
   init_env_steps: 1000
-  device: cpu
-  env_per_collector: 1
+  device:
+  env_per_collector: 8
   reset_at_each_iter: False
 
 # replay buffer
 replay_buffer:
   size: 1000000
   prb: 0 # use prioritized experience replay
-  scratch_dir: null
+  scratch_dir:
 
 # optim
 optim:
@@ -51,3 +51,8 @@ logger:
   mode: online
   eval_iter: 25000
   video: False
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

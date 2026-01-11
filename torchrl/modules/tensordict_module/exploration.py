@@ -2,19 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
-from typing import Optional, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDictBase
-
+from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.utils import expand_as_right, expand_right, NestedKey
+from tensordict.utils import expand_as_right, expand_right
+from torch import nn
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -24,7 +25,6 @@ __all__ = [
     "EGreedyWrapper",
     "EGreedyModule",
     "AdditiveGaussianModule",
-    "AdditiveGaussianWrapper",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
 ]
@@ -52,12 +52,13 @@ class EGreedyModule(TensorDictModuleBase):
             Default is ``"action"``.
         action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
             Default is ``None`` (corresponding to no mask).
+        device (torch.device, optional): the device of the exploration module.
 
     .. note::
-        It is crucial to incorporate a call to :meth:`~.step` in the training loop
+        It is crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
+        will be raised if this is omitted!
 
     Examples:
         >>> import torch
@@ -92,8 +93,9 @@ class EGreedyModule(TensorDictModuleBase):
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         *,
-        action_key: Optional[NestedKey] = "action",
-        action_mask_key: Optional[NestedKey] = None,
+        action_key: NestedKey | None = "action",
+        action_mask_key: NestedKey | None = None,
+        device: torch.device | None = None,
     ):
         if not isinstance(eps_init, float):
             warnings.warn("eps_init should be a float.")
@@ -109,14 +111,18 @@ class EGreedyModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("eps_init", torch.as_tensor([eps_init]))
-        self.register_buffer("eps_end", torch.as_tensor([eps_end]))
+        self.register_buffer("eps_init", torch.as_tensor(eps_init, device=device))
+        self.register_buffer("eps_end", torch.as_tensor(eps_end, device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.as_tensor([eps_init], dtype=torch.float32))
+        self.register_buffer(
+            "eps", torch.as_tensor(eps_init, dtype=torch.float32, device=device)
+        )
 
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
                 spec = Composite({action_key: spec}, shape=spec.shape[:-1])
+            if device is not None:
+                spec = spec.to(device)
         self._spec = spec
 
     @property
@@ -144,7 +150,8 @@ class EGreedyModule(TensorDictModuleBase):
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
+        expl = exploration_type()
+        if expl in (ExplorationType.RANDOM, None):
             if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
                 action_tensordict = tensordict.get(self.action_key[:-1])
                 action_key = self.action_key[-1]
@@ -152,23 +159,29 @@ class EGreedyModule(TensorDictModuleBase):
                 action_tensordict = tensordict
                 action_key = self.action_key
 
-            out = action_tensordict.get(action_key)
+            action = action_tensordict.get(action_key)
             eps = self.eps
-            cond = torch.rand(action_tensordict.shape, device=out.device) < eps
+            device = eps.device
+            action_device = action.device
+            if action_device is not None and action_device != device:
+                raise RuntimeError(
+                    f"Expected action and e-greedy module to be on the same device, but got {action.device=} and e-greedy device={device}."
+                )
+            cond = torch.rand(action_tensordict.shape, device=device) < eps
             # cond = torch.zeros(action_tensordict.shape, device=out.device, dtype=torch.bool).bernoulli_(eps)
-            cond = expand_as_right(cond, out)
+            cond = expand_as_right(cond, action)
             spec = self.spec
             if spec is not None:
                 if isinstance(spec, Composite):
                     spec = spec[self.action_key]
-                if spec.shape != out.shape:
+                if spec.shape != action.shape:
                     # In batched envs if the spec is passed unbatched, the rand() will not
                     # cover all batched dims
                     if (
                         not len(spec.shape)
-                        or out.shape[-len(spec.shape) :] == spec.shape
+                        or action.shape[-len(spec.shape) :] == spec.shape
                     ):
-                        spec = spec.expand(out.shape)
+                        spec = spec.expand(action.shape)
                     else:
                         raise ValueError(
                             "Action spec shape does not match the action shape"
@@ -180,10 +193,13 @@ class EGreedyModule(TensorDictModuleBase):
                             f"Action mask key {self.action_mask_key} not found in {tensordict}."
                         )
                     spec.update_mask(action_mask)
-                out = torch.where(cond, spec.rand().to(out.device), out)
+                r = spec.rand()
+                if r.device != device:
+                    r = r.to(device)
+                action = torch.where(cond, r, action)
             else:
                 raise RuntimeError("spec must be provided to the exploration wrapper.")
-            action_tensordict.set(action_key, out)
+            action_tensordict.set(action_key, action)
         return tensordict
 
 
@@ -197,9 +213,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
-        action_key: Optional[NestedKey] = "action",
-        action_mask_key: Optional[NestedKey] = None,
-        spec: Optional[TensorSpec] = None,
+        action_key: NestedKey | None = "action",
+        action_mask_key: NestedKey | None = None,
+        spec: TensorSpec | None = None,
     ):
         raise RuntimeError(
             "This class has been deprecated in favor of torchrl.modules.EGreedyModule."
@@ -207,41 +223,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
 
 class AdditiveGaussianWrapper(TensorDictModuleWrapper):
-    """Additive Gaussian PO wrapper.
-
-    Args:
-        policy (TensorDictModule): a policy.
-
-    Keyword Args:
-        sigma_init (scalar, optional): initial epsilon value.
-            default: 1.0
-        sigma_end (scalar, optional): final epsilon value.
-            default: 0.1
-        annealing_num_steps (int, optional): number of steps it will take for
-            sigma to reach the :obj:`sigma_end` value.
-        mean (:obj:`float`, optional): mean of each output element’s normal distribution.
-        std (:obj:`float`, optional): standard deviation of each output element’s normal distribution.
-        action_key (NestedKey, optional): if the policy module has more than one output key,
-            its output spec will be of type Composite. One needs to know where to
-            find the action spec.
-            Default is "action".
-        spec (TensorSpec, optional): if provided, the sampled action will be
-            projected onto the valid action space once explored. If not provided,
-            the exploration wrapper will attempt to recover it from the policy.
-        safe (boolean, optional): if False, the TensorSpec can be None. If it
-            is set to False but the spec is passed, the projection will still
-            happen.
-            Default is True.
-
-    .. note::
-        Once an environment has been wrapped in :class:`AdditiveGaussianWrapper`, it is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
-        to update the exploration factor.
-        Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
-
-
-    """
+    """[Deprecated] Additive Gaussian PO wrapper."""
 
     def __init__(
         self,
@@ -252,98 +234,14 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         annealing_num_steps: int = 1000,
         mean: float = 0.0,
         std: float = 1.0,
-        action_key: Optional[NestedKey] = "action",
-        spec: Optional[TensorSpec] = None,
-        safe: Optional[bool] = True,
+        action_key: NestedKey | None = "action",
+        spec: TensorSpec | None = None,
+        safe: bool | None = True,
+        device: torch.device | None = None,
     ):
-        warnings.warn(
-            "AdditiveGaussianWrapper is deprecated and will be removed "
-            "in v0.7. Please use torchrl.modules.AdditiveGaussianModule "
-            "instead.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "This module has been removed from TorchRL. Please use torchrl.modules.AdditiveGaussianModule instead."
         )
-        super().__init__(policy)
-        if sigma_end > sigma_init:
-            raise RuntimeError("sigma should decrease over time or be constant")
-        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
-        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
-        self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("mean", torch.tensor([mean]))
-        self.register_buffer("std", torch.tensor([std]))
-        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
-        self.action_key = action_key
-        self.out_keys = list(self.td_module.out_keys)
-        if action_key not in self.out_keys:
-            raise RuntimeError(
-                f"The action key {action_key} was not found in the td_module out_keys {self.td_module.out_keys}."
-            )
-        if spec is not None:
-            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
-                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
-            self._spec = spec
-        elif hasattr(self.td_module, "_spec"):
-            self._spec = self.td_module._spec.clone()
-            if action_key not in self._spec.keys(True, True):
-                self._spec[action_key] = None
-        elif hasattr(self.td_module, "spec"):
-            self._spec = self.td_module.spec.clone()
-            if action_key not in self._spec.keys(True, True):
-                self._spec[action_key] = None
-        else:
-            self._spec = Composite({key: None for key in policy.out_keys})
-
-        self.safe = safe
-        if self.safe:
-            self.register_forward_hook(_forward_hook_safe_action)
-
-    @property
-    def spec(self):
-        return self._spec
-
-    def step(self, frames: int = 1) -> None:
-        """A step of sigma decay.
-
-        After self.annealing_num_steps, this function is a no-op.
-
-        Args:
-            frames (int): number of frames since last step.
-
-        """
-        for _ in range(frames):
-            self.sigma.data.copy_(
-                torch.maximum(
-                    self.sigma_end(
-                        self.sigma
-                        - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
-                    ),
-                )
-            )
-
-    def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
-        sigma = self.sigma
-        noise = torch.normal(
-            mean=torch.ones(action.shape) * self.mean,
-            std=torch.ones(action.shape) * self.std,
-        ).to(action.device)
-        action = action + noise * sigma
-        spec = self.spec
-        spec = spec[self.action_key]
-        if spec is not None:
-            action = spec.project(action)
-        elif self.safe:
-            raise RuntimeError(
-                "the action spec must be provided to AdditiveGaussianWrapper unless "
-                "the `safe` keyword argument is turned off at initialization."
-            )
-        return action
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = self.td_module.forward(tensordict)
-        if exploration_type() is ExplorationType.RANDOM or exploration_type() is None:
-            out = tensordict.get(self.action_key)
-            out = self._add_noise(out)
-            tensordict.set(self.action_key, out)
-        return tensordict
 
 
 class AdditiveGaussianModule(TensorDictModuleBase):
@@ -371,14 +269,15 @@ class AdditiveGaussianModule(TensorDictModuleBase):
             default: "action"
         safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
             given the :obj:`TensorSpec.project` heuristic.
-            default: True
+            default: False
+        device (torch.device, optional): the device where the buffers have to be stored.
 
     .. note::
         It is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
+        crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
+        will be raised if this is omitted!
 
 
     """
@@ -392,8 +291,10 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         mean: float = 0.0,
         std: float = 1.0,
         *,
-        action_key: Optional[NestedKey] = "action",
-        safe: bool = True,
+        action_key: NestedKey | None = "action",
+        # safe is already implemented because we project in the noise addition
+        safe: bool = False,
+        device: torch.device | None = None,
     ):
         if not isinstance(sigma_init, float):
             warnings.warn("eps_init should be a float.")
@@ -405,12 +306,14 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
         super().__init__()
 
-        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
-        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
+        self.register_buffer("sigma_init", torch.tensor(sigma_init, device=device))
+        self.register_buffer("sigma_end", torch.tensor(sigma_end, device=device))
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("mean", torch.tensor([mean]))
-        self.register_buffer("std", torch.tensor([std]))
-        self.register_buffer("sigma", torch.tensor([sigma_init], dtype=torch.float32))
+        self.register_buffer("mean", torch.tensor(mean, device=device))
+        self.register_buffer("std", torch.tensor(std, device=device))
+        self.register_buffer(
+            "sigma", torch.tensor(sigma_init, dtype=torch.float32, device=device)
+        )
 
         if spec is not None:
             if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
@@ -448,10 +351,15 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma
-        noise = torch.normal(
-            mean=torch.ones(action.shape) * self.mean,
-            std=torch.ones(action.shape) * self.std,
-        ).to(action.device)
+        mean = self.mean.expand(action.shape)
+        std = self.std.expand(action.shape)
+        if not mean.dtype.is_floating_point:
+            mean = mean.to(torch.get_default_dtype())
+        if not std.dtype.is_floating_point:
+            std = std.to(torch.get_default_dtype())
+        noise = torch.normal(mean=mean, std=std)
+        if noise.device != action.device:
+            noise = noise.to(action.device)
         action = action + noise * sigma
         spec = self.spec[self.action_key]
         action = spec.project(action)
@@ -466,93 +374,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
 
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
-    r"""Ornstein-Uhlenbeck exploration policy wrapper.
-
-    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf.
-
-    The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
-    noise. This enables a sort of 'structured' exploration.
-
-    Noise equation:
-
-    .. math::
-        noise_t = noise_{t-1} + \theta * (mu - noise_{t-1}) * dt + \sigma_t * \sqrt{dt} * W
-
-    Sigma equation:
-
-    .. math::
-        \sigma_t = max(\sigma^{min, (-(\sigma_{t-1} - \sigma^{min}) / (n^{\text{steps annealing}}) * n^{\text{steps}} + \sigma))
-
-    To keep track of the steps and noise from sample to sample, an :obj:`"ou_prev_noise{id}"` and :obj:`"ou_steps{id}"` keys
-    will be written in the input/output tensordict. It is expected that the tensordict will be zeroed at reset,
-    indicating that a new trajectory is being collected. If not, and is the same tensordict is used for consecutive
-    trajectories, the step count will keep on increasing across rollouts. Note that the collector classes take care of
-    zeroing the tensordict at reset time.
-
-    .. note::
-        Once an environment has been wrapped in :class:`OrnsteinUhlenbeckProcessWrapper`, it is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
-        to update the exploration factor.
-        Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
-
-    Args:
-        policy (TensorDictModule): a policy
-
-    Keyword Args:
-        eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
-            default: 1.0
-        eps_end (scalar): final epsilon value, determining the amount of noise to be added.
-            default: 0.1
-        annealing_num_steps (int): number of steps it will take for epsilon to reach the eps_end value.
-            default: 1000
-        theta (scalar): theta factor in the noise equation
-            default: 0.15
-        mu (scalar): OU average (mu in the noise equation).
-            default: 0.0
-        sigma (scalar): sigma value in the sigma equation.
-            default: 0.2
-        dt (scalar): dt in the noise equation.
-            default: 0.01
-        x0 (Tensor, ndarray, optional): initial value of the process.
-            default: 0.0
-        sigma_min (number, optional): sigma_min in the sigma equation.
-            default: None
-        n_steps_annealing (int): number of steps for the sigma annealing.
-            default: 1000
-        action_key (NestedKey, optional): key of the action to be modified.
-            default: "action"
-        is_init_key (NestedKey, optional): key where to find the is_init flag used to reset the noise steps.
-            default: "is_init"
-        spec (TensorSpec, optional): if provided, the sampled action will be
-            projected onto the valid action space once explored. If not provided,
-            the exploration wrapper will attempt to recover it from the policy.
-        safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
-            given the :obj:`TensorSpec.project` heuristic.
-            default: True
-
-    Examples:
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from torchrl.data import Bounded
-        >>> from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
-        >>> torch.manual_seed(0)
-        >>> spec = Bounded(-1, 1, torch.Size([4]))
-        >>> module = torch.nn.Linear(4, 4, bias=False)
-        >>> policy = Actor(module=module, spec=spec)
-        >>> explorative_policy = OrnsteinUhlenbeckProcessWrapper(policy)
-        >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
-        >>> print(explorative_policy(td))
-        TensorDict(
-            fields={
-                _ou_prev_noise: Tensor(torch.Size([10, 4]), dtype=torch.float32),
-                _ou_steps: Tensor(torch.Size([10, 1]), dtype=torch.int64),
-                action: Tensor(torch.Size([10, 4]), dtype=torch.float32),
-                observation: Tensor(torch.Size([10, 4]), dtype=torch.float32)},
-            batch_size=torch.Size([10]),
-            device=None,
-            is_shared=False)
-    """
+    """[Deprecated] Ornstein-Uhlenbeck exploration policy wrapper."""
 
     def __init__(
         self,
@@ -565,121 +387,19 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         mu: float = 0.0,
         sigma: float = 0.2,
         dt: float = 1e-2,
-        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[float] = None,
+        x0: torch.Tensor | np.ndarray | None = None,
+        sigma_min: float | None = None,
         n_steps_annealing: int = 1000,
-        action_key: Optional[NestedKey] = "action",
-        is_init_key: Optional[NestedKey] = "is_init",
+        action_key: NestedKey | None = "action",
+        is_init_key: NestedKey | None = "is_init",
         spec: TensorSpec = None,
         safe: bool = True,
-        key: Optional[NestedKey] = None,
+        key: NestedKey | None = None,
+        device: torch.device | None = None,
     ):
-        warnings.warn(
-            "OrnsteinUhlenbeckProcessWrapper is deprecated and will be removed "
-            "in v0.7. Please use torchrl.modules.OrnsteinUhlenbeckProcessModule "
-            "instead.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "OrnsteinUhlenbeckProcessWrapper has been removed. Please use torchrl.modules.OrnsteinUhlenbeckProcessModule instead."
         )
-        if key is not None:
-            action_key = key
-            warnings.warn(
-                f"the 'key' keyword argument of {type(self)} has been renamed 'action_key'. The 'key' entry will be deprecated soon."
-            )
-        super().__init__(policy)
-        self.ou = _OrnsteinUhlenbeckProcess(
-            theta=theta,
-            mu=mu,
-            sigma=sigma,
-            dt=dt,
-            x0=x0,
-            sigma_min=sigma_min,
-            n_steps_annealing=n_steps_annealing,
-            key=action_key,
-        )
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
-        if self.eps_end > self.eps_init:
-            raise ValueError(
-                "eps should decrease over time or be constant, "
-                f"got eps_init={eps_init} and eps_end={eps_end}"
-            )
-        self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
-        self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
-        self.is_init_key = is_init_key
-        noise_key = self.ou.noise_key
-        steps_key = self.ou.steps_key
-
-        if spec is not None:
-            if not isinstance(spec, Composite) and len(self.out_keys) >= 1:
-                spec = Composite({action_key: spec}, shape=spec.shape[:-1])
-            self._spec = spec
-        elif hasattr(self.td_module, "_spec"):
-            self._spec = self.td_module._spec.clone()
-            if action_key not in self._spec.keys(True, True):
-                self._spec[action_key] = None
-        elif hasattr(self.td_module, "spec"):
-            self._spec = self.td_module.spec.clone()
-            if action_key not in self._spec.keys(True, True):
-                self._spec[action_key] = None
-        else:
-            self._spec = Composite({key: None for key in policy.out_keys})
-        ou_specs = {
-            noise_key: None,
-            steps_key: None,
-        }
-        self._spec.update(ou_specs)
-        if len(set(self.out_keys)) != len(self.out_keys):
-            raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
-        self.safe = safe
-        if self.safe:
-            self.register_forward_hook(_forward_hook_safe_action)
-
-    @property
-    def spec(self):
-        return self._spec
-
-    def step(self, frames: int = 1) -> None:
-        """Updates the eps noise factor.
-
-        Args:
-            frames (int): number of frames of the current batch (corresponding to the number of updates to be made).
-
-        """
-        for _ in range(frames):
-            if self.annealing_num_steps > 0:
-                self.eps.data.copy_(
-                    torch.maximum(
-                        self.eps_end,
-                        (
-                            self.eps
-                            - (self.eps_init - self.eps_end) / self.annealing_num_steps
-                        ),
-                    )
-                )
-            else:
-                raise ValueError(
-                    f"{self.__class__.__name__}.step() called when "
-                    f"self.annealing_num_steps={self.annealing_num_steps}. Expected a strictly positive "
-                    f"number of frames."
-                )
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = super().forward(tensordict)
-        if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            is_init = tensordict.get(self.is_init_key, None)
-            if is_init is None:
-                warnings.warn(
-                    f"The tensordict passed to {self.__class__.__name__} appears to be "
-                    f"missing the '{self.is_init_key}' entry. This entry is used to "
-                    f"reset the noise at the beginning of a trajectory, without it "
-                    f"the behavior of this exploration method is undefined. "
-                    f"This is allowed for BC compatibility purposes but it will be deprecated soon! "
-                    f"To create a '{self.is_init_key}' entry, simply append an torchrl.envs.InitTracker "
-                    f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
-                )
-            tensordict = self.ou.add_sample(tensordict, self.eps, is_init=is_init)
-        return tensordict
 
 
 class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
@@ -708,10 +428,10 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
 
     .. note::
         It is
-        crucial to incorporate a call to :meth:`~.step` in the training loop
+        crucial to incorporate a call to :meth:`step` in the training loop
         to update the exploration factor.
         Since it is not easy to capture this omission no warning or exception
-        will be raised if this is ommitted!
+        will be raised if this is omitted!
 
     Args:
         spec (TensorSpec): the spec used for sampling actions. The sampled
@@ -746,6 +466,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             is set to False but the spec is passed, the projection will still
             happen.
             Default is True.
+        device (torch.device, optional): the device where the buffers have to be stored.
 
     Examples:
         >>> import torch
@@ -782,13 +503,14 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         mu: float = 0.0,
         sigma: float = 0.2,
         dt: float = 1e-2,
-        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[float] = None,
+        x0: torch.Tensor | np.ndarray | None = None,
+        sigma_min: float | None = None,
         n_steps_annealing: int = 1000,
         *,
-        action_key: Optional[NestedKey] = "action",
-        is_init_key: Optional[NestedKey] = "is_init",
+        action_key: NestedKey = "action",
+        is_init_key: NestedKey = "is_init",
         safe: bool = True,
+        device: torch.device | None = None,
     ):
         super().__init__()
 
@@ -801,17 +523,20 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             sigma_min=sigma_min,
             n_steps_annealing=n_steps_annealing,
             key=action_key,
+            device=device,
         )
 
-        self.register_buffer("eps_init", torch.tensor([eps_init]))
-        self.register_buffer("eps_end", torch.tensor([eps_end]))
+        self.register_buffer("eps_init", torch.tensor(eps_init, device=device))
+        self.register_buffer("eps_end", torch.tensor(eps_end, device=device))
         if self.eps_end > self.eps_init:
             raise ValueError(
                 "eps should decrease over time or be constant, "
                 f"got eps_init={eps_init} and eps_end={eps_end}"
             )
         self.annealing_num_steps = annealing_num_steps
-        self.register_buffer("eps", torch.tensor([eps_init], dtype=torch.float32))
+        self.register_buffer(
+            "eps", torch.tensor(eps_init, dtype=torch.float32, device=device)
+        )
 
         self.in_keys = [self.ou.key]
         self.out_keys = [self.ou.key] + self.ou.out_keys
@@ -883,19 +608,23 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
 
 
 # Based on http://math.stackexchange.com/questions/1287634/implementing-ornstein-uhlenbeck-in-matlab
-class _OrnsteinUhlenbeckProcess:
+class _OrnsteinUhlenbeckProcess(nn.Module):
     def __init__(
         self,
         theta: float,
         mu: float = 0.0,
         sigma: float = 0.2,
         dt: float = 1e-2,
-        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[float] = None,
+        x0: torch.Tensor | np.ndarray | None = None,
+        sigma_min: float | None = None,
         n_steps_annealing: int = 1000,
-        key: Optional[NestedKey] = "action",
-        is_init_key: Optional[NestedKey] = "is_init",
+        key: NestedKey | None = "action",
+        is_init_key: NestedKey | None = "is_init",
+        device: torch.device | None = None,
     ):
+        super().__init__()
+        self.register_buffer("_empty_tensor_device", torch.zeros(0, device=device))
+
         self.mu = mu
         self.sigma = sigma
 
@@ -917,6 +646,13 @@ class _OrnsteinUhlenbeckProcess:
         self._noise_key = "_ou_prev_noise"
         self._steps_key = "_ou_steps"
         self.out_keys = [self.noise_key, self.steps_key]
+        self._auto_buffer()
+
+    def _auto_buffer(self):
+        for key, item in list(self.__dict__.items()):
+            if isinstance(item, torch.Tensor):
+                delattr(self, key)
+                self.register_buffer(key, item)
 
     @property
     def noise_key(self):
@@ -932,12 +668,14 @@ class _OrnsteinUhlenbeckProcess:
         tensordict: TensorDictBase,
         is_init: torch.Tensor,
     ):
+        device = tensordict.device
+        if device is None:
+            device = self._empty_tensor_device.device
+
         if self.steps_key not in tensordict.keys():
-            noise = torch.zeros(
-                tensordict.get(self.key).shape, device=tensordict.device
-            )
+            noise = torch.zeros(tensordict.get(self.key).shape, device=device)
             steps = torch.zeros(
-                action_tensordict.batch_size, dtype=torch.long, device=tensordict.device
+                action_tensordict.batch_size, dtype=torch.long, device=device
             )
             tensordict.set(self.noise_key, noise)
             tensordict.set(self.steps_key, steps)
@@ -946,15 +684,15 @@ class _OrnsteinUhlenbeckProcess:
             noise = tensordict.get(self.noise_key).clone()
             steps = tensordict.get(self.steps_key).clone()
         if is_init is not None:
-            noise = torch.masked_fill(noise, is_init, 0)
-            steps = torch.masked_fill(steps, is_init, 0)
+            noise = torch.masked_fill(noise, expand_right(is_init, noise.shape), 0)
+            steps = torch.masked_fill(steps, expand_right(is_init, steps.shape), 0)
         return noise, steps
 
     def add_sample(
         self,
         tensordict: TensorDictBase,
         eps: float = 1.0,
-        is_init: Optional[torch.Tensor] = None,
+        is_init: torch.Tensor | None = None,
     ) -> TensorDictBase:
 
         # Get the nested tensordict where the action lives
@@ -972,7 +710,7 @@ class _OrnsteinUhlenbeckProcess:
                 is_init = is_init.squeeze(-1)  # Squeeze dangling dim
             if (
                 action_tensordict.ndim >= is_init.ndim
-            ):  # if is_init has less dimensions than action_tensordict we expand it
+            ):  # if is_init has fewer dimensions than action_tensordict we expand it
                 is_init = expand_right(is_init, action_tensordict.shape)
             else:
                 is_init = is_init.sum(
@@ -1005,3 +743,31 @@ class _OrnsteinUhlenbeckProcess:
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
         sigma = (self.m * n_steps + self.c).clamp_min(self.sigma_min)
         return sigma
+
+
+class RandomPolicy:
+    """A random policy for data collectors.
+
+    This is a wrapper around the action_spec.rand method.
+
+    Args:
+        action_spec: TensorSpec object describing the action specs
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.tensor_specs import Bounded
+        >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
+        >>> actor = RandomPolicy(action_spec=action_spec)
+        >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
+    """
+
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
+        self.action_spec = action_spec.clone()
+        self.action_key = action_key
+
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        if isinstance(self.action_spec, Composite):
+            return td.update(self.action_spec.rand())
+        else:
+            return td.set(self.action_key, self.action_spec.rand())

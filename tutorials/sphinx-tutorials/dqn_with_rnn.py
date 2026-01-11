@@ -20,6 +20,8 @@ Recurrent DQN: Training recurrent policies
       * tqdm
 """
 
+import tempfile
+
 #########################################################################
 # Overview
 # --------
@@ -28,7 +30,7 @@ Recurrent DQN: Training recurrent policies
 # observable but also when the time dimension must be taken into account to
 # make informed decisions.
 #
-# Recurrent neural network have long been a popular tool for memory-based
+# Recurrent neural networks have long been a popular tool for memory-based
 # policies. The idea is to keep a recurrent state in memory between two
 # consecutive steps, and use this as an input to the policy along with the
 # current observation.
@@ -99,6 +101,7 @@ from tensordict.nn import (
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import (
     Compose,
     ExplorationType,
@@ -317,7 +320,7 @@ qval = QValueModule(action_space=None, spec=env.action_spec)
 #
 # We can now put things together in a :class:`~tensordict.nn.TensorDictSequential`
 #
-stoch_policy = Seq(feature, lstm, mlp, qval)
+policy = Seq(feature, lstm, mlp, qval)
 
 ######################################################################
 # DQN being a deterministic algorithm, exploration is a crucial part of it.
@@ -330,7 +333,7 @@ exploration_module = EGreedyModule(
     annealing_num_steps=1_000_000, spec=env.action_spec, eps_init=0.2
 )
 stoch_policy = TensorDictSequential(
-    stoch_policy,
+    policy,
     exploration_module,
 )
 
@@ -338,20 +341,17 @@ stoch_policy = TensorDictSequential(
 # Using the model for the loss
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# The model as we've built it is well equipped to be used in sequential settings.
+# The model as we've built it is well-equipped to be used in sequential settings.
 # However, the class :class:`torch.nn.LSTM` can use a cuDNN-optimized backend
 # to run the RNN sequence faster on GPU device. We would not want to miss
 # such an opportunity to speed up our training loop!
-# To use it, we just need to tell the LSTM module to run on "recurrent-mode"
-# when used by the loss.
-# As we'll usually want to have two copies of the LSTM module, we do this by
-# calling a :meth:`~torchrl.modules.LSTMModule.set_recurrent_mode` method that
-# will return a new instance of the LSTM (with shared weights) that will
-# assume that the input data is sequential in nature.
 #
-policy = Seq(feature, lstm.set_recurrent_mode(True), mlp, qval)
-
-######################################################################
+# By default, torchrl losses will use this when executing any
+# :class:`~torchrl.modules.LSTMModule` or :class:`~torchrl.modules.GRUModule`
+# forward call. If you need to control this manually, the RNN modules are sensitive
+# to a context manager/decorator, :class:`~torchrl.modules.set_recurrent_mode`,
+# that handles the behaviour of the underlying RNN module.
+#
 # Because we still have a couple of uninitialized parameters we should
 # initialize them before creating an optimizer and such.
 #
@@ -384,29 +384,53 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 # Collector and replay buffer
 # ---------------------------
 #
-# We build the simplest data collector there is. We'll try to train our algorithm
-# with a million frames, extending the buffer with 50 frames at a time. The buffer
-# will be designed to store 20 thousands trajectories of 50 steps each.
-# At each optimization step (16 per data collection), we'll collect 4 items
-# from our buffer, for a total of 200 transitions.
+# For RNN-based policies, we need to sample sequences of consecutive transitions
+# rather than independent transitions. We'll use a :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+# to sample trajectory slices of length 50. This ensures that the LSTM hidden states
+# can be properly propagated through the sequence during training.
+#
+# The buffer will store 1,000,000 individual transitions, and when sampling, we'll
+# get slices of up to 50 consecutive steps. At each optimization step (16 per data collection),
+# we'll sample batches totaling 200 transitions from trajectory slices.
+#
 # We'll use a :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` storage to keep the data
-# on disk.
+# on disk, and pass the replay buffer directly to the data collector so it can
+# automatically populate the buffer as data is collected.
 #
 # .. note::
 #   For the sake of efficiency, we're only running a few thousands iterations
 #   here. In a real setting, the total number of frames should be set to 1M.
 #
-collector = SyncDataCollector(env, stoch_policy, frames_per_batch=50, total_frames=200)
+buffer_scratch_dir = tempfile.TemporaryDirectory().name
+
 rb = TensorDictReplayBuffer(
-    storage=LazyMemmapStorage(20_000), batch_size=4, prefetch=10
+    storage=LazyMemmapStorage(1_000_000, scratch_dir=buffer_scratch_dir),
+    sampler=SliceSampler(
+        slice_len=50, end_key=("next", "done"), cache_values=True, strict_length=False
+    ),
+    batch_size=200,
+    prefetch=10,
+    transform=lambda td: td.to(device),
+)
+
+collector = SyncDataCollector(
+    env,
+    stoch_policy,
+    frames_per_batch=50,
+    total_frames=200,
+    storing_device="cpu",
+    replay_buffer=rb,
 )
 
 ######################################################################
 # Training loop
 # -------------
 #
+# Since we passed the replay buffer to the collector, the collector no longer yields
+# data directly - instead it automatically populates the replay buffer. We iterate
+# through the collector to trigger data collection, then sample from the buffer for training.
 # To keep track of the progress, we will run the policy in the environment once
-# every 50 data collection, and plot the results after training.
+# every 50 data collection iterations, and plot the results after training.
 #
 
 utd = 16
@@ -414,30 +438,31 @@ pbar = tqdm.tqdm(total=collector.total_frames)
 longest = 0
 
 traj_lens = []
-for i, data in enumerate(collector):
-    if i == 0:
-        print(
-            "Let us print the first batch of data.\nPay attention to the key names "
-            "which will reflect what can be found in this data structure, in particular: "
-            "the output of the QValueModule (action_values, action and chosen_action_value),"
-            "the 'is_init' key that will tell us if a step is initial or not, and the "
-            "recurrent_state keys.\n",
-            data,
-        )
-    pbar.update(data.numel())
-    # it is important to pass data that is not flattened
-    rb.extend(data.unsqueeze(0).to_tensordict().cpu())
-    for _ in range(utd):
-        s = rb.sample().to(device, non_blocking=True)
+for i, _ in enumerate(collector):
+    pbar.update(collector.frames_per_batch)
+    # Only start training once we have enough data in the buffer
+    if len(rb) < 1000:
+        continue
+    for j in range(utd):
+        s = rb.sample()
+        if i == 0 and j == 0:
+            # Let's print the first sample to see the data structure
+            print(
+                "Let us print the first batch of sampled data from the replay buffer.\n"
+                "Pay attention to the key names which will reflect what can be found in this data structure, "
+                "in particular: the output of the QValueModule (action_values, action and chosen_action_value),"
+                "the 'is_init' key that will tell us if a step is initial or not, and the "
+                "recurrent_state keys.\n",
+                s,
+            )
         loss_vals = loss_fn(s)
         loss_vals["loss"].backward()
         optim.step()
         optim.zero_grad()
-    longest = max(longest, data["step_count"].max().item())
     pbar.set_description(
-        f"steps: {longest}, loss_val: {loss_vals['loss'].item(): 4.4f}, action_spread: {data['action'].sum(0)}"
+        f"buffer_size: {len(rb)}, loss_val: {loss_vals['loss'].item(): 4.4f}"
     )
-    exploration_module.step(data.numel())
+    exploration_module.step(collector.frames_per_batch)
     updater.step()
 
     with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
@@ -473,3 +498,19 @@ if traj_lens:
 # ---------------
 #
 # - The TorchRL documentation can be found `here <https://pytorch.org/rl/>`_.
+
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore

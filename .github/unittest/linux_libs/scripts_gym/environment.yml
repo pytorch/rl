@@ -11,7 +11,7 @@ dependencies:
     - future
     - cloudpickle
     - pygame
-    - moviepy
+    - moviepy<2.0.0
     - tqdm
     - pytest
     - pytest-cov
@@ -19,7 +19,9 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-error-for-skips
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core

@@ -7,19 +7,17 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from functools import wraps
-from typing import Dict, List, Tuple, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
+
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _reduce,
@@ -80,7 +78,7 @@ class CrossQLoss(LossModule):
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
             Default is ``False``.
-        target_entropy (float or str, optional): Target entropy for the
+        target_entropy (:obj:`float` or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -94,6 +92,8 @@ class CrossQLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -242,7 +242,8 @@ class CrossQLoss(LossModule):
         terminated: NestedKey = "terminated"
         log_prob: NestedKey = "_log_prob"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: ProbabilisticActor
@@ -255,19 +256,20 @@ class CrossQLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = None,
-        max_alpha: float = None,
+        min_alpha: float | None = None,
+        max_alpha: float | None = None,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
-        priority_key: str = None,
+        target_entropy: str | float = "auto",
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -275,6 +277,8 @@ class CrossQLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
+
+        self.deactivate_vmap = deactivate_vmap
 
         # Actor
         self.convert_to_functional(
@@ -306,7 +310,7 @@ class CrossQLoss(LossModule):
         try:
             device = next(self.parameters()).device
         except AttributeError:
-            device = torch.device("cpu")
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         if bool(min_alpha) ^ bool(max_alpha):
             min_alpha = min_alpha if min_alpha else 0.0
@@ -341,11 +345,14 @@ class CrossQLoss(LossModule):
         self._make_vmap()
         self.reduction = reduction
         # init target entropy
-        _ = self.target_entropy
+        self.maybe_init_target_entropy()
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
@@ -356,29 +363,32 @@ class CrossQLoss(LossModule):
         """
         return self.target_entropy
 
-    @property
-    def target_entropy(self):
-        target_entropy = self._buffers.get("_target_entropy", None)
-        if target_entropy is not None:
-            return target_entropy
+    def maybe_init_target_entropy(self, fault_tolerant=True):
+        """Initialize the target entropy.
+
+        Args:
+            fault_tolerant (bool, optional): if ``True``, returns None if the target entropy
+                cannot be determined. Raises an exception otherwise. Defaults to ``True``.
+
+        """
+        if "_target_entropy" in self._buffers:
+            return
         target_entropy = self._target_entropy
-        action_spec = self._action_spec
-        actor_network = self.actor_network
         device = next(self.parameters()).device
         if target_entropy == "auto":
-            action_spec = (
-                action_spec
-                if action_spec is not None
-                else getattr(actor_network, "spec", None)
-            )
+            action_spec = self.get_action_spec()
             if action_spec is None:
+                if fault_tolerant:
+                    return
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
+                    "the target entropy explicitly or provide the spec of the "
                     "action tensor in the actor network."
                 )
             if not isinstance(action_spec, Composite):
                 action_spec = Composite({self.tensor_keys.action: action_spec})
+            elif fault_tolerant and self.tensor_keys.action not in action_spec:
+                return
             if (
                 isinstance(self.tensor_keys.action, tuple)
                 and len(self.tensor_keys.action) > 1
@@ -396,6 +406,28 @@ class CrossQLoss(LossModule):
             "_target_entropy", torch.tensor(target_entropy, device=device)
         )
         return self._target_entropy
+
+    def get_action_spec(self):
+        action_spec = self._action_spec
+        actor_network = self.actor_network
+        action_spec = (
+            action_spec
+            if action_spec is not None
+            else getattr(actor_network, "spec", None)
+        )
+        return action_spec
+
+    @property
+    def target_entropy(self):
+        target_entropy = self._buffers.get("_target_entropy")
+        if target_entropy is not None:
+            return target_entropy
+        return self.maybe_init_target_entropy(fault_tolerant=False)
+
+    def set_keys(self, **kwargs) -> None:
+        out = super().set_keys(**kwargs)
+        self.maybe_init_target_entropy()
+        return out
 
     state_dict = _delezify(LossModule.state_dict)
     load_state_dict = _delezify(LossModule.load_state_dict)
@@ -516,6 +548,14 @@ class CrossQLoss(LossModule):
             **value_metadata,
         }
         td_out = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return td_out
 
     @property
@@ -525,7 +565,7 @@ class CrossQLoss(LossModule):
 
     def actor_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and before the `~.alpha_loss` which
@@ -567,7 +607,7 @@ class CrossQLoss(LossModule):
 
     def qvalue_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.
@@ -652,7 +692,7 @@ class CrossQLoss(LossModule):
 
     @property
     def _alpha(self):
-        if self.min_log_alpha is not None:
+        if self.min_log_alpha is not None or self.max_log_alpha is not None:
             self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()

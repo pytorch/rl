@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import uuid
 from datetime import datetime
@@ -41,7 +42,7 @@ DEFAULT_REWARD_SCALING = {
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -119,7 +120,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 annealing_num_steps=cfg.exploration.annealing_frames,
                 sigma=cfg.exploration.ou_sigma,
                 theta=cfg.exploration.ou_theta,
-            ).to(device),
+                device=device,
+            ),
         )
     if device == torch.device("cpu"):
         # mostly for debugging

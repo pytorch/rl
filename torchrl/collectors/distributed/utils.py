@@ -1,3 +1,10 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
 import subprocess
 import time
 
@@ -51,8 +58,7 @@ class submitit_delayed_launcher:
         >>> num_jobs=2
         >>> @submitit_delayed_launcher(num_jobs=num_jobs)
         ... def main():
-        ...     from torchrl.envs.utils import RandomPolicy
-                from torchrl.envs.libs.gym import GymEnv
+        ...     from torchrl.modules.utils.utils import RandomPolicyfrom torchrl.envs.libs.gym import GymEnv
         ...     from torchrl.data import BoundedContinuous
         ...     collector = DistributedDataCollector(
         ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
@@ -96,7 +102,7 @@ class submitit_delayed_launcher:
             executor.update_parameters(**self.submitit_main_conf)
             main_job = executor.submit(main_func)
             # listen to output file looking for IP address
-            torchrl_logger.info(f"job id: {main_job.job_id}")
+            torchrl_logger.debug(f"job id: {main_job.job_id}")
             time.sleep(2.0)
             node = None
             while not node:
@@ -107,11 +113,11 @@ class submitit_delayed_launcher:
                 except ValueError:
                     time.sleep(0.5)
                     continue
-            torchrl_logger.info(f"node: {node}")
+            torchrl_logger.debug(f"node: {node}")
             # by default, sinfo will truncate the node name at char 20, we increase this to 200
             cmd = f"sinfo -n {node} -O nodeaddr:200 | tail -1"
             rank0_ip = subprocess.check_output(cmd, shell=True, text=True).strip()
-            torchrl_logger.info(f"IP: {rank0_ip}")
+            torchrl_logger.debug(f"IP: {rank0_ip}")
             world_size = self.num_jobs + 1
 
             # submit jobs

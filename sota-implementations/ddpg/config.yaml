@@ -13,7 +13,7 @@ collector:
   frames_per_batch: 1000
   init_env_steps: 1000
   reset_at_each_iter: False
-  device: cpu
+  device:
   env_per_collector: 1
 
 
@@ -39,6 +39,11 @@ network:
   hidden_sizes: [256, 256]
   activation: relu
   noise_type: "ou" # ou or gaussian
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False
 
 # logging
 logger:

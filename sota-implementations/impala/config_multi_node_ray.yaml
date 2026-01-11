@@ -1,6 +1,7 @@
 # Environment
 env:
-  env_name: PongNoFrameskip-v4
+  env_name: ALE/Pong-v5
+  backend: gymnasium
 
 # Ray init kwargs - https://docs.ray.io/en/latest/ray-core/api/doc/ray.init.html
 ray_init_config:
@@ -24,7 +25,7 @@ ray_init_config:
   storage: null
 
 # Device for the forward and backward passes
-local_device: "cuda:0"
+local_device:
 
 # Resources assigned to each IMPALA rollout collection worker
 remote_worker_resources:

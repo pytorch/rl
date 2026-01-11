@@ -7,24 +7,27 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+*.egg
+*.egg-info/
 .Python
+.eggs/
+.installed.cfg
+MANIFEST
 build/
+./data/
 develop-eggs/
 dist/
 downloads/
+dump/
 eggs/
-.eggs/
 lib/
 lib64/
 parts/
 sdist/
+share/python-wheels/
+tmp/
 var/
 wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -37,23 +40,32 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
 *.cover
 *.py,cover
+.benchmarks/
+.cache
+.coverage
+.coverage.*
 .hypothesis/
+.neptune
+.neptune
+.neptune/
+.nox/
 .pytest_cache/
+.pytest_cache/
+.tox/
 cover/
+coverage.xml
+htmlcov/
+nosetests.xml
+nosetests.xml
 
 # Translations
 *.mo
 *.pot
+
+# Jupyter
+*.ipynb
 
 # Django stuff:
 *.log
@@ -175,3 +187,13 @@ log
 # macOS
 .DS_Store
 Roms
+
+scratch/*
+
+# Large directories from git history that should not be committed
+dev/
+main/
+*.html
+
+# Additional cache directories
+.ruff_cache/

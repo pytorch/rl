@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from __future__ import annotations
 
 import os
 import pathlib
@@ -35,7 +35,7 @@ def get_logger(
             If empty, ``None`` is returned.
         logger_name (str): Name to be used as a log_dir
         experiment_name (str): Name of the experiment
-        kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`
+        kwargs (dict[str]): might contain either `wandb_kwargs`, `mlflow_kwargs` or `trackio_kwargs`
     """
     if logger_type == "tensorboard":
         from torchrl.record.loggers.tensorboard import TensorboardLogger
@@ -62,6 +62,14 @@ def get_logger(
             tracking_uri=pathlib.Path(os.path.abspath(logger_name)).as_uri(),
             exp_name=experiment_name,
             **mlflow_kwargs,
+        )
+    elif logger_type == "trackio":
+        from torchrl.record.loggers.trackio import TrackioLogger
+
+        trackio_kwargs = kwargs.get("trackio_kwargs", {})
+        project = trackio_kwargs.pop("project", "torchrl")
+        logger = TrackioLogger(
+            project=project, exp_name=experiment_name, **trackio_kwargs
         )
     elif logger_type in ("", None):
         return None

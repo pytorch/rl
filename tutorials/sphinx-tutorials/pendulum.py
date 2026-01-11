@@ -98,7 +98,6 @@ except RuntimeError:
 # sphinx_gallery_end_ignore
 
 from collections import defaultdict
-from typing import Optional
 
 import numpy as np
 import torch
@@ -366,8 +365,8 @@ def _reset(self, tensordict):
 #
 # There are four specs that we must code in our environment:
 #
-# * :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.CompositeSpec`
-#   instance where each key is an observation (a :class:`CompositeSpec` can be
+# * :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.Composite`
+#   instance where each key is an observation (a :class:`Composite` can be
 #   viewed as a dictionary of specs).
 # * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
 #   that it corresponds to the ``"action"`` entry in the input ``tensordict``;
@@ -470,7 +469,7 @@ def make_composite_from_td(td):
 #
 
 
-def _set_seed(self, seed: Optional[int]):
+def _set_seed(self, seed: int | None) -> None:
     rng = torch.manual_seed(seed)
     self.rng = rng
 
@@ -868,8 +867,9 @@ optim = torch.optim.Adam(policy.parameters(), lr=2e-3)
 # which demonstrates that the pendulum is upward and still as desired.
 #
 batch_size = 32
-pbar = tqdm.tqdm(range(20_000 // batch_size))
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, 20_000)
+n_iter = 1000  # set to 20_000 for a proper training
+pbar = tqdm.tqdm(range(n_iter // batch_size))
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, n_iter)
 logs = defaultdict(list)
 
 for _ in pbar:

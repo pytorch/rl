@@ -2,19 +2,21 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
-import os
+import importlib.util
 
 import pytest
 import torch
-
 from tensordict import TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
+
 from torchrl.data import Binary, Bounded, Categorical, Composite, MultiOneHot, OneHot
-from torchrl.data.rlhf.dataset import _has_transformers
+from torchrl.data.llm.dataset import _has_transformers
 from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
@@ -30,12 +32,10 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-    from pytorch.rl.test.mocking_classes import NestedCountingEnv
-else:
-    from _utils_internal import get_default_devices
-    from mocking_classes import NestedCountingEnv
+from torchrl.testing import get_default_devices
+from torchrl.testing.mocking_classes import NestedCountingEnv
+
+_has_vllm = importlib.util.find_spec("vllm") is not None
 
 
 @pytest.mark.parametrize(
@@ -47,7 +47,7 @@ else:
         ("data", "sample_log_prob"),
     ],
 )
-def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
+def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=1):
     env = NestedCountingEnv(nested_dim=nested_dim)
     action_spec = Bounded(shape=torch.Size((nested_dim, n_actions)), high=1, low=-1)
     policy_module = TensorDictModule(
@@ -74,7 +74,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
     policy = ProbabilisticActor(
         module=policy_module,
@@ -94,7 +94,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
 
 @pytest.mark.parametrize(
@@ -139,7 +139,7 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
     policy = ProbabilisticActor(
         module=policy_module,
@@ -159,7 +159,7 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
 
 class TestQValue:
@@ -213,7 +213,10 @@ class TestQValue:
             nest_obs_action=nested_action, batch_size=batch_size, nested_dim=nested_dim
         )
         action_spec = env._input_spec["full_action_spec"]
-        leaf_action_spec = env.action_spec
+        if nested_action:
+            leaf_action_spec = env.full_action_spec[env.action_keys[0]]
+        else:
+            leaf_action_spec = env.action_spec
 
         space_str, spec = _process_action_space_spec(None, action_spec)
         assert spec == action_spec
@@ -859,7 +862,7 @@ def test_lmhead_actorvalueoperator(device):
 
     # check actor
     assert aco.module[1].in_keys == ["x"]
-    assert aco.module[1].out_keys == ["logits", "action", "sample_log_prob"]
+    assert aco.module[1].out_keys == ["logits", "action", "action_log_prob"]
     assert aco.module[1][0].module is base_model.lm_head
 
     # check critic

@@ -59,7 +59,8 @@ class GAILLoss(LossModule):
         collector_observation: NestedKey = "collector_observation"
         discriminator_pred: NestedKey = "d_logits"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
 
     discriminator_network: TensorDictModule
     discriminator_network_params: TensorDictParams
@@ -77,7 +78,7 @@ class GAILLoss(LossModule):
         *,
         use_grad_penalty: bool = False,
         gp_lambda: float = 10,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -120,7 +121,7 @@ class GAILLoss(LossModule):
         self._in_keys = values
 
     @property
-    def out_keys(self):
+    def out_keys(self):  # noqa: F811
         if self._out_keys is None:
             keys = ["loss"]
             if self.use_grad_penalty:
@@ -247,5 +248,11 @@ class GAILLoss(LossModule):
             out["gp_loss"] = gp_loss.detach()
         loss = _reduce(loss, reduction=self.reduction)
         out["loss"] = loss
-        td_out = TensorDict(out, [])
+        td_out = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "target_discriminator_network_params",
+            "discriminator_network_params",
+        )
         return td_out

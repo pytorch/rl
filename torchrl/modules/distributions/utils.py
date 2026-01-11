@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from typing import Union
+from __future__ import annotations
 
 import torch
 from torch import autograd, distributions as d
@@ -15,23 +14,27 @@ except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
 
 
-def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
+def _cast_device(elt: torch.Tensor | float, device) -> torch.Tensor | float:
     if isinstance(elt, torch.Tensor):
-        return elt.to(device)
+        _non_blocking = device is not None and torch.device(device).type == "cuda"
+        return elt.to(device, non_blocking=_non_blocking)
     return elt
 
 
 def _cast_transform_device(transform, device):
     if transform is None:
         return transform
-    elif isinstance(transform, d.ComposeTransform):
+    _non_blocking = device is not None and torch.device(device).type == "cuda"
+    if isinstance(transform, d.ComposeTransform):
         for i, t in enumerate(transform.parts):
             transform.parts[i] = _cast_transform_device(t, device)
     elif isinstance(transform, d.Transform):
         for attribute in dir(transform):
             value = getattr(transform, attribute)
             if isinstance(value, torch.Tensor):
-                setattr(transform, attribute, value.to(device))
+                setattr(
+                    transform, attribute, value.to(device, non_blocking=_non_blocking)
+                )
         return transform
     else:
         raise TypeError(
@@ -55,7 +58,7 @@ class FasterTransformedDistribution(TransformedDistribution):
             raise ValueError("Make a ComposeTransform first.")
         else:
             raise ValueError(
-                "transforms must be a Transform or list, but was {}".format(transforms)
+                f"transforms must be a Transform or list, but was {transforms}"
             )
         transform = self.transforms[0]
         # Reshape base_distribution according to transforms.

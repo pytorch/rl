@@ -4,6 +4,7 @@
 name: Push Binary Nightly
 
 on:
+  pull_request:
   workflow_call:
     secrets:
 #      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
@@ -12,19 +13,14 @@ on:
 #        required: true
       PYPI_TOKEN:
         required: false
-  # run every day at 11:15am
+  # run every day at 15:15am
   schedule:
-    - cron:  '15 11 * * *'
+    - cron:  '15 15 * * *'
   # or manually trigger it
   workflow_dispatch:
   push:
     branches:
       - "nightly"
-
-env:
-  ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -32,70 +28,165 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  build-wheel-linux:
+  build-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    runs-on: ubuntu-20.04
+    continue-on-error: true
+    runs-on: ${{ matrix.os[1] }}
     strategy:
       matrix:
-        python_version: [["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
+        os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
+        python_version: [
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
+        ]
         cuda_support: [["", "cpu", "cpu"]]
-    container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout torchrl
-        uses: actions/checkout@v3
-        env:
-         AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version[0] }}
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build TorchRL Nightly
+        env:
+          TORCHRL_NIGHTLY: 1
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name torchrl-nightly \
-            --python-tag=${{ matrix.python-tag }}
-           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          python -mpip install build wheel
+          ./build_nightly.sh
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
-      - name: Show auditwheel output; confirm 2-17
-        run: |
-          python3 -mpip install auditwheel
-          auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/*.whl
 
-  upload-wheel-linux:
+
+  test-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    needs: test-wheel-linux
-    runs-on: ubuntu-20.04
+    needs: build-wheel-unix
+    continue-on-error: true
+    runs-on: ${{ matrix.os[1] }}
     strategy:
       matrix:
-        python_version: [["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
+        os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
+        python_version: [
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
+        ]
         cuda_support: [["", "cpu", "cpu"]]
-    container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version[0] }}
+      - name: Checkout torchrl
+        uses: actions/checkout@v4
+      - name: Install PyTorch Nightly
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+      - name: Upgrade pip
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -mpip install --upgrade pip
+      - name: Install tensordict
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -mpip install tensordict-nightly
+      - name: Install test dependencies
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          path: /tmp/wheels
+        env:
+          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
+      - name: Install built wheels
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -mpip install /tmp/wheels/*
+      - name: Log version string
+        run: |
+          # Avoid ambiguity of "import torchrl" by deleting the source files.
+          rm -rf torchrl/
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -c "import torchrl; print(torchrl.__version__)"
+      - name: Verify nightly version format
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python scripts/verify_nightly_version.py
+      - name: Run tests
+        run: |
+          set -e
+          export IN_CI=1
+          mkdir test-reports
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python -m torch.utils.collect_env
+          python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
+          EXIT_STATUS=0
+          pytest test/smoke_test.py -v --durations 200
+          exit $EXIT_STATUS
+
+  upload-wheel-unix:
+    # Don't run on forked repos.
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: test-wheel-unix
+    runs-on: ${{ matrix.os[1] }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
+        python_version: [
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+          ["3.14", "cp314-cp314"],
+        ]
+        cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Checkout torchrl
-        uses: actions/checkout@v3
-      - name: Download built wheels
-        uses: actions/download-artifact@v3
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          python-version: ${{ matrix.python_version[0] }}
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
       - name: Push TorchRL Binary to PYPI
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install twine
+          python -mpip install twine
           python -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
@@ -103,97 +194,43 @@ jobs:
               /tmp/wheels/torchrl_nightly-*.whl \
               --verbose
 
-  test-wheel-linux:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: build-wheel-linux
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        python_version: [["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-          architecture: x64
-        env:
-          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
-      - name: Checkout torchrl
-        uses: actions/checkout@v3
-      - name: Install PyTorch Nightly
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
-      - name: Upgrade pip
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --upgrade pip
-      - name: Install tensordict
-        run: |
-          python3 -mpip install git+https://github.com/pytorch/tensordict.git
-      - name: Install test dependencies
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
-      - name: Download built wheels
-        uses: actions/download-artifact@v3
-        with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
-          path: /tmp/wheels
-        env:
-          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
-      - name: Install built wheels
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install /tmp/wheels/*
-      - name: Log version string
-        run: |
-          # Avoid ambiguity of "import torchrl" by deleting the source files.
-          rm -rf torchrl/
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -c "import torchrl; print(torchrl.__version__)"
-      - name: Run tests
-        run: |
-          set -e
-          export IN_CI=1
-          mkdir test-reports
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -m torch.utils.collect_env
-          python3 -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
-          EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 200
-          exit $EXIT_STATUS
+
 
   build-wheel-windows:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     runs-on: windows-latest
+    continue-on-error: true
     strategy:
       matrix:
-        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"], ["3.12", "3.12"]]
+        python_version: [
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+          ["3.13", "3.13"],
+          ["3.14", "3.14"],
+        ]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout torchrl
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install PyTorch nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Build TorchRL nightly
+        env:
+          TORCHRL_NIGHTLY: 1
         shell: bash
         run: |
           rm -r dist || true
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name torchrl-nightly \
-            --python-tag=${{ matrix.python-tag }}
+          python -mpip install build wheel
+          ./build_nightly.sh
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: torchrl-win-${{ matrix.python_version[0] }}.whl
           path: dist/*.whl
@@ -202,47 +239,60 @@ jobs:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     needs: build-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"], ["3.12", "3.12"]]
+        python_version: [
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+          ["3.13", "3.13"],
+          ["3.14", "3.14"],
+        ]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout torchrl
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install PyTorch Nightly
         shell: bash
         run: |
-          python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+          python -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Upgrade pip
         shell: bash
         run: |
-          python3 -mpip install --upgrade pip
+          python -mpip install --upgrade pip
       - name: Install test dependencies
         shell: bash
         run: |
-          python3 -mpip install numpy pytest --no-cache-dir
+          python -mpip install numpy pytest --no-cache-dir
       - name: Install tensordict
+        shell: bash
         run: |
-          python3 -mpip install git+https://github.com/pytorch/tensordict.git
+          python -mpip install tensordict-nightly
       - name: Download built wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: torchrl-win-${{ matrix.python_version[0] }}.whl
           path: wheels
       - name: Install built wheels
         shell: bash
         run: |
-          python3 -mpip install wheels/*
+          python -mpip install wheels/*
       - name: Log version string
         shell: bash
         run: |
           # Avoid ambiguity of "import torchrl" by deleting the source files.
           rm -rf torchrl/
-          python3 -c "import torchrl; print(torchrl.__version__)"
+          python -c "import torchrl; print(torchrl.__version__)"
+      - name: Verify nightly version format
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          python scripts/verify_nightly_version.py
       - name: Run tests
         shell: bash
         run: |
@@ -257,17 +307,24 @@ jobs:
 
   upload-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"], ["3.12", "3.12"]]
+        python_version: [
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+          ["3.13", "3.13"],
+          ["3.14", "3.14"],
+        ]
     steps:
       - name: Checkout torchrl
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Download built wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: torchrl-win-${{ matrix.python_version[0] }}.whl
           path: wheels
@@ -276,8 +333,8 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          python3 -mpip install twine
-          python3 -m twine upload \
+          python -mpip install twine
+          python -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
               --skip-existing \

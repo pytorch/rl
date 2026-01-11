@@ -5,7 +5,7 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update && apt-get install -y git gcc
+apt-get update && apt-get install -y git gcc cmake
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export PYTORCH_TEST_WITH_SLOW='1'
@@ -24,5 +24,5 @@ conda deactivate && conda activate ./env
 python -c "import sklearn, pandas"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenML --error-for-skips --runslow
-coverage combine
+coverage combine -q
 coverage xml -i

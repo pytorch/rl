@@ -9,11 +9,21 @@ set -e
 
 
 if [[ $OSTYPE != 'darwin'* ]]; then
-  apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget
+  # Prevent interactive prompts (notably tzdata) in CI.
+  export DEBIAN_FRONTEND=noninteractive
+  export TZ="${TZ:-Etc/UTC}"
+  ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime || true
+  echo "${TZ}" > /etc/timezone || true
 
-  apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+  apt-get update
+  apt-get install -y --no-install-recommends tzdata
+  dpkg-reconfigure -f noninteractive tzdata || true
+
+  apt-get upgrade -y
+  apt-get install -y vim git wget cmake
+
+  apt-get install -y libglfw3 libosmesa6 libglew-dev
+  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     # solves version `GLIBCXX_3.4.29' not found for tensorboard
@@ -132,7 +142,7 @@ else
 fi
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation
 
 # smoke test
 python -c "import torchrl"
@@ -159,9 +169,10 @@ export BATCHED_PIPE_TIMEOUT=60
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
+  --ignore test/llm \
   --timeout=120 --mp_fork_if_no_cuda
 
-coverage combine
+coverage combine -q
 coverage xml -i
 
 # ==================================================================================== #

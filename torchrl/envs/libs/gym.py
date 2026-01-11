@@ -8,19 +8,18 @@ from __future__ import annotations
 import collections
 import importlib
 import warnings
+from contextlib import nullcontext
 from copy import copy
 from types import ModuleType
-from typing import Dict, List, Tuple
 from warnings import warn
 
 import numpy as np
 import torch
 from packaging import version
-
 from tensordict import TensorDict, TensorDictBase
 from torch.utils._pytree import tree_map
 
-from torchrl._utils import implement_for
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     _minmax_dtype,
     Binary,
@@ -37,9 +36,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
-
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
-
 from torchrl.envs.utils import _classproperty
 
 try:
@@ -56,10 +53,11 @@ if not _has_gym:
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
+_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
 
-GYMNASIUM_1_ERROR = """RuntimeError: TorchRL does not support gymnasium 1.0 or later versions due to incompatible
+GYMNASIUM_1_ERROR = """RuntimeError: TorchRL does not support gymnasium 1.0 versions due to incompatible
 changes in the Gym API.
 Using gymnasium 1.0 with TorchRL would require significant modifications to your code and may result in:
 * Inaccurate step counting, as the auto-reset feature can cause unpredictable numbers of steps to be executed.
@@ -69,7 +67,7 @@ Using gymnasium 1.0 with TorchRL would require significant modifications to your
 * Manual filtering and boilerplate code to mitigate these issues, which would compromise the modularity and ease of
 use of TorchRL.
 To maintain the integrity and efficiency of our library, we cannot support this version of gymnasium at this time.
-If you need to use gymnasium 1.0 or later, we recommend exploring alternative solutions or waiting for future updates
+If you need to use gymnasium 1.0, we recommend exploring alternative solutions or waiting for future updates
 to TorchRL and gymnasium that may address this compatibility issue.
 For more information, please refer to discussion https://github.com/pytorch/rl/discussions/2483 in torchrl.
 """
@@ -132,7 +130,7 @@ class set_gym_backend(_DecoratorContextManager):
         """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        found_setters = collections.defaultdict(lambda: False)
+        found_setters = collections.defaultdict(bool)
         for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)
@@ -167,7 +165,7 @@ class set_gym_backend(_DecoratorContextManager):
 
     def __enter__(self):
         # we save a complete list of setters as well as whether they should be set.
-        # we want the full list becasue we want to be able to nest the calls to set_gym_backend.
+        # we want the full list because we want to be able to nest the calls to set_gym_backend.
         # we also want to keep track of which ones are set to reproduce what was set before.
         self._setters_saved = copy(implement_for._implementations)
         self._call()
@@ -234,6 +232,80 @@ def gym_backend(submodule=None):
 __all__ = ["GymWrapper", "GymEnv"]
 
 
+# Define a dictionary to store conversion functions for each spec type
+class _ConversionRegistry(collections.UserDict):
+    def __getitem__(self, cls):
+        if cls not in super().keys():
+            # We want to find the closest parent
+            parents = {}
+            for k in self.keys():
+                if not isinstance(k, str):
+                    parents[k] = k
+                    continue
+                try:
+                    space_cls = gym_backend("spaces")
+                    for sbsp in k.split("."):
+                        space_cls = getattr(space_cls, sbsp)
+                except AttributeError:
+                    # Some specs may be too recent
+                    continue
+                parents[space_cls] = k
+            mro = cls.mro()
+            for base in mro:
+                for p in parents:
+                    if issubclass(base, p):
+                        return self[parents[p]]
+            else:
+                raise KeyError(
+                    f"No conversion tool could be found with the gym space {cls}. "
+                    f"You can register your own with `torchrl.envs.libs.register_gym_spec_conversion.`"
+                )
+        return super().__getitem__(cls)
+
+
+_conversion_registry = _ConversionRegistry()
+
+
+def register_gym_spec_conversion(spec_type):
+    """Decorator to register a conversion function for a specific spec type.
+
+    The method must have the following signature:
+
+        >>> @register_gym_spec_conversion("spec.name")
+        ... def convert_specname(
+        ...     spec,
+        ...     dtype=None,
+        ...     device=None,
+        ...     categorical_action_encoding=None,
+        ...     remap_state_to_observation=None,
+        ...     batch_size=None,
+        ... ):
+
+    where `gym(nasium).spaces.spec.name` is the location of the spec in gym.
+
+    If the spec type is accessible, this will also work:
+
+        >>> @register_gym_spec_conversion(SpecType)
+        ... def convert_specname(
+        ...     spec,
+        ...     dtype=None,
+        ...     device=None,
+        ...     categorical_action_encoding=None,
+        ...     remap_state_to_observation=None,
+        ...     batch_size=None,
+        ... ):
+
+    ..note:: The wrapped function can be simplified, and unused kwargs can be wrapped in `**kwargs`.
+
+    """
+
+    def decorator(conversion_func):
+        _conversion_registry[spec_type] = conversion_func
+        return conversion_func
+
+    return decorator
+
+
 def _gym_to_torchrl_spec_transform(
     spec,
     dtype=None,
@@ -256,7 +328,6 @@ def _gym_to_torchrl_spec_transform(
             Dict specs to "observation". Default is true.
         batch_size (torch.Size): batch size to which expand the spec. Defaults to
             ``torch.Size([])``.
-
     """
     if batch_size:
         return _gym_to_torchrl_spec_transform(
@@ -267,139 +338,239 @@ def _gym_to_torchrl_spec_transform(
             remap_state_to_observation=remap_state_to_observation,
             batch_size=None,
         ).expand(batch_size)
-    gym_spaces = gym_backend("spaces")
-    if isinstance(spec, gym_spaces.tuple.Tuple):
-        result = torch.stack(
-            [
-                _gym_to_torchrl_spec_transform(
-                    s,
-                    device=device,
-                    categorical_action_encoding=categorical_action_encoding,
-                    remap_state_to_observation=remap_state_to_observation,
-                )
-                for s in spec
-            ],
-            dim=0,
-        )
-        return result
-    if isinstance(spec, gym_spaces.discrete.Discrete):
-        action_space_cls = Categorical if categorical_action_encoding else OneHot
+
+    # Get the conversion function from the registry
+    conversion_func = _conversion_registry[type(spec)]
+    # Call the conversion function with the provided arguments
+    return conversion_func(
+        spec,
+        dtype=dtype,
+        device=device,
+        categorical_action_encoding=categorical_action_encoding,
+        remap_state_to_observation=remap_state_to_observation,
+        batch_size=batch_size,
+    )
+
+
+# Register conversion functions for each spec type
+@register_gym_spec_conversion("tuple.Tuple")
+def convert_tuple_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    # Implementation for Tuple spec type
+    result = torch.stack(
+        [
+            _gym_to_torchrl_spec_transform(
+                s,
+                device=device,
+                categorical_action_encoding=categorical_action_encoding,
+                remap_state_to_observation=remap_state_to_observation,
+            )
+            for s in spec
+        ],
+        dim=0,
+    )
+    return result
+
+
+@register_gym_spec_conversion("discrete.Discrete")
+def convert_discrete_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    # Implementation for Discrete spec type
+    action_space_cls = Categorical if categorical_action_encoding else OneHot
+    dtype = (
+        numpy_to_torch_dtype_dict[spec.dtype]
+        if categorical_action_encoding
+        else torch.long
+    )
+    return action_space_cls(spec.n, device=device, dtype=dtype)
+
+
+@register_gym_spec_conversion("multi_binary.MultiBinary")
+def convert_multi_binary_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    # Implementation for MultiBinary spec type
+    return Binary(spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype])
+
+
+@register_gym_spec_conversion("multi_discrete.MultiDiscrete")
+def convert_multidiscrete_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
             else torch.long
         )
-        return action_space_cls(spec.n, device=device, dtype=dtype)
-    elif isinstance(spec, gym_spaces.multi_binary.MultiBinary):
-        return Binary(
-            spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
-        )
-    # a spec type cannot be a string, so we're sure that versions of gym that don't have Sequence will just skip through this
-    elif isinstance(spec, getattr(gym_spaces, "Sequence", str)):
-        if not hasattr(spec, "stack"):
-            # gym does not have a stack attribute in sequence
-            raise ValueError(
-                "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
-                "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
-            )
-        if not getattr(spec, "stack", False):
-            raise ValueError(
-                "Sequence spaces must have the stack argument set to ``True``. "
-            )
-        space = spec.feature_space
-        out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)
-        out = out.unsqueeze(0)
-        out.make_neg_dim(0)
-        return out
-    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
-        if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
-            dtype = (
-                numpy_to_torch_dtype_dict[spec.dtype]
-                if categorical_action_encoding
-                else torch.long
-            )
 
-            return (
-                MultiCategorical(spec.nvec, device=device, dtype=dtype)
-                if categorical_action_encoding
-                else MultiOneHot(spec.nvec, device=device, dtype=dtype)
-            )
-
-        return torch.stack(
-            [
-                _gym_to_torchrl_spec_transform(
-                    spec[i],
-                    device=device,
-                    categorical_action_encoding=categorical_action_encoding,
-                    remap_state_to_observation=remap_state_to_observation,
-                )
-                for i in range(len(spec.nvec))
-            ],
-            0,
-        )
-    elif isinstance(spec, gym_spaces.Box):
-        shape = spec.shape
-        if not len(shape):
-            shape = torch.Size([1])
-        if dtype is None:
-            dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        low = torch.as_tensor(spec.low, device=device, dtype=dtype)
-        high = torch.as_tensor(spec.high, device=device, dtype=dtype)
-        is_unbounded = low.isinf().all() and high.isinf().all()
-
-        minval, maxval = _minmax_dtype(dtype)
-        minval = torch.as_tensor(minval).to(low.device, dtype)
-        maxval = torch.as_tensor(maxval).to(low.device, dtype)
-        is_unbounded = is_unbounded or (
-            torch.isclose(low, torch.as_tensor(minval, dtype=dtype)).all()
-            and torch.isclose(high, torch.as_tensor(maxval, dtype=dtype)).all()
-        )
         return (
-            Unbounded(shape, device=device, dtype=dtype)
-            if is_unbounded
-            else Bounded(
-                low,
-                high,
-                shape,
-                dtype=dtype,
-                device=device,
-            )
+            MultiCategorical(spec.nvec, device=device, dtype=dtype)
+            if categorical_action_encoding
+            else MultiOneHot(spec.nvec, device=device, dtype=dtype)
         )
-    elif isinstance(spec, (Dict,)):
-        spec_out = {}
-        for k in spec.keys():
-            key = k
-            if (
-                remap_state_to_observation
-                and k == "state"
-                and "observation" not in spec.keys()
-            ):
-                # we rename "state" in "observation" as "observation" is the conventional name
-                # for single observation in torchrl.
-                # naming it 'state' will result in envs that have a different name for the state vector
-                # when queried with and without pixels
-                key = "observation"
-            spec_out[key] = _gym_to_torchrl_spec_transform(
-                spec[k],
+
+    return torch.stack(
+        [
+            _gym_to_torchrl_spec_transform(
+                spec[i],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
                 remap_state_to_observation=remap_state_to_observation,
             )
-        # the batch-size must be set later
-        return Composite(spec_out, device=device)
-    elif isinstance(spec, gym_spaces.dict.Dict):
-        return _gym_to_torchrl_spec_transform(
-            spec.spaces,
+            for i in range(len(spec.nvec))
+        ],
+        0,
+    )
+
+
+@register_gym_spec_conversion("Box")
+def convert_box_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    shape = spec.shape
+    if not len(shape):
+        shape = torch.Size([1])
+    if dtype is None:
+        dtype = numpy_to_torch_dtype_dict[spec.dtype]
+    low = torch.as_tensor(spec.low, device=device, dtype=dtype)
+    high = torch.as_tensor(spec.high, device=device, dtype=dtype)
+    is_unbounded = low.isinf().all() and high.isinf().all()
+
+    minval, maxval = _minmax_dtype(dtype)
+    minval = torch.as_tensor(minval).to(low.device, dtype)
+    maxval = torch.as_tensor(maxval).to(low.device, dtype)
+    is_unbounded = is_unbounded or (
+        torch.isclose(low, torch.as_tensor(minval, dtype=dtype)).all()
+        and torch.isclose(high, torch.as_tensor(maxval, dtype=dtype)).all()
+    )
+    return (
+        Unbounded(shape, device=device, dtype=dtype)
+        if is_unbounded
+        else Bounded(
+            low,
+            high,
+            shape,
+            dtype=dtype,
+            device=device,
+        )
+    )
+
+
+@register_gym_spec_conversion("Sequence")
+def convert_sequence_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    if not hasattr(spec, "stack"):
+        # gym does not have a stack attribute in sequence
+        raise ValueError(
+            "gymnasium should be used whenever a Sequence is present, as it needs to be stacked. "
+            "If you need the gym backend at all price, please raise an issue on the TorchRL GitHub repository."
+        )
+    if not getattr(spec, "stack", False):
+        raise ValueError(
+            "Sequence spaces must have the stack argument set to ``True``. "
+        )
+    space = spec.feature_space
+    out = _gym_to_torchrl_spec_transform(space, device=device, dtype=dtype)
+    out = out.unsqueeze(0)
+    out.make_neg_dim(0)
+    return out
+
+
+@register_gym_spec_conversion(dict)
+def convert_dict_spec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    spec_out = {}
+    for k in spec.keys():
+        key = k
+        if (
+            remap_state_to_observation
+            and k == "state"
+            and "observation" not in spec.keys()
+        ):
+            # we rename "state" in "observation" as "observation" is the conventional name
+            # for single observation in torchrl.
+            # naming it 'state' will result in envs that have a different name for the state vector
+            # when queried with and without pixels
+            key = "observation"
+        spec_out[key] = _gym_to_torchrl_spec_transform(
+            spec[k],
             device=device,
             categorical_action_encoding=categorical_action_encoding,
             remap_state_to_observation=remap_state_to_observation,
+            batch_size=batch_size,
         )
-    elif _has_minigrid and isinstance(spec, _minigrid_lib().core.mission.MissionSpace):
-        return NonTensor((), device=device)
-    else:
-        raise NotImplementedError(
-            f"spec of type {type(spec).__name__} is currently unaccounted for"
-        )
+    # the batch-size must be set later
+    return Composite(spec_out, device=device)
+
+
+@register_gym_spec_conversion("Text")
+def convert_text_soec(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    return NonTensor((), device=device, example_data="a string")
+
+
+@register_gym_spec_conversion("dict.Dict")
+def convert_dict_spec2(
+    spec,
+    dtype=None,
+    device=None,
+    categorical_action_encoding=None,
+    remap_state_to_observation=None,
+    batch_size=None,
+):
+    return _gym_to_torchrl_spec_transform(
+        spec.spaces,
+        device=device,
+        categorical_action_encoding=categorical_action_encoding,
+        remap_state_to_observation=remap_state_to_observation,
+        batch_size=batch_size,
+    )
 
 
 @implement_for("gym", None, "0.18")
@@ -423,9 +594,16 @@ def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     return gym_spaces.Box(low=low, high=high, shape=shape)
 
 
-@implement_for("gymnasium", "1.0.0")
+@implement_for("gymnasium", "1.0.0", "1.1.0")
 def _box_convert(spec, gym_spaces, shape):  # noqa: F811
     raise ImportError(GYMNASIUM_1_ERROR)
+
+
+@implement_for("gymnasium", "1.1.0")
+def _box_convert(spec, gym_spaces, shape):  # noqa: F811
+    low = spec.low.detach().cpu().numpy()
+    high = spec.high.detach().cpu().numpy()
+    return gym_spaces.Box(low=low, high=high, shape=shape)
 
 
 @implement_for("gym", "0.21", None)
@@ -442,9 +620,16 @@ def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
     )
 
 
-@implement_for("gymnasium", "1.0.0")
+@implement_for("gymnasium", "1.0.0", "1.1.0")
 def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
     raise ImportError(GYMNASIUM_1_ERROR)
+
+
+@implement_for("gymnasium", "1.1.0")
+def _multidiscrete_convert(gym_spaces, spec):  # noqa: F811
+    return gym_spaces.multi_discrete.MultiDiscrete(
+        spec.nvec, dtype=torch_to_numpy_dtype_dict[spec.dtype]
+    )
 
 
 @implement_for("gym", None, "0.21")
@@ -524,7 +709,7 @@ def _torchrl_to_gym_spec_transform(
         )
 
 
-def _get_envs(to_dict=False) -> List:
+def _get_envs(to_dict=False) -> list:
     if not _has_gym:
         raise ImportError("Gym(nasium) could not be found in your virtual environment.")
     envs = _get_gym_envs()
@@ -551,9 +736,15 @@ def _get_gym_envs():  # noqa: F811
     return gym.envs.registration.registry.keys()
 
 
-@implement_for("gymnasium", "1.0.0")
+@implement_for("gymnasium", "1.0.0", "1.1.0")
 def _get_gym_envs():  # noqa: F811
     raise ImportError(GYMNASIUM_1_ERROR)
+
+
+@implement_for("gymnasium", "1.1.0")
+def _get_gym_envs():  # noqa: F811
+    gym = gym_backend()
+    return gym.envs.registration.registry.keys()
 
 
 def _is_from_pixels(env):
@@ -574,7 +765,7 @@ def _is_from_pixels(env):
     gDict = gym_backend("spaces").dict.Dict
     Box = gym_backend("spaces").Box
 
-    if isinstance(observation_spec, (Dict,)):
+    if isinstance(observation_spec, (dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
     if isinstance(observation_spec, (gDict,)):
@@ -601,8 +792,9 @@ def _is_from_pixels(env):
     return False
 
 
-class _AsyncMeta(_EnvPostInit):
+class _GymAsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
+        missing_obs_value = kwargs.pop("missing_obs_value", None)
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
         # before gym 0.22, there was no final_observation
@@ -613,15 +805,24 @@ class _AsyncMeta(_EnvPostInit):
                 VecGymEnvTransform,
             )
 
+            if _has_isaaclab:
+                from isaaclab.envs import ManagerBasedRLEnv
+
+                kwargs = {}
+                if missing_obs_value is not None:
+                    kwargs["missing_obs_value"] = missing_obs_value
+                if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
+                    return TransformedEnv(instance, VecGymEnvTransform(**kwargs))
+
             if _has_sb3:
                 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
                 if isinstance(instance._env, VecEnv):
                     backend = "sb3"
                 else:
-                    backend = "gym"
+                    backend = gym_backend
             else:
-                backend = "gym"
+                backend = gym_backend
 
             # we need 3 checks: the backend is not sb3 (if so, gymnasium is used),
             # it is gym and not gymnasium and the version is before 0.22.0
@@ -638,6 +839,16 @@ class _AsyncMeta(_EnvPostInit):
                         category=UserWarning,
                     )
                     add_info_dict = False
+            if gym_backend == "gymnasium":
+                import gymnasium
+
+                if version.parse(gymnasium.__version__) >= version.parse("1.1.0"):
+                    add_info_dict = (
+                        instance._env.autoreset_mode
+                        != gymnasium.vector.AutoresetMode.DISABLED
+                    )
+                    if not add_info_dict:
+                        return instance
             if add_info_dict:
                 # register terminal_obs_reader
                 instance.auto_register_info_dict(
@@ -645,14 +856,17 @@ class _AsyncMeta(_EnvPostInit):
                         instance.observation_spec, backend=backend
                     )
                 )
-            return TransformedEnv(instance, VecGymEnvTransform())
+            kwargs = {}
+            if missing_obs_value is not None:
+                kwargs["missing_obs_value"] = missing_obs_value
+            return TransformedEnv(instance, VecGymEnvTransform(**kwargs))
         return instance
 
 
-class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
+class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     """OpenAI Gym environment wrapper.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+    Works across `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`
@@ -685,13 +899,17 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         convert_actions_to_numpy (bool, optional): if ``True``, actions will be
             converted from tensors to numpy arrays and moved to CPU before being passed to the
             env step function. Set this to ``False`` if the environment is evaluated
             on GPU, such as IsaacLab.
             Defaults to ``True``.
+        missing_obs_value (Any, optional): default value to use as placeholder for missing observations, when
+            the environment is auto-resetting and missing observations cannot be found in the info dictionary
+            (e.g., with IsaacLab). This argument is passed to :class:`~torchrl.envs.VecGymEnvTransform` by
+            the metaclass.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.
@@ -735,7 +953,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        :meth:`set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
         For parallel (Vectorized) environments, the info dictionary reader is automatically set and should
         not be set manually.
@@ -744,13 +962,13 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
@@ -823,12 +1041,33 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                         "https://github.com/pytorch/rl/issues."
                     )
             libname = self.get_library_name(env)
+            self._validate_env(env)
             with set_gym_backend(libname):
                 kwargs["env"] = env
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
         self._post_init()
+
+    @implement_for("gymnasium", "1.1.0")
+    def _validate_env(self, env):
+        autoreset_mode = getattr(env, "autoreset_mode", None)
+        if autoreset_mode is not None:
+            from gymnasium.vector import AutoresetMode
+
+            if autoreset_mode not in (AutoresetMode.DISABLED, AutoresetMode.SAME_STEP):
+                raise RuntimeError(
+                    "The auto-reset mode must be one of SAME_STEP or DISABLED (which is preferred). Got "
+                    f"autoreset_mode={autoreset_mode}."
+                )
+
+    @implement_for("gym", None, "1.1.0")
+    def _validate_env(self, env):  # noqa
+        pass
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def _validate_env(self, env):  # noqa
+        pass
 
     def _post_init(self):
         # writes the functions that are gym-version specific to the instance
@@ -848,14 +1087,17 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @property
     def _is_batched(self):
+        tuple_of_classes = ()
         if _has_sb3:
             from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-            tuple_of_classes = (VecEnv,)
-        else:
-            tuple_of_classes = ()
+            tuple_of_classes = tuple_of_classes + (VecEnv,)
+        if _has_isaaclab:
+            from isaaclab.envs import ManagerBasedRLEnv
+
+            tuple_of_classes = tuple_of_classes + (ManagerBasedRLEnv,)
         return isinstance(
-            self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
+            self._env.unwrapped, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
     @implement_for("gym")
@@ -875,11 +1117,20 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             batch_size = self.batch_size
         return batch_size
 
-    @implement_for("gymnasium", "1.0.0")
+    @implement_for("gymnasium", "1.0.0", "1.1.0")
     def _get_batch_size(self, env):  # noqa: F811
         raise ImportError(GYMNASIUM_1_ERROR)
 
-    def _check_kwargs(self, kwargs: Dict):
+    @implement_for("gymnasium", "1.1.0")  # gymnasium wants the unwrapped env
+    def _get_batch_size(self, env):  # noqa: F811
+        env_unwrapped = env.unwrapped
+        if hasattr(env_unwrapped, "num_envs"):
+            batch_size = torch.Size([env_unwrapped.num_envs, *self.batch_size])
+        else:
+            batch_size = self.batch_size
+        return batch_size
+
+    def _check_kwargs(self, kwargs: dict):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -891,7 +1142,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         env,
         from_pixels: bool = False,
         pixels_only: bool = False,
-    ) -> "gym.core.Env":  # noqa: F821
+    ) -> gym.core.Env:  # noqa: F821
         self.batch_size = self._get_batch_size(env)
 
         env_from_pixels = _is_from_pixels(env)
@@ -955,7 +1206,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @implement_for("gymnasium", "1.0.0")
+    @implement_for("gymnasium", "1.0.0", "1.1.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         raise ImportError(GYMNASIUM_1_ERROR)
 
@@ -983,11 +1234,35 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
+    @implement_for("gymnasium", "1.1.0")
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        wrappers = gym_backend("wrappers")
+
+        if env.render_mode:
+            return wrappers.AddRenderObservation(env, render_only=pixels_only)
+
+        warnings.warn(
+            "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+            "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
+            'where mode is either "rgb_array" or any other supported mode.'
+        )
+        env.reset()
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+        )
+
+        return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
+
     @property
     def lib(self) -> ModuleType:
-        return gym_backend()
+        gym = gym_backend()
+        if gym is None:
+            raise RuntimeError(
+                "Gym backend is not available. Please install gym or gymnasium."
+            )
+        return gym
 
-    def _set_seed(self, seed: int) -> int:  # noqa: F811
+    def _set_seed(self, seed: int | None) -> None:  # noqa: F811
         if self._seed_calls_reset is None:
             # Determine basing on gym version whether `reset` is called when setting seed.
             self._set_seed_initial(seed)
@@ -995,8 +1270,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self.reset(seed=seed)
         else:
             self._env.seed(seed=seed)
-
-        return seed
 
     @implement_for("gym", None, "0.15.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
@@ -1024,11 +1297,24 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             except AttributeError as err2:
                 raise err from err2
 
-    @implement_for("gymnasium", "1.0.0")
+    @implement_for("gymnasium", "1.0.0", "1.1.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         raise ImportError(GYMNASIUM_1_ERROR)
 
     @implement_for("gymnasium", None, "1.0.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        try:
+            self.reset(seed=seed)
+            self._seed_calls_reset = True
+        except TypeError as err:
+            warnings.warn(
+                f"reset with seed kwarg returned an exception: {err}.\n"
+                f"Calling env.seed from now on."
+            )
+            self._seed_calls_reset = False
+            self._env.seed(seed=seed)
+
+    @implement_for("gymnasium", "1.1.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
@@ -1046,7 +1332,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if hasattr(env, "reward_space") and env.reward_space is not None:
             return env.reward_space
 
-    @implement_for("gymnasium", "1.0.0")
+    @implement_for("gymnasium", "1.0.0", "1.1.0")
     def _reward_space(self, env):  # noqa: F811
         raise ImportError(GYMNASIUM_1_ERROR)
 
@@ -1057,7 +1343,14 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             rs = env.reward_space
             return rs
 
-    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+    @implement_for("gymnasium", "1.1.0")
+    def _reward_space(self, env):  # noqa: F811
+        env = env.unwrapped
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            rs = env.reward_space
+            return rs
+
+    def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
         # If batch_size is provided, we se it to tell what batch size must be used
         # instead of self.batch_size
         cur_batch_size = self.batch_size if batch_size is None else torch.Size([])
@@ -1261,7 +1554,16 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     def _init_env(self):
-        self.reset()
+        pass
+        # init_reset = self.init_reset
+        # if init_reset is None:
+        #     warnings.warn(f"init_env is None in the {type(self).__name__} constructor. The current "
+        #                   f"default behavior is to reset the gym env as soon as it's wrapped in the "
+        #                   f"class (init_reset=True), but from v0.9 this will be changed to False. "
+        #                   f"To adapt for these changes, pass init_reset to your constructor.", category=FutureWarning)
+        #     init_reset = True
+        # if init_reset:
+        #     self._env.reset()
 
     def __repr__(self) -> str:
         return (
@@ -1273,6 +1575,27 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
 
+    @implement_for("gym")
+    def _replace_reset(self, reset, kwargs):
+        return kwargs
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        return kwargs
+
+    # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
+    @implement_for("gymnasium", "1.1.0")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        import gymnasium as gym
+
+        if (
+            getattr(self._env, "autoreset_mode", None)
+            == gym.vector.AutoresetMode.DISABLED
+        ):
+            options = {"reset_mask": reset.view(self.batch_size).numpy()}
+            kwargs.setdefault("options", {}).update(options)
+        return kwargs
+
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
@@ -1283,13 +1606,15 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             if tensordict is None:
                 return super()._reset(tensordict, **kwargs)
             reset = tensordict.get("_reset", None)
+            kwargs = self._replace_reset(reset, kwargs)
             if reset is not None:
                 # we must copy the tensordict because the transform
                 # expects a tuple (tensordict, tensordict_reset) where the
                 # first still carries a _reset
                 tensordict = tensordict.exclude("_reset")
-            if reset is None or reset.all():
-                return super()._reset(tensordict, **kwargs)
+            if reset is None or reset.all() or "options" in kwargs:
+                result = super()._reset(tensordict, **kwargs)
+                return result
             else:
                 return tensordict
         return super()._reset(tensordict, **kwargs)
@@ -1304,7 +1629,7 @@ ACCEPTED_TYPE_ERRORS = {
 class GymEnv(GymWrapper):
     """OpenAI Gym environment wrapper constructed by environment ID directly.
 
-    Works accross `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
+    Works across `gymnasium <https://gymnasium.farama.org/>`_ and `OpenAI/gym <https://github.com/openai/gym>`_.
 
     Args:
         env_name (str): the environment id registered in `gym.registry`.
@@ -1340,7 +1665,7 @@ class GymEnv(GymWrapper):
             rewards, actions and infos.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
@@ -1399,20 +1724,20 @@ class GymEnv(GymWrapper):
     .. note::
         info dictionaries will be read using :class:`~torchrl.envs.gym_like.default_info_dict_reader`
         if no other reader is provided. To provide another reader, refer to
-        :meth:`~.set_info_dict_reader`. To automatically register the info_dict
+        :meth:`set_info_dict_reader`. To automatically register the info_dict
         content, refer to :meth:`torchrl.envs.GymLikeEnv.auto_register_info_dict`.
 
     .. note:: Gym spaces are not completely covered.
         The following spaces are accounted for provided that they can be represented by a torch.Tensor, a nested tensor
         and/or within a tensordict:
 
-          - spaces.Box
-          - spaces.Sequence
-          - spaces.Tuple
-          - spaces.Discrete
-          - spaces.MultiBinary
-          - spaces.MultiDiscrete
-          - spaces.Dict
+        - spaces.Box
+        - spaces.Sequence
+        - spaces.Tuple
+        - spaces.Discrete
+        - spaces.MultiBinary
+        - spaces.MultiDiscrete
+        - spaces.Dict
 
         Some considerations should be made when working with gym spaces. For instance, a tuple of spaces
         can only be supported if the spaces are semantically identical (same dtype and same number of dimensions).
@@ -1425,9 +1750,11 @@ class GymEnv(GymWrapper):
     """
 
     def __init__(self, env_name, **kwargs):
-        kwargs["env_name"] = env_name
-        self._set_gym_args(kwargs)
-        super().__init__(**kwargs)
+        backend = kwargs.pop("backend", None)
+        with set_gym_backend(backend) if backend is not None else nullcontext():
+            kwargs["env_name"] = env_name
+            self._set_gym_args(kwargs)
+            super().__init__(**kwargs)
 
     @implement_for("gym", None, "0.24.0")
     def _set_gym_args(self, kwargs) -> None:  # noqa: F811
@@ -1444,7 +1771,7 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
-    @implement_for("gymnasium", "1.0.0")
+    @implement_for("gymnasium", "1.0.0", "1.1.0")
     def _set_gym_args(  # noqa: F811
         self,
         kwargs,
@@ -1458,6 +1785,13 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
+    @implement_for("gymnasium", "1.1.0")
+    def _set_gym_args(  # noqa: F811
+        self,
+        kwargs,
+    ) -> None:
+        kwargs.setdefault("disable_env_checker", True)
+
     def _async_env(self, *args, **kwargs):
         return gym_backend("vector").AsyncVectorEnv(*args, **kwargs)
 
@@ -1465,7 +1799,7 @@ class GymEnv(GymWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "gym.core.Env":  # noqa: F821
+    ) -> gym.core.Env:  # noqa: F821
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {env_name}. "
@@ -1485,6 +1819,13 @@ class GymEnv(GymWrapper):
             # to find the config that works.
             try:
                 with warnings.catch_warnings(record=True) as w:
+                    if env_name.startswith("ALE/"):
+                        try:
+                            import ale_py  # noqa: F401
+                        except ImportError as err:
+                            torchrl_logger.warning(
+                                f"ale_py not found, this may cause issues with ALE environments: {err}"
+                            )
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
                     if len(w) and "frameskip" in str(w[-1].message):
@@ -1534,7 +1875,7 @@ class GymEnv(GymWrapper):
     def env_name(self):
         return self._constructor_kwargs["env_name"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env_name" not in kwargs:
             raise TypeError("Expected 'env_name' to be part of kwargs")
 
@@ -1645,10 +1986,12 @@ class terminal_obs_reader(default_info_dict_reader):
     backend_key = {
         "sb3": "terminal_observation",
         "gym": "final_observation",
+        "gymnasium": "final_obs",
     }
     backend_info_key = {
         "sb3": "terminal_info",
         "gym": "final_info",
+        "gymnasium": "final_info",
     }
 
     def __init__(self, observation_spec: Composite, backend, name="final"):
@@ -1698,6 +2041,10 @@ class terminal_obs_reader(default_info_dict_reader):
             )
 
     def __call__(self, info_dict, tensordict):
+        # TODO: This is a tad slow, we iterate over each sub-env and call spec.zero() at each step.
+        #  In theory we could spare that whole thing but we need to run it once at the beginning if specs
+        #  of the info reader are not passed as we need to observe the data to infer the spec.
+        #  We should find a way to avoid this call altogether is no env is resetting.
         def replace_none(nparray):
             if not isinstance(nparray, np.ndarray) or nparray.dtype != np.dtype("O"):
                 return nparray
@@ -1731,7 +2078,6 @@ class terminal_obs_reader(default_info_dict_reader):
             final_info["observation"] = terminal_obs
 
         for key in self.info_spec[self.name].keys():
-
             spec = self.info_spec[self.name, key]
 
             final_obs_buffer = spec.zero()
@@ -1748,7 +2094,7 @@ class terminal_obs_reader(default_info_dict_reader):
         self._final_validated = False
 
 
-def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
+def _flip_info_tuple(info: tuple[dict]) -> dict[str, tuple]:
     # In Gym < 0.24, batched envs returned tuples of dict, and not dict of tuples.
     # We patch this by flipping the tuple -> dict order.
     info_example = set(info[0])

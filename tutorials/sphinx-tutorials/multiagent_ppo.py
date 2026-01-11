@@ -57,7 +57,7 @@ Key learnings:
 #
 # This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
-# form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
+# from agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 # In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
 # backpropagation. This leads to updated policies which are then used again for sampling.
 # The execution of this process in a loop constitutes *on-policy learning*.
@@ -115,7 +115,7 @@ Key learnings:
 import torch
 
 # Tensordict modules
-from tensordict.nn import TensorDictModule
+from tensordict.nn import set_composite_lp_aggregate, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import multiprocessing
 
@@ -164,7 +164,7 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration
-n_iters = 10  # Number of sampling and training iterations
+n_iters = 5  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
@@ -178,6 +178,9 @@ clip_epsilon = 0.2  # clip value for PPO loss
 gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
+
+# disable log-prob aggregation
+set_composite_lp_aggregate(False).set()
 
 ######################################################################
 # Environment
@@ -401,7 +404,8 @@ policy_net = torch.nn.Sequential(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
+        n_agent_outputs=2
+        * env.full_action_spec[env.action_key].shape[-1],  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
@@ -445,16 +449,15 @@ policy_module = TensorDictModule(
 
 policy = ProbabilisticActor(
     module=policy_module,
-    spec=env.unbatched_action_spec,
+    spec=env.action_spec_unbatched,
     in_keys=[("agents", "loc"), ("agents", "scale")],
     out_keys=[env.action_key],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "low": env.unbatched_action_spec[env.action_key].space.low,
-        "high": env.unbatched_action_spec[env.action_key].space.high,
+        "low": env.full_action_spec_unbatched[env.action_key].space.low,
+        "high": env.full_action_spec_unbatched[env.action_key].space.high,
     },
     return_log_prob=True,
-    log_prob_key=("agents", "sample_log_prob"),
 )  # we'll need the log-prob for the PPO loss
 
 ######################################################################
@@ -602,7 +605,6 @@ loss_module = ClipPPOLoss(
 loss_module.set_keys(  # We have to tell the loss where to find the keys
     reward=env.reward_key,
     action=env.action_key,
-    sample_log_prob=("agents", "sample_log_prob"),
     value=("agents", "state_value"),
     # These last 2 keys will be expanded to match the reward shape
     done=("agents", "done"),

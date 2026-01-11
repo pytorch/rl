@@ -13,7 +13,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -85,8 +85,8 @@ if __name__ == "__main__":
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "low": env.action_spec.space.low,
-            "high": env.action_spec.space.high,
+            "low": env.action_spec_unbatched.space.low,
+            "high": env.action_spec_unbatched.space.high,
         },
         return_log_prob=True,
     )
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     collector = RayCollector(
         create_env_fn=[env] * num_collectors,
         policy=policy_module,
-        collector_class=SyncDataCollector,
+        collector_class=Collector,
         collector_kwargs={
             "max_frames_per_traj": 50,
             "device": device,

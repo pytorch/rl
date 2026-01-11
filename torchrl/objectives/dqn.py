@@ -6,24 +6,21 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import nn
+
 from torchrl.data.tensor_specs import TensorSpec
-
 from torchrl.data.utils import _find_action_space
-
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.tensordict_module.actors import (
     DistributionalQValueActor,
     QValueActor,
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -163,8 +160,10 @@ class DQNLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = ["loss"]
 
@@ -174,19 +173,21 @@ class DQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: Union[QValueActor, nn.Module],
+        value_network: QValueActor | nn.Module,
         *,
-        loss_function: Optional[str] = "l2",
+        loss_function: str | None = "l2",
         delay_value: bool = True,
         double_dqn: bool = False,
-        gamma: float = None,
-        action_space: Union[str, TensorSpec] = None,
-        priority_key: str = None,
-        reduction: str = None,
+        gamma: float | None = None,
+        action_space: str | TensorSpec = None,
+        priority_key: str | None = None,
+        reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         if double_dqn and not delay_value:
             raise ValueError("double_dqn=True requires delay_value=True.")
@@ -366,8 +367,23 @@ class DQNLoss(LossModule):
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = _reduce(loss, reduction=self.reduction)
-        td_out = TensorDict({"loss": loss}, [])
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
+        td_out = TensorDict(loss=loss)
+
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "value_network_params",
+            "target_value_network_params",
+        )
+
         return td_out
 
 
@@ -423,7 +439,7 @@ class DistributionalDQNLoss(LossModule):
                 Defaults to ``"done"``.
             terminated (NestedKey): The input tensordict key where the flag if a trajectory is done is expected.
                 Defaults to ``"terminated"``.
-            steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is exptected.
+            steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is expected.
                 Defaults to ``"steps_to_next_obs"``.
         """
 
@@ -434,8 +450,10 @@ class DistributionalDQNLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
+        priority_weight: NestedKey = "priority_weight"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
     value_network: TensorDictModule
@@ -444,16 +462,18 @@ class DistributionalDQNLoss(LossModule):
 
     def __init__(
         self,
-        value_network: Union[DistributionalQValueActor, nn.Module],
+        value_network: DistributionalQValueActor | nn.Module,
         *,
         gamma: float,
         delay_value: bool = True,
-        priority_key: str = None,
-        reduction: str = None,
+        priority_key: str | None = None,
+        reduction: str | None = None,
+        use_prioritized_weights: str | bool = "auto",
     ):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
         self.delay_value = delay_value
@@ -604,8 +624,21 @@ class DistributionalDQNLoss(LossModule):
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
-        loss = _reduce(loss, reduction=self.reduction)
-        td_out = TensorDict({"loss": loss}, [])
+        # Extract weights for prioritized replay buffer
+        weights = None
+        if (
+            self.use_prioritized_weights in (True, "auto")
+            and self.tensor_keys.priority_weight in tensordict.keys()
+        ):
+            weights = tensordict.get(self.tensor_keys.priority_weight)
+        loss = _reduce(loss, reduction=self.reduction, weights=weights)
+        td_out = TensorDict(loss=loss)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "value_network_params",
+            "target_value_network_params",
+        )
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

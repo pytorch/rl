@@ -1,7 +1,8 @@
 # Environment
 env:
-  env_name: PongNoFrameskip-v4
+  env_name: ALE/Pong-v5
   num_envs: 8
+  backend: gymnasium
 
 # collector
 collector:
@@ -25,6 +26,7 @@ optim:
   weight_decay: 0.0
   max_grad_norm: 0.5
   anneal_lr: True
+  device:
 
 # loss
 loss:
@@ -37,3 +39,8 @@ loss:
   critic_coef: 1.0
   entropy_coef: 0.01
   loss_critic_type: l2
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

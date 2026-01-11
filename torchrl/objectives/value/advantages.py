@@ -7,26 +7,34 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable, List, Union
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.nn import (
+    composite_lp_aggregate,
     dispatch,
+    ProbabilisticTensorDictModule,
+    set_composite_lp_aggregate,
     set_skip_existing,
     TensorDictModule,
     TensorDictModuleBase,
 )
-from tensordict.utils import NestedKey
+from tensordict.nn.probabilistic import interaction_type
+from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
-from torchrl._utils import RL_WARNINGS
+from torchrl._utils import logger, rl_warnings
 from torchrl.envs.utils import step_mdp
-
-from torchrl.objectives.utils import _vmap_func, hold_out_net, RANDOM_MODULE_LIST
+from torchrl.objectives.utils import (
+    _maybe_get_or_select,
+    _pseudo_vmap,
+    _vmap_func,
+    hold_out_net,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -74,14 +82,15 @@ def _self_set_skip_existing(fun):
 
 
 def _call_actor_net(
-    actor_net: TensorDictModuleBase,
+    actor_net: ProbabilisticTensorDictModule,
     data: TensorDictBase,
     params: TensorDictBase,
     log_prob_key: NestedKey,
 ):
-    # TODO: extend to handle time dimension (and vmap?)
-    log_pi = actor_net(data.select(*actor_net.in_keys, strict=False)).get(log_prob_key)
-    return log_pi
+    dist = actor_net.get_dist(data.select(*actor_net.in_keys, strict=False))
+    s = actor_net._dist_sample(dist, interaction_type=interaction_type())
+    with set_composite_lp_aggregate(True):
+        return dist.log_prob(s)
 
 
 class ValueEstimatorBase(TensorDictModuleBase):
@@ -120,7 +129,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 that indicates the number of steps to the next observation.
                 Defaults to ``"steps_to_next_obs"``.
             sample_log_prob (NestedKey): The key in the input tensordict that
-                indicates the log probability of the sampled action. Defaults to ``"sample_log_prob"``.
+                indicates the log probability of the sampled action.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
         """
 
         advantage: NestedKey = "advantage"
@@ -130,11 +141,20 @@ class ValueEstimatorBase(TensorDictModuleBase):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
 
-    default_keys = _AcceptedKeys()
-    value_network: Union[TensorDictModule, Callable]
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
+    tensor_keys: _AcceptedKeys
+    value_network: TensorDictModule | Callable
     _vmap_randomness = None
+    deactivate_vmap: bool = False
 
     @property
     def advantage_key(self):
@@ -216,15 +236,17 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         device: torch.device | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__()
         if device is None:
-            device = torch.get_default_device()
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
         # this is saved for tracking only and should not be used to cast anything else than buffers during
         # init.
         self._device = device
         self._tensor_keys = None
         self.differentiable = differentiable
+        self.deactivate_vmap = deactivate_vmap
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
@@ -270,7 +292,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         except AttributeError:
             # value network does not have an `in_keys` attribute
             in_keys = []
-            pass
         return in_keys
 
     @property
@@ -282,13 +303,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names."""
-        for key, value in kwargs.items():
-            if not isinstance(value, (str, tuple)):
+        for key, value in list(kwargs.items()):
+            if isinstance(value, list):
+                value = [unravel_key(k) for k in value]
+            elif not isinstance(value, (str, tuple)):
+                if value is None:
+                    raise ValueError("tensordict keys cannot be None")
                 raise ValueError(
                     f"key name must be of type NestedKey (Union[str, Tuple[str]]) but got {type(value)}"
                 )
-            if value is None:
-                raise ValueError("tensordict keys cannot be None")
+            else:
+                value = unravel_key(value)
+
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
                     f"{key} is not an accepted tensordict key for advantages"
@@ -301,8 +327,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise KeyError(
                     f"value key '{value}' not found in value network out_keys {self.value_network.out_keys}"
                 )
+            kwargs[key] = value
         if self._tensor_keys is None:
-            conf = asdict(self.default_keys)
+            conf = asdict(self.default_keys())
             conf.update(self.dep_keys)
         else:
             conf = asdict(self._tensor_keys)
@@ -364,8 +391,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
             do_break = False
             for val in self.__dict__.values():
                 if isinstance(val, torch.nn.Module):
+                    import torchrl.objectives.utils
+
                     for module in val.modules():
-                        if isinstance(module, RANDOM_MODULE_LIST):
+                        if isinstance(
+                            module, torchrl.objectives.utils.RANDOM_MODULE_LIST
+                        ):
                             self._vmap_randomness = "different"
                             do_break = True
                             break
@@ -412,62 +443,88 @@ class ValueEstimatorBase(TensorDictModuleBase):
             value_net = self.value_network
         in_keys = value_net.in_keys
         if single_call:
-            for i, name in enumerate(data.names):
-                if name == "time":
-                    ndim = i + 1
-                    break
-            else:
-                ndim = None
-            if ndim is not None:
-                # get data at t and last of t+1
-                idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
-                idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
-                idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
-                data_in = torch.cat(
-                    [
-                        data.select(*in_keys, value_key, strict=False),
-                        data.get("next").select(*in_keys, value_key, strict=False)[
-                            idx0
-                        ],
-                    ],
-                    ndim - 1,
-                )
-            else:
-                if RL_WARNINGS:
-                    warnings.warn(
+            # We are going to flatten the data, then interleave the last observation of each trajectory in between its
+            #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
+            #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
+            #  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data
+            #  accordingly and process each of them independently.
+            try:
+                ndim = list(data.names).index("time") + 1
+            except ValueError:
+                if rl_warnings():
+                    logger.warning(
                         "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
                         "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
                     )
                 ndim = data.ndim
-                idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
-                idx_ = (slice(None),) * (ndim - 1) + (
-                    slice(data.shape[ndim - 1], None),
+            data_copy = data.copy()
+            # we are going to modify the done so let's clone it
+            done = data_copy["next", "done"].clone()
+            # Mark the last step of every sequence as done. We do this because flattening would cause the trajectories
+            #  of different batches to be merged.
+            done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
+            truncated = data_copy.get(("next", "truncated"), done)
+            if truncated is not done:
+                truncated[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
+            data_copy["next", "done"] = done
+            data_copy["next", "truncated"] = truncated
+            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
+            with data_copy.view(-1) as data_copy_view:
+                # Interleave next data when done
+                data_copy_select = data_copy_view.select(
+                    *in_keys, value_key, strict=False
                 )
-                data_in = torch.cat(
-                    [
-                        data.select(*in_keys, value_key, strict=False),
-                        data.get("next").select(*in_keys, value_key, strict=False),
-                    ],
-                    ndim - 1,
+                total_elts = (
+                    data_copy_view.shape[0]
+                    + data_copy_view["next", "done"].sum().item()
                 )
-
-            # next_params should be None or be identical to params
-            if next_params is not None and next_params is not params:
-                raise ValueError(
-                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+                data_in = data_copy_select.new_zeros((total_elts,))
+                # we can get the indices of non-done data by adding the shifted done cumsum to an arange
+                #    traj = [0, 0, 0, 1, 1, 2, 2]
+                #  arange = [0, 1, 2, 3, 4, 5, 6]
+                #    done = [0, 0, 1, 0, 1, 0, 1]
+                # done_cs = [0, 0, 0, 1, 1, 2, 2]
+                # indices = [0, 1, 2, 4, 5, 7, 8]
+                done_view = data_copy_view["next", "done"]
+                if done_view.shape[-1] == 1:
+                    done_view = done_view.squeeze(-1)
+                else:
+                    done_view = done_view.any(-1)
+                done_cs = done_view.cumsum(0)
+                done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
+                indices = torch.arange(done_cs.shape[0], device=done_cs.device)
+                indices = indices + done_cs
+                data_in[indices] = data_copy_select
+                # To get the indices of the extra data, we can mask indices with done_view and add 1
+                indices_interleaved = indices[done_view] + 1
+                # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
+                data_in[indices_interleaved] = (
+                    data_copy_view[done_view]
+                    .get("next")
+                    .select(*in_keys, value_key, strict=False)
                 )
-            if params is not None:
-                with params.to_module(value_net):
+                if next_params is not None and next_params is not params:
+                    raise ValueError(
+                        "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+                    )
+                if params is not None:
+                    with params.to_module(value_net):
+                        value_est = value_net(data_in).get(value_key)
+                else:
                     value_est = value_net(data_in).get(value_key)
-            else:
-                value_est = value_net(data_in).get(value_key)
-            value, value_ = value_est[idx], value_est[idx_]
+                value, value_ = value_est[indices], value_est[indices + 1]
+            value = value.view_as(done)
+            value_ = value_.view_as(done)
         else:
+            data_root = data.select(*in_keys, value_key, strict=False)
+            data_next = data.get("next").select(*in_keys, value_key, strict=False)
+            if "is_init" in data_root.keys():
+                # We need to mark the first element of the "next" td as being an init step for RNNs
+                #  otherwise, consecutive elements in the sequence will be considered as part of the same
+                #  trajectory, even if they're not.
+                data_next["is_init"] = data_next["is_init"] | data_root["is_init"]
             data_in = torch.stack(
-                [
-                    data.select(*in_keys, value_key, strict=False),
-                    data.get("next").select(*in_keys, value_key, strict=False),
-                ],
+                [data_root, data_next],
                 0,
             )
             if (params is not None) ^ (next_params is not None):
@@ -476,11 +533,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             elif params is not None:
                 params_stack = torch.stack([params, next_params], 0).contiguous()
-                data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
-                    data_in, params_stack
-                )
-            else:
+                data_out = _vmap_func(
+                    value_net,
+                    (0, 0),
+                    randomness=vmap_randomness,
+                    pseudo_vmap=self.deactivate_vmap,
+                )(data_in, params_stack)
+            elif not self.deactivate_vmap:
                 data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
+            else:
+                data_out = _pseudo_vmap(value_net, (0,), randomness=vmap_randomness)(
+                    data_in
+                )
             value_est = data_out.get(value_key)
             value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)
@@ -528,6 +592,8 @@ class TD0Estimator(ValueEstimatorBase):
             read from the input tensordict.  Defaults to ``"state_value"``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -544,6 +610,7 @@ class TD0Estimator(ValueEstimatorBase):
         value_key: NestedKey = None,
         skip_existing: bool | None = None,
         device: torch.device | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -554,6 +621,7 @@ class TD0Estimator(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -740,11 +808,13 @@ class TD1Estimator(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -762,6 +832,7 @@ class TD1Estimator(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -772,6 +843,7 @@ class TD1Estimator(ValueEstimatorBase):
             shifted=shifted,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -894,7 +966,6 @@ class TD1Estimator(ValueEstimatorBase):
     ):
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
         gamma = self.gamma
@@ -965,11 +1036,13 @@ class TDLambdaEstimator(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -989,6 +1062,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -999,12 +1073,23 @@ class TDLambdaEstimator(ValueEstimatorBase):
             skip_existing=skip_existing,
             shifted=shifted,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
         self.average_rewards = average_rewards
         self.vectorized = vectorized
         self.time_dim = time_dim
+
+    @property
+    def vectorized(self):
+        if is_dynamo_compiling():
+            return False
+        return self._vectorized
+
+    @vectorized.setter
+    def vectorized(self, value):
+        self._vectorized = value
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -1013,8 +1098,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: List[Tensor] | None = None,
-        target_params: List[Tensor] | None = None,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
     ) -> TensorDictBase:
         r"""Computes the TD(:math:`\lambda`) advantage given the data in tensordict.
 
@@ -1131,6 +1216,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
         lmbda = self.lmbda
         if self.average_rewards:
             reward = reward - reward.mean()
@@ -1177,7 +1264,9 @@ class GAE(ValueEstimatorBase):
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (TensorDictModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule, optional): value operator used to retrieve the value estimates.
+            If ``None``, this module will expect the ``"state_value"`` keys to be already filled, and
+            will not call the value network to produce it.
         average_gae (bool): if ``True``, the resulting GAE values will be standardized.
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -1217,6 +1306,11 @@ class GAE(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        auto_reset_env (bool, optional): if ``True``, the last ``"next"`` state
+            of the episode isn't valid, so the GAE calculation will use the ``value``
+            instead of ``next_value`` to bootstrap truncated episodes.
+        deactivate_vmap (bool, optional): if ``True``, no vmap call will be used, and
+            vectorized maps will be replaced with simple for loops. Defaults to ``False``.
 
     GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1230,14 +1324,26 @@ class GAE(ValueEstimatorBase):
       in the input tensordict, the GAE module will ignore the calls to the value
       network (if any) and use the provided value instead.
 
+    .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the
+        init markers (`"is_init"`) and terminated / truncated markers are properly set.
+        If `shifted=True`, the trajectory batch will be flattened and the last step of each trajectory will
+        be placed within the flat tensordict after the last step from the root, such that each trajectory has
+        `T+1` elements. If `shifted=False`, the root and `"next"` trajecotries will be stacked and the value
+        network will be called with `vmap` over the stack of trajectories. Because RNNs require fair amount of
+        control flow, they are currently not compatible with `torch.vmap` and, as such, the `deactivate_vmap` option
+        must be turned on in these cases.
+        Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied onto the
+        `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
     """
+
+    value_network: TensorDictModule | None
 
     def __init__(
         self,
         *,
         gamma: float | torch.Tensor,
         lmbda: float | torch.Tensor,
-        value_network: TensorDictModule,
+        value_network: TensorDictModule | None,
         average_gae: bool = False,
         differentiable: bool = False,
         vectorized: bool | None = None,
@@ -1248,6 +1354,8 @@ class GAE(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        auto_reset_env: bool = False,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             shifted=shifted,
@@ -1259,11 +1367,23 @@ class GAE(ValueEstimatorBase):
             skip_existing=skip_existing,
             device=device,
         )
-        self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
-        self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
+        self.register_buffer(
+            "gamma",
+            gamma.to(self._device)
+            if isinstance(gamma, Tensor)
+            else torch.tensor(gamma, device=self._device),
+        )
+        self.register_buffer(
+            "lmbda",
+            lmbda.to(self._device)
+            if isinstance(lmbda, Tensor)
+            else torch.tensor(lmbda, device=self._device),
+        )
         self.average_gae = average_gae
         self.vectorized = vectorized
         self.time_dim = time_dim
+        self.auto_reset_env = auto_reset_env
+        self.deactivate_vmap = deactivate_vmap
 
     @property
     def vectorized(self):
@@ -1282,8 +1402,8 @@ class GAE(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: List[Tensor] | None = None,
-        target_params: List[Tensor] | None = None,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
         time_dim: int | None = None,
     ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
@@ -1361,13 +1481,12 @@ class GAE(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         if self.lmbda.device != device:
             self.lmbda = self.lmbda.to(device)
-        gamma, lmbda = self.gamma, self.lmbda
-
+        lmbda = self.lmbda
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1396,9 +1515,24 @@ class GAE(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
+            if value is None:
+                raise ValueError(
+                    f"The tensor with key {self.tensor_keys.value} is missing, and no value network was provided."
+                )
+            if next_value is None:
+                raise ValueError(
+                    f"The tensor with key {('next', self.tensor_keys.value)} is missing, and no value network was provided."
+                )
+
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         time_dim = self._get_time_dim(time_dim, tensordict)
+
+        if self.auto_reset_env:
+            truncated = tensordict.get(("next", "truncated"))
+            if truncated.any():
+                reward += gamma * value * truncated
+
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
                 gamma,
@@ -1407,7 +1541,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=terminated,
+                terminated=terminated if not self.auto_reset_env else done,
                 time_dim=time_dim,
             )
         else:
@@ -1418,7 +1552,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=terminated,
+                terminated=terminated if not self.auto_reset_env else done,
                 time_dim=time_dim,
             )
 
@@ -1448,13 +1582,12 @@ class GAE(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-
         if self.gamma.device != device:
             self.gamma = self.gamma.to(device)
+        gamma = self.gamma
         if self.lmbda.device != device:
             self.lmbda = self.lmbda.to(device)
-        gamma, lmbda = self.gamma, self.lmbda
-
+        lmbda = self.lmbda
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
@@ -1547,7 +1680,7 @@ class VTrace(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
             in the input tensordict. If not provided, defaults to the dimension
-            markes with the ``"time"`` name if any, and to the last dimension
+            marked with the ``"time"`` name if any, and to the last dimension
             otherwise. Can be overridden during a call to
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
@@ -1623,8 +1756,8 @@ class VTrace(ValueEstimatorBase):
         self,
         tensordict: TensorDictBase,
         *,
-        params: List[Tensor] | None = None,
-        target_params: List[Tensor] | None = None,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
         time_dim: int | None = None,
     ) -> TensorDictBase:
         """Computes the V-Trace correction given the data in tensordict.
@@ -1646,7 +1779,7 @@ class VTrace(ValueEstimatorBase):
                 target params to be passed to the functional value network module.
             time_dim (int, optional): the dimension corresponding to the time
                 in the input tensordict. If not provided, defaults to the dimension
-                markes with the ``"time"`` name if any, and to the last dimension
+                marked with the ``"time"`` name if any, and to the last dimension
                 otherwise.
                 Negative dimensions are considered with respect to the input
                 tensordict.
@@ -1757,12 +1890,11 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        # Make sure we have the log prob computed at collection time
-        if self.tensor_keys.sample_log_prob not in tensordict.keys():
-            raise ValueError(
-                f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict"
-            )
-        log_mu = tensordict.get(self.tensor_keys.sample_log_prob).view_as(value)
+        lp = _maybe_get_or_select(tensordict, self.tensor_keys.sample_log_prob)
+        if is_tensor_collection(lp):
+            # Sum all values to match the batch size
+            lp = lp.sum(dim="feature", reduce=True)
+        log_mu = lp.view_as(value)
 
         # Compute log prob with current policy
         with hold_out_net(self.actor_network):
@@ -1771,7 +1903,8 @@ class VTrace(ValueEstimatorBase):
                 data=tensordict,
                 params=None,
                 log_prob_key=self.tensor_keys.sample_log_prob,
-            ).view_as(value)
+            )
+            log_pi = log_pi.view_as(value)
 
         # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))

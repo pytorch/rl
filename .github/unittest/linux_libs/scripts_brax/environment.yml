@@ -13,9 +13,12 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-error-for-skips
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core
-    - jax[cuda12]
+    - jax[cuda12]>=0.7.0
     - brax
+    - psutil

@@ -17,17 +17,20 @@ class SafeSequential(TensorDictSequential, SafeModule):
 
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
-    When calling a :obj:`TensorDictSequencial` instance with a functional module, it is expected that the parameter lists (and
+    When calling a :obj:`TensorDictSequential` instance with a functional module, it is expected that the parameter lists (and
     buffers) will be concatenated in a single list.
 
     Args:
          modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
          partial_tolerant (bool, optional): if ``True``, the input tensordict can miss some of the input keys.
-            If so, the only module that will be executed are those who can be executed given the keys that
+            If so, the only modules that will be executed are those which can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the
             stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
+        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
+            :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
+            output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).
 
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
@@ -107,6 +110,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
         self,
         *modules: TensorDictModule,
         partial_tolerant: bool = False,
+        inplace: bool | str | None = None,
     ):
         self.partial_tolerant = partial_tolerant
 
@@ -124,4 +128,5 @@ class SafeSequential(TensorDictSequential, SafeModule):
             module=nn.ModuleList(list(modules)),
             in_keys=in_keys,
             out_keys=out_keys,
+            inplace=inplace,
         )

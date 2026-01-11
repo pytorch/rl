@@ -2,6 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import warnings
+
 import hydra
 import torch
 
@@ -9,7 +13,7 @@ torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     from copy import deepcopy
 
@@ -19,7 +23,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from tensordict import from_module
     from tensordict.nn import CudaGraphModule
 
-    from torchrl._utils import timeit
+    from torchrl._utils import get_available_device, timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -32,11 +36,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Define paper hyperparameters
 
-    device = cfg.loss.device
-    if not device:
-        device = torch.device("cpu" if not torch.cuda.is_available() else "cuda:0")
-    else:
-        device = torch.device(device)
+    device = (
+        torch.device(cfg.loss.device) if cfg.loss.device else get_available_device()
+    )
 
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
@@ -145,6 +147,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         adv_module = torch.compile(adv_module, mode=compile_mode)
 
     if cfg.compile.cudagraphs:
+        warnings.warn(
+            "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
+            category=UserWarning,
+        )
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=20)
         adv_module = CudaGraphModule(adv_module, warmup=20)
 
@@ -159,7 +165,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         max_frames_per_traj=-1,
         trust_policy=True,
         compile_policy={"mode": compile_mode} if compile_mode is not None else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     test_env.eval()
@@ -171,11 +177,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
     c_iter = iter(collector)
-    for i in range(len(collector)):
+    total_iter = len(collector)
+    for i in range(total_iter):
+        timeit.printevery(1000, total_iter, erase=True)
+
         with timeit("collecting"):
             data = next(c_iter)
 
-        log_info = {}
+        metrics_to_log = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
@@ -184,7 +193,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -225,8 +234,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get training losses
         losses = torch.stack(losses).float().mean()
         for key, value in losses.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
+            metrics_to_log.update({f"train/{key}": value.item()})
+        metrics_to_log.update(
             {
                 "train/lr": alpha * cfg.optim.lr,
             }
@@ -242,23 +251,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg.logger.num_test_episodes
                 )
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "test/reward": test_rewards.mean(),
                     }
                 )
                 actor.train()
 
-        if i % 200 == 0:
-            log_info.update(timeit.todict(prefix="time"))
-            timeit.print()
-            timeit.erase()
-
         if logger:
-            for key, value in log_info.items():
+            metrics_to_log.update(timeit.todict(prefix="time"))
+            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, collected_frames)
-
-        torch.compiler.cudagraph_mark_step_begin()
 
     collector.shutdown()
     if not test_env.is_closed:

@@ -2,9 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import importlib.util
-from typing import List, Optional, Union
 
 import torch
 from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
@@ -70,12 +70,12 @@ class _R3MNet(Transform):
         self.del_keys = del_keys
 
     @set_lazy_legacy(False)
-    def _call(self, tensordict):
-        with tensordict.view(-1) as tensordict_view:
+    def _call(self, next_tensordict):
+        with next_tensordict.view(-1) as tensordict_view:
             super()._call(tensordict_view)
         if self.del_keys:
-            tensordict.exclude(*self.in_keys, inplace=True)
-        return tensordict
+            next_tensordict.exclude(*self.in_keys, inplace=True)
+        return next_tensordict
 
     forward = _call
 
@@ -205,7 +205,7 @@ class R3MTransform(Compose):
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
-             argument will be treaded separetely and each will be given a single,
+             argument will be treaded separately and each will be given a single,
              separated entry in the output tensordict. Defaults to ``True``.
         download (bool, torchvision Weights config or corresponding string):
             if ``True``, the weights will be downloaded using the torch.hub download
@@ -214,7 +214,7 @@ class R3MTransform(Compose):
             If the torchvision weights are needed, there are two ways they can be
             obtained: :obj:`download=ResNet50_Weights.IMAGENET1K_V1` or :obj:`download="IMAGENET1K_V1"`
             where :obj:`ResNet50_Weights` can be imported via :obj:`from torchvision.models import resnet50, ResNet50_Weights`.
-            Defaults to False.
+            Defaults to `False`.
         download_path (str, optional): path where to download the models.
             Default is None (cache path determined by torch.hub utils).
         tensor_pixels_keys (list of str, optional): Optionally, one can keep the
@@ -232,13 +232,13 @@ class R3MTransform(Compose):
     def __init__(
         self,
         model_name: str,
-        in_keys: List[str],
-        out_keys: List[str] = None,
+        in_keys: list[str],
+        out_keys: list[str] = None,
         size: int = 244,
         stack_images: bool = True,
-        download: Union[bool, "WeightsEnum", str] = False,  # noqa: F821
-        download_path: Optional[str] = None,
-        tensor_pixels_keys: List[str] = None,
+        download: bool | WeightsEnum | str = False,  # noqa: F821
+        download_path: str | None = None,
+        tensor_pixels_keys: list[str] = None,
     ):
         super().__init__()
         self.in_keys = in_keys if in_keys is not None else ["pixels"]
@@ -356,7 +356,7 @@ class R3MTransform(Compose):
         if self._dtype is not None:
             self.to(self._dtype)
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
+    def to(self, dest: DEVICE_TYPING | torch.dtype):
         if isinstance(dest, torch.dtype):
             self._dtype = dest
         else:

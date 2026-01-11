@@ -4,10 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import List
-
 import torch
-
 from tensordict import NestedKey, TensorDictBase
 from torchrl.data.postprocs.postprocs import _multi_step_func
 from torchrl.envs.transforms.transforms import Transform
@@ -112,9 +109,9 @@ class MultiStepTransform(Transform):
         n_steps,
         gamma,
         *,
-        reward_keys: List[NestedKey] | None = None,
+        reward_keys: list[NestedKey] | None = None,
         done_key: NestedKey | None = None,
-        done_keys: List[NestedKey] | None = None,
+        done_keys: list[NestedKey] | None = None,
         mask_key: NestedKey | None = None,
     ):
         super().__init__()
@@ -195,7 +192,7 @@ class MultiStepTransform(Transform):
             self._validate()
 
         total_cat = self._append_tensordict(tensordict)
-        if total_cat.shape[-1] >= self.n_steps:
+        if total_cat.shape[-1] > self.n_steps:
             out = _multi_step_func(
                 total_cat,
                 done_key=self.done_key,

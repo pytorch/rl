@@ -9,15 +9,17 @@ dependencies:
     - future
     - cloudpickle
     - pygame
-    - moviepy
+    - moviepy<2.0.0
     - pytest-cov
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-error-for-skips
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - dm_control
-    - mujoco
+    - mujoco<3.3.6
     - coverage

@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from torchrl.modules.tensordict_module.actors import LMHeadActorValueOperator
 from torchrl.modules.tensordict_module.common import VmapModule
 
@@ -32,4 +34,4 @@ def init_actor_critic(model_cfg, sys_cfg):
     critic = model.get_value_operator()
     critic_head = model.get_value_head()
 
-    return actor, VmapModule(critic), critic_head, base_model
+    return actor, VmapModule(critic, mock=True), critic_head, base_model

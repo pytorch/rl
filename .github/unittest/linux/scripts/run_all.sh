@@ -6,23 +6,33 @@ set -v
 # =============================================================================== #
 # ================================ Init ========================================= #
 
-
 if [[ $OSTYPE != 'darwin'* ]]; then
-  apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0
+  # Prevent interactive prompts (notably tzdata) in CI.
+  export DEBIAN_FRONTEND=noninteractive
+  export TZ="${TZ:-Etc/UTC}"
+  ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime || true
+  echo "${TZ}" > /etc/timezone || true
 
-  apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+  apt-get update
+  apt-get install -y --no-install-recommends tzdata
+  dpkg-reconfigure -f noninteractive tzdata || true
+
+  apt-get upgrade -y
+  apt-get install -y vim git wget cmake curl python3-dev
+
+  # SDL2 and freetype needed for building pygame from source (Python 3.14+)
+  apt-get install -y libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev
+  apt-get install -y libfreetype6-dev pkg-config
+
+  apt-get install -y libglfw3 libosmesa6 libglew-dev
+  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
-    # solves version `GLIBCXX_3.4.29' not found for tensorboard
-#    apt-get install -y gcc-4.9
     apt-get upgrade -y libstdc++6
     apt-get dist-upgrade -y
   else
     apt-get install -y g++ gcc
   fi
-
 fi
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
@@ -38,76 +48,140 @@ fi
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
+env_dir="${root_dir}/venv"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
-fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+# Create venv with uv
+printf "* Creating venv with Python ${PYTHON_VERSION}\n"
+# IMPORTANT: ensure a clean environment.
+# In CI (and some local workflows), the workspace directory can be reused across runs.
+# A reused venv may contain packages that violate our constraints (e.g. transformers'
+# huggingface-hub upper bound), and `uv pip install` does not always guarantee
+# downgrades of already-present packages unless the environment is clean.
+rm -rf "${env_dir}"
+uv venv --python "${PYTHON_VERSION}" "${env_dir}"
+source "${env_dir}/bin/activate"
+uv_pip_install() {
+  uv pip install --no-progress --python "${env_dir}/bin/python" "$@"
+}
 
-# 2. Create test environment at ./env
-printf "python: ${PYTHON_VERSION}\n"
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
-conda activate "${env_dir}"
+# Verify CPython
+python -c "import sys; assert sys.implementation.name == 'cpython', f'Expected CPython, got {sys.implementation.name}'"
 
-# 3. Install Conda dependencies
-printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-cat "${this_dir}/environment.yml"
-
+# Set environment variables
 if [ "${CU_VERSION:-}" == cpu ] ; then
   export MUJOCO_GL=glfw
 else
   export MUJOCO_GL=egl
 fi
 
-export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
+export PYOPENGL_PLATFORM=$MUJOCO_GL
+export DISPLAY=:99
+export LAZY_LEGACY_OP=False
+export RL_LOGGING_LEVEL=INFO
+export TOKENIZERS_PARALLELISM=true
+export MAX_IDLE_COUNT=1000
+export MKL_THREADING_LAYER=GNU
+export CKPT_BACKEND=torch
+export BATCHED_PIPE_TIMEOUT=60
 
-# legacy from bash scripts: remove?
-conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG
+# ==================================================================================== #
+# ================================ Install dependencies ============================== #
 
-pip3 install pip --upgrade
-pip install virtualenv
+printf "* Installing dependencies\n"
 
-conda env update --file "${this_dir}/environment.yml" --prune
+# Install base dependencies
+uv_pip_install \
+  hypothesis \
+  future \
+  cloudpickle \
+  pyvers \
+  packaging \
+  pygame \
+  "moviepy<2.0.0" \
+  tqdm \
+  pytest \
+  pytest-cov \
+  pytest-mock \
+  pytest-instafail \
+  pytest-rerunfailures \
+  pytest-timeout \
+  pytest-forked \
+  pytest-asyncio \
+  expecttest \
+  "pybind11[global]>=2.13" \
+  pyyaml \
+  scipy \
+  psutil \
+  hydra-core \
+  tensorboard \
+  "imageio==2.26.0" \
+  "huggingface-hub>=0.34.0,<1.0" \
+  wandb \
+  mlflow \
+  av \
+  coverage \
+  transformers \
+  ninja \
+  timm
 
-# Reset conda env variables
-conda deactivate
-conda activate "${env_dir}"
-
-echo "installing gymnasium"
-if [[ "$PYTHON_VERSION" == "3.12" ]]; then
-  pip3 install ale-py
-  pip3 install sympy
-  pip3 install "gymnasium[accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
-else
-  pip3 install "gymnasium[atari,accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+# Install dm_control for Python < 3.13
+# labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
+if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing dm_control"
+  uv_pip_install dm_control
 fi
-pip3 install "mujoco" -U
 
-# sanity check: remove?
-python3 -c """
+# Install ray for Python < 3.14 (ray doesn't support Python 3.14 yet)
+if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing ray"
+  uv_pip_install ray
+fi
+
+# Install trackio for Python < 3.14 (trackio wheels may not be available for Python 3.14 yet)
+if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing trackio"
+  uv_pip_install trackio
+fi
+
+# Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
+if [[ "$PYTHON_VERSION" != "3.14" ]]; then
+  echo "installing mujoco"
+  uv_pip_install "mujoco>=3.3.7"
+fi
+
+# Install gymnasium
+echo "installing gymnasium"
+if [[ "$PYTHON_VERSION" == "3.14" ]]; then
+  # Python 3.14: no mujoco wheels available, ale_py also failing
+  uv_pip_install "gymnasium>=1.1"
+elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
+  uv_pip_install ale-py sympy
+  uv_pip_install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]"
+else
+  uv_pip_install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]"
+fi
+
+# sanity check
+if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
+  python -c "
 import dm_control
 from dm_control import composer
 from tensorboard import *
 from google.protobuf import descriptor as _descriptor
-"""
+"
+else
+  python -c "
+from tensorboard import *
+from google.protobuf import descriptor as _descriptor
+"
+fi
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
@@ -115,7 +189,6 @@ from google.protobuf import descriptor as _descriptor
 unset PYTORCH_VERSION
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    version="cpu"
     echo "Using cpu build"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
@@ -124,7 +197,6 @@ else
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-    version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
 
 # submodules
@@ -133,15 +205,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      uv_pip_install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION -U
+      uv_pip_install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
-    if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION -U
+      uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -151,72 +223,113 @@ fi
 # smoke test
 python -c "import functorch"
 
-## install snapshot
-#if [[ "$TORCH_VERSION" == "nightly" ]]; then
-#  pip3 install git+https://github.com/pytorch/torchsnapshot
-#else
-#  pip3 install torchsnapshot
-#fi
+# Help CMake find pybind11 when building tensordict from source.
+# pybind11 ships a CMake package; its location can be obtained via `python -m pybind11 --cmakedir`.
+pybind11_DIR="$(python -m pybind11 --cmakedir)"
+export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  uv_pip_install --no-deps tensordict
 fi
 
 printf "* Installing torchrl\n"
-python setup.py develop
-
+if [[ "$RELEASE" == 0 ]]; then
+  uv_pip_install -e . --no-build-isolation --no-deps
+else
+  uv_pip_install -e . --no-build-isolation --no-deps
+fi
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
-  python3 -c """
-from torchrl.envs.transforms.vc1 import VC1Transform
-VC1Transform.install_vc_models(auto_exit=True)
-"""
+  # Install vc_models directly via uv.
+  # VC1Transform.install_vc_models() uses `setup.py develop` which expects `pip`
+  # to be present in the environment, but uv-created venvs do not necessarily
+  # ship with pip.
+  uv_pip_install "git+https://github.com/facebookresearch/eai-vc.git#subdirectory=vc_models"
 
-  python3 -c """
+  printf "* Upgrading timm\n"
+  # Keep HF Hub constrained: timm can pull a hub>=1.x which breaks transformers'
+  # import-time version check.
+  uv_pip_install --upgrade "timm>=0.9.0" "huggingface-hub>=0.34.0,<1.0"
+
+  python -c "
 import vc_models
 from vc_models.models.vit import model_utils
 print(model_utils)
-"""
+"
 fi
 
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
 
+TORCHRL_TEST_SUITE="${TORCHRL_TEST_SUITE:-all}" # all|distributed|nondistributed
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
-## Avoid error: "fatal: unsafe repository"
-#git config --global --add safe.directory '*'
-#root_dir="$(git rev-parse --show-toplevel)"
 
-# solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
-#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
-export MKL_THREADING_LAYER=GNU
-export CKPT_BACKEND=torch
-export MAX_IDLE_COUNT=100
-export BATCHED_PIPE_TIMEOUT=60
+Xvfb :99 -screen 0 1024x768x24 &
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
-if [ "${CU_VERSION:-}" != cpu ] ; then
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
+
+# Track if any tests fail
+EXIT_STATUS=0
+
+run_distributed_tests() {
+  # Distributed tests are GPU-only in our CI.
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+    echo "TORCHRL_TEST_SUITE=${TORCHRL_TEST_SUITE}: distributed tests require GPU (CU_VERSION != cpu)."
+    return 1
+  fi
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_distributed.py \
+    --instafail --durations 200 -vv --capture no \
     --timeout=120 --mp_fork_if_no_cuda
-else
+}
+
+run_non_distributed_tests() {
+  # Note: we always ignore distributed tests here (they can be run in a separate job).
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
     --ignore test/test_distributed.py \
+    --ignore test/llm \
     --timeout=120 --mp_fork_if_no_cuda
+}
+
+case "${TORCHRL_TEST_SUITE}" in
+  all)
+    # Run distributed tests first (GPU only) to surface errors early, then the rest.
+    if [ "${CU_VERSION:-}" != cpu ] ; then
+      run_distributed_tests || EXIT_STATUS=$?
+    fi
+    run_non_distributed_tests || EXIT_STATUS=$?
+    ;;
+  distributed)
+    run_distributed_tests || EXIT_STATUS=$?
+    ;;
+  nondistributed)
+    run_non_distributed_tests || EXIT_STATUS=$?
+    ;;
+  *)
+    echo "Unknown TORCHRL_TEST_SUITE='${TORCHRL_TEST_SUITE}'. Expected: all|distributed|nondistributed."
+    exit 2
+    ;;
+esac
+
+# Fail the workflow if any tests failed
+if [ $EXIT_STATUS -ne 0 ]; then
+  echo "Some tests failed with exit status $EXIT_STATUS"
 fi
 
-coverage combine
+coverage combine -q
 coverage xml -i
 
 # ==================================================================================== #
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# Exit with failure if any tests failed
+exit $EXIT_STATUS

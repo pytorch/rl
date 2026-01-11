@@ -5,10 +5,8 @@
 from __future__ import annotations
 
 import math
-
 import warnings
 from functools import wraps
-from typing import Optional, Tuple, Union
 
 import torch
 
@@ -129,7 +127,7 @@ def generalized_advantage_estimate(
     terminated: torch.Tensor | None = None,
     *,
     time_dim: int = -2,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Generalized advantage estimate of a trajectory.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
@@ -271,8 +269,8 @@ def _fast_vec_gae(
 
 @_transpose_time
 def vec_generalized_advantage_estimate(
-    gamma: Union[float, torch.Tensor],
-    lmbda: Union[float, torch.Tensor],
+    gamma: float | torch.Tensor,
+    lmbda: float | torch.Tensor,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -280,7 +278,7 @@ def vec_generalized_advantage_estimate(
     terminated: torch.Tensor | None = None,
     *,
     time_dim: int = -2,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Vectorized Generalized advantage estimate of a trajectory.
 
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
@@ -335,13 +333,15 @@ def vec_generalized_advantage_estimate(
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
 
-    first_below_thr = gammalmbdas < 1e-7
-    # if we have multiple gammas, we only want to truncate if _all_ of
-    # the geometric sequences fall below the threshold
-    first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
-    if first_below_thr.any():
-        first_below_thr = torch.where(first_below_thr)[0][0].item()
-        gammalmbdas = gammalmbdas[..., :first_below_thr, :]
+    # Skip data-dependent truncation optimization during compile (causes guards)
+    if not is_dynamo_compiling():
+        first_below_thr = gammalmbdas < 1e-7
+        # if we have multiple gammas, we only want to truncate if _all_ of
+        # the geometric sequences fall below the threshold
+        first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
+        if first_below_thr.any():
+            first_below_thr = torch.where(first_below_thr)[0][0].item()
+            gammalmbdas = gammalmbdas[..., :first_below_thr, :]
 
     not_terminated = (~terminated).to(dtype)
     td0 = reward + not_terminated * gamma * next_state_value - state_value
@@ -382,7 +382,7 @@ def td0_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     """TD(0) advantage estimate of a trajectory.
 
     Also known as bootstrapped Temporal Difference or one-step return.
@@ -422,7 +422,7 @@ def td0_return_estimate(
     terminated: torch.Tensor | None = None,
     *,
     done: torch.Tensor | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     # noqa: D417
     """TD(0) discounted return estimate of a trajectory.
 
@@ -452,8 +452,8 @@ def td0_return_estimate(
     if not (next_state_value.shape == reward.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     not_terminated = (~terminated).int()
-    advantage = reward + gamma * not_terminated * next_state_value
-    return advantage
+    returns = reward + gamma * not_terminated * next_state_value
+    return returns
 
 
 ########################################################################
@@ -468,7 +468,7 @@ def td1_return_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     *,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -526,7 +526,14 @@ def td1_return_estimate(
     single_gamma = False
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
         single_gamma = True
-        gamma = torch.full_like(next_state_value, gamma)
+        if isinstance(gamma, torch.Tensor):
+            # Use expand instead of full_like to avoid .item() call which creates
+            # unbacked symbols during torch.compile tracing.
+            if gamma.device != next_state_value.device:
+                gamma = gamma.to(next_state_value.device)
+            gamma = gamma.expand(next_state_value.shape)
+        else:
+            gamma = torch.full_like(next_state_value, gamma)
 
     if rolling_gamma is None:
         rolling_gamma = True
@@ -569,7 +576,7 @@ def td1_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
     """TD(1) advantage estimate.
@@ -645,7 +652,7 @@ def vec_td1_return_estimate(
     reward,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: Optional[bool] = None,
+    rolling_gamma: bool | None = None,
     time_dim: int = -2,
 ):
     """Vectorized TD(1) return estimate.
@@ -707,7 +714,7 @@ def vec_td1_advantage_estimate(
     reward,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     time_dim: int = -2,
 ):
     """Vectorized TD(1) advantage estimate.
@@ -788,7 +795,7 @@ def td_lambda_return_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     *,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -849,12 +856,26 @@ def td_lambda_return_estimate(
     single_gamma = False
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == done.shape):
         single_gamma = True
-        gamma = torch.full_like(next_state_value, gamma)
+        if isinstance(gamma, torch.Tensor):
+            # Use expand instead of full_like to avoid .item() call which creates
+            # unbacked symbols during torch.compile tracing.
+            if gamma.device != next_state_value.device:
+                gamma = gamma.to(next_state_value.device)
+            gamma = gamma.expand(next_state_value.shape)
+        else:
+            gamma = torch.full_like(next_state_value, gamma)
 
     single_lambda = False
     if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == done.shape):
         single_lambda = True
-        lmbda = torch.full_like(next_state_value, lmbda)
+        if isinstance(lmbda, torch.Tensor):
+            # Use expand instead of full_like to avoid .item() call which creates
+            # unbacked symbols during torch.compile tracing.
+            if lmbda.device != next_state_value.device:
+                lmbda = lmbda.to(next_state_value.device)
+            lmbda = lmbda.expand(next_state_value.shape)
+        else:
+            lmbda = torch.full_like(next_state_value, lmbda)
 
     if rolling_gamma is None:
         rolling_gamma = True
@@ -897,7 +918,7 @@ def td_lambda_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     # not a kwarg because used directly
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -970,7 +991,7 @@ def td_lambda_advantage_estimate(
 
 
 def _fast_td_lambda_return_estimate(
-    gamma: Union[torch.Tensor, float],
+    gamma: torch.Tensor | float,
     lmbda: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -1006,7 +1027,12 @@ def _fast_td_lambda_return_estimate(
     # the only valid next states are those where the trajectory does not terminate
     next_state_value = (~terminated).int() * next_state_value
 
-    gamma_tensor = torch.tensor([gamma], device=device)
+    # Use torch.full to create directly on device (avoids DeviceCopy in cudagraph)
+    # Handle both scalar and single-element tensor gamma
+    if isinstance(gamma, torch.Tensor):
+        gamma_tensor = gamma.to(device).view(1)
+    else:
+        gamma_tensor = torch.full((1,), gamma, device=device)
     gammalmbda = gamma_tensor * lmbda
 
     num_per_traj = _get_num_per_traj(done)
@@ -1035,7 +1061,7 @@ def vec_td_lambda_return_estimate(
     reward,
     done,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: Optional[bool] = None,
+    rolling_gamma: bool | None = None,
     *,
     time_dim: int = -2,
 ):
@@ -1127,7 +1153,8 @@ def vec_td_lambda_return_estimate(
 
     if rolling_gamma is None:
         rolling_gamma = True
-    if not rolling_gamma:
+    if not rolling_gamma and not is_dynamo_compiling():
+        # Skip this validation during compile to avoid CUDA syncs
         terminated_follows_terminated = terminated[..., 1:, :][
             terminated[..., :-1, :]
         ].all()
@@ -1191,7 +1218,7 @@ def vec_td_lambda_advantage_estimate(
     reward,
     done,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     # not a kwarg because used directly
     time_dim: int = -2,
 ):
@@ -1277,11 +1304,11 @@ def vtrace_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rho_thresh: Union[float, torch.Tensor] = 1.0,
-    c_thresh: Union[float, torch.Tensor] = 1.0,
+    rho_thresh: float | torch.Tensor = 1.0,
+    c_thresh: float | torch.Tensor = 1.0,
     # not a kwarg because used directly
     time_dim: int = -2,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Computes V-Trace off-policy actor critic targets.
 
     Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"

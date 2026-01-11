@@ -2,9 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Union
 from warnings import warn
 
 import torch
@@ -13,7 +13,7 @@ from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType
@@ -25,8 +25,8 @@ from torchrl.trainers.trainers import (
     BatchSubSampler,
     ClearCudaCache,
     CountFramesLog,
-    LogReward,
-    Recorder,
+    LogScalar,
+    LogValidationReward,
     ReplayBufferTrainer,
     RewardNormalizer,
     SelectKeys,
@@ -51,7 +51,7 @@ class TrainerConfig:
     # Optimizer to be used.
     lr_scheduler: str = "cosine"
     # LR scheduler.
-    selected_keys: Optional[List] = None
+    selected_keys: list | None = None
     # a list of strings that indicate the data that should be kept from the data collector. Since storing and
     # retrieving information from the replay buffer does not come for free, limiting the amount of data
     # passed to it can improve the algorithm performance.
@@ -78,21 +78,19 @@ class TrainerConfig:
 
 
 def make_trainer(
-    collector: DataCollectorBase,
+    collector: BaseCollector,
     loss_module: LossModule,
-    recorder: Optional[EnvBase] = None,
-    target_net_updater: Optional[TargetNetUpdater] = None,
-    policy_exploration: Optional[
-        Union[TensorDictModuleWrapper, TensorDictModule]
-    ] = None,
-    replay_buffer: Optional[ReplayBuffer] = None,
-    logger: Optional[Logger] = None,
-    cfg: "DictConfig" = None,  # noqa: F821
+    recorder: EnvBase | None = None,
+    target_net_updater: TargetNetUpdater | None = None,
+    policy_exploration: None | (TensorDictModuleWrapper | TensorDictModule) = None,
+    replay_buffer: ReplayBuffer | None = None,
+    logger: Logger | None = None,
+    cfg: DictConfig = None,  # noqa: F821
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
     Args:
-        collector (DataCollectorBase): A data collector to be used to collect data.
+        collector (BaseCollector): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
         recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
@@ -113,7 +111,7 @@ def make_trainer(
         >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
-        >>> from torchrl.collectors.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper
@@ -128,7 +126,7 @@ def make_trainer(
         >>> net_value = torch.nn.Linear(env_proof.observation_spec.shape[-1], 1)  # for the purpose of testing
         >>> policy = SafeModule(action_spec, net, in_keys=["observation"], out_keys=["action"])
         >>> value = ValueOperator(net_value, in_keys=["observation"], out_keys=["state_action_value"])
-        >>> collector = SyncDataCollector(env_maker, policy, total_frames=100)
+        >>> collector = Collector(env_maker, policy, total_frames=100)
         >>> loss_module = DDPGLoss(policy, value, gamma=0.99)
         >>> recorder = env_proof
         >>> target_net_updater = None
@@ -259,7 +257,7 @@ def make_trainer(
 
     if recorder is not None:
         # create recorder object
-        recorder_obj = Recorder(
+        recorder_obj = LogValidationReward(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
@@ -275,7 +273,7 @@ def make_trainer(
         # call recorder - could be removed
         recorder_obj(None)
         # create explorative recorder - could be optional
-        recorder_obj_explore = Recorder(
+        recorder_obj_explore = LogValidationReward(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
@@ -297,7 +295,7 @@ def make_trainer(
         "post_steps", UpdateWeights(collector, update_weights_interval=1)
     )
 
-    trainer.register_op("pre_steps_log", LogReward())
+    trainer.register_op("pre_steps_log", LogScalar())
     trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.frame_skip))
 
     return trainer

@@ -1,6 +1,7 @@
 # Environment
 env:
-  env_name: PongNoFrameskip-v4
+  env_name: ALE/Pong-v5
+  backend: gymnasium
   num_envs: 16
 
 # collector

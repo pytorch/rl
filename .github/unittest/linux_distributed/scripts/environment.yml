@@ -9,23 +9,27 @@ dependencies:
     - future
     - cloudpickle
     - pygame
-    - moviepy
+    - moviepy<2.0.0
     - tqdm
     - pytest
     - pytest-cov
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
+    - psutil
     - hydra-core
     - tensorboard
     - imageio==2.26.0
     - wandb
     - dm_control
-    - mujoco
+    - mujoco<3.3.6
     - mlflow
+    - trackio
     - av
     - coverage
     - ray

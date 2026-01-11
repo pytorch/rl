@@ -6,19 +6,15 @@ from __future__ import annotations
 
 import importlib.util
 import math
+from collections.abc import Callable, Sequence
 from copy import copy
-from typing import Callable, List, Optional, Sequence, Union
 
 import numpy as np
 import torch
-
 from tensordict import NonTensorData, TensorDictBase
-
 from tensordict.utils import NestedKey
-
 from torchrl._utils import _can_be_pickled
-from torchrl.data import TensorSpec
-from torchrl.data.tensor_specs import NonTensor, Unbounded
+from torchrl.data.tensor_specs import NonTensor, TensorSpec, Unbounded
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform
@@ -49,6 +45,10 @@ class VideoRecorder(ObservationTransform):
             if not.
         out_keys (sequence of NestedKey, optional): destination keys. Defaults
             to ``in_keys`` if not provided.
+        fps (int, optional): Frames per second of the output video. Defaults to the logger predefined ``fps``,
+            and overrides it if provided.
+        **kwargs (Dict[str, Any], optional): additional keyword arguments for
+            :meth:`~torchrl.record.loggers.Logger.log_video`.
 
     Examples:
         The following example shows how to save a rollout under a video. First a few imports:
@@ -81,10 +81,11 @@ class VideoRecorder(ObservationTransform):
             >>> from torchrl.data.datasets import OpenXExperienceReplay
             >>> from torchrl.envs import Compose
             >>> from torchrl.record import VideoRecorder, CSVLogger
-            >>> # Create a logger that saves videos as mp4
-            >>> logger = CSVLogger("./dump", video_format="mp4")
+            >>> # Create a logger that saves videos as mp4 using 24 frames per sec
+            >>> logger = CSVLogger("./dump", video_format="mp4", video_fps=24)
             >>> # We use the VideoRecorder transform to save register the images coming from the batch.
-            >>> t = VideoRecorder(logger=logger, tag="pixels", in_keys=[("next", "observation", "image")])
+            >>> #  Setting the fps to 12 overrides the one set in the logger, not doing so keeps it unchanged.
+            >>> t = VideoRecorder(logger=logger, tag="pixels", in_keys=[("next", "observation", "image")], fps=12)
             >>> # Each batch of data will have 10 consecutive videos of 200 frames each (maximum, since strict_length=False)
             >>> dataset = OpenXExperienceReplay("cmu_stretch", batch_size=2000, slice_len=200,
             ...             download=True, strict_length=False,
@@ -103,11 +104,12 @@ class VideoRecorder(ObservationTransform):
         self,
         logger: Logger,
         tag: str,
-        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
         skip: int | None = None,
-        center_crop: Optional[int] = None,
+        center_crop: int | None = None,
         make_grid: bool | None = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        fps: int | None = None,
         **kwargs,
     ) -> None:
         if in_keys is None:
@@ -115,8 +117,10 @@ class VideoRecorder(ObservationTransform):
         if out_keys is None:
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
-        video_kwargs = {"fps": 6}
+        video_kwargs = {}
         video_kwargs.update(kwargs)
+        if fps is not None:
+            video_kwargs["fps"] = fps
         self.video_kwargs = video_kwargs
         self.iter = 0
         self.skip = skip
@@ -231,7 +235,7 @@ class VideoRecorder(ObservationTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
 
-    def dump(self, suffix: Optional[str] = None) -> None:
+    def dump(self, suffix: str | None = None) -> None:
         """Writes the video to the ``self.logger`` attribute.
 
         Calling ``dump`` when no image has been stored in a no-op.
@@ -288,7 +292,7 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Sequence[str] | None = None,
     ) -> None:
         if in_keys is None:
             in_keys = []
@@ -301,16 +305,16 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
-            _td = tensordict
+            _td = next_tensordict
             if self.in_keys:
-                _td = tensordict.select(*self.in_keys).to_tensordict()
+                _td = next_tensordict.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
-        return tensordict
+        return next_tensordict
 
-    def dump(self, suffix: Optional[str] = None) -> None:
+    def dump(self, suffix: str | None = None) -> None:
         if suffix is None:
             tag = self.tag
         else:
@@ -338,7 +342,7 @@ class TensorDictRecorder(Transform):
 class PixelRenderTransform(Transform):
     """A transform to call render on the parent environment and register the pixel observation in the tensordict.
 
-    This transform offers an alternative to the ``from_pixels`` syntatic sugar when instantiating an environment
+    This transform offers an alternative to the ``from_pixels`` syntactic sugar when instantiating an environment
     that offers rendering is expensive, or when ``from_pixels`` is not implemented.
     It can be used within a single environment or over batched environments alike.
 
@@ -422,11 +426,11 @@ class PixelRenderTransform(Transform):
 
     def __init__(
         self,
-        out_keys: List[NestedKey] = None,
+        out_keys: list[NestedKey] = None,
         preproc: Callable[
             [np.ndarray | torch.Tensor], np.ndarray | torch.Tensor
         ] = None,
-        as_non_tensor: bool = None,
+        as_non_tensor: bool | None = None,
         render_method: str = "render",
         pass_tensordict: bool = False,
         **kwargs,
@@ -454,15 +458,15 @@ class PixelRenderTransform(Transform):
     ) -> TensorDictBase:
         return self._call(tensordict_reset)
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         if not self._enabled:
-            return tensordict
+            return next_tensordict
 
         method = getattr(self.parent, self.render_method)
         if not self.pass_tensordict:
             array = method(**self.kwargs)
         else:
-            array = method(tensordict, **self.kwargs)
+            array = method(next_tensordict, **self.kwargs)
 
         if self.preproc:
             array = self.preproc(array)
@@ -482,18 +486,18 @@ class PixelRenderTransform(Transform):
                 self.as_non_tensor = False
         if not self.as_non_tensor:
             try:
-                tensordict.set(self.out_keys[0], array)
+                next_tensordict.set(self.out_keys[0], array)
             except Exception:
                 raise RuntimeError(
                     f"An exception was raised while writing the rendered array "
-                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {tensordict.shape}. "
+                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {next_tensordict.shape}. "
                     f"Consider adapting your preproc function in {type(self).__name__}. You can also "
                     f"pass keyword arguments to the render function of the parent environment, or save "
                     f"this observation as a non-tensor data with as_non_tensor=True."
                 )
         else:
-            tensordict.set_non_tensor(self.out_keys[0], array)
-        return tensordict
+            next_tensordict.set_non_tensor(self.out_keys[0], array)
+        return next_tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         # Adds the pixel observation spec by calling render on the parent env
@@ -536,7 +540,7 @@ class PixelRenderTransform(Transform):
         """Whether the recorder is enabled."""
         return self._enabled
 
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+    def set_container(self, container: Transform | EnvBase) -> None:
         out = super().set_container(container)
         if isinstance(self.parent, EnvBase):
             # Start the env if needed

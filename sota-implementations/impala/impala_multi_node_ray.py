@@ -7,12 +7,14 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
+from __future__ import annotations
+
 import hydra
 from torchrl._utils import logger as torchrl_logger
 
 
 @hydra.main(config_path="", config_name="config_multi_node_ray", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     import time
 
@@ -30,7 +32,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils import eval_model, make_env, make_ppo_models
 
-    device = torch.device(cfg.local_device)
+    device = cfg.local_device
+    if not device:
+        device = torch.device("cpu" if not torch.cuda.is_available() else "cuda:0")
+    else:
+        device = torch.device(device)
 
     # Correct for frame_skip
     frame_skip = 4
@@ -53,7 +59,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ) * cfg.loss.sgd_updates
 
     # Create models (check utils.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = make_ppo_models(cfg.env.env_name, cfg.env.backend)
     actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
@@ -85,7 +91,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "memory": cfg.remote_worker_resources.memory,
     }
     collector = RayCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
+        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
+        * num_workers,
         policy=actor,
         collector_class=SyncDataCollector,
         frames_per_batch=frames_per_batch,
@@ -148,7 +155,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device, is_test=True)
+    test_env = make_env(
+        cfg.env.env_name, device, gym_backend=cfg.env.backend, is_test=True
+    )
     test_env.eval()
 
     # Main loop
@@ -159,7 +168,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = sampling_start = time.time()
     for i, data in enumerate(collector):
 
-        log_info = {}
+        metrics_to_log = {}
         sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
@@ -169,7 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "terminated"]]
-            log_info.update(
+            metrics_to_log.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
@@ -180,7 +189,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(accumulator) < batch_size:
             accumulator.append(data)
             if logger:
-                for key, value in log_info.items():
+                for key, value in metrics_to_log.items():
                     logger.log_scalar(key, value, collected_frames)
             continue
 
@@ -237,8 +246,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
-            log_info.update({f"train/{key}": value.item()})
-        log_info.update(
+            metrics_to_log.update({f"train/{key}": value.item()})
+        metrics_to_log.update(
             {
                 "train/lr": alpha * lr,
                 "train/sampling_time": sampling_time,
@@ -257,7 +266,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     actor, test_env, num_episodes=num_test_episodes
                 )
                 eval_time = time.time() - eval_start
-                log_info.update(
+                metrics_to_log.update(
                     {
                         "eval/reward": test_reward,
                         "eval/time": eval_time,
@@ -266,7 +275,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor.train()
 
         if logger:
-            for key, value in log_info.items():
+            for key, value in metrics_to_log.items():
                 logger.log_scalar(key, value, collected_frames)
 
         collector.update_policy_weights_()

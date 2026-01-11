@@ -1,0 +1,35 @@
+channels:
+  - defaults
+  - pytorch
+dependencies:
+  - pip
+  - protobuf
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pygame
+    - moviepy<2.0.0
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - expecttest
+    - pybind11[global]
+    - pyyaml
+    - scipy
+    - psutil
+    - hydra-core
+    - imageio==2.26.0
+    - dm_control
+    - mujoco<3.3.6
+    - mlflow
+    - trackio
+    - av
+    - coverage
+    - vmas
+    - transformers
+    - minari
+    - minari[create]

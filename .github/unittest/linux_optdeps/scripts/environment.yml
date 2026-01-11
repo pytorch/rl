@@ -14,7 +14,9 @@ dependencies:
     - pytest-rerunfailures
     - pytest-timeout
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
+    - psutil
     - coverage
     - ray

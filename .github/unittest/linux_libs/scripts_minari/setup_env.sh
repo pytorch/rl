@@ -8,43 +8,65 @@
 set -e
 set -v
 
-this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++ unzip
-
 git config --global --add safe.directory '*'
+apt-get install -y wget \
+    gcc \
+    g++ \
+    unzip \
+    curl \
+    patchelf \
+    libosmesa6-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    swig3.0 \
+    libglew-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2
+
+# Upgrade specific package
+apt-get upgrade -y libstdc++6
+
+this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
-
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
+# Install uv if not already installed
+if ! command -v uv &> /dev/null; then
+    printf "* Installing uv\n"
+    # Try different Python commands
+    if command -v python &> /dev/null; then
+        python -m pip install uv
+    elif command -v python &> /dev/null; then
+        python -m pip install uv
+    else
+        # Fallback to curl installation
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
 fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
-# 2. Create test environment at ./env
+# Create virtual environment using uv
 printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+    printf "* Creating a test environment with uv\n"
+    uv venv "${env_dir}" --python "${PYTHON_VERSION}"
 fi
-conda activate "${env_dir}"
 
-# 3. Install Conda dependencies
+# Activate the virtual environment
+source "${env_dir}/bin/activate"
+
+# Upgrade pip
+uv pip install --upgrade pip
+
+# Install dependencies from requirements.txt (we'll create this)
 printf "* Installing dependencies (except PyTorch)\n"
-echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-cat "${this_dir}/environment.yml"
-
-pip3 install pip --upgrade
-
-conda env update --file "${this_dir}/environment.yml" --prune
+if [ -f "${this_dir}/requirements.txt" ]; then
+    uv pip install -r "${this_dir}/requirements.txt"
+fi

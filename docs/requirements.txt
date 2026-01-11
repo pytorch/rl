@@ -15,8 +15,8 @@ sphinx_design
 
 torchvision
 dm_control
-mujoco
-gym[classic_control,accept-rom-license,ale-py,atari]
+mujoco<3.3.6
+gymnasium[classic_control,atari]
 pygame
 tqdm
 ipython
@@ -28,3 +28,7 @@ vmas
 onnxscript
 onnxruntime
 onnx
+psutil
+hydra-core>=1.1
+omegaconf
+hydra-submitit-launcher

@@ -2,19 +2,25 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.envs.common import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
+
+if TYPE_CHECKING:
+    from torchrl.envs.common import EnvBase
 
 
 class MPPIPlanner(MPCPlannerBase):
     """MPPI Planner Module.
 
     Reference:
+
      - Model predictive path integral control using covariance variable importance
      sampling. (Williams, G., Aldrich, A., and Theodorou, E. A.) https://arxiv.org/abs/1509.01149
      - Temporal Difference Learning for Model Predictive Control

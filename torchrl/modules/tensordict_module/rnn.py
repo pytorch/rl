@@ -4,26 +4,20 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Optional, Tuple
+import typing
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from tensordict import TensorDictBase, unravel_key_list
-
 from tensordict.base import NO_DEFAULT
-
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
-
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
+from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
-from torchrl.objectives.value.functional import (
-    _inv_pad_sequence,
-    _split_and_pad_sequence,
-)
-from torchrl.objectives.value.utils import _get_num_per_traj_init
 
 
 class LSTMCell(RNNCellBase):
@@ -75,8 +69,8 @@ class LSTMCell(RNNCellBase):
         super().__init__(input_size, hidden_size, bias, num_chunks=4, **factory_kwargs)
 
     def forward(
-        self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None
-    ) -> Tuple[Tensor, Tensor]:
+        self, input: Tensor, hx: tuple[Tensor, Tensor] | None = None
+    ) -> tuple[Tensor, Tensor]:
         if input.dim() not in (1, 2):
             raise ValueError(
                 f"LSTMCell: Expected input to be 1D or 2D, got {input.dim()}D instead"
@@ -339,7 +333,7 @@ class LSTMModule(ModuleBase):
       *but* the final hidden values should not be trusted in those cases (ie. they
       should not be re-used for a consecutive trajectory).
       The reason is that LSTM returns only the last hidden value, which for the
-      padded inputs we provide can correspont to a 0-filled input.
+      padded inputs we provide can correspond to a 0-filled input.
 
     Args:
         input_size: The number of expected features in the input `x`
@@ -376,6 +370,9 @@ class LSTMModule(ModuleBase):
         device (torch.device or compatible): the device of the module.
         lstm (torch.nn.LSTM, optional): an LSTM instance to be wrapped.
             Exclusive with other nn.LSTM arguments.
+        default_recurrent_mode (bool, optional): if provided, the recurrent mode if it hasn't been overridden
+            by the :class:`~torchrl.modules.set_recurrent_mode` context manager / decorator.
+            Defaults to ``False``.
 
     Attributes:
         recurrent_mode: Returns the recurrent mode of the module.
@@ -396,7 +393,7 @@ class LSTMModule(ModuleBase):
     Examples:
         >>> from torchrl.envs import TransformedEnv, InitTracker
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.modules import MLP
+        >>> from torchrl.modules import MLP, LSTMModule
         >>> from torch import nn
         >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
@@ -435,8 +432,8 @@ class LSTMModule(ModuleBase):
 
     def __init__(
         self,
-        input_size: int = None,
-        hidden_size: int = None,
+        input_size: int | None = None,
+        hidden_size: int | None = None,
         num_layers: int = 1,
         bias: bool = True,
         batch_first=True,
@@ -451,6 +448,7 @@ class LSTMModule(ModuleBase):
         out_keys=None,
         device=None,
         lstm=None,
+        default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
         if lstm is not None:
@@ -524,7 +522,7 @@ class LSTMModule(ModuleBase):
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self._recurrent_mode = False
+        self._recurrent_mode = default_recurrent_mode
 
     def make_python_based(self) -> LSTMModule:
         """Transforms the LSTM layer in its python-based version.
@@ -585,6 +583,10 @@ class LSTMModule(ModuleBase):
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
         processes and dealt with properly.
 
+        When using batched environments such as :class:`~torchrl.envs.ParallelEnv`, the transform can be used at the
+        single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
+        batched env instance level (i.e., a transformed batch of regular envs).
+
         Not including a ``TensorDictPrimer`` in the environment may result in poorly defined behaviors, for instance
         in parallel settings where a step involves copying the new recurrent state from ``"next"`` to the root
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
@@ -594,7 +596,7 @@ class LSTMModule(ModuleBase):
         module.
 
         Examples:
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.envs import TransformedEnv, InitTracker
             >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP, LSTMModule
@@ -611,7 +613,7 @@ class LSTMModule(ModuleBase):
             >>> policy = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy(env.reset())
             >>> env = env.append_transform(lstm_module.make_tensordict_primer())
-            >>> data_collector = SyncDataCollector(
+            >>> data_collector = Collector(
             ...     env,
             ...     policy,
             ...     frames_per_batch=10
@@ -642,17 +644,21 @@ class LSTMModule(ModuleBase):
             {
                 in_key1: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
                 in_key2: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
-            }
+            },
+            expand_specs=True,
         )
 
     @property
     def recurrent_mode(self):
-        return self._recurrent_mode
+        rm = recurrent_mode()
+        if rm is None:
+            return bool(self._recurrent_mode)
+        return rm
 
     @recurrent_mode.setter
     def recurrent_mode(self, value):
         raise RuntimeError(
-            "recurrent_mode cannot be changed in-place. Call `module.set"
+            "recurrent_mode cannot be changed in-place. Please use the set_recurrent_mode context manager."
         )
 
     @property
@@ -662,44 +668,19 @@ class LSTMModule(ModuleBase):
         )
 
     def set_recurrent_mode(self, mode: bool = True):
-        """Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
-
-        A copy is created such that the module can be used with divergent behavior
-        in various parts of the code (inference vs training):
-
-        Examples:
-            >>> from torchrl.envs import TransformedEnv, InitTracker, step_mdp
-            >>> from torchrl.envs import GymEnv
-            >>> from torchrl.modules import MLP
-            >>> from tensordict import TensorDict
-            >>> from torch import nn
-            >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
-            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-            >>> lstm_module = LSTMModule(lstm=lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
-            >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviors:
-            >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> traj_td = env.rollout(3) # some random temporal data
-            >>> traj_td = policy_training(traj_td)
-            >>> # let's check that both return the same results
-            >>> td_inf = TensorDict(batch_size=traj_td.shape[:-1])
-            >>> for td in traj_td.unbind(-1):
-            ...     td_inf = td_inf.update(td.select("is_init", "observation", ("next", "observation")))
-            ...     td_inf = policy_inference(td_inf)
-            ...     td_inf = step_mdp(td_inf)
-            ...
-            >>> torch.testing.assert_close(td_inf["hidden0"], traj_td[..., -1]["next", "hidden0"])
-        """
-        if mode is self._recurrent_mode:
-            return self
-        out = LSTMModule(lstm=self.lstm, in_keys=self.in_keys, out_keys=self.out_keys)
-        out._recurrent_mode = mode
-        return out
+        raise RuntimeError(
+            "The lstm.set_recurrent_mode() API has been removed in v0.8. "
+            "To set the recurrent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
+            "the `default_recurrent_mode` keyword argument in the constructor."
+        )
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
@@ -724,6 +705,8 @@ class LSTMModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -741,16 +724,24 @@ class LSTMModule(ModuleBase):
             tensordict_shaped.get(key, default)
             for key, default in zip(self.in_keys, defaults)
         )
-        batch, steps = value.shape[:2]
-        device = value.device
-        dtype = value.dtype
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
-        if hidden0 is not None:
+
+        if not self.recurrent_mode and hidden0 is not None:
+            # We zero the hidden states if we're calling the lstm recursively
+            #  as we assume the hidden state comes from the previous trajectory.
+            #  When using the recurrent_mode=True option, the lstm can be called from
+            #  any intermediate state, hence zeroing should not be done.
             is_init_expand = expand_as_right(is_init, hidden0)
-            hidden0 = torch.where(is_init_expand, 0, hidden0)
-            hidden1 = torch.where(is_init_expand, 0, hidden1)
+            zeros = torch.zeros_like(hidden0)
+            hidden0 = torch.where(is_init_expand, zeros, hidden0)
+            hidden1 = torch.where(is_init_expand, zeros, hidden1)
+
+        batch, steps = value.shape[:2]
+        device = value.device
+        dtype = value.dtype
+
         val, hidden0, hidden1 = self._lstm(
             value, batch, steps, device, dtype, hidden0, hidden1
         )
@@ -774,16 +765,16 @@ class LSTMModule(ModuleBase):
         steps,
         device,
         dtype,
-        hidden0_in: Optional[torch.Tensor] = None,
-        hidden1_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden0_in: torch.Tensor | None = None,
+        hidden1_in: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
 
         if hidden1_in is None and hidden0_in is None:
             shape = (batch, steps)
-            hidden0_in, hidden1_in = [
+            hidden0_in, hidden1_in = (
                 torch.zeros(
                     *shape,
                     self.lstm.num_layers,
@@ -792,15 +783,15 @@ class LSTMModule(ModuleBase):
                     dtype=dtype,
                 )
                 for _ in range(2)
-            ]
+            )
         elif hidden1_in is None or hidden0_in is None:
             raise RuntimeError(
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
             )
 
         # we only need the first hidden state
-        _hidden0_in = hidden0_in[:, 0]
-        _hidden1_in = hidden1_in[:, 0]
+        _hidden0_in = hidden0_in[..., 0, :, :]
+        _hidden1_in = hidden1_in[..., 0, :, :]
         hidden = (
             _hidden0_in.transpose(-3, -2).contiguous(),
             _hidden1_in.transpose(-3, -2).contiguous(),
@@ -866,7 +857,7 @@ class GRUCell(RNNCellBase):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__(input_size, hidden_size, bias, num_chunks=3, **factory_kwargs)
 
-    def forward(self, input: Tensor, hx: Optional[Tensor] = None) -> Tensor:
+    def forward(self, input: Tensor, hx: Tensor | None = None) -> Tensor:
         if input.dim() not in (1, 2):
             raise ValueError(
                 f"GRUCell: Expected input to be 1D or 2D, got {input.dim()}D instead"
@@ -1155,6 +1146,9 @@ class GRUModule(ModuleBase):
         device (torch.device or compatible): the device of the module.
         gru (torch.nn.GRU, optional): a GRU instance to be wrapped.
             Exclusive with other nn.GRU arguments.
+        default_recurrent_mode (bool, optional): if provided, the recurrent mode if it hasn't been overridden
+            by the :class:`~torchrl.modules.set_recurrent_mode` context manager / decorator.
+            Defaults to ``False``.
 
     Attributes:
         recurrent_mode: Returns the recurrent mode of the module.
@@ -1241,8 +1235,8 @@ class GRUModule(ModuleBase):
 
     def __init__(
         self,
-        input_size: int = None,
-        hidden_size: int = None,
+        input_size: int | None = None,
+        hidden_size: int | None = None,
         num_layers: int = 1,
         bias: bool = True,
         batch_first=True,
@@ -1256,6 +1250,7 @@ class GRUModule(ModuleBase):
         out_keys=None,
         device=None,
         gru=None,
+        default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
         if gru is not None:
@@ -1326,7 +1321,7 @@ class GRUModule(ModuleBase):
             in_keys = in_keys + ["is_init"]
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self._recurrent_mode = False
+        self._recurrent_mode = default_recurrent_mode
 
     def make_python_based(self) -> GRUModule:
         """Transforms the GRU layer in its python-based version.
@@ -1390,11 +1385,15 @@ class GRUModule(ModuleBase):
         tensordict, which the meth:`~torchrl.EnvBase.step_mdp` method will not be able to do as the recurrent states
         are not registered within the environment specs.
 
+        When using batched environments such as :class:`~torchrl.envs.ParallelEnv`, the transform can be used at the
+        single env instance level (i.e., a batch of transformed envs with tensordict primers set within) or at the
+        batched env instance level (i.e., a transformed batch of regular envs).
+
         See :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
         module.
 
         Examples:
-            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.collectors import Collector
             >>> from torchrl.envs import TransformedEnv, InitTracker
             >>> from torchrl.envs import GymEnv
             >>> from torchrl.modules import MLP, LSTMModule
@@ -1411,7 +1410,7 @@ class GRUModule(ModuleBase):
             >>> policy = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
             >>> policy(env.reset())
             >>> env = env.append_transform(gru_module.make_tensordict_primer())
-            >>> data_collector = SyncDataCollector(
+            >>> data_collector = Collector(
             ...     env,
             ...     policy,
             ...     frames_per_batch=10
@@ -1439,17 +1438,21 @@ class GRUModule(ModuleBase):
         return TensorDictPrimer(
             {
                 in_key1: Unbounded(shape=(self.gru.num_layers, self.gru.hidden_size)),
-            }
+            },
+            expand_specs=True,
         )
 
     @property
     def recurrent_mode(self):
-        return self._recurrent_mode
+        rm = recurrent_mode()
+        if rm is None:
+            return bool(self._recurrent_mode)
+        return rm
 
     @recurrent_mode.setter
     def recurrent_mode(self, value):
         raise RuntimeError(
-            "recurrent_mode cannot be changed in-place. Call `module.set"
+            "recurrent_mode cannot be changed in-place. Please use the set_recurrent_mode context manager."
         )
 
     @property
@@ -1459,44 +1462,20 @@ class GRUModule(ModuleBase):
         )
 
     def set_recurrent_mode(self, mode: bool = True):
-        """Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
-
-        A copy is created such that the module can be used with divergent behavior
-        in various parts of the code (inference vs training):
-
-        Examples:
-            >>> from torchrl.envs import GymEnv, TransformedEnv, InitTracker, step_mdp
-            >>> from torchrl.modules import MLP
-            >>> from tensordict import TensorDict
-            >>> from torch import nn
-            >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
-            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> gru = nn.GRU(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-            >>> gru_module = GRUModule(gru=gru, in_keys=["observation", "hidden"], out_keys=["intermediate", ("next", "hidden")])
-            >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviors:
-            >>> policy_inference = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> policy_training = Seq(gru_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> traj_td = env.rollout(3) # some random temporal data
-            >>> traj_td = policy_training(traj_td)
-            >>> # let's check that both return the same results
-            >>> td_inf = TensorDict(batch_size=traj_td.shape[:-1])
-            >>> for td in traj_td.unbind(-1):
-            ...     td_inf = td_inf.update(td.select("is_init", "observation", ("next", "observation")))
-            ...     td_inf = policy_inference(td_inf)
-            ...     td_inf = step_mdp(td_inf)
-            ...
-            >>> torch.testing.assert_close(td_inf["hidden"], traj_td[..., -1]["next", "hidden"])
-        """
-        if mode is self._recurrent_mode:
-            return self
-        out = GRUModule(gru=self.gru, in_keys=self.in_keys, out_keys=self.out_keys)
-        out._recurrent_mode = mode
-        return out
+        raise RuntimeError(
+            "The gru.set_recurrent_mode() API has been removed in v0.8. "
+            "To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
+            "the `default_recurrent_mode` keyword argument in the constructor.",
+        )
 
     @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
@@ -1521,6 +1500,8 @@ class GRUModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
         if self.recurrent_mode and is_init[..., 1:].any():
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
             # if we have consecutive trajectories, things get a little more complicated
             # we have a tensordict of shape [B, T]
             # we will split / pad things such that we get a tensordict of shape
@@ -1544,7 +1525,7 @@ class GRUModule(ModuleBase):
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
-        if is_init.any() and hidden is not None:
+        if not self.recurrent_mode and is_init.any() and hidden is not None:
             is_init_expand = expand_as_right(is_init, hidden)
             hidden = torch.where(is_init_expand, 0, hidden)
         val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
@@ -1567,8 +1548,8 @@ class GRUModule(ModuleBase):
         steps,
         device,
         dtype,
-        hidden_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_in: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
@@ -1598,3 +1579,57 @@ class GRUModule(ModuleBase):
         )
         out = [y, hidden]
         return tuple(out)
+
+
+# Recurrent mode manager
+recurrent_mode_state_manager = _ContextManager()
+
+
+def recurrent_mode() -> bool | None:
+    """Returns the current sampling type."""
+    return recurrent_mode_state_manager.get_mode()
+
+
+class set_recurrent_mode(_DecoratorContextManager):
+    """Context manager for setting RNNs recurrent mode.
+
+    Args:
+        mode (bool, "recurrent" or "sequential"): the recurrent mode to be used within the context manager.
+            `"recurrent"` leads to `mode=True` and `"sequential"` leads to `mode=False`.
+            An RNN executed with recurrent_mode "on" assumes that the data comes in time batches, otherwise
+            it is assumed that each data element in a tensordict is independent of the others.
+            The default value of this context manager is ``True``.
+            The default recurrent mode is ``None``, i.e., the default recurrent mode of the RNN is used
+            (see :class:`~torchrl.modules.LSTMModule` and :class:`~torchrl.modules.GRUModule` constructors).
+
+    .. seealso:: :class:`~torchrl.modules.recurrent_mode``.
+
+    .. note:: All of TorchRL methods are decorated with ``set_recurrent_mode(True)`` by default.
+
+    """
+
+    def __init__(
+        self, mode: bool | typing.Literal["recurrent", "sequential"] | None = True
+    ) -> None:
+        super().__init__()
+        if isinstance(mode, str):
+            if mode.lower() in ("recurrent",):
+                mode = True
+            elif mode.lower() in ("sequential",):
+                mode = False
+            else:
+                raise ValueError(
+                    f"Unsupported recurrent mode. Must be a bool, or one of {('recurrent', 'sequential')}"
+                )
+        self.mode = mode
+
+    def clone(self) -> set_recurrent_mode:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.prev = recurrent_mode_state_manager.get_mode()
+        recurrent_mode_state_manager.set_mode(self.mode)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        recurrent_mode_state_manager.set_mode(self.prev)

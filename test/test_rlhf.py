@@ -2,9 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
-import os
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -21,22 +21,19 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModule
-from torchrl.data.rlhf import TensorDictTokenizer
-from torchrl.data.rlhf.dataset import (
+from torchrl.data.llm import TensorDictTokenizer
+from torchrl.data.llm.dataset import (
     _has_datasets,
     _has_transformers,
     get_dataloader,
     TokenizedDatasetLoader,
 )
-from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
-from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
-from torchrl.data.rlhf.utils import RolloutFromModel
-from torchrl.modules.models.rlhf import GPT2RewardModel
+from torchrl.data.llm.prompt import PromptData, PromptTensorDictTokenizer
+from torchrl.data.llm.reward import PairwiseDataset, pre_tokenization_hook
+from torchrl.data.llm.utils import RolloutFromModel
+from torchrl.modules.models.llm import GPT2RewardModel
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import get_default_devices
-else:
-    from _utils_internal import get_default_devices
+from torchrl.testing import get_default_devices
 
 HERE = Path(__file__).parent
 
@@ -298,12 +295,10 @@ class TestTokenizers:
                 "Lettuce in, it's cold out here!",
             ]
         }
-        if not truncation and return_tensordict and max_length == 10:
-            with pytest.raises(ValueError, match="TensorDict conversion only supports"):
-                out = process(example)
-            return
         out = process(example)
-        if return_tensordict:
+        if not truncation and return_tensordict and max_length == 10:
+            assert out.get("input_ids").shape[-1] == -1
+        elif return_tensordict:
             assert out.get("input_ids").shape[-1] == max_length
         else:
             obj = out.get("input_ids")
@@ -346,12 +341,10 @@ class TestTokenizers:
             ],
             "label": ["right", "wrong", "right", "wrong", "right"],
         }
-        if not truncation and return_tensordict and max_length == 10:
-            with pytest.raises(ValueError, match="TensorDict conversion only supports"):
-                out = process(example)
-            return
         out = process(example)
-        if return_tensordict:
+        if not truncation and return_tensordict and max_length == 10:
+            assert out.get("input_ids").shape[-1] == -1
+        elif return_tensordict:
             assert out.get("input_ids").shape[-1] == max_length
         else:
             obj = out.get("input_ids")

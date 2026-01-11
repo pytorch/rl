@@ -5,16 +5,14 @@
 from __future__ import annotations
 
 import importlib.util
-
 import itertools
 import warnings
-from typing import Any, Dict, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
-
 from tensordict import TensorDictBase
-from torchrl.data import Composite
+from torchrl.data.tensor_specs import Composite
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
@@ -45,7 +43,7 @@ class IsaacGymWrapper(GymWrapper):
         return isaacgym
 
     def __init__(
-        self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs  # noqa: F821
+        self, env: isaacgymenvs.tasks.base.vec_task.Env, **kwargs  # noqa: F821
     ):
         warnings.warn(
             "IsaacGym environment support is an experimental feature that may change in the future."
@@ -57,7 +55,7 @@ class IsaacGymWrapper(GymWrapper):
             # by convention in IsaacGymEnvs
             self.task = env.__name__
 
-    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
+    def _make_specs(self, env: gym.Env) -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
         self.full_done_spec = Composite(
             {
@@ -80,9 +78,9 @@ class IsaacGymWrapper(GymWrapper):
         specs = make_composite_from_td(data)
 
         obs_spec = self.observation_spec
-        obs_spec.unlock_()
+        obs_spec.unlock_(recurse=True)
         obs_spec.update(specs)
-        obs_spec.lock_()
+        obs_spec.lock_(recurse=True)
 
     def _output_transform(self, output):
         obs, reward, done, info = output
@@ -113,9 +111,9 @@ class IsaacGymWrapper(GymWrapper):
         )
         return envs
 
-    def _set_seed(self, seed: int) -> int:
+    def _set_seed(self, seed: int | None) -> None:
         # as of #665c32170d84b4be66722eea405a1e08b6e7f761 the seed points nowhere in gym.make for IsaacGymEnvs
-        return seed
+        ...
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
@@ -130,10 +128,10 @@ class IsaacGymWrapper(GymWrapper):
 
     def read_done(
         self,
-        terminated: bool = None,
+        terminated: bool | None = None,
         truncated: bool | None = None,
         done: bool | None = None,
-    ) -> Tuple[bool, bool, bool]:
+    ) -> tuple[bool, bool, bool]:
         if terminated is not None:
             terminated = terminated.bool()
         if truncated is not None:
@@ -146,8 +144,8 @@ class IsaacGymWrapper(GymWrapper):
         return total_reward
 
     def read_obs(
-        self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
-    ) -> Dict[str, Any]:
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
         """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:

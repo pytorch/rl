@@ -13,11 +13,13 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-error-for-skips
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core
     - tqdm
     - h5py
-    - datasets
+    - datasets<4.0.0
     - pillow

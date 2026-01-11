@@ -6,20 +6,20 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
+
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
-
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _pseudo_vmap,
     _reduce,
     _vmap_func,
     default_value_kwargs,
@@ -69,6 +69,8 @@ class IQLLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -233,7 +235,8 @@ class IQLLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss_actor",
@@ -255,17 +258,18 @@ class IQLLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
-        value_network: Optional[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
+        value_network: TensorDictModule | None,
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         temperature: float = 1.0,
         expectile: float = 0.5,
-        gamma: float = None,
-        priority_key: str = None,
+        gamma: float | None = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -273,6 +277,8 @@ class IQLLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
+
+        self.deactivate_vmap = deactivate_vmap
 
         # IQL parameter
         self.temperature = temperature
@@ -323,7 +329,10 @@ class IQLLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
@@ -395,13 +404,21 @@ class IQLLoss(LossModule):
             "loss_value": loss_value,
             "entropy": entropy.mean(),
         }
+        td_out = TensorDict(out)
 
-        return TensorDict(
-            out,
-            [],
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
         )
+        return td_out
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
@@ -435,9 +452,18 @@ class IQLLoss(LossModule):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_actor, {}
 
-    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def value_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
@@ -449,9 +475,18 @@ class IQLLoss(LossModule):
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile)
         value_loss = _reduce(value_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return value_loss, {}
 
-    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
         tensordict = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
@@ -475,6 +510,15 @@ class IQLLoss(LossModule):
         ).sum(0)
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         metadata = {"td_error": td_error.detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_qval, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -709,7 +753,8 @@ class DiscreteIQLLoss(IQLLoss):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss_actor",
@@ -732,17 +777,17 @@ class DiscreteIQLLoss(IQLLoss):
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
-        value_network: Optional[TensorDictModule],
+        value_network: TensorDictModule | None,
         *,
-        action_space: Union[str, TensorSpec] = None,
+        action_space: str | TensorSpec = None,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         temperature: float = 1.0,
         expectile: float = 0.5,
-        gamma: float = None,
-        priority_key: str = None,
+        gamma: float | None = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -772,7 +817,7 @@ class DiscreteIQLLoss(IQLLoss):
         self.action_space = _find_action_space(action_space)
         self.reduction = reduction
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict)
@@ -785,15 +830,24 @@ class DiscreteIQLLoss(IQLLoss):
         state_action_value = td_q.get(self.tensor_keys.state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
-            if action.shape != state_action_value.shape:
+            if action.ndim < (state_action_value.ndim - (td_q.ndim - tensordict.ndim)):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
-            chosen_state_action_value = torch.gather(
-                state_action_value, -1, index=action
-            ).squeeze(-1)
-        else:
+            if self.deactivate_vmap:
+                vmap = _pseudo_vmap
+            else:
+                vmap = torch.vmap
+            chosen_state_action_value = vmap(
+                lambda state_action_value, action: torch.gather(
+                    state_action_value, -1, index=action
+                ).squeeze(-1),
+                (0, None),
+            )(state_action_value, action)
+        elif self.action_space == "one_hot":
             action = action.to(torch.float)
             chosen_state_action_value = (state_action_value * action).sum(-1)
+        else:
+            raise RuntimeError(f"Unknown action space {self.action_space}.")
         min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         if log_prob.shape != min_Q.shape:
             raise RuntimeError(
@@ -817,9 +871,18 @@ class DiscreteIQLLoss(IQLLoss):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_actor, {}
 
-    def value_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def value_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # Min Q value
         with torch.no_grad():
             # Min Q value
@@ -828,15 +891,26 @@ class DiscreteIQLLoss(IQLLoss):
             state_action_value = td_q.get(self.tensor_keys.state_action_value)
             action = tensordict.get(self.tensor_keys.action)
             if self.action_space == "categorical":
-                if action.shape != state_action_value.shape:
+                if action.ndim < (
+                    state_action_value.ndim - (td_q.ndim - tensordict.ndim)
+                ):
                     # unsqueeze the action if it lacks on trailing singleton dim
                     action = action.unsqueeze(-1)
-                chosen_state_action_value = torch.gather(
-                    state_action_value, -1, index=action
-                ).squeeze(-1)
-            else:
+                if self.deactivate_vmap:
+                    vmap = _pseudo_vmap
+                else:
+                    vmap = torch.vmap
+                chosen_state_action_value = vmap(
+                    lambda state_action_value, action: torch.gather(
+                        state_action_value, -1, index=action
+                    ).squeeze(-1),
+                    (0, None),
+                )(state_action_value, action)
+            elif self.action_space == "one_hot":
                 action = action.to(torch.float)
                 chosen_state_action_value = (state_action_value * action).sum(-1)
+            else:
+                raise RuntimeError(f"Unknown action space {self.action_space}.")
             min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
@@ -845,9 +919,18 @@ class DiscreteIQLLoss(IQLLoss):
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_Q - value, self.expectile)
         value_loss = _reduce(value_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return value_loss, {}
 
-    def qvalue_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def qvalue_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
         next_td = tensordict.select(
             "next", *obs_keys, self.tensor_keys.action, strict=False
@@ -863,13 +946,24 @@ class DiscreteIQLLoss(IQLLoss):
         state_action_value = td_q.get(self.tensor_keys.state_action_value)
         action = tensordict.get(self.tensor_keys.action)
         if self.action_space == "categorical":
-            if action.shape != state_action_value.shape:
+            if action.ndim < (state_action_value.ndim - (td_q.ndim - tensordict.ndim)):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
-            pred_val = torch.gather(state_action_value, -1, index=action).squeeze(-1)
-        else:
+            if self.deactivate_vmap:
+                vmap = _pseudo_vmap
+            else:
+                vmap = torch.vmap
+            pred_val = vmap(
+                lambda state_action_value, action: torch.gather(
+                    state_action_value, -1, index=action
+                ).squeeze(-1),
+                (0, None),
+            )(state_action_value, action)
+        elif self.action_space == "one_hot":
             action = action.to(torch.float)
             pred_val = (state_action_value * action).sum(-1)
+        else:
+            raise RuntimeError(f"Unknown action space {self.action_space}.")
 
         td_error = (pred_val - target_value.expand_as(pred_val)).pow(2)
         loss_qval = distance_loss(
@@ -879,4 +973,13 @@ class DiscreteIQLLoss(IQLLoss):
         ).sum(0)
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         metadata = {"td_error": td_error.detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "value_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+            "target_value_network_params",
+        )
         return loss_qval, metadata

@@ -11,7 +11,12 @@ from dataclasses import dataclass
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 
-from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import (
+    composite_lp_aggregate,
+    dispatch,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 
@@ -189,7 +194,8 @@ class ReinforceLoss(LossModule):
             value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected.
-                Defaults to ``"sample_log_prob"``.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
@@ -205,22 +211,30 @@ class ReinforceLoss(LossModule):
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
     out_keys = ["loss_actor", "loss_value"]
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
-    actor_network_params: TensorDictParams
-    critic_network_params: TensorDictParams
-    target_actor_network_params: TensorDictParams
-    target_critic_network_params: TensorDictParams
+    actor_network_params: TensorDictParams | None
+    critic_network_params: TensorDictParams | None
+    target_actor_network_params: TensorDictParams | None
+    target_critic_network_params: TensorDictParams | None
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -234,14 +248,14 @@ class ReinforceLoss(LossModule):
         *,
         delay_value: bool = False,
         loss_critic_type: str = "smooth_l1",
-        gamma: float = None,
-        advantage_key: str = None,
-        value_target_key: str = None,
+        gamma: float | None = None,
+        advantage_key: str | None = None,
+        value_target_key: str | None = None,
         separate_losses: bool = False,
         functional: bool = True,
         actor: ProbabilisticTensorDictSequential = None,
         critic: ProbabilisticTensorDictSequential = None,
-        reduction: str = None,
+        reduction: str | None = None,
         clip_value: float | None = None,
     ) -> None:
         if actor is not None:
@@ -390,9 +404,15 @@ class ReinforceLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
         )
-
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
+        )
         return td_out
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
@@ -445,6 +465,13 @@ class ReinforceLoss(LossModule):
                 loss_value,
                 self.loss_critic_type,
             )
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
+        )
 
         return loss_value, clip_fraction
 

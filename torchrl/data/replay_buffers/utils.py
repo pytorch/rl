@@ -7,18 +7,18 @@ from __future__ import annotations
 
 import contextlib
 import itertools
-
 import math
 import operator
 import os
 import typing
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Union
+from typing import Any, Union
 
 import numpy as np
 import torch
 from tensordict import (
-    LazyStackedTensorDict,
+    lazy_stack,
     MemoryMappedTensor,
     NonTensorData,
     TensorDict,
@@ -93,7 +93,7 @@ def _pin_memory(output: Any) -> Any:
 
 def _reduce(
     tensor: torch.Tensor, reduction: str, dim: int | None = None
-) -> Union[float, torch.Tensor]:
+) -> float | torch.Tensor:
     """Reduces a tensor given the reduction method."""
     if reduction == "max":
         result = tensor.max(dim=dim)
@@ -141,7 +141,7 @@ class TED2Flat:
         >>>
         >>> from tensordict import TensorDict
         >>>
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.data import ReplayBuffer, TED2Flat, LazyMemmapStorage
         >>> from torchrl.envs import GymEnv
         >>> import torch
@@ -149,7 +149,7 @@ class TED2Flat:
         >>> env = GymEnv("CartPole-v1")
         >>> env.set_seed(0)
         >>> torch.manual_seed(0)
-        >>> collector = SyncDataCollector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
+        >>> collector = Collector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
         >>> rb = ReplayBuffer(storage=LazyMemmapStorage(200))
         >>> rb.register_save_hook(TED2Flat())
         >>> with tempfile.TemporaryDirectory() as tmpdir:
@@ -179,8 +179,8 @@ class TED2Flat:
 
     """
 
-    _shift: int = None
-    _is_full: bool = None
+    _shift: int | None = None
+    _is_full: bool | None = None
 
     def __init__(
         self,
@@ -370,7 +370,7 @@ class Flat2TED:
         >>>
         >>> from tensordict import TensorDict
         >>>
-        >>> from torchrl.collectors import SyncDataCollector
+        >>> from torchrl.collectors import Collector
         >>> from torchrl.data import ReplayBuffer, TED2Flat, LazyMemmapStorage, Flat2TED
         >>> from torchrl.envs import GymEnv
         >>> import torch
@@ -378,7 +378,7 @@ class Flat2TED:
         >>> env = GymEnv("CartPole-v1")
         >>> env.set_seed(0)
         >>> torch.manual_seed(0)
-        >>> collector = SyncDataCollector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
+        >>> collector = Collector(env, policy=env.rand_step, total_frames=200, frames_per_batch=200)
         >>> rb = ReplayBuffer(storage=LazyMemmapStorage(200))
         >>> rb.register_save_hook(TED2Flat())
         >>> with tempfile.TemporaryDirectory() as tmpdir:
@@ -483,7 +483,7 @@ class Flat2TED:
                         out._get_sub_tensordict((slice(None),) * i + (j,))
                         for j in range(out.shape[i])
                     ]
-                    out = LazyStackedTensorDict(*out_list, stack_dim=i)
+                    out = lazy_stack(out_list, i)
 
             # Create a function that reads slices of the input data
             with out.flatten(1, -1) if out.ndim > 2 else contextlib.nullcontext(
@@ -610,8 +610,8 @@ class Flat2TED:
 class TED2Nested(TED2Flat):
     """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
 
-    _shift: int = None
-    _is_full: bool = None
+    _shift: int | None = None
+    _is_full: bool | None = None
 
     def __init__(self, *args, **kwargs):
         if not hasattr(torch, "_nested_compute_contiguous_strides_offsets"):
@@ -721,8 +721,8 @@ class Nested2TED(Flat2TED):
 class H5Split(TED2Flat):
     """Splits a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors."""
 
-    _shift: int = None
-    _is_full: bool = None
+    _shift: int | None = None
+    _is_full: bool | None = None
 
     def __call__(self, data):
         nzeros = int(math.ceil(math.log10(data.shape[0])))
@@ -977,15 +977,13 @@ def _roll_inplace(tensor, shift, out, index_dest=None, index_source=None):
 
 # Copy-paste of unravel-index for PT 2.0
 def _unravel_index(
-    indices: Tensor, shape: Union[int, typing.Sequence[int], torch.Size]
-) -> typing.Tuple[Tensor, ...]:
+    indices: Tensor, shape: int | typing.Sequence[int] | torch.Size
+) -> tuple[Tensor, ...]:
     res_tensor = _unravel_index_impl(indices, shape)
     return res_tensor.unbind(-1)
 
 
-def _unravel_index_impl(
-    indices: Tensor, shape: Union[int, typing.Sequence[int]]
-) -> Tensor:
+def _unravel_index_impl(indices: Tensor, shape: int | typing.Sequence[int]) -> Tensor:
     if isinstance(shape, (int, torch.SymInt)):
         shape = torch.Size([shape])
     else:
@@ -1034,3 +1032,11 @@ def tree_iter(pytree):  # noqa: F811
 def tree_iter(pytree):  # noqa: F811
     """A version-compatible wrapper around tree_iter."""
     yield from torch.utils._pytree.tree_iter(pytree)
+
+
+def _auto_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda:0")
+    elif torch.mps.is_available():
+        return torch.device("mps:0")
+    return torch.device("cpu")

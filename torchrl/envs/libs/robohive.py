@@ -2,20 +2,23 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib
 import os
 import warnings
-
 from copy import copy
 from pathlib import Path
 
 import numpy as np
 import torch
 from tensordict import TensorDict
+
 from torchrl.data.tensor_specs import Unbounded
+from torchrl.envs.common import _maybe_unlock
 from torchrl.envs.libs.gym import (
-    _AsyncMeta,
     _gym_to_torchrl_spec_transform,
+    _GymAsyncMeta,
     gym_backend,
     GymEnv,
 )
@@ -31,7 +34,7 @@ if _has_robohive:
     os.environ.setdefault("sim_backend", "MUJOCO")
 
 
-class set_directory(object):
+class set_directory:
     """Sets the cwd within the context.
 
     Args:
@@ -56,7 +59,7 @@ class set_directory(object):
         return new_fun
 
 
-class _RoboHiveBuild(_AsyncMeta):
+class _RoboHiveBuild(_GymAsyncMeta):
     def __call__(self, *args, **kwargs):
         instance: RoboHiveEnv = super().__call__(*args, **kwargs)
         instance._refine_specs()
@@ -109,7 +112,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             ``RoboHiveEnv`` since vectorized environments are not supported within the
             class. To execute more than one environment at a time, see :class:`~torchrl.envs.ParallelEnv`.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
@@ -161,7 +164,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         pixels_only: bool = False,
         from_depths: bool = False,
         **kwargs,
-    ) -> "gym.core.Env":  # noqa: F821
+    ) -> gym.core.Env:  # noqa: F821
         if from_pixels:
             if "cameras" not in kwargs:
                 warnings.warn(
@@ -218,7 +221,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             self.set_info_dict_reader(self.read_info)
         return env
 
-    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+    def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
         out = super()._make_specs(env=env, batch_size=batch_size)
         self.env.reset()
         *_, info = self.env.step(self.env.action_space.sample())
@@ -251,6 +254,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             cls.env_list += [env_name]
             return env_name
 
+    @_maybe_unlock
     def _refine_specs(self) -> None:  # noqa: F821
         env = self._env
         self.action_spec = _gym_to_torchrl_spec_transform(

@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import itertools
 from dataclasses import dataclass
 
@@ -60,7 +62,7 @@ ACTIVATIONS = {
 
 
 def make_dqn_actor(
-    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
+    proof_environment: EnvBase, cfg: DictConfig, device: torch.device  # noqa: F821
 ) -> Actor:
     """DQN constructor helper function.
 
@@ -194,7 +196,7 @@ def make_dqn_actor(
 
 @set_lazy_legacy(False)
 def make_dreamer(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     proof_environment: EnvBase = None,
     device: DEVICE_TYPING = "cpu",
     action_key: str = "action",
@@ -214,13 +216,13 @@ def make_dreamer(
         value_key (str, optional): Key to use for the value.
             Defaults to "state_value".
         use_decoder_in_env (bool, optional): Whether to use the decoder in the model based dreamer env.
-            Defaults to False.
+            Defaults to `False`.
         obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform used
             when proof_environment is missing. Defaults to None.
 
     Returns:
         nn.TensorDictModel: Dreamer World model.
-        nn.TensorDictModel: Dreamer Model based environnement.
+        nn.TensorDictModel: Dreamer Model based environment.
         nn.TensorDictModel: Dreamer Actor the world model space.
         nn.TensorDictModel: Dreamer Value model.
         nn.TensorDictModel: Dreamer Actor for the real world space.
@@ -572,7 +574,7 @@ class REDQModelConfig:
     ou_sigma: float = 0.2
     # Ornstein-Uhlenbeck sigma
     ou_theta: float = 0.15
-    # Aimed at superseeding --ou_exploration.
+    # Aimed at superseding --ou_exploration.
     distributional: bool = False
     # whether a distributional loss should be used (TODO: not implemented yet).
     atoms: int = 51
@@ -612,7 +614,7 @@ class ContinuousModelConfig:
     ou_sigma: float = 0.2
     # Ornstein-Uhlenbeck sigma
     ou_theta: float = 0.15
-    # Aimed at superseeding --ou_exploration.
+    # Aimed at superseding --ou_exploration.
     distributional: bool = False
     # whether a distributional loss should be used (TODO: not implemented yet).
     atoms: int = 51

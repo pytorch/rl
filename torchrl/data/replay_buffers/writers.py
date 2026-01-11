@@ -8,17 +8,23 @@ import heapq
 import json
 import textwrap
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any
 
 import numpy as np
 import torch
-
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
-from tensordict.utils import _STRDTYPE2DTYPE, expand_as_right, is_tensorclass
+from tensordict.utils import expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
+from torchrl._utils import _STRDTYPE2DTYPE
+
+try:
+    from torch.compiler import disable as compile_disable
+except ImportError:
+    from torch._dynamo import disable as compile_disable
 
 try:
     from torch.utils._pytree import tree_leaves
@@ -58,7 +64,7 @@ class Writer(ABC):
         ...
 
     @abstractmethod
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         ...
 
     @abstractmethod
@@ -70,11 +76,11 @@ class Writer(ABC):
         ...
 
     @abstractmethod
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
     def _replicate_index(self, index):
@@ -122,7 +128,7 @@ class ImmutableDatasetWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         raise RuntimeError(self.WRITING_ERR)
 
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         raise RuntimeError(self.WRITING_ERR)
 
     def dumps(self, path):
@@ -131,10 +137,10 @@ class ImmutableDatasetWriter(Writer):
     def loads(self, path):
         ...
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return
 
 
@@ -151,6 +157,7 @@ class RoundRobinWriter(Writer):
     def __init__(self, compilable: bool = False) -> None:
         super().__init__(compilable=compilable)
         self._cursor = 0
+        self._write_count  # noqa
 
     def dumps(self, path):
         path = Path(path).absolute()
@@ -160,7 +167,7 @@ class RoundRobinWriter(Writer):
 
     def loads(self, path):
         path = Path(path).absolute()
-        with open(path / "metadata.json", "r") as file:
+        with open(path / "metadata.json") as file:
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
 
@@ -176,8 +183,7 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
@@ -189,7 +195,7 @@ class RoundRobinWriter(Writer):
         else:
             batch_size = len(tree_leaves(data)[0])
         if batch_size == 0:
-            raise RuntimeError("Expected at least one element in extend.")
+            raise RuntimeError(f"Expected at least one element in extend. Got {data=}")
         device = data.device if hasattr(data, "device") else None
         max_size_along0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
@@ -205,18 +211,27 @@ class RoundRobinWriter(Writer):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities_iter():
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {"_cursor": self._cursor}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
 
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
+        if empty_write_count:
+            self._write_count = 0
+
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @compile_disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
+        for ent in self._storage._attached_entities_iter():
+            ent.mark_update(index)
 
     @property
     def _cursor(self):
@@ -266,18 +281,28 @@ class RoundRobinWriter(Writer):
         state = super().__getstate__()
         if get_spawning_popen() is None:
             cursor = self._cursor
+            write_count = self._write_count
             del state["_cursor_value"]
+            del state["_write_count_value"]
             state["cursor__context"] = cursor
+            state["write_count__context"] = write_count
         return state
 
     def __setstate__(self, state):
         cursor = state.pop("cursor__context", None)
+        write_count = state.pop("write_count__context", None)
         if cursor is not None:
             if not state["_compilable"]:
                 _cursor_value = mp.Value("i", cursor)
             else:
                 _cursor_value = cursor
             state["_cursor_value"] = _cursor_value
+        if write_count is not None:
+            if not state["_compilable"]:
+                _write_count_value = mp.Value("i", write_count)
+            else:
+                _write_count_value = write_count
+            state["_write_count_value"] = _write_count_value
         self.__dict__.update(state)
 
     def __repr__(self):
@@ -302,8 +327,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
             )
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
@@ -332,8 +356,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
-        for ent in self._storage._attached_entities:
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
 
@@ -533,7 +556,7 @@ class TensorDictMaxValueWriter(Writer):
             # Other than that, a "flat" (1d) index is ok to write the data
             self._storage.set(index, data)
             index = self._replicate_index(index)
-            for ent in self._storage._attached_entities:
+            for ent in self._storage._attached_entities_iter():
                 ent.mark_update(index)
         return index
 
@@ -567,13 +590,22 @@ class TensorDictMaxValueWriter(Writer):
             device = getattr(self._storage, "device", None)
             out_index = torch.full(data.shape, -1, dtype=torch.long, device=device)
         index = self._replicate_index(out_index)
-        for ent in self._storage._attached_entities:
-            ent.mark_update(index)
+        self._mark_update_entities(index)
         return index
 
-    def _empty(self) -> None:
+    # TODO: Workaround for PyTorch nightly regression where compiler can't handle
+    # method calls on objects returned from _attached_entities_iter()
+    @compile_disable()
+    def _mark_update_entities(self, index: torch.Tensor) -> None:
+        """Mark entities as updated with the given index."""
+        for ent in self._storage._attached_entities_iter():
+            ent.mark_update(index)
+
+    def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
         self._current_top_values = []
+        if empty_write_count:
+            self._write_count = 0
 
     def __getstate__(self):
         if get_spawning_popen() is not None:
@@ -582,7 +614,18 @@ class TensorDictMaxValueWriter(Writer):
                 f"Please submit an issue at https://github.com/pytorch/rl if this feature is needed."
             )
         state = super().__getstate__()
+        # Handle the mp.Value object for pickling
+        if "_write_count_value" in state:
+            write_count = self._write_count
+            del state["_write_count_value"]
+            state["write_count__context"] = write_count
         return state
+
+    def __setstate__(self, state):
+        write_count = state.pop("write_count__context", None)
+        if write_count is not None:
+            state["_write_count_value"] = mp.Value("i", write_count)
+        self.__dict__.update(state)
 
     def dumps(self, path):
         path = Path(path).absolute()
@@ -611,7 +654,7 @@ class TensorDictMaxValueWriter(Writer):
 
     def loads(self, path):
         path = Path(path).absolute()
-        with open(path / "metadata.json", "r") as file:
+        with open(path / "metadata.json") as file:
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
             self._rank_key = metadata["rank_key"]
@@ -623,10 +666,10 @@ class TensorDictMaxValueWriter(Writer):
             shape=shape,
         ).tolist()
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         raise NotImplementedError
 
     def __repr__(self):
@@ -663,7 +706,7 @@ class WriterEnsemble(Writer):
         for writer in self._writers:
             writer._rng = value
 
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         raise NotImplementedError
 
     def dumps(self, path: Path):
@@ -705,7 +748,7 @@ class WriterEnsemble(Writer):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:
@@ -731,8 +774,8 @@ class WriterEnsemble(Writer):
         writers = textwrap.indent(f"writers={self._writers}", " " * 4)
         return f"WriterEnsemble(\n{writers})"
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         raise NotImplementedError

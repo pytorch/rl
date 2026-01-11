@@ -9,7 +9,7 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++
+apt-get update && apt-get install -y git wget gcc g++ cmake
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -61,13 +61,15 @@ cat "${this_dir}/environment.yml"
 
 export MUJOCO_GL=egl
 conda env config vars set \
+  MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
-  DISPLAY=unix:0.0 \
+  DISPLAY=:99 \
   PYOPENGL_PLATFORM=egl \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   sim_backend=MUJOCO \
-  LAZY_LEGACY_OP=False
+  LAZY_LEGACY_OP=False \
+  TOKENIZERS_PARALLELISM=true
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
@@ -80,7 +82,7 @@ conda install conda-forge::ffmpeg -y
 
 pip install robohive
 
-python3 -m robohive_init
+python -m robohive_init
 
 # make sure only gymnasium is available
 # pip uninstall gym -y

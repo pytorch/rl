@@ -9,31 +9,41 @@ from __future__ import annotations
 import os
 import socket
 import warnings
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, List, OrderedDict, Type
+from typing import Any
 
 import torch.cuda
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from torch import nn
-
-from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiSyncDataCollector,
-    SyncDataCollector,
+from torchrl._utils import (
+    _get_mp_ctx,
+    _ProcessNoWarn,
+    logger as torchrl_logger,
+    VERBOSE,
 )
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.distributed.default_configs import (
+    _create_tcpstore_with_retry,
     DEFAULT_SLURM_CONF,
     MAX_TIME_TO_CONNECT,
     TCP_PORT,
 )
-from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.utils import _cast, _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update import DistributedWeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 SUBMITIT_ERR = None
 try:
@@ -50,11 +60,11 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
     os.environ["MASTER_PORT"] = str(tcpport)
 
     if verbose:
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"Rank0 IP address: '{rank0_ip}' \ttcp port: '{tcpport}', backend={backend}."
         )
-        torchrl_logger.info(
-            f"node with rank {rank} with world_size {world_size} -- launching distributed"
+        torchrl_logger.debug(
+            f"RANK {rank} with world_size {world_size} -- launching distributed"
         )
     torch.distributed.init_process_group(
         backend,
@@ -64,11 +74,21 @@ def _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose):
         init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
     if verbose:
-        torchrl_logger.info(f"Connected!\nNode with rank {rank} -- creating store")
+        torchrl_logger.debug(f"Connected!\nRANK {rank} -- creating store")
+
+    # Receive actual store port from master via broadcast (master may have used retry)
+    store_port_tensor = torch.zeros(1, dtype=torch.int64)
+    torch.distributed.broadcast(store_port_tensor, src=0)
+    actual_store_port = int(store_port_tensor.item())
+    if verbose:
+        torchrl_logger.debug(
+            f"RANK {rank} -- received store port {actual_store_port} from master"
+        )
+
     # The store carries instructions for the node
     _store = torch.distributed.TCPStore(
         host_name=rank0_ip,
-        port=tcpport + 1,
+        port=actual_store_port,
         world_size=world_size,
         is_master=False,
         timeout=timedelta(10),
@@ -104,19 +124,20 @@ def _distributed_init_delayed(
     frames_per_batch = output["frames_per_batch"]
     collector_kwargs = output["collector_kwargs"]
     _run_collector(
-        _store,
-        sync,
-        collector_class,
-        num_workers,
-        env_make,
-        policy,
-        frames_per_batch,
-        collector_kwargs,
+        _store=_store,
+        sync=sync,
+        collector_class=collector_class,
+        num_workers=num_workers,
+        env_make=env_make,
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        collector_kwargs=collector_kwargs,
         verbose=verbose,
     )
 
 
 def _distributed_init_collection_node(
+    *,
     rank,
     rank0_ip,
     tcpport,
@@ -127,99 +148,184 @@ def _distributed_init_collection_node(
     num_workers,
     env_make,
     policy,
+    policy_factory,
     frames_per_batch,
     collector_kwargs,
+    weight_sync_schemes,
     verbose=True,
 ):
     _store = _node_init_dist(rank, world_size, backend, rank0_ip, tcpport, verbose)
     _run_collector(
-        _store,
-        sync,
-        collector_class,
-        num_workers,
-        env_make,
-        policy,
-        frames_per_batch,
-        collector_kwargs,
+        _store=_store,
+        sync=sync,
+        collector_class=collector_class,
+        num_workers=num_workers,
+        env_make=env_make,
+        policy=policy,
+        policy_factory=policy_factory,
+        frames_per_batch=frames_per_batch,
+        weight_sync_schemes=weight_sync_schemes,
+        collector_kwargs=collector_kwargs,
         verbose=verbose,
     )
 
 
 def _run_collector(
+    *,
     _store,
     sync,
     collector_class,
     num_workers,
     env_make,
     policy,
+    policy_factory,
     frames_per_batch,
     collector_kwargs,
+    weight_sync_schemes: dict[str, DistributedWeightSyncScheme],
     verbose=True,
 ):
     rank = torch.distributed.get_rank()
     if verbose:
-        torchrl_logger.info(
-            f"node with rank {rank} -- creating collector of type {collector_class}"
+        torchrl_logger.debug(
+            f"RANK {rank} -- creating collector of type {collector_class}"
         )
-    if not issubclass(collector_class, SyncDataCollector):
+    if not issubclass(collector_class, Collector):
         env_make = [env_make] * num_workers
     else:
         collector_kwargs["return_same_td"] = True
         if num_workers != 1:
             raise RuntimeError(
-                "SyncDataCollector and subclasses can only support a single environment."
+                "Collector and subclasses can only support a single environment."
             )
+
+    if issubclass(collector_class, MultiCollector) and (
+        (not isinstance(policy_factory, Sequence) and policy_factory is not None)
+        or (isinstance(policy_factory, Sequence) and any(policy_factory))
+    ):
+        # We build an intermediate policy to get the weights from for weight updates. This is slow
+        # (main -> dist worker -> mp worker), but in some cases there is no alternative
+        policy = (
+            policy_factory[0]()
+            if isinstance(policy_factory, Sequence)
+            else policy_factory()
+        )
 
     if isinstance(policy, nn.Module):
         policy_weights = TensorDict.from_module(policy)
-        policy_weights = policy_weights.data.lock_()
+        policy_weights = policy_weights.data.apply(_cast, policy_weights).lock_()
     else:
-        warnings.warn(_NON_NN_POLICY_WEIGHTS)
+        if collector_kwargs.get("weight_updater") is None and (
+            policy_factory is None
+            or (isinstance(policy_factory, Sequence) and not any(policy_factory))
+        ):
+            warnings.warn(_NON_NN_POLICY_WEIGHTS)
         policy_weights = TensorDict(lock=True)
 
+    # NOTE:
+    # - `weight_sync_schemes` here are the *distributed* schemes used to send
+    #   weights from the main process to this node.
+    # - Inner multi-process collectors (e.g., MultiSyncCollector) should
+    #   manage their own local weight sync schemes (SharedMem / MP) for their
+    #   sub-workers.
+    #   Therefore, we do NOT pass `weight_sync_schemes` down into
+    #   `collector_class` so that it can set up its own local schemes.
     collector = collector_class(
         env_make,
-        policy,
+        policy=policy,
+        policy_factory=policy_factory,
         frames_per_batch=frames_per_batch,
         total_frames=-1,
         split_trajs=False,
         **collector_kwargs,
     )
+
+    if weight_sync_schemes is not None:
+        for model_id, scheme in weight_sync_schemes.items():
+            # Provide both collector context and distributed store / rank so the
+            # scheme can wire its transport correctly.
+            scheme.init_on_receiver(
+                model_id=model_id,
+                context=collector,
+                # store=_store,
+                worker_idx=rank,
+            )
+            scheme.connect()
+
     total_frames = 0
-    if verbose:
-        torchrl_logger.info(f"node with rank {rank} -- loop")
     while True:
+        if verbose:
+            torchrl_logger.debug(f"RANK {rank} -- waiting for instructions")
         instruction = _store.get(f"NODE_{rank}_in")
         if verbose:
-            torchrl_logger.info(
-                f"node with rank {rank} -- new instruction: {instruction}"
-            )
+            torchrl_logger.debug(f"RANK {rank} -- new instruction: {instruction}")
         _store.delete_key(f"NODE_{rank}_in")
         if instruction == b"continue":
             _store.set(f"NODE_{rank}_status", b"busy")
             if verbose:
-                torchrl_logger.info(f"node with rank {rank} -- new data")
+                torchrl_logger.debug(f"RANK {rank} -- collecting new data")
             data = collector.next()
             total_frames += data.numel()
             if verbose:
-                torchrl_logger.info(f"got data, total frames = {total_frames}")
-                torchrl_logger.info(f"node with rank {rank} -- sending {data}")
+                torchrl_logger.debug(
+                    f"RANK {rank} -- got data, total frames = {total_frames}"
+                )
+                torchrl_logger.debug(
+                    f"RANK {rank} -- sending TensorDict payload to rank 0"
+                )
+
             if _store.get("TRAINER_status") == b"alive":
                 data.isend(dst=0)
                 if verbose:
-                    torchrl_logger.info(f"node with rank {rank} -- setting to 'done'")
+                    torchrl_logger.debug(f"RANK {rank} -- setting to 'done'")
                 if not sync:
                     _store.set(f"NODE_{rank}_status", b"done")
+                if verbose:
+                    torchrl_logger.debug(f"RANK {rank} -- set to 'done'")
+
         elif instruction == b"shutdown":
             if verbose:
-                torchrl_logger.info(f"node with rank {rank} -- shutting down")
+                torchrl_logger.debug(f"RANK {rank} -- shutting down")
+            # Shutdown weight sync schemes first (stops background threads)
+            if weight_sync_schemes is not None:
+                for scheme in weight_sync_schemes.values():
+                    try:
+                        scheme.shutdown()
+                    except Exception:
+                        pass
             try:
                 collector.shutdown()
             except Exception:
                 pass
             _store.set(f"NODE_{rank}_out", b"down")
             break
+
         elif instruction == b"update_weights":
+            if verbose:
+                torchrl_logger.debug(f"RANK {rank} -- updating weights")
+
+            if weight_sync_schemes is not None:
+                if verbose:
+                    torchrl_logger.debug(
+                        f"RANK {rank} -- using weight sync schemes for update"
+                    )
+                # Receive fresh weights from the main process for each model.
+                # scheme.receive() handles both applying weights locally and
+                # cascading to sub-collectors via context.update_policy_weights_().
+                for model_id, scheme in weight_sync_schemes.items():
+                    if verbose:
+                        torchrl_logger.debug(
+                            f"RANK {rank} -- receiving weights for model '{model_id}'"
+                        )
+                    scheme.receive()
+                    if verbose:
+                        torchrl_logger.debug(
+                            f"RANK {rank} -- received and cascaded weights for model '{model_id}'"
+                        )
+
+                # Acknowledgment is handled by the transport (send_ack in the
+                # WeightReceiver), so we can continue without touching the
+                # TCPStore here.
+                continue
             if sync:
                 policy_weights.recv(0)
             else:
@@ -227,7 +333,7 @@ def _run_collector(
                 # been updated
                 policy_weights.irecv(0)
             # the policy has been updated: we can simply update the weights
-            collector.update_policy_weights_(policy_weights)
+            collector.update_policy_weights_(policy_weights=policy_weights)
             _store.set(f"NODE_{rank}_out", b"updated")
         elif instruction.startswith(b"seeding"):
             seed = int(instruction.split(b"seeding_"))
@@ -242,7 +348,7 @@ def _run_collector(
     return
 
 
-class DistributedDataCollector(DataCollectorBase):
+class DistributedCollector(BaseCollector):
     """A distributed data collector with torch.distributed backend.
 
     Supports sync and async data collection.
@@ -262,21 +368,31 @@ class DistributedDataCollector(DataCollectorBase):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the ``policy_factory`` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
             number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
-             Endless collectors can be created by passing ``total_frames=-1``.
-             Defaults to ``-1`` (endless collector).
+            Endless collectors can be created by passing ``total_frames=-1``.
+            Defaults to ``-1`` (endless collector).
         device (int, str or torch.device, optional): The generic device of the
             collector. The ``device`` args fills any non-specified device: if
             ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
@@ -341,13 +457,13 @@ class DistributedDataCollector(DataCollectorBase):
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
-        collector_class (type or str, optional): a collector class for the remote node. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+        collector_class (Type or str, optional): a collector class for the remote node. Can be
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
         collector_kwargs (dict or list, optional): a dictionary of parameters to be passed to the
             remote data-collector. If a list is provided, each element will
             correspond to an individual set of keyword arguments for the
@@ -397,6 +513,22 @@ class DistributedDataCollector(DataCollectorBase):
             to learn more.
             Defaults to ``"submitit"``.
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
+        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on distributed inference workers.
+            If not provided, a :class:`~torchrl.collectors.distributed.DistributedWeightUpdater` will be used by
+            default, which handles weight synchronization across distributed workers.
+            Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            SENDING weights to distributed worker collectors. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to send weights via torch.distributed.
+            If not provided, a :class:`~torchrl.weight_update.DistributedWeightSyncScheme` will be used by default.
+            This is for propagating weights from the main process to distributed workers.
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This is typically used when DistributedDataCollector is itself a worker in a larger distributed setup.
+            Defaults to ``None``.
+
     """
 
     _VERBOSE = VERBOSE  # for debugging
@@ -404,47 +536,66 @@ class DistributedDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn,
-        policy,
+        policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[] | Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] | None = None,
+        storing_device: torch.device | list[torch.device] | None = None,
+        env_device: torch.device | list[torch.device] | None = None,
+        policy_device: torch.device | list[torch.device] | None = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Callable | None = None,
         split_trajs: bool = False,
-        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class: Type = SyncDataCollector,
-        collector_kwargs: dict = None,
+        exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
+        collector_class: type = Collector,
+        collector_kwargs: dict[str, Any] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
-        slurm_kwargs: dict | None = None,
+        slurm_kwargs: dict[str, Any] | None = None,
         backend: str = "gloo",
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
+        update_interval: int | None = None,
         launcher: str = "submitit",
-        tcp_port: int = None,
+        tcp_port: int | None = None,
+        weight_updater: WeightUpdaterBase
+        | Callable[[], WeightUpdaterBase]
+        | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
 
+        if self._VERBOSE:
+            torchrl_logger.setLevel("DEBUG")
+
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
-        self.policy = policy
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory for _ in range(len(self.env_constructors))]
+        self.policy_factory = policy_factory
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
+        elif any(policy_factory):
+            policy_weights = None
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            if not any(policy_factory):
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
+        self.policy = policy
+        self._policy_to_send = policy if not any(policy_factory) else None
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
@@ -459,9 +610,15 @@ class DistributedDataCollector(DataCollectorBase):
         self._sync = sync
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
+        if update_interval is not None and update_interval < 1:
+            raise ValueError(
+                "`update_interval` must be >= 1 when provided. "
+                f"Got update_interval={update_interval}."
+            )
+        self.update_interval = update_interval
         if self.update_after_each_batch and self.max_weight_update_interval > -1:
             raise RuntimeError(
-                "Got conflicting udpate instructions: `update_after_each_batch` "
+                "Got conflicting update instructions: `update_after_each_batch` "
                 "`max_weight_update_interval` are incompatible."
             )
         self.launcher = launcher
@@ -519,25 +676,66 @@ class DistributedDataCollector(DataCollectorBase):
 
         self.backend = backend
 
-        # os.environ['TP_SOCKET_IFNAME'] = 'lo'
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_updater is None and weight_sync_schemes is None:
+            # Default to Distributed weight sync scheme for distributed collectors
+            from torchrl.weight_update import DistributedWeightSyncScheme
+
+            weight_sync_schemes = {
+                "policy": DistributedWeightSyncScheme(backend=backend, sync=self._sync)
+            }
+
+        if weight_sync_schemes is not None:
+            torchrl_logger.debug("RANK 0 -- Using weight sync schemes")
+            # Use new weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self.weight_updater = None
+        else:
+            torchrl_logger.debug("RANK 0 -- Using weight updater")
+            # Fall back to legacy weight updater system
+            if weight_updater is None:
+                weight_updater = DistributedWeightUpdater(
+                    store=self._store,
+                    policy_weights=self.policy_weights,
+                    num_workers=self.num_workers,
+                    sync=self._sync,
+                )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+
+        if self._weight_sync_schemes is not None:
+            # Initialize schemes on the sender (main process) side now that
+            # worker processes and the store have been created.
+            for model_id, scheme in self._weight_sync_schemes.items():
+                scheme.init_on_sender(
+                    num_workers=self.num_workers, context=self, model_id=model_id
+                )
 
         self._init_workers()
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
+
         self._make_container()
+        if self._weight_sync_schemes is not None:
+            for scheme in self._weight_sync_schemes.values():
+                scheme.connect()
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -589,11 +787,10 @@ class DistributedDataCollector(DataCollectorBase):
         world_size,
         backend,
     ):
-        if self._VERBOSE:
-            torchrl_logger.info(
-                f"launching main node with tcp port '{self.tcp_port}' and "
-                f"IP '{self.IPAddr}'. rank: 0, world_size: {world_size}, backend={backend}."
-            )
+        torchrl_logger.debug(
+            f"RANK 0 -- launching main node with tcp port '{self.tcp_port}' and "
+            f"IP '{self.IPAddr}'. rank: 0, world_size: {world_size}, backend={backend}."
+        )
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
 
@@ -605,38 +802,56 @@ class DistributedDataCollector(DataCollectorBase):
             timeout=timedelta(MAX_TIME_TO_CONNECT),
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
-        if self._VERBOSE:
-            torchrl_logger.info("main initiated! Launching store...")
-        self._store = torch.distributed.TCPStore(
+        torchrl_logger.debug("RANK 0 -- main initiated! Launching store...")
+        # Use retry logic to handle port conflicts
+        self._store, self._store_port = _create_tcpstore_with_retry(
             host_name=self.IPAddr,
             port=int(TCP_PORT) + 1,
             world_size=self.num_workers + 1,
             is_master=True,
-            timeout=timedelta(10),
+            timeout=10.0,
+            wait_for_workers=False,  # Don't wait - we need to broadcast port first
         )
-        if self._VERBOSE:
-            torchrl_logger.info("done. Setting status to 'alive'")
+        torchrl_logger.debug(
+            f"RANK 0 -- store created on port {self._store_port}. Broadcasting to workers..."
+        )
+        # Broadcast actual store port to all workers
+        store_port_tensor = torch.tensor([self._store_port], dtype=torch.int64)
+        torch.distributed.broadcast(store_port_tensor, src=0)
+        torchrl_logger.debug("RANK 0 -- done. Setting status to 'alive'")
         self._store.set("TRAINER_status", b"alive")
 
     def _make_container(self):
-        if self._VERBOSE:
-            torchrl_logger.info("making container")
+        torchrl_logger.debug("RANK 0 -- making container")
         env_constructor = self.env_constructors[0]
-        pseudo_collector = SyncDataCollector(
+        kwargs = self.collector_kwargs[
+            0
+        ].copy()  # Create a copy to avoid modifying the original
+        # Mirror the Collector configuration used on the workers so
+        # that the dummy batch structure matches what remote ranks will send.
+        # _run_collector always sets return_same_td=True for Collector,
+        # so we must do the same here to ensure structural consistency.
+        kwargs["return_same_td"] = True
+        pseudo_collector = Collector(
             env_constructor,
-            self.policy,
+            policy=self.policy if not self.policy_factory[0] else None,
+            policy_factory=self.policy_factory[0],
             frames_per_batch=self._frames_per_batch_corrected,
             total_frames=-1,
             split_trajs=False,
+            **kwargs,
         )
         for _data in pseudo_collector:
             break
-        if self._VERBOSE:
-            torchrl_logger.info(f"got data {_data}")
-            torchrl_logger.info("expanding...")
-        self._tensordict_out = _data.expand((self.num_workers, *_data.shape))
-        if self._VERBOSE:
-            torchrl_logger.info("locking")
+        torchrl_logger.debug(f"RANK 0 -- got dummy batch: {_data}")
+        torchrl_logger.debug("RANK 0 -- expanding...")
+        self._tensordict_out = (
+            _data.expand((self.num_workers, *_data.shape)).clone().to_lazystack(0)
+        )
+        torchrl_logger.debug(
+            f"RANK 0 -- expanded recv buffer spec: {self._tensordict_out}"
+        )
+        torchrl_logger.debug("RANK 0 -- locking")
         if self._sync:
             self._tensordict_out.lock_()
             self._tensordict_out_unbind = self._tensordict_out.unbind(0)
@@ -646,12 +861,10 @@ class DistributedDataCollector(DataCollectorBase):
             self._tensordict_out = self._tensordict_out.unbind(0)
             for td in self._tensordict_out:
                 td.lock_()
-        if self._VERBOSE:
-            torchrl_logger.info("storage created:")
-            torchrl_logger.info("shutting down...")
+        torchrl_logger.debug("RANK 0 -- storage created:")
+        torchrl_logger.debug("RANK 0 -- shutting down...")
         pseudo_collector.shutdown()
-        if self._VERBOSE:
-            torchrl_logger.info("dummy collector shut down!")
+        torchrl_logger.debug("RANK 0 -- dummy collector shut down!")
         del pseudo_collector
 
     def _init_worker_dist_submitit(self, executor, i):
@@ -661,19 +874,21 @@ class DistributedDataCollector(DataCollectorBase):
         TCP_PORT = self.tcp_port
         job = executor.submit(
             _distributed_init_collection_node,
-            i + 1,
-            self.IPAddr,
-            int(TCP_PORT),
-            self._sync,
-            self.num_workers + 1,
-            self.backend,
-            self.collector_class,
-            self.num_workers_per_collector,
-            env_make,
-            self.policy,
-            self._frames_per_batch_corrected,
-            self.collector_kwargs[i],
-            self._VERBOSE,
+            rank=i + 1,
+            rank0_ip=self.IPAddr,
+            tcpport=int(TCP_PORT),
+            sync=self._sync,
+            world_size=self.num_workers + 1,
+            backend=self.backend,
+            collector_class=self.collector_class,
+            num_workers=self.num_workers_per_collector,
+            env_make=env_make,
+            policy=self._policy_to_send,
+            policy_factory=self.policy_factory[i],
+            frames_per_batch=self._frames_per_batch_corrected,
+            weight_sync_schemes=self._weight_sync_schemes,
+            collector_kwargs=self.collector_kwargs[i],
+            verbose=self._VERBOSE,
         )
         return job
 
@@ -692,6 +907,7 @@ class DistributedDataCollector(DataCollectorBase):
                 "num_workers": self.num_workers_per_collector,
                 "env_make": get_env_make(i),
                 "policy": self.policy,
+                "policy_factory": self.policy_factory[i],
                 "frames_per_batch": self._frames_per_batch_corrected,
                 "collector_kwargs": self.collector_kwargs[i],
             }
@@ -707,20 +923,23 @@ class DistributedDataCollector(DataCollectorBase):
         TCP_PORT = self.tcp_port
         job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
-            args=(
-                i + 1,
-                self.IPAddr,
-                int(TCP_PORT),
-                self._sync,
-                self.num_workers + 1,
-                self.backend,
-                self.collector_class,
-                self.num_workers_per_collector,
-                env_make,
-                self.policy,
-                self._frames_per_batch_corrected,
-                self.collector_kwargs[i],
-                self._VERBOSE,
+            _start_method=_get_mp_ctx().get_start_method(),
+            kwargs=dict(  # noqa: C408
+                rank=i + 1,
+                rank0_ip=self.IPAddr,
+                tcpport=int(TCP_PORT),
+                sync=self._sync,
+                world_size=self.num_workers + 1,
+                backend=self.backend,
+                collector_class=self.collector_class,
+                num_workers=self.num_workers_per_collector,
+                env_make=env_make,
+                policy=self._policy_to_send,
+                policy_factory=self.policy_factory[i],
+                frames_per_batch=self._frames_per_batch_corrected,
+                collector_kwargs=self.collector_kwargs[i],
+                weight_sync_schemes=self._weight_sync_schemes,
+                verbose=self._VERBOSE,
             ),
         )
         job.start()
@@ -733,8 +952,7 @@ class DistributedDataCollector(DataCollectorBase):
             IPAddr = socket.gethostbyname(hostname)
         else:
             IPAddr = "localhost"
-        if self._VERBOSE:
-            torchrl_logger.info(f"Server IP address: {IPAddr}")
+        torchrl_logger.debug(f"RANK 0 -- Server IP address: {IPAddr}")
         self.IPAddr = IPAddr
         os.environ["MASTER_ADDR"] = str(self.IPAddr)
         os.environ["MASTER_PORT"] = str(self.tcp_port)
@@ -749,21 +967,20 @@ class DistributedDataCollector(DataCollectorBase):
             self._init_worker_dist_submitit_delayed()
         else:
             for i in range(self.num_workers):
-                if self._VERBOSE:
-                    torchrl_logger.info("Submitting job")
+                torchrl_logger.debug("RANK 0 -- Submitting job")
                 if self.launcher == "submitit":
                     job = self._init_worker_dist_submitit(
                         executor,
                         i,
                     )
-                    if self._VERBOSE:
-                        torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
+                    torchrl_logger.debug(
+                        f"RANK 0 -- job id {job.job_id}"
+                    )  # ID of your job
                 elif self.launcher == "mp":
                     job = self._init_worker_dist_mp(
                         i,
                     )
-                    if self._VERBOSE:
-                        torchrl_logger.info("job launched")
+                    torchrl_logger.debug("RANK 0 -- job launched")
                 self.jobs.append(job)
             self._init_master_dist(self.num_workers + 1, self.backend)
 
@@ -771,33 +988,69 @@ class DistributedDataCollector(DataCollectorBase):
         yield from self._iterator_dist()
 
     def _iterator_dist(self):
-        if self._VERBOSE:
-            torchrl_logger.info("iterating...")
+        torchrl_logger.debug("RANK 0 -- iterating...")
 
         total_frames = 0
+        num_batches_yielded = 0
         if not self._sync:
             for rank in range(1, self.num_workers + 1):
-                if self._VERBOSE:
-                    torchrl_logger.info(f"sending 'continue' to {rank}")
+                torchrl_logger.debug(f"RANK 0 -- sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
             trackers = []
             for i in range(self.num_workers):
                 rank = i + 1
+                torchrl_logger.debug(f"RANK 0 -- receiving {rank=}")
                 trackers.append(
                     self._tensordict_out[i].irecv(src=rank, return_premature=True)
                 )
+            torchrl_logger.debug(f"RANK 0 -- trackers: {trackers}")
 
         while total_frames < self.total_frames:
             if self._sync:
                 data, total_frames = self._next_sync(total_frames)
             else:
-                data, total_frames = self._next_async(total_frames, trackers)
+                data, total_frames, ready_worker_idx = self._next_async(
+                    total_frames, trackers
+                )
 
             if self.split_trajs:
                 data = split_trajectories(data)
             if self.postproc is not None:
                 data = self.postproc(data)
             yield data
+            num_batches_yielded += 1
+            has_more = total_frames < self.total_frames
+
+            # Automatic weight update hook: update_interval controls how often we
+            # propagate weights through the registered weight sync schemes.
+            #
+            # Important: for async collection, we do this *after* yielding the batch
+            # (so the user can mutate policy weights) but *before* letting the worker
+            # continue, to ensure the next batch reflects the new weights.
+            if (
+                has_more
+                and self.update_interval is not None
+                and self._weight_sync_schemes is not None
+                and num_batches_yielded % self.update_interval == 0
+            ):
+                if self._sync:
+                    # Sync case: all workers will proceed next, update everyone.
+                    for scheme in self._weight_sync_schemes.values():
+                        scheme.send()
+                else:
+                    # Async case: only release the worker that just produced data.
+                    for scheme in self._weight_sync_schemes.values():
+                        scheme.send(worker_ids=ready_worker_idx)
+
+            if (not self._sync) and has_more:
+                # Release the worker that produced the last batch and restart its
+                # receive tracker *after* any weight update has been propagated.
+                rank = ready_worker_idx + 1
+                torchrl_logger.debug(f"RANK 0 -- sending 'continue' to {rank}")
+                self._store.set(f"NODE_{rank}_in", b"continue")
+                trackers[ready_worker_idx] = self._tensordict_out[
+                    ready_worker_idx
+                ].irecv(src=rank, return_premature=True)
 
             if self.max_weight_update_interval > -1:
                 for j in range(self.num_workers):
@@ -806,17 +1059,22 @@ class DistributedDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
                     ):
-                        self.update_policy_weights_(rank)
+                        torchrl_logger.debug(f"RANK 0 -- updating weights for {rank=}")
+                        self.update_policy_weights_(
+                            policy_weights=None, worker_ids=rank
+                        )
 
         for i in range(self.num_workers):
             rank = i + 1
-            if self._VERBOSE:
-                torchrl_logger.info(f"shutting down rank {rank}.")
+            torchrl_logger.debug(f"RANK 0 -- shutting down rank {rank}.")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
 
     def _next_sync(self, total_frames):
         # in the 'sync' case we should update before collecting the data
         if self.update_after_each_batch:
+            torchrl_logger.debug(
+                f"RANK 0 -- updating weights for {total_frames=} in _next_sync."
+            )
             self.update_policy_weights_()
         else:
             for j in range(self.num_workers):
@@ -824,12 +1082,12 @@ class DistributedDataCollector(DataCollectorBase):
 
         if total_frames < self.total_frames:
             for rank in range(1, self.num_workers + 1):
-                if self._VERBOSE:
-                    torchrl_logger.info(f"sending 'continue' to {rank}")
+                torchrl_logger.debug(f"RANK 0 -- sending 'continue' to {rank}")
                 self._store.set(f"NODE_{rank}_in", b"continue")
         trackers = []
         for i in range(self.num_workers):
             rank = i + 1
+            torchrl_logger.debug(f"RANK 0 -- receiving {rank=} in _next_sync.")
             trackers.append(
                 self._tensordict_out_unbind[i].irecv(src=rank, return_premature=True)
             )
@@ -847,57 +1105,37 @@ class DistributedDataCollector(DataCollectorBase):
 
     def _next_async(self, total_frames, trackers):
         data = None
+        ready_worker_idx = None
         while data is None:
             for i in range(self.num_workers):
                 rank = i + 1
+                torchrl_logger.debug(f"RANK 0 -- checking {rank=} in _next_async.")
                 if self._store.get(f"NODE_{rank}_status") == b"done":
+                    torchrl_logger.debug(f"RANK 0 -- receiving {rank=} in _next_async.")
                     for _tracker in trackers[i]:
                         _tracker.wait()
+                    torchrl_logger.debug(f"RANK 0 -- received {rank=} in _next_async.")
                     data = self._tensordict_out[i].clone()
                     if self.update_after_each_batch:
-                        self.update_policy_weights_(rank)
+                        torchrl_logger.debug(
+                            f"RANK 0 -- updating weights for {rank=} in _next_async."
+                        )
+                        self.update_policy_weights_(worker_ids=rank)
                     total_frames += data.numel()
-                    if total_frames < self.total_frames:
-                        if self._VERBOSE:
-                            torchrl_logger.info(f"sending 'continue' to {rank}")
-                        self._store.set(f"NODE_{rank}_in", b"continue")
-                    trackers[i] = self._tensordict_out[i].irecv(
-                        src=i + 1, return_premature=True
-                    )
+                    ready_worker_idx = i
                     for j in range(self.num_workers):
                         self._batches_since_weight_update[j] += j != i
                     break
-        return data, total_frames
-
-    def update_policy_weights_(self, worker_rank=None) -> None:
-        """Updates the weights of the worker nodes.
-
-        Args:
-            worker_rank (int, optional): if provided, only this worker weights
-                will be updated.
-        """
-        if worker_rank is not None and worker_rank < 1:
-            raise RuntimeError("worker_rank must be greater than 1")
-        workers = range(self.num_workers) if worker_rank is None else [worker_rank - 1]
-        for i in workers:
-            rank = i + 1
-            if self._VERBOSE:
-                torchrl_logger.info(f"updating weights of {rank}")
-            self._store.set(f"NODE_{rank}_in", b"update_weights")
-            if self._sync:
-                self.policy_weights.send(rank)
-            else:
-                self.policy_weights.isend(rank)
-            self._batches_since_weight_update[i] = 0
-            status = self._store.get(f"NODE_{rank}_out")
-            if status != b"updated":
-                raise RuntimeError(f"Expected 'updated' but got status {status}.")
-            self._store.delete_key(f"NODE_{rank}_out")
+        if ready_worker_idx is None:
+            raise RuntimeError(
+                "Failed to find a ready worker in async collection loop."
+            )
+        return data, total_frames, ready_worker_idx
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
             rank = i + 1
-            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode("utf-8"))
+            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode())
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":
                 raise RuntimeError(f"Expected 'seeded' but got status {status}.")
@@ -913,17 +1151,20 @@ class DistributedDataCollector(DataCollectorBase):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
+        # Prevent double shutdown
+        if getattr(self, "_shutdown", False):
+            return
+        self._shutdown = True
+
         self._store.set("TRAINER_status", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
-            if self._VERBOSE:
-                torchrl_logger.info(f"shutting down node with rank={rank}")
+            torchrl_logger.debug(f"shutting down node with rank={rank}")
             self._store.set(f"NODE_{rank}_in", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1
-            if self._VERBOSE:
-                torchrl_logger.info(f"getting status of node {rank}")
+            torchrl_logger.debug(f"getting status of node {rank}")
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"down":
                 raise RuntimeError(f"Expected 'down' but got status {status}.")
@@ -937,5 +1178,129 @@ class DistributedDataCollector(DataCollectorBase):
                 self.jobs[i].result()
             elif self.launcher == "submitit_delayed":
                 pass
-        if self._VERBOSE:
-            torchrl_logger.info("collector shut down")
+
+        # Clean up weight sync schemes AFTER workers have exited
+        # (workers have their own scheme instances that they clean up)
+        if self._weight_sync_schemes is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torchrl_logger.debug("destroying process group")
+            torch.distributed.destroy_process_group()
+
+        torchrl_logger.debug("collector shut down")
+
+
+class DistributedWeightUpdater(WeightUpdaterBase):
+    """A remote weight updater for synchronizing policy weights across distributed workers.
+
+    .. warning::
+        This class has been deprecated in favor of the :class:`~torchrl.weight_update.DistributedWeightSyncScheme`
+        API.
+
+    The `DistributedWeightUpdater` class provides a mechanism for updating the weights
+    of a policy across distributed inference workers. It is designed to work with the
+    :class:`~torchrl.collectors.distributed.DistributedDataCollector` to ensure that each worker receives the latest policy weights.
+    This class is typically used in distributed data collection scenarios where multiple workers
+    need to be kept in sync with the central policy weights.
+
+    Args:
+        store (dict[str, str]): A dictionary-like store used for communication between the server
+            and the distributed workers.
+        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed
+            to the workers.
+        num_workers (int): The number of distributed workers that will receive the updated policy weights.
+        sync (bool): if ``True``, the sync happens synchronously (the server waits for the worker to have completed
+            the update to restart the run).
+
+    Methods:
+        update_weights: Updates the weights on specified or all distributed workers.
+        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).
+        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).
+        _get_server_weights: Retrieves the latest weights from the server (not implemented).
+        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).
+
+    .. note::
+        This class assumes that the server weights can be directly applied to the distributed workers
+        without any additional processing. If your use case requires more complex weight mapping or
+        synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation.
+
+    Raises:
+        RuntimeError: If the worker rank is less than 1 or if the status returned by the store is not "updated".
+
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
+        :class:`~torchrl.collectors.distributed.DistributedDataCollector`.
+
+    """
+
+    _VERBOSE = False
+
+    def __init__(
+        self,
+        store: dict[str, str],
+        policy_weights: TensorDictBase,
+        num_workers: int,
+        sync: bool,
+    ):
+        self._store = store
+        self.policy_weights = policy_weights
+        self.num_workers = num_workers
+        self._sync = sync
+        self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
+
+    def _sync_weights_with_worker(
+        self, worker_id: int | torch.device, server_weights: TensorDictBase
+    ) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _get_server_weights(self) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError
+
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
+        raise NotImplementedError
+
+    def _push_weights(
+        self,
+        policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
+    ):
+        worker_rank = worker_ids
+        if isinstance(worker_ids, int):
+            if worker_rank is not None and worker_rank < 1:
+                raise RuntimeError("worker_rank must be greater than 1")
+            worker_rank = [worker_rank - 1]
+        workers = range(self.num_workers) if worker_rank is None else worker_rank
+        weights = (
+            self.policy_weights if policy_or_weights is None else policy_or_weights
+        )
+        for i in workers:
+            rank = i + 1
+            torchrl_logger.debug(f"updating weights of {rank}")
+            self._store.set(f"NODE_{rank}_in", b"update_weights")
+            if self._sync:
+                weights.send(rank)
+            else:
+                weights.isend(rank)
+            self._batches_since_weight_update[i] = 0
+            status = self._store.get(f"NODE_{rank}_out")
+            if status != b"updated":
+                raise RuntimeError(f"Expected 'updated' but got status {status}.")
+            self._store.delete_key(f"NODE_{rank}_out")
+
+
+class DistributedDataCollector(DistributedCollector, metaclass=_LegacyCollectorMeta):
+    """Deprecated version of :class:`~torchrl.collectors.distributed.DistributedCollector`."""
+
+    ...

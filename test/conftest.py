@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 import os
 import sys
@@ -12,7 +14,7 @@ from collections import defaultdict
 import pytest
 import torch
 
-CALL_TIMES = defaultdict(lambda: 0.0)
+CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"
 
 
@@ -71,6 +73,11 @@ def set_warnings() -> None:
         "ignore",
         category=UserWarning,
         message=r"Skipping device Apple Paravirtual device",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"A lambda function was passed to ParallelEnv",
     )
     warnings.filterwarnings(
         "ignore",
@@ -153,3 +160,27 @@ def maybe_fork_ParallelEnv(request):
     ):
         return functools.partial(ParallelEnv, mp_start_method="fork")
     return ParallelEnv
+
+
+# LLM testing fixtures
+@pytest.fixture
+def mock_transformer_model():
+    """Fixture that provides a mock transformer model factory."""
+    from torchrl.testing import MockTransformerModel
+
+    def _make_model(
+        vocab_size: int = 1024, device: torch.device | str | int = "cpu"
+    ) -> MockTransformerModel:
+        """Make a mock transformer model."""
+        device = torch.device(device)
+        return MockTransformerModel(vocab_size, device)
+
+    return _make_model
+
+
+@pytest.fixture
+def mock_tokenizer():
+    """Fixture that provides a mock tokenizer."""
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")

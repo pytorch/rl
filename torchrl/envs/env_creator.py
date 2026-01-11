@@ -6,14 +6,13 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
 from multiprocessing.sharedctypes import Synchronized
-from typing import Callable, Dict, Optional, Union
+from multiprocessing.synchronize import Lock, RLock
 
 import torch
 from tensordict import TensorDictBase
-
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
 
@@ -39,7 +38,7 @@ class EnvCreator:
 
     Examples:
         >>> # We create the same environment on 2 processes using VecNorm
-        >>> # and check that the discounted count of observations match on
+        >>> # and check that the discounted count of observations matches on
         >>> # both workers, even if one has not executed any step
         >>> import time
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -80,7 +79,7 @@ class EnvCreator:
     def __init__(
         self,
         create_env_fn: Callable[..., EnvBase],
-        create_env_kwargs: Optional[Dict] = None,
+        create_env_kwargs: dict | None = None,
         share_memory: bool = True,
         **kwargs,
     ) -> None:
@@ -105,7 +104,7 @@ class EnvCreator:
         Examples:
             >>> from torchrl.envs import GymEnv
             >>> env_creator_pendulum = EnvCreator(GymEnv, env_name="Pendulum-v1")
-            >>> env_creator_cartpole = env_creator_pendulum(env_name="CartPole-v1")
+            >>> env_creator_cartpole = env_creator_pendulum.make_variant(env_name="CartPole-v1")
 
         """
         # Copy self
@@ -143,8 +142,12 @@ class EnvCreator:
 
     @staticmethod
     def _is_mp_value(val):
-
-        return isinstance(val, (Synchronized,)) and hasattr(val, "_obj")
+        if isinstance(val, (Synchronized,)) and hasattr(val, "_obj"):
+            return True
+        # Also check for lock types which need to be shared across processes
+        if isinstance(val, (Lock, RLock)):
+            return True
+        return False
 
     @classmethod
     def _find_mp_values(cls, env_or_transform, values, prefix=()):
@@ -230,9 +233,7 @@ def env_creator(fun: Callable) -> EnvCreator:
     return EnvCreator(fun)
 
 
-def get_env_metadata(
-    env_or_creator: Union[EnvBase, Callable], kwargs: Optional[Dict] = None
-):
+def get_env_metadata(env_or_creator: EnvBase | Callable, kwargs: dict | None = None):
     """Retrieves a EnvMetaData object from an env."""
     if isinstance(env_or_creator, (EnvBase,)):
         return EnvMetaData.metadata_from_env(env_or_creator)

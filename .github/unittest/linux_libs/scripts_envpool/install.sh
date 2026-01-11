@@ -26,11 +26,11 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu121"
+printf "Installing PyTorch with cu128"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
 else
-    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 -U
+    pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
 fi
 
 # smoke test
@@ -40,4 +40,4 @@ python -c "import functorch"
 pip install git+https://github.com/pytorch/tensordict
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e . --no-build-isolation

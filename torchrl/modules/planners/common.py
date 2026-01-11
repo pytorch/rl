@@ -2,14 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import abc
-from typing import Optional
+from typing import TYPE_CHECKING
 
 import torch
 from tensordict import TensorDictBase
 
-from torchrl.envs.common import EnvBase
 from torchrl.modules import SafeModule
+
+if TYPE_CHECKING:
+    from torchrl.envs.common import EnvBase
 
 
 class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
@@ -31,7 +35,7 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
         # Check if env is stateless
         if env.batch_locked:
             raise ValueError(
-                "Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size"
+                "Environment is batch_locked. MPCPlanners need an environment that accepts batched inputs with any batch size"
             )
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys(True, True))
@@ -52,7 +56,7 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
     def forward(
         self,
         tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
+        tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
         if "params" in kwargs or "vmap" in kwargs:

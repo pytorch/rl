@@ -7,26 +7,17 @@ from __future__ import annotations
 
 import abc
 import enum
+import functools
+import gc
 import math
 import warnings
-from collections.abc import Iterable
-from copy import deepcopy
-from dataclasses import dataclass
+import weakref
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from copy import copy, deepcopy
+from dataclasses import dataclass, field
 from functools import wraps
 from textwrap import indent
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    Optional,
-    overload,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Generic, overload, TypeVar, Union
 
 import numpy as np
 
@@ -34,39 +25,52 @@ import tensordict
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
+    set_capture_non_tensor_stack,
     TensorDict,
     TensorDictBase,
     unravel_key,
 )
 from tensordict.base import NO_DEFAULT
-from tensordict.utils import _getitem_batch_size, NestedKey
+from tensordict.utils import (
+    _getitem_batch_size,
+    expand_as_right,
+    is_non_tensor,
+    NestedKey,
+)
 from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
+
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
-INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
+INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, list]
 
 SHAPE_INDEX_TYPING = Union[
     int,
     range,
-    List[int],
+    list[int],
     np.ndarray,
     slice,
     None,
     torch.Tensor,
     type(...),
-    Tuple[
+    tuple[
         int,
         range,
-        List[int],
+        list[int],
         np.ndarray,
         slice,
         None,
         torch.Tensor,
         type(...),
-        Tuple[Any],
+        tuple[Any],
     ],
 ]
 
@@ -99,10 +103,10 @@ NO_DEFAULT_RL = _NoDefault.ONE
 
 
 def _default_dtype_and_device(
-    dtype: Union[None, torch.dtype],
-    device: Union[None, str, int, torch.device],
+    dtype: None | torch.dtype,
+    device: None | str | int | torch.device,
     allow_none_device: bool = False,
-) -> Tuple[torch.dtype, torch.device | None]:
+) -> tuple[torch.dtype, torch.device | None]:
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is not None:
@@ -133,7 +137,7 @@ def _validate_iterable(
 
     Args:
         idx (Iterable[Any]): Iterable, may contain nested iterables
-        expected_type (type): Required item type in the Iterable (e.g. int)
+        expected_type (Type): Required item type in the Iterable (e.g. int)
         iterable_classname (str): Iterable type as a string (e.g. 'List'). Logging purpose only.
     """
     for item in idx:
@@ -146,7 +150,7 @@ def _validate_iterable(
                 )
 
 
-def _slice_indexing(shape: list[int], idx: slice) -> List[int]:
+def _slice_indexing(shape: list[int], idx: slice) -> list[int]:
     """Given an input shape and a slice index, returns the new indexed shape.
 
     Args:
@@ -193,8 +197,8 @@ def _slice_indexing(shape: list[int], idx: slice) -> List[int]:
 
 
 def _shape_indexing(
-    shape: Union[list[int], torch.Size, Tuple[int]], idx: SHAPE_INDEX_TYPING
-) -> List[int]:
+    shape: list[int] | torch.Size | tuple[int], idx: SHAPE_INDEX_TYPING
+) -> list[int]:
     """Given an input shape and an index, returns the size of the resulting indexed spec.
 
     This function includes indexing checks and may raise IndexErrors.
@@ -360,7 +364,7 @@ class Box:
     def __iter__(self):
         raise NotImplementedError
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> ContinuousBox:
         raise NotImplementedError
 
     def __repr__(self):
@@ -377,15 +381,62 @@ class ContinuousBox(Box):
     _low: torch.Tensor
     _high: torch.Tensor
     device: torch.device | None = None
+    _batch_size: torch.Size | None = None
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size | tuple):
+        # Check batch size is compatible with low and high
+        value = _remove_neg_shapes(value)
+        if self._batch_size is None:
+            if value != self._low.shape[: len(value)]:
+                raise ValueError(
+                    f"Batch size {value} is not compatible with low and high {self._low.shape}"
+                )
+        if value is None:
+            self._batch_size = None
+            self._low = self.low.clone()
+            self._high = self.high.clone()
+            return
+        # Remove batch size from low and high
+        if value:
+            # Check that low and high have a single value
+            td_low_high = TensorDict(
+                low=self.low, high=self.high, batch_size=value
+            ).flatten()
+            td_low_high0 = td_low_high[0]
+            if torch.allclose(
+                td_low_high0["low"], td_low_high["low"]
+            ) and torch.allclose(td_low_high0["high"], td_low_high["high"]):
+                self._low = td_low_high0["low"].clone()
+                self._high = td_low_high0["high"].clone()
+                self._batch_size = torch.Size(value)
+        else:
+            self._low = self.low.clone()
+            self._high = self.high.clone()
+            self._batch_size = torch.Size(value)
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
     def low(self):
-        return self._low.to(self.device)
+        low = self._low
+        if self.device is not None and low.device != self.device:
+            low = low.to(self.device)
+        if self._batch_size:
+            low = low.expand((*self._batch_size, *low.shape)).clone()
+        return low
 
     @property
     def high(self):
-        return self._high.to(self.device)
+        high = self._high
+        if self.device is not None and high.device != self.device:
+            high = high.to(self.device)
+        if self._batch_size:
+            high = high.expand((*self._batch_size, *high.shape)).clone()
+        return high
 
     def unbind(self, dim: int = 0):
         return tuple(
@@ -396,22 +447,37 @@ class ContinuousBox(Box):
     @low.setter
     def low(self, value):
         self.device = value.device
-        self._low = value.cpu()
+        self._low = value
+        if self._batch_size is not None:
+            if value.shape[: len(self._batch_size)] != self._batch_size:
+                raise ValueError(
+                    f"Batch size {value.shape[:len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
+                )
+            if self._batch_size:
+                self._low = self._low.flatten(0, len(self._batch_size) - 1)[0].clone()
 
     @high.setter
     def high(self, value):
         self.device = value.device
-        self._high = value.cpu()
+        self._high = value
+        if self._batch_size is not None:
+            if value.shape[: len(self._batch_size)] != self._batch_size:
+                raise ValueError(
+                    f"Batch size {value.shape[:len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
+                )
+            if self._batch_size:
+                self._high = self._high.flatten(0, len(self._batch_size) - 1)[0].clone()
 
     def __post_init__(self):
         self.low = self.low.clone()
         self.high = self.high.clone()
+        self._batch_size = None
 
     def __iter__(self):
         yield self.low
         yield self.high
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> ContinuousBox:
         return self.__class__(self.low.to(dest), self.high.to(dest))
 
     def clone(self) -> ContinuousBox:
@@ -446,7 +512,7 @@ class ContinuousBox(Box):
                 return True
             return False
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.low.dtype == other.low.dtype
             and self.high.dtype == other.high.dtype
             and self.device == other.device
@@ -455,14 +521,19 @@ class ContinuousBox(Box):
         )
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class CategoricalBox(Box):
     """A box of discrete, categorical values."""
 
     n: int
     register = invertible_dict()
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CategoricalBox:
+    def __post_init__(self):
+        # n could be a numpy array or a tensor, making compile go a bit crazy
+        # We want to make sure we're working with a regular integer
+        self.__dict__["n"] = int(self.n)
+
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> CategoricalBox:
         return deepcopy(self)
 
     def __repr__(self):
@@ -479,14 +550,13 @@ class DiscreteBox(CategoricalBox):
 class BoxList(Box):
     """A box of discrete values."""
 
-    boxes: List
+    boxes: list
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> BoxList:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> BoxList:
         return BoxList([box.to(dest) for box in self.boxes])
 
     def __iter__(self):
-        for elt in self.boxes:
-            yield elt
+        yield from self.boxes
 
     def __repr__(self):
         return f"{self.__class__.__name__}(boxes={self.boxes})"
@@ -502,13 +572,13 @@ class BoxList(Box):
             return BoxList([BoxList.from_nvec(n) for n in nvec.unbind(-1)])
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class BinaryBox(Box):
     """A box of n binary values."""
 
     n: int
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> ContinuousBox:
         return deepcopy(self)
 
     def __repr__(self):
@@ -516,7 +586,7 @@ class BinaryBox(Box):
 
 
 @dataclass(repr=False)
-class TensorSpec:
+class TensorSpec(metaclass=abc.ABCMeta):
     """Parent class of the tensor meta-data containers.
 
     TorchRL's TensorSpec are used to present what input/output is to be expected for a specific class,
@@ -545,12 +615,46 @@ class TensorSpec:
     """
 
     shape: torch.Size
-    space: Union[None, Box]
-    device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    space: None | Box
+    device: torch.device | None = None  # noqa # type: ignore
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
+    _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
+        default_factory=dict,
+    )
 
     SPEC_HANDLED_FUNCTIONS = {}
+
+    def memoize_encode(self, mode: bool = True) -> None:
+        """Creates a cached sequence of callables for the `encode` method that speeds up its execution.
+
+        This should only be used whenever the input type, shape etc. are expected to be consistent across calls
+        for a given spec.
+
+        Args:
+            mode (bool, optional): Whether the cache should be used. Defaults to `True`.
+
+        .. seealso:: the cache can be erased via :meth:`~torchrl.data.TensorSpec.erase_memoize_cache`.
+        """
+        warnings.warn(
+            "memoized encoding is an experimental feature. Use at your own risks."
+        )
+        if mode:
+            self.encode = self._encode_memo
+        else:
+            self.encode = self._encode_eager
+
+    def erase_memoize_cache(self) -> None:
+        """Clears the memoized cache for cached encode execution.
+
+        .. seealso:: :meth:`~torchrl.data.TensorSpec.memoize_encode`.
+        """
+        self._encode_memo_dict.clear()
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["_encode"] = {}
+        return state
 
     @classmethod
     def implements_for_spec(cls, torch_function: Callable) -> Callable:
@@ -564,7 +668,7 @@ class TensorSpec:
         return decorator
 
     @property
-    def device(self) -> torch.device:
+    def device(self) -> torch.device:  # noqa # type: ignore
         """The device of the spec.
 
         Only :class:`Composite` specs can have a ``None`` device. All leaves must have a non-null device.
@@ -582,9 +686,19 @@ class TensorSpec:
         """
         return self
 
+    @abc.abstractmethod
+    def cardinality(self) -> int:
+        """The cardinality of the spec.
+
+        This refers to the number of possible outcomes in a spec. It is assumed that the cardinality of a composite
+        spec is the cartesian product of all possible outcomes.
+
+        """
+        ...
+
     def encode(
         self,
-        val: np.ndarray | torch.Tensor | TensorDictBase,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
@@ -606,6 +720,16 @@ class TensorSpec:
             torch.Tensor matching the required tensor specs.
 
         """
+        raise NotImplementedError(
+            "This is a placeholder that needs to be set during construction"
+        )
+
+    def _encode_eager(
+        self,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor | TensorDictBase:
         if not isinstance(val, torch.Tensor):
             if isinstance(val, list):
                 if len(val) == 1:
@@ -641,6 +765,81 @@ class TensorSpec:
             self.assert_is_in(val)
         return val
 
+    def _encode_memo(
+        self,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor | TensorDictBase:
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(val)
+
+        funcs = []
+        val_orig = val
+        if not isinstance(val, torch.Tensor):
+            if isinstance(val, list):
+                if len(val) == 1:
+                    # gym used to return lists of images since 0.26.0
+                    # We convert these lists in np.array or take the first element
+                    # if there is just one.
+                    # See https://github.com/pytorch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
+                    funcs.append(lambda val: val[0])
+                else:
+                    funcs.append(lambda val: np.array(val))
+            val = _reduce_funcs(funcs)(val_orig)
+            if isinstance(val, np.ndarray) and not all(
+                stride > 0 for stride in val.strides
+            ):
+                funcs.append(lambda val: val.copy())
+            val = _reduce_funcs(funcs)(val_orig)
+            if not ignore_device:
+                funcs.append(
+                    lambda val: torch.as_tensor(
+                        val, device=self.device, dtype=self.dtype
+                    )
+                )
+            else:
+                funcs.append(lambda val: torch.as_tensor(val, dtype=self.dtype))
+            val = _reduce_funcs(funcs)(val_orig)
+        if val.shape != self.shape:
+            # if val.shape[-len(self.shape) :] != self.shape:
+            # option 1: add a singleton dim at the end
+            if val.shape == self.shape and self.shape[-1] == 1:
+                funcs.append(lambda val: val.unsqueeze(-1))
+            else:
+
+                def reshape(val):
+                    try:
+                        return val.reshape(self.shape)
+                    except Exception as err:
+                        raise RuntimeError(
+                            f"Shape mismatch: the value has shape {val.shape} which "
+                            f"is incompatible with the spec shape {self.shape}."
+                        ) from err
+
+                funcs.append(reshape)
+            val = _reduce_funcs(funcs)(val_orig)
+        if _CHECK_SPEC_ENCODE:
+
+            def check(val):
+                self.assert_is_in(val)
+                return val
+
+            funcs.append(check)
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = _reduce_funcs(funcs)
+        return self._encode_memo_dict[ignore_device](val_orig)
+
+    @abc.abstractmethod
+    def __eq__(self, other: Any) -> bool:
+        # Implement minimal version if super() is called
+        return type(self) is type(other)
+
     def __ne__(self, other):
         return not (self == other)
 
@@ -650,7 +849,7 @@ class TensorSpec:
         super().__setattr__(key, value)
 
     def to_numpy(
-        self, val: torch.Tensor | TensorDictBase, safe: bool = None
+        self, val: torch.Tensor | TensorDictBase, safe: bool | None = None
     ) -> np.ndarray | dict:
         """Returns the ``np.ndarray`` correspondent of an input tensor.
 
@@ -700,12 +899,30 @@ class TensorSpec:
     ) -> torch.Tensor | TensorDictBase:
         """Indexes the input tensor.
 
+        This method is to be used with specs that encode one or more categorical variables (e.g.,
+        :class:`~torchrl.data.OneHot` or :class:`~torchrl.data.Categorical`), such that indexing of a tensor
+        with a sample can be done without caring about the actual representation of the index.
+
         Args:
             index (int, torch.Tensor, slice or list): index of the tensor
             tensor_to_index: tensor to be indexed
 
         Returns:
             indexed tensor
+
+        Exanples:
+            >>> from torchrl.data import OneHot
+            >>> import torch
+            >>>
+            >>> one_hot = OneHot(n=100)
+            >>> categ = one_hot.to_categorical_spec()
+            >>> idx_one_hot = torch.zeros((100,), dtype=torch.bool)
+            >>> idx_one_hot[50] = 1
+            >>> print(one_hot.index(idx_one_hot, torch.arange(100)))
+            tensor(50)
+            >>> idx_categ = one_hot.to_categorical(idx_one_hot)
+            >>> print(categ.index(idx_categ, torch.arange(100)))
+            tensor(50)
 
         """
         ...
@@ -780,7 +997,7 @@ class TensorSpec:
     def _reshape(self, shape: torch.Size) -> T:
         ...
 
-    def unflatten(self, dim: int, sizes: Tuple[int]) -> T:
+    def unflatten(self, dim: int, sizes: tuple[int]) -> T:
         """Unflattens a ``TensorSpec``.
 
         Check :func:`~torch.unflatten` for more information on this method.
@@ -788,7 +1005,7 @@ class TensorSpec:
         """
         return self._unflatten(dim, sizes)
 
-    def _unflatten(self, dim: int, sizes: Tuple[int]) -> T:
+    def _unflatten(self, dim: int, sizes: tuple[int]) -> T:
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
         return self._reshape(shape)
 
@@ -830,17 +1047,21 @@ class TensorSpec:
     def contains(self, item: torch.Tensor | TensorDictBase) -> bool:
         """If the value ``val`` could have been generated by the ``TensorSpec``, returns ``True``, otherwise ``False``.
 
-        See :meth:`~.is_in` for more information.
+        See :meth:`is_in` for more information.
         """
         return self.is_in(item)
 
     @abc.abstractmethod
-    def enumerate(self) -> Any:
+    def enumerate(self, use_mask: bool = False) -> Any:
         """Returns all the samples that can be obtained from the TensorSpec.
 
         The samples will be stacked along the first dimension.
 
         This method is only implemented for discrete specs.
+
+        Args:
+            use_mask (bool, optional): If ``True`` and the spec has a mask,
+                samples that are masked are excluded. Default is ``False``.
         """
         ...
 
@@ -856,7 +1077,7 @@ class TensorSpec:
             a torch.Tensor belonging to the TensorSpec box.
 
         """
-        if not self.is_in(val):
+        if is_compiling() or not self.is_in(val):
             return self._project(val)
         return val
 
@@ -909,7 +1130,7 @@ class TensorSpec:
     def sample(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
         """Returns a random tensor in the space defined by the spec.
 
-        See :meth:`~.rand` for details.
+        See :meth:`rand` for details.
         """
         return self.rand(shape=shape)
 
@@ -934,7 +1155,7 @@ class TensorSpec:
         )
 
     def zeros(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
-        """Proxy to :meth:`~.zero`."""
+        """Proxy to :meth:`zero`."""
         return self.zero(shape=shape)
 
     def one(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
@@ -956,11 +1177,11 @@ class TensorSpec:
         return self.zero(shape) + 1
 
     def ones(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
-        """Proxy to :meth:`~.one`."""
+        """Proxy to :meth:`one`."""
         return self.one(shape=shape)
 
     @abc.abstractmethod
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> TensorSpec:
         """Casts a TensorSpec to a device or a dtype.
 
         Returns the same spec if no change is made.
@@ -978,7 +1199,7 @@ class TensorSpec:
         return self.to(f"cuda:{device}")
 
     @abc.abstractmethod
-    def clone(self) -> "TensorSpec":
+    def clone(self) -> TensorSpec:
         """Creates a copy of the TensorSpec."""
         ...
 
@@ -999,8 +1220,8 @@ class TensorSpec:
         cls,
         func: Callable,
         types,
-        args: Tuple = (),
-        kwargs: Optional[dict] = None,
+        args: tuple = (),
+        kwargs: dict | None = None,
     ) -> Callable:
         if kwargs is None:
             kwargs = {}
@@ -1020,7 +1241,7 @@ T = TypeVar("T")
 
 
 class _LazyStackedMixin(Generic[T]):
-    def __init__(self, *specs: Tuple[T, ...], dim: int) -> None:
+    def __init__(self, *specs: tuple[T, ...], dim: int) -> None:
         self._specs = list(specs)
         self.dim = dim
         if self.dim < 0:
@@ -1160,7 +1381,7 @@ class _LazyStackedMixin(Generic[T]):
             )
         return torch.nested.nested_tensor(samples)
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> T:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> T:
         if dest is None:
             return self
         return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
@@ -1215,7 +1436,7 @@ class _LazyStackedMixin(Generic[T]):
             for spec in self._specs:
                 spec.make_neg_dim(dim - 1)
 
-    def squeeze(self, dim: int = None):
+    def squeeze(self, dim: int | None = None):
         if dim is None:
             size = self.shape
             if len(size) == 1 or size.count(1) == 0:
@@ -1268,6 +1489,31 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     """
 
+    def _reshape(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`reshape` is not implemented for {type(self).__name__} specs."
+        )
+
+    def cardinality(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`cardinality` is not implemented for {type(self).__name__} specs."
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            f"`index` is not implemented for {type(self).__name__} specs."
+        )
+
     def __eq__(self, other):
         if not isinstance(other, Stacked):
             return False
@@ -1281,15 +1527,15 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
                 return False
         return True
 
-    def enumerate(self) -> torch.Tensor | TensorDictBase:
+    def enumerate(self, use_mask: bool = False) -> torch.Tensor | TensorDictBase:
         return torch.stack(
-            [spec.enumerate() for spec in self._specs], dim=self.stack_dim + 1
+            [spec.enumerate(use_mask) for spec in self._specs], dim=self.stack_dim + 1
         )
 
     def __len__(self):
         return self.shape[0]
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         if safe:
@@ -1409,8 +1655,8 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
     def _project(self, val: TensorDictBase) -> TensorDictBase:
         raise NOT_IMPLEMENTED_ERROR
 
-    def encode(
-        self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
+    def _encode_eager(
+        self, val: np.ndarray | torch.Tensor, *, ignore_device=False
     ) -> torch.Tensor:
         if self.dim != 0 and not isinstance(val, tuple):
             val = val.unbind(self.dim)
@@ -1460,7 +1706,7 @@ class OneHot(TensorSpec):
             elements will be mapped in a register to a series of unique
             one-hot binary vectors).
         mask (torch.Tensor or None): mask some of the possible outcomes when a
-            sample is taken. See :meth:`~.update_mask` for more information.
+            sample is taken. See :meth:`update_mask` for more information.
 
     Examples:
         >>> from torchrl.data.tensor_specs import OneHot
@@ -1482,19 +1728,24 @@ class OneHot(TensorSpec):
     shape: torch.Size
     space: CategoricalBox
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
+    _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
+        default_factory=dict,
+    )
 
     def __init__(
         self,
         n: int,
-        shape: Optional[torch.Size] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.bool,
+        shape: torch.Size | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: str | torch.dtype | None = torch.bool,
         use_register: bool = False,
         mask: torch.Tensor | None = None,
     ):
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         self.use_register = use_register
         space = CategoricalBox(n)
         if shape is None:
@@ -1510,10 +1761,14 @@ class OneHot(TensorSpec):
             shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
         )
         self.update_mask(mask)
+        self.encode = self._encode_eager
 
     @property
     def n(self):
         return self.space.n
+
+    def cardinality(self) -> int:
+        return self.n
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -1544,7 +1799,7 @@ class OneHot(TensorSpec):
                 raise ValueError("Only boolean masks are accepted.")
         self.mask = mask
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> OneHot:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> OneHot:
         if dest is None:
             return self
         if isinstance(dest, torch.dtype):
@@ -1682,7 +1937,7 @@ class OneHot(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    @implement_for("torch", None, "2.1")
+    @implement_for("torch", None, "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
@@ -1705,7 +1960,7 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    @implement_for("torch", "2.1")
+    @implement_for("torch", "2.1", compilable=True)
     def rand(self, shape: torch.Size = None) -> torch.Tensor:  # noqa: F811
         if shape is None:
             shape = self.shape[:-1]
@@ -1728,10 +1983,10 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    def encode(
+    def _encode_eager(
         self,
-        val: Union[np.ndarray, torch.Tensor],
-        space: Optional[CategoricalBox] = None,
+        val: np.ndarray | torch.Tensor,
+        space: CategoricalBox | None = None,
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor:
@@ -1755,7 +2010,58 @@ class OneHot(TensorSpec):
         val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
         return val
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
+    def _encode_memo(
+        self,
+        val: np.ndarray | torch.Tensor,
+        space: CategoricalBox | None = None,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor:
+
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(val)
+        funcs = []
+        val_orig = val
+        if not isinstance(val, torch.Tensor):
+            if ignore_device:
+                funcs.append(torch.as_tensor)
+            else:
+                funcs.append(lambda val: torch.as_tensor(val, device=self.device))
+        val = _reduce_funcs(funcs)(val_orig)
+        if space is None:
+            # TODO: make sure this is the case when the encoding is cached
+            space = self.space
+
+        if self.use_register:
+
+            def from_register(val):
+                if val not in space.register:
+                    space.register[val] = len(space.register)
+                return space.register[val]
+
+            funcs.append(from_register)
+
+        val = _reduce_funcs(funcs)(val_orig)
+
+        def check_and_one_hot(val):
+            if (val >= space.n).any():
+                raise AssertionError("Value must be less than action space.")
+            val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
+            return val
+
+        funcs.append(check_and_one_hot)
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._encode_memo_dict[ignore_device](val_orig)
+
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> np.ndarray:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         if safe:
@@ -1771,7 +2077,9 @@ class OneHot(TensorSpec):
             return np.array(vals).reshape(tuple(val.shape))
         return val
 
-    def enumerate(self) -> torch.Tensor:
+    def enumerate(self, use_mask: bool = False) -> torch.Tensor:
+        if use_mask:
+            raise NotImplementedError
         return (
             torch.eye(self.n, dtype=self.dtype, device=self.device)
             .expand(*self.shape, self.n)
@@ -1784,7 +2092,7 @@ class OneHot(TensorSpec):
                 f"Only tensors are allowed for indexing using "
                 f"{self.__class__.__name__}.index(...)"
             )
-        index = index.nonzero().squeeze()
+        index = index.nonzero(as_tuple=True)[-1]
         index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
 
@@ -1805,7 +2113,7 @@ class OneHot(TensorSpec):
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if self.mask is None:
-            out = torch.multinomial(val.to(torch.float), 1).squeeze(-1)
+            out = torch.multinomial(val.to(torch.get_default_dtype()), 1).squeeze(-1)
             out = torch.nn.functional.one_hot(out, self.space.n).to(self.dtype)
             return out
         shape = self.mask.shape
@@ -1814,9 +2122,8 @@ class OneHot(TensorSpec):
         gathered = mask_expand & val
         oob = ~gathered.any(-1)
         new_val = torch.multinomial(mask_expand[oob].float(), 1)
-        val = val.clone()
-        val[oob] = 0
-        val[oob] = torch.scatter(val[oob], -1, new_val, 1)
+        new_val = torch.scatter(torch.zeros_like(val[oob]), -1, new_val, 1)
+        val = val.masked_scatter(expand_as_right(oob, val), new_val)
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
@@ -1845,7 +2152,7 @@ class OneHot(TensorSpec):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -1855,7 +2162,9 @@ class OneHot(TensorSpec):
             and mask_equal
         )
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
 
         Args:
@@ -1904,7 +2213,7 @@ class OneHot(TensorSpec):
             mask=self.mask,
         )
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool | None = None) -> torch.Tensor:
         """No-op for OneHot."""
         return val
 
@@ -1990,11 +2299,11 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
 
     def __init__(
         self,
-        low: Union[float, torch.Tensor, np.ndarray] = None,
-        high: Union[float, torch.Tensor, np.ndarray] = None,
-        shape: Optional[Union[torch.Size, int]] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[torch.dtype, str]] = None,
+        low: float | torch.Tensor | np.ndarray = None,
+        high: float | torch.Tensor | np.ndarray = None,
+        shape: torch.Size | int | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | str | None = None,
         **kwargs,
     ):
         if "maximum" in kwargs:
@@ -2017,7 +2326,9 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if len(kwargs):
             raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype is None:
             dtype = torch.get_default_dtype()
         if domain is None:
@@ -2039,11 +2350,11 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         if dtype is not None and high.dtype is not dtype:
             high = high.to(dtype)
         err_msg = (
-            "Bounded requires the shape to be explicitely (via "
-            "the shape argument) or implicitely defined (via either the "
+            "Bounded requires the shape to be explicitly (via "
+            "the shape argument) or implicitly defined (via either the "
             "minimum or the maximum or both). If the maximum and/or the "
             "minimum have a non-singleton shape, they must match the "
-            "provided shape if this one is set explicitely."
+            "provided shape if this one is set explicitly."
         )
         if shape is not None and not isinstance(shape, torch.Size):
             if isinstance(shape, int):
@@ -2101,15 +2412,28 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             dtype=dtype,
             domain=domain,
         )
+        self.encode = self._encode_eager
 
-    def enumerate(self) -> Any:
+    def _register_batch_size(self, batch_size: torch.Size | tuple):
+        # Register batch size in the space to decrease the memory footprint of the specs
+        self.space.batch_size = batch_size
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("Indexing not implemented for Bounded.")
+
+    def enumerate(self, use_mask: bool = False) -> Any:
         raise NotImplementedError(
             f"enumerate is not implemented for spec of class {type(self).__name__}."
         )
 
+    def cardinality(self) -> int:
+        return float("inf")
+
     def __eq__(self, other):
         return (
-            type(other) == type(self)
+            type(other) is type(self)
             and self.device == other.device
             and self.shape == other.shape
             and self.space == other.space
@@ -2127,13 +2451,6 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(
-            orig_val != val and val < 0
-            for val, orig_val in zip(shape[-len(self.shape) :], self.shape)
-        ):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -2249,24 +2566,21 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             r = torch.rand(_size([*shape, *self._safe_shape]), device=interval.device)
             r = interval * r
             r = self.space.low + r
-            r = r.to(self.dtype).to(self.device)
+            if r.dtype != self.dtype:
+                r = r.to(self.dtype)
+            if self.dtype is not None and r.device != self.device:
+                r = r.to(self.device)
             return r
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        low = self.space.low.to(val.device)
-        high = self.space.high.to(val.device)
-        try:
-            val = val.clamp_(low.item(), high.item())
-        except ValueError:
-            low = low.expand_as(val)
-            high = high.expand_as(val)
-            val[val < low] = low[val < low]
-            val[val > high] = high[val > high]
-        except RuntimeError:
-            low = low.expand_as(val)
-            high = high.expand_as(val)
-            val[val < low] = low[val < low]
-            val[val > high] = high[val > high]
+        low = self.space.low
+        high = self.space.high
+        if self.device != val.device:
+            low = low.to(val.device)
+            high = high.to(val.device)
+        low = low.expand_as(val)
+        high = high.expand_as(val)
+        val = torch.clamp(val, low, high)
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
@@ -2301,7 +2615,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 return False
             raise err
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Bounded:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> Bounded:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -2353,16 +2667,17 @@ class BoundedContinuous(Bounded, metaclass=_BoundedMeta):
 
     def __init__(
         self,
-        low: Union[float, torch.Tensor, np.ndarray] = None,
-        high: Union[float, torch.Tensor, np.ndarray] = None,
-        shape: Optional[Union[torch.Size, int]] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[torch.dtype, str]] = None,
+        low: float | torch.Tensor | np.ndarray = None,
+        high: float | torch.Tensor | np.ndarray = None,
+        shape: torch.Size | int | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | str | None = None,
         domain: str = "continuous",
     ):
         super().__init__(
             low=low, high=high, shape=shape, device=device, dtype=dtype, domain=domain
         )
+        self.encode = self._encode_eager
 
 
 class BoundedDiscrete(Bounded, metaclass=_BoundedMeta):
@@ -2370,11 +2685,11 @@ class BoundedDiscrete(Bounded, metaclass=_BoundedMeta):
 
     def __init__(
         self,
-        low: Union[float, torch.Tensor, np.ndarray] = None,
-        high: Union[float, torch.Tensor, np.ndarray] = None,
-        shape: Optional[Union[torch.Size, int]] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[torch.dtype, str]] = None,
+        low: float | torch.Tensor | np.ndarray = None,
+        high: float | torch.Tensor | np.ndarray = None,
+        shape: torch.Size | int | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | str | None = None,
         domain: str = "discrete",
     ):
         super().__init__(
@@ -2385,6 +2700,7 @@ class BoundedDiscrete(Bounded, metaclass=_BoundedMeta):
             dtype=dtype,
             domain=domain,
         )
+        self.encode = self._encode_eager
 
 
 def _is_nested_list(index, notuple=False):
@@ -2404,32 +2720,114 @@ def _is_nested_list(index, notuple=False):
 class NonTensor(TensorSpec):
     """A spec for non-tensor data.
 
-    This spec has a shae, device and dtype like :class:`~tensordict.NonTensorData`.
+    The `NonTensor` class is designed to handle specifications for data that do not conform to standard tensor
+    structures.
+    It maintains attributes such as shape, and device similar to the `NonTensorData` class.
+    The dtype is optional and should in practice be left to `None` in most cases.
+    Methods like `rand`, `zero`, and `one` will return a `NonTensorData` object with a `None` data value.
 
-    :meth:`.rand` will return a :class:`~tensordict.NonTensorData` object with `None` data value.
-    (same will go for :meth:`.zero` and :meth:`.one`).
+    .. warning:: The default shape of `NonTensor` is `(1,)`.
+
+    Args:
+        shape (Union[torch.Size, int], optional): The shape of the non-tensor data. Defaults to `(1,)`.
+        device (Optional[DEVICE_TYPING], optional): The device on which the data is stored. Defaults to `None`.
+        dtype (torch.dtype | None, optional): The data type of the non-tensor data. Defaults to `None`.
+        example_data (Any, optional): An example of the data that this spec represents. This example is used as a
+            template when generating new data with the `rand`, `zero`, and `one` methods.
+        batched (bool, optional): Indicates whether the data is batched. If `True`, the `rand`, `zero`, and `one` methods
+            will generate data with an additional batch dimension, stacking copies of the `example_data` across this dimension.
+            Defaults to `False`.
+            Exclusive with `feature_dims`.
+        feature_dims (int, optional): The number of dimensions that are features.
+            The feature dimensions are the trailing dimensions that are not batch dimensions.
+            Every feature dimension is included in a single NonTensorData object, whereas these
+            are stacked across the batch dimension.
+            Exclusive with `batched`.
+            Defaults to `None` (all if batched=False, none if batched=True).
+        **kwargs: Additional keyword arguments passed to the parent class.
+
+    .. seealso:: :class:`~torchrl.data.Choice` which allows to randomly choose among different specs when calling
+      `rand`.
+
+    Examples:
+        >>> from torchrl.data import NonTensor
+        >>> spec = NonTensor(example_data="a string", batched=False, shape=(3,))
+        >>> spec.rand()
+        NonTensorData(data=a string, batch_size=torch.Size([3]), device=None)
+        >>> spec = NonTensor(example_data="a string", batched=True, shape=(3,))
+        >>> spec.rand()
+        NonTensorStack(
+            ['a string', 'a string', 'a string'],
+            batch_size=torch.Size([3]),
+            device=None)
     """
+
+    example_data: Any = None
 
     def __init__(
         self,
-        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
-        device: Optional[DEVICE_TYPING] = None,
+        shape: torch.Size | int = _DEFAULT_SHAPE,
+        device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
+        example_data: Any = None,
+        batched: bool | None = None,
+        feature_dims: int | None = None,
         **kwargs,
     ):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        _, device = _default_dtype_and_device(None, device)
         domain = None
         super().__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
+        self.example_data = example_data
+        if batched is None and feature_dims is None:
+            batched = False
+            feature_dims = len(self.shape)
+        elif batched is None and feature_dims is not None:
+            batched = False
+        elif batched is not None and feature_dims is not None:
+            raise ValueError("Cannot specify both batched and feature_dims.")
+        else:
+            feature_dims = 0 if batched else len(self.shape)
+        self.batched = batched
+        self.feature_dims = feature_dims
+        self.encode = self._encode_eager
 
-    def enumerate(self) -> Any:
-        raise NotImplementedError("Cannot enumerate a NonTensorSpec.")
+    def __repr__(self):
+        shape_str = indent("shape=" + str(self.shape), " " * 4)
+        space_str = indent("space=" + str(self.space), " " * 4)
+        device_str = indent("device=" + str(self.device), " " * 4)
+        dtype_str = indent("dtype=" + str(self.dtype), " " * 4)
+        domain_str = indent("domain=" + str(self.domain), " " * 4)
+        example_str = indent("example_data=" + str(self.example_data), " " * 4)
+        sub_string = ",\n".join(
+            [shape_str, space_str, device_str, dtype_str, domain_str, example_str]
+        )
+        string = f"{self.__class__.__name__}(\n{sub_string})"
+        return string
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> NonTensor:
+    def __eq__(self, other):
+        eq = super().__eq__(other)
+        eq = eq & (self.example_data == getattr(other, "example_data", None))
+        return eq
+
+    def _project(self) -> Any:
+        raise NotImplementedError("Cannot project a NonTensor spec.")
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("Cannot use index with a NonTensor spec.")
+
+    def cardinality(self) -> Any:
+        raise NotImplementedError("Cannot enumerate a NonTensor spec.")
+
+    def enumerate(self, use_mask: bool = False) -> Any:
+        raise NotImplementedError("Cannot enumerate a NonTensor spec.")
+
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> NonTensor:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -2440,40 +2838,72 @@ class NonTensor(TensorSpec):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
-        return self.__class__(shape=self.shape, device=dest_device, dtype=None)
+        return self.__class__(
+            shape=self.shape,
+            device=dest_device,
+            dtype=None,
+            example_data=self.example_data,
+            feature_dims=self.feature_dims,
+        )
 
     def clone(self) -> NonTensor:
-        return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=self.shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+            feature_dims=self.feature_dims,
+        )
 
     def rand(self, shape=None):
         if shape is None:
             shape = ()
-        return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
-        )
+        if self.batched:
+            # feature dim is None
+            feature_dims = 0
+        else:
+            feature_dims = self.feature_dims
+        if isinstance(shape, int):
+            shape = _size([shape])
+        total_shape = (*shape, *self._safe_shape)
+        batch_shape = total_shape[:-feature_dims]
+        feature_shape = total_shape[-feature_dims:]
+        with set_capture_non_tensor_stack(False):
+            val = NonTensorData(
+                data=self.example_data,
+                batch_size=feature_shape,
+                device=self.device,
+            )
+            if batch_shape:
+                for i in reversed(batch_shape):
+                    val = lazy_stack([val.copy() for _ in range(i)])
+            return val
 
     def zero(self, shape=None):
-        if shape is None:
-            shape = ()
-        return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
-        )
+        return self.rand(shape=shape)
 
     def one(self, shape=None):
-        if shape is None:
-            shape = ()
-        return NonTensorData(
-            data=None, batch_size=(*shape, *self._safe_shape), device=self.device
-        )
+        return self.rand(shape=shape)
 
-    def is_in(self, val: torch.Tensor) -> bool:
-        shape = torch.broadcast_shapes(self._safe_shape, val.shape)
+    def is_in(self, val: Any) -> bool:
+        if not isinstance(val, torch.Tensor) and not is_tensor_collection(val):
+            return True
+        # Since we don't really share Nontensor across processes, it's ok to modify the shape
+        # We do this when the shape has been determined by a single sample gathered
+        # from a dataloader, but shapes of the non-tensor may actually vary.
+        if any(v < 0 for v in val.shape):
+            self.shape = torch.Size(
+                (self.shape[i] if s >= 0 else -1 for i, s in enumerate(val.shape))
+            )
+        _safe_val_shape = torch.Size(s if s >= 0 else 1 for s in val.shape)
+        shape = torch.broadcast_shapes(self._safe_shape, _safe_val_shape)
         return (
-            isinstance(val, NonTensorData)
-            and val.shape == shape
+            is_non_tensor(val)
+            and _safe_val_shape == shape
             # We relax constrains on device as they're hard to enforce for non-tensor
             #  tensordicts and pointless
             # and val.device == self.device
+            # TODO: do we want this?
             and val.dtype == self.dtype
         )
 
@@ -2488,10 +2918,36 @@ class NonTensor(TensorSpec):
             raise ValueError(
                 f"The last elements of the expanded shape must match the current one. Got shape={shape} while self.shape={self.shape}."
             )
-        return self.__class__(shape=shape, device=self.device, dtype=None)
+        return self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=None,
+            example_data=self.example_data,
+            feature_dims=self.feature_dims,
+        )
+
+    def unsqueeze(self, dim: int) -> NonTensor:
+        unsq = super().unsqueeze(dim=dim)
+        unsq.example_data = self.example_data
+        unsq.feature_dims = self.feature_dims
+        unsq.batched = self.batched
+        return unsq
+
+    def squeeze(self, dim: int | None = None) -> NonTensor:
+        sq = super().squeeze(dim=dim)
+        sq.example_data = self.example_data
+        sq.feature_dims = self.feature_dims
+        sq.batched = self.batched
+        return sq
 
     def _reshape(self, shape):
-        return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+            feature_dims=self.feature_dims,
+        )
 
     def _unflatten(self, dim, sizes):
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
@@ -2499,12 +2955,20 @@ class NonTensor(TensorSpec):
             shape=shape,
             device=self.device,
             dtype=self.dtype,
+            example_data=self.example_data,
+            feature_dims=self.feature_dims,
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
-        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
+        return self.__class__(
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+            example_data=self.example_data,
+            feature_dims=self.feature_dims,
+        )
 
     def unbind(self, dim: int = 0):
         orig_dim = dim
@@ -2520,9 +2984,41 @@ class NonTensor(TensorSpec):
                 shape=shape,
                 device=self.device,
                 dtype=self.dtype,
+                example_data=self.example_data,
+                feature_dims=self.feature_dims,
             )
             for i in range(self.shape[dim])
         )
+
+    def to_numpy(
+        self, val: torch.Tensor | TensorDictBase, safe: bool | None = None
+    ) -> np.ndarray | dict:
+        return val
+
+    def _encode_eager(
+        self,
+        val: np.ndarray | torch.Tensor | TensorDictBase,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor | TensorDictBase:
+        if self.batched:
+            # feature dim is None
+            feature_dims = 0
+        else:
+            feature_dims = self.feature_dims
+        total_shape = self._safe_shape
+        batch_shape = total_shape[:-feature_dims]
+        feature_shape = total_shape[-feature_dims:]
+        result = NonTensorData(
+            val,
+            device=self.device,
+            batch_size=feature_shape,
+        )
+        if not batch_shape:
+            return result
+        for i in reversed(batch_shape):
+            result = lazy_stack([result.copy() for _ in range(i)])
+        return result
 
 
 class _UnboundedMeta(abc.ABCMeta):
@@ -2598,15 +3094,17 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
 
     def __init__(
         self,
-        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = None,
+        shape: torch.Size | int = _DEFAULT_SHAPE,
+        device: DEVICE_TYPING | None = None,
+        dtype: str | torch.dtype | None = None,
         **kwargs,
     ):
         if isinstance(shape, int):
             shape = _size([shape])
 
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if dtype == torch.bool:
             min_value = False
             max_value = True
@@ -2633,8 +3131,19 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         super().__init__(
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
+        self.encode = self._encode_eager
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Unbounded:
+    def cardinality(self) -> int:
+        raise NotImplementedError(
+            "`cardinality` is not implemented for Unbounded specs."
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("`index` is not implemented for Unbounded specs.")
+
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> Unbounded:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -2653,7 +3162,7 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
         if shape is None:
             shape = _size([])
-        shape = [*shape, *self.shape]
+        shape = [*shape, *self._safe_shape]
         if self.dtype.is_floating_point:
             return torch.randn(shape, device=self.device, dtype=self.dtype)
         return torch.empty(shape, device=self.device, dtype=self.dtype).random_()
@@ -2663,9 +3172,11 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         return val.shape == shape and val.dtype == self.dtype
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        return torch.as_tensor(val, dtype=self.dtype).reshape(self.shape)
+        return torch.as_tensor(val, dtype=self.dtype).reshape(
+            val.shape[: -self.ndim] + self.shape
+        )
 
-    def enumerate(self) -> Any:
+    def enumerate(self, use_mask: bool = False) -> Any:
         raise NotImplementedError("enumerate cannot be called with continuous specs.")
 
     def expand(self, *shape):
@@ -2721,8 +3232,8 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         # those specs are equivalent to a discrete spec
         if isinstance(other, Bounded):
             minval, maxval = _minmax_dtype(self.dtype)
-            minval = torch.as_tensor(minval).to(self.device, self.dtype)
-            maxval = torch.as_tensor(maxval).to(self.device, self.dtype)
+            minval = torch.as_tensor(minval, device=self.device, dtype=self.dtype)
+            maxval = torch.as_tensor(maxval, device=self.device, dtype=self.dtype)
             return (
                 Bounded(
                     shape=self.shape,
@@ -2756,12 +3267,13 @@ class UnboundedDiscrete(Unbounded):
 
     def __init__(
         self,
-        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.int64,
+        shape: torch.Size | int = _DEFAULT_SHAPE,
+        device: DEVICE_TYPING | None = None,
+        dtype: str | torch.dtype | None = torch.int64,
         **kwargs,
     ):
         super().__init__(shape=shape, device=device, dtype=dtype, **kwargs)
+        self.encode = self._encode_eager
 
 
 @dataclass(repr=False)
@@ -2782,7 +3294,7 @@ class MultiOneHot(OneHot):
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
         mask (torch.Tensor or None): mask some of the possible outcomes when a
-            sample is taken. See :meth:`~.update_mask` for more information.
+            sample is taken. See :meth:`update_mask` for more information.
 
     Examples:
         >>> ts = MultiOneHot((3,2,3))
@@ -2804,14 +3316,16 @@ class MultiOneHot(OneHot):
     def __init__(
         self,
         nvec: Sequence[int],
-        shape: Optional[torch.Size] = None,
+        shape: torch.Size | None = None,
         device=None,
         dtype=torch.bool,
         use_register=False,
         mask: torch.Tensor | None = None,
     ):
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = _size((sum(nvec),))
         else:
@@ -2831,10 +3345,14 @@ class MultiOneHot(OneHot):
             domain="discrete",
         )
         self.update_mask(mask)
+        self.encode = self._encode_eager
 
-    def enumerate(self) -> torch.Tensor:
+    def cardinality(self) -> int:
+        return torch.as_tensor(self.nvec).prod()
+
+    def enumerate(self, use_mask: bool = False) -> torch.Tensor:
         nvec = self.nvec
-        enum_disc = self.to_categorical_spec().enumerate()
+        enum_disc = self.to_categorical_spec().enumerate(use_mask)
         enums = torch.cat(
             [
                 torch.nn.functional.one_hot(enum_unb, nv).to(self.dtype)
@@ -2876,7 +3394,7 @@ class MultiOneHot(OneHot):
                 raise ValueError("Only boolean masks are accepted.")
         self.mask = mask
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> MultiOneHot:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> MultiOneHot:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -2914,7 +3432,7 @@ class MultiOneHot(OneHot):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -2924,7 +3442,7 @@ class MultiOneHot(OneHot):
             and mask_equal
         )
 
-    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+    def rand(self, shape: torch.Size | None = None) -> torch.Tensor:
         if shape is None:
             shape = self.shape[:-1]
         else:
@@ -2964,8 +3482,8 @@ class MultiOneHot(OneHot):
             out.append(m)
         return torch.cat(out, -1)
 
-    def encode(
-        self, val: Union[np.ndarray, torch.Tensor], *, ignore_device: bool = False
+    def _encode_eager(
+        self, val: np.ndarray | torch.Tensor, *, ignore_device: bool = False
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
             if not ignore_device:
@@ -2980,11 +3498,59 @@ class MultiOneHot(OneHot):
                     f"value {v} is greater than the allowed max {space.n}"
                 )
             x.append(
-                super(MultiOneHot, self).encode(v, space, ignore_device=ignore_device)
+                super(type(self), self)._encode_eager(
+                    v, space, ignore_device=ignore_device
+                )
             )
         return torch.cat(x, -1).reshape(self.shape)
 
-    def _split(self, val: torch.Tensor) -> Optional[torch.Tensor]:
+    def _encode_memo(
+        self, val: np.ndarray | torch.Tensor, *, ignore_device: bool = False
+    ) -> torch.Tensor:
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(val)
+        funcs = []
+        val_orig = val
+        if not isinstance(val, torch.Tensor):
+            if not ignore_device:
+
+                def as_tensor(val):
+                    val = torch.tensor(val, device=self.device)
+
+            else:
+                as_tensor = torch.as_tensor
+            funcs.append(as_tensor)
+        val = _reduce_funcs(funcs)(val_orig)
+
+        def cat(val):
+            x = []
+            for v, space in zip(val.unbind(-1), self.space):
+                if not (v < space.n).all():
+                    raise RuntimeError(
+                        f"value {v} is greater than the allowed max {space.n}"
+                    )
+                x.append(
+                    super(type(self), self)._encode_eager(
+                        v, space, ignore_device=ignore_device
+                    )
+                )
+            return torch.cat(x, -1).reshape(self.shape)
+
+        funcs.append(cat)
+        val = _reduce_funcs(funcs)(val_orig)
+
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._encode_memo_dict[ignore_device](val_orig)
+
+    def _split(self, val: torch.Tensor) -> torch.Tensor | None:
         split_sizes = [space.n for space in self.space]
         if val.ndim < 1 or val.shape[-1] != sum(split_sizes):
             return None
@@ -3043,7 +3609,9 @@ class MultiOneHot(OneHot):
             )
         return result
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
 
         Args:
@@ -3094,7 +3662,7 @@ class MultiOneHot(OneHot):
             mask=self.mask,
         )
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool | None = None) -> torch.Tensor:
         """No-op for MultiOneHot."""
         return val
 
@@ -3214,19 +3782,26 @@ class Categorical(TensorSpec):
     """A discrete tensor spec.
 
     An alternative to :class:`OneHot` for categorical variables in TorchRL.
-    Categorical variables perform indexing insted of masking, which can speed-up
+    Categorical variables perform indexing instead of masking, which can speed-up
     computation and reduce memory cost for large categorical variables.
 
     The spec will have the shape defined by the ``shape`` argument: if a singleton dimension is
     desired for the training dimension, one should specify it explicitly.
 
+    Attributes:
+        n (int): The number of possible outcomes.
+        shape (torch.Size): The shape of the variable.
+        device (torch.device): The device of the tensors.
+        dtype (torch.dtype): The dtype of the tensors.
+
     Args:
-        n (int): number of possible outcomes.
+        n (int): number of possible outcomes. If set to -1, the cardinality of the categorical spec is undefined,
+            and `set_provisional_n` must be called before sampling from this spec.
         shape: (torch.Size, optional): shape of the variable, default is "torch.Size([])".
-        device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
-        mask (torch.Tensor or None): mask some of the possible outcomes when a
-            sample is taken. See :meth:`~.update_mask` for more information.
+        device (str, int or torch.device, optional): the device of the tensors.
+        dtype (str or torch.dtype, optional): the dtype of the tensors.
+        mask (torch.Tensor or None): A boolean mask to prevent some of the possible outcomes when a sample is taken.
+            See :meth:`update_mask` for more information.
 
     Examples:
         >>> categ = Categorical(3)
@@ -3249,13 +3824,20 @@ class Categorical(TensorSpec):
             domain=discrete)
         >>> categ.rand()
         tensor([1])
+        >>> categ = Categorical(-1)
+        >>> categ.set_provisional_n(5)
+        >>> categ.rand()
+        tensor(3)
+
+    .. note:: When n is set to -1, calling `rand` without first setting a provisional n using `set_provisional_n`
+        will raise a ``RuntimeError``.
 
     """
 
     shape: torch.Size
     space: CategoricalBox
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
 
     # SPEC_HANDLED_FUNCTIONS = {}
@@ -3270,22 +3852,48 @@ class Categorical(TensorSpec):
     ):
         if shape is None:
             shape = _size([])
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         space = CategoricalBox(n)
         super().__init__(
             shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
         )
         self.update_mask(mask)
+        self._provisional_n = None
+        self.encode = self._encode_eager
 
-    def enumerate(self) -> torch.Tensor:
-        arange = torch.arange(self.n, dtype=self.dtype, device=self.device)
+    @property
+    def _undefined_n(self):
+        return self.space.n < 0
+
+    def enumerate(self, use_mask: bool = False) -> torch.Tensor:
+        dtype = self.dtype
+        if dtype is torch.bool:
+            dtype = torch.uint8
+        n = self.n
+        arange = torch.arange(n, dtype=dtype, device=self.device)
+        if use_mask and self.mask is not None:
+            arange = arange[self.mask]
+            n = arange.shape[0]
         if self.ndim:
             arange = arange.view(-1, *(1,) * self.ndim)
-        return arange.expand(self.n, *self.shape)
+        return arange.expand(n, *self.shape)
 
     @property
     def n(self):
-        return self.space.n
+        n = self.space.n
+        if n == -1:
+            n = self._provisional_n
+            if n is None:
+                raise RuntimeError(
+                    f"Undefined cardinality for {type(self)}. Please call "
+                    f"spec.set_provisional_n(int)."
+                )
+        return n
+
+    def cardinality(self) -> int:
+        return self.n
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -3316,14 +3924,34 @@ class Categorical(TensorSpec):
                 raise ValueError("Only boolean masks are accepted.")
         self.mask = mask
 
+    def set_provisional_n(self, n: int):
+        """Set the cardinality of the Categorical spec temporarily.
+
+        This method is required to be called before sampling from the spec when n is -1.
+
+        Args:
+            n (int): The cardinality of the Categorical spec.
+
+        """
+        self._provisional_n = n
+
     def rand(self, shape: torch.Size = None) -> torch.Tensor:
+        if self._undefined_n:
+            if self._provisional_n is None:
+                raise RuntimeError(
+                    "Cannot generate random categorical samples for undefined cardinality (n=-1). "
+                    "To sample from this class, first call Categorical.set_provisional_n(n) before calling rand()."
+                )
+            n = self._provisional_n
+        else:
+            n = self.space.n
         if shape is None:
             shape = _size([])
         if self.mask is None:
             return torch.randint(
                 0,
-                self.space.n,
-                _size([*shape, *self.shape]),
+                n,
+                _size([*shape, *_remove_neg_shapes(self.shape)]),
                 device=self.device,
                 dtype=self.dtype,
             )
@@ -3334,8 +3962,22 @@ class Categorical(TensorSpec):
         else:
             mask_flat = mask
         shape_out = mask.shape[:-1]
-        out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+        # Check that the mask has the right size
+        if mask_flat.shape[-1] != n:
+            raise ValueError(
+                "The last dimension of the mask must match the number of action allowed by the "
+                f"Categorical spec. Got mask.shape={self.mask.shape} and n={n}."
+            )
+        out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out).to(self.dtype)
         return out
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        idx = index.expand(
+            tensor_to_index.shape[: -self.ndim] + torch.Size([-1] * self.ndim)
+        )
+        return tensor_to_index.gather(-1, idx)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if val.dtype not in (torch.int, torch.long):
@@ -3360,11 +4002,13 @@ class Categorical(TensorSpec):
             dtype_match = val.dtype == self.dtype
             if not dtype_match:
                 return False
+            if self.space.n == -1:
+                return True
             return (0 <= val).all() and (val < self.space.n).all()
         shape = self.mask.shape
         shape = _size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
         mask_expand = self.mask.expand(shape)
-        gathered = mask_expand.gather(-1, val.unsqueeze(-1))
+        gathered = mask_expand.gather(-1, val.unsqueeze(-1).to(torch.long))
         return gathered.all()
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
@@ -3387,7 +4031,7 @@ class Categorical(TensorSpec):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -3396,14 +4040,14 @@ class Categorical(TensorSpec):
             and mask_equal
         )
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         # if not val.shape and not safe:
         #     return val.item()
         return super().to_numpy(val, safe)
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool | None = None) -> torch.Tensor:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
@@ -3430,7 +4074,9 @@ class Categorical(TensorSpec):
             self.assert_is_in(val)
         return torch.nn.functional.one_hot(val, self.space.n).bool()
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> torch.Tensor:
         """No-op for categorical."""
         return val
 
@@ -3536,7 +4182,7 @@ class Categorical(TensorSpec):
             for i in range(self.shape[dim])
         )
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Categorical:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> Categorical:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -3561,6 +4207,160 @@ class Categorical(TensorSpec):
         )
 
 
+class Choice(TensorSpec):
+    """A discrete choice spec for either tensor or non-tensor data.
+
+    Args:
+        choices (list[:class:`~TensorSpec`, :class:`~tensordict.NonTensorData`, :class:`~tensordict.NonTensorStack`]):
+            List of specs or non-tensor data from which to choose during
+            sampling. All elements must have the same type, shape, dtype, and
+            device.
+
+    Examples:
+        >>> import torch
+        >>> _ = torch.manual_seed(0)
+        >>> from torchrl.data import Choice, Bounded
+        >>> spec = Choice([
+        ...     Bounded(0, 1, shape=(1,)),
+        ...     Bounded(10, 11, shape=(1,))])
+        >>> spec.rand()
+        tensor([0.7682])
+        >>> spec.rand()
+        tensor([10.1320])
+        >>> from tensordict import NonTensorData
+        >>> _ = torch.manual_seed(0)
+        >>> spec = Choice([NonTensorData(s) for s in ["a", "b", "c", "d"]])
+        >>> spec.rand().data
+        'a'
+        >>> spec.rand().data
+        'd'
+    """
+
+    def __init__(
+        self,
+        choices: list[TensorSpec | NonTensorData | NonTensorStack],
+    ):
+        if not isinstance(choices, list):
+            raise TypeError("'choices' must be a list")
+
+        if not isinstance(choices[0], (TensorSpec, NonTensorData, NonTensorStack)):
+            raise TypeError(
+                "Each choice must be either a TensorSpec, NonTensorData, or "
+                f"NonTensorStack, but got {type(choices[0])}"
+            )
+
+        if not all([isinstance(choice, type(choices[0])) for choice in choices[1:]]):
+            raise TypeError("All choices must be the same type")
+
+        if not all([choice.shape == choices[0].shape for choice in choices[1:]]):
+            raise ValueError("All choices must have the same shape")
+
+        if not all([choice.dtype == choices[0].dtype for choice in choices[1:]]):
+            raise ValueError("All choices must have the same dtype")
+
+        if not all([choice.device == choices[0].device for choice in choices[1:]]):
+            raise ValueError("All choices must have the same device")
+
+        shape = choices[0].shape
+        device = choices[0].device
+        dtype = choices[0].dtype
+
+        super().__init__(
+            shape=shape, space=None, device=device, dtype=dtype, domain=None
+        )
+
+        self._choices = [choice.clone() for choice in choices]
+        self.encode = self._encode_eager
+
+    def _rand_idx(self):
+        return torch.randint(0, len(self._choices), ()).item()
+
+    def _sample(self, idx, spec_sample_fn) -> TensorDictBase:
+        res = self._choices[idx]
+        if isinstance(res, TensorSpec):
+            return spec_sample_fn(res)
+        else:
+            return res
+
+    def zero(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(0, lambda x: x.zero(shape))
+
+    def one(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(min(1, len(self - 1)), lambda x: x.one(shape))
+
+    def rand(self, shape: torch.Size = None) -> TensorDictBase:
+        return self._sample(self._rand_idx(), lambda x: x.rand(shape))
+
+    def is_in(self, val: torch.Tensor | TensorDictBase) -> bool:
+        if isinstance(self._choices[0], TensorSpec):
+            return any([choice.is_in(val) for choice in self._choices])
+        else:
+            return any([(choice == val).all() for choice in self._choices])
+
+    def expand(self, *shape):
+        return self.__class__([choice.expand(*shape) for choice in self._choices])
+
+    def unsqueeze(self, dim: int):
+        return self.__class__([choice.unsqueeze(dim) for choice in self._choices])
+
+    def clone(self) -> Choice:
+        return self.__class__([choice.clone() for choice in self._choices])
+
+    def cardinality(self) -> int:
+        if isinstance(self._choices[0], (NonTensorData, NonTensorStack)):
+            return len(self._choices)
+        else:
+            return (
+                torch.tensor([choice.cardinality() for choice in self._choices])
+                .sum()
+                .item()
+            )
+
+    def enumerate(self, use_mask: bool = False) -> list[Any]:
+        return [s for choice in self._choices for s in choice.enumerate()]
+
+    def _project(
+        self, val: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            "_project is not implemented for Choice. If this feature is required, please raise "
+            "an issue on TorchRL github repo."
+        )
+
+    def _reshape(self, shape: torch.Size) -> T:
+        return self.__class__(
+            [choice.reshape(shape) for choice in self._choices],
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            "index is not implemented for Choice. If this feature is required, please raise "
+            "an issue on TorchRL github repo."
+        )
+
+    @property
+    def num_choices(self):
+        """Number of choices for the spec."""
+        return len(self._choices)
+
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> Choice:
+        return self.__class__([choice.to(dest) for choice in self._choices])
+
+    def __eq__(self, other):
+        if not isinstance(other, Choice):
+            return False
+        if self.num_choices != other.num_choices:
+            return False
+        return all(
+            (s0 == s1).all()
+            if isinstance(s0, torch.Tensor) or is_tensor_collection(s0)
+            else s0 == s1
+            for s0, s1 in zip(self._choices, other._choices)
+        )
+
+
 @dataclass(repr=False)
 class Binary(Categorical):
     """A binary discrete tensor spec.
@@ -3575,7 +4375,7 @@ class Binary(Categorical):
             If not provided, ``shape`` must be passed.
 
             .. warning:: the ``n`` argument from ``Binary`` must not be confused with the ``n`` argument from :class:`Categorical`
-                or :class:`OneHot` which denotes the maximum nmber of elements that can be sampled.
+                or :class:`OneHot` which denotes the maximum number of elements that can be sampled.
                 For clarity, use ``shape`` instead.
 
         shape (torch.Size, optional): total shape of the sampled tensors.
@@ -3603,64 +4403,88 @@ class Binary(Categorical):
     def __init__(
         self,
         n: int | None = None,
-        shape: Optional[torch.Size] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Union[str, torch.dtype] = torch.int8,
+        shape: torch.Size | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: str | torch.dtype = torch.int8,
     ):
-        if n is None and not shape:
+        if n is None and shape is None:
             raise TypeError("Must provide either n or shape.")
-        if n is None:
-            n = shape[-1]
-        if shape is None or not len(shape):
-            shape = _size((n,))
-        else:
-            shape = _size(shape)
+
+        # Either `shape` or `n` is not `None`.
+        shape = _size((n,)) if shape is None else _size(shape)
+
+        # Consistency checks between `shape` and `n`.
+        if len(shape) == 0:
+            if n is not None and n != 0:
+                raise ValueError(
+                    f"'n' must be zero for spec {self.__class__} when using an empty shape"
+                )
+        elif n is not None:
             if shape[-1] != n:
                 raise ValueError(
-                    f"The last value of the shape must match n for spec {self.__class__}. "
+                    f"The last value of the shape must match 'n' for spec {self.__class__}. "
                     f"Got n={n} and shape={shape}."
                 )
+        else:
+            n = shape[-1]
+
         super().__init__(n=2, shape=shape, device=device, dtype=dtype)
+        self.encode = self._encode_eager
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(val < 0 for val in shape):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _reshape(self, shape):
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _unflatten(self, dim, sizes):
-        shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
+        shape = (
+            torch.zeros(_remove_neg_shapes(self.shape), device="meta")
+            .unflatten(dim, sizes)
+            .shape
+        )
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def squeeze(self, dim=None):
-        shape = _squeezed_shape(self.shape, dim)
+        shape = _squeezed_shape(_remove_neg_shapes(self.shape), dim)
         if shape is None:
             return self
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def unbind(self, dim: int = 0):
@@ -3677,12 +4501,15 @@ class Binary(Categorical):
         shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
         return tuple(
             self.__class__(
-                n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+                n=shape[-1] if len(shape) > 0 else None,
+                shape=shape,
+                device=self.device,
+                dtype=self.dtype,
             )
             for i in range(self.shape[dim])
         )
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Binary:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> Binary:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -3694,12 +4521,15 @@ class Binary(Categorical):
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
         return self.__class__(
-            n=self.shape[-1], shape=self.shape, device=dest_device, dtype=dest_dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
         )
 
     def clone(self) -> Binary:
         return self.__class__(
-            n=self.shape[-1],
+            n=self.shape[-1] if len(self.shape) > 0 else None,
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
@@ -3710,6 +4540,8 @@ class Binary(Categorical):
 
         The last dimension of the spec (length n of the binary vector) cannot be indexed.
         """
+        if not len(self.shape):
+            raise ValueError("Cannot index a Binary spec with an empty shape")
         indexed_shape = _shape_indexing(self.shape[:-1], idx)
         return self.__class__(
             n=self.shape[-1],
@@ -3746,7 +4578,7 @@ class MultiCategorical(Categorical):
         remove_singleton (bool, optional): if ``True``, singleton samples (of size [1])
             will be squeezed. Defaults to ``True``.
         mask (torch.Tensor or None): mask some of the possible outcomes when a
-            sample is taken. See :meth:`~.update_mask` for more information.
+            sample is taken. See :meth:`update_mask` for more information.
 
     Examples:
         >>> ts = MultiCategorical((3, 2, 3))
@@ -3758,10 +4590,10 @@ class MultiCategorical(Categorical):
 
     def __init__(
         self,
-        nvec: Union[Sequence[int], torch.Tensor, int],
-        shape: Optional[torch.Size] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.int64,
+        nvec: Sequence[int] | torch.Tensor | int,
+        shape: torch.Size | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: str | torch.dtype | None = torch.int64,
         mask: torch.Tensor | None = None,
         remove_singleton: bool = True,
     ):
@@ -3770,7 +4602,9 @@ class MultiCategorical(Categorical):
         if nvec.ndim < 1:
             nvec = nvec.unsqueeze(0)
         self.nvec = nvec
-        dtype, device = _default_dtype_and_device(dtype, device)
+        dtype, device = _default_dtype_and_device(
+            dtype, device, allow_none_device=False
+        )
         if shape is None:
             shape = nvec.shape
         else:
@@ -3789,8 +4623,11 @@ class MultiCategorical(Categorical):
         )
         self.update_mask(mask)
         self.remove_singleton = remove_singleton
+        self.encode = self._encode_eager
 
-    def enumerate(self) -> torch.Tensor:
+    def enumerate(self, use_mask: bool = False) -> torch.Tensor:
+        if use_mask:
+            raise NotImplementedError()
         if self.mask is not None:
             raise RuntimeError(
                 "Cannot enumerate a masked TensorSpec. Submit an issue on github if this feature is requested."
@@ -3812,6 +4649,9 @@ class MultiCategorical(Categorical):
         arange = arange.view(arange.shape[0], *(1,) * (self.ndim - 1), self.shape[-1])
         arange = arange.expand(arange.shape[0], *self.shape)
         return arange
+
+    def cardinality(self) -> int:
+        return self.nvec._base.prod()
 
     def update_mask(self, mask):
         """Sets a mask to prevent some of the possible outcomes when a sample is taken.
@@ -3850,7 +4690,7 @@ class MultiCategorical(Categorical):
                 raise ValueError("Only boolean masks are accepted.")
         self.mask = mask
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> MultiCategorical:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> MultiCategorical:
         if isinstance(dest, torch.dtype):
             dest_dtype = dest
             dest_device = self.device
@@ -3880,7 +4720,7 @@ class MultiCategorical(Categorical):
             and (self.mask == other.mask).all()
         )
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.shape == other.shape
             and self.space == other.space
             and self.device == other.device
@@ -3915,7 +4755,7 @@ class MultiCategorical(Categorical):
                 )
         return torch.stack(x, -1)
 
-    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+    def rand(self, shape: torch.Size | None = None) -> torch.Tensor:
         if self.mask is not None:
             splits = self._split_self()
             return torch.stack([split.rand(shape) for split in splits], -1)
@@ -4003,8 +4843,8 @@ class MultiCategorical(Categorical):
         )
 
     def to_one_hot(
-        self, val: torch.Tensor, safe: bool = None
-    ) -> Union[MultiOneHot, torch.Tensor]:
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> MultiOneHot | torch.Tensor:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
@@ -4040,7 +4880,9 @@ class MultiCategorical(Categorical):
             mask=self.mask,
         )
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> MultiCategorical:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> MultiCategorical:
         """Not op for MultiCategorical."""
         return val
 
@@ -4174,7 +5016,7 @@ class Composite(TensorSpec):
     Args:
         *args: if an unnamed argument is passed, it must be a dictionary with keys
             matching the expected keys to be found in the :obj:`Composite` object.
-            This is useful to build nested CompositeSpecs with tuple indices.
+            This is useful to build nested Composite specs with tuple indices.
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
             to be stored. Values can be None, in which case is_in will be assumed
             to be ``True`` for the corresponding tensors, and :obj:`project()` will have no
@@ -4188,6 +5030,11 @@ class Composite(TensorSpec):
             to ``None``.
         shape (torch.Size): the leading shape of all the leaves. Equivalent
             to the batch-size of the corresponding tensordicts.
+        data_cls (type, optional): the tensordict subclass (TensorDict, TensorClass, tensorclass...) that should be
+            enforced in the env. Defaults to ``None``.
+        step_mdp_static (bool, optional): whether the spec is static under step_mdp. Defaults to ``False``.
+            Defining a `Composite` as a step_mdp_static spec will make it so that the entire related TensorDict/TensorClass
+            instance is copied during calls to `step_mdp` - and not updated in-place.
 
     Examples:
         >>> pixels_spec = Bounded(
@@ -4248,14 +5095,96 @@ class Composite(TensorSpec):
 
     shape: torch.Size
     domain: str = "composite"
+    _td_dim_names: list[str] | None = None
 
     SPEC_HANDLED_FUNCTIONS = {}
 
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._device = None
-        cls._locked = False
+        cls._is_locked = False
         return super().__new__(cls)
+
+    def __init__(
+        self,
+        *args,
+        shape: tuple | torch.Size | None = None,
+        device: torch.device | None = None,
+        data_cls: type | None = None,
+        step_mdp_static: bool = False,
+        names: Sequence[str] | None = None,
+        **kwargs,
+    ):
+        # For compatibility with TensorDict
+        batch_size = kwargs.pop("batch_size", None)
+        if batch_size is not None:
+            if shape is not None:
+                raise TypeError("Cannot specify both batch_size and shape.")
+            shape = batch_size
+
+        if shape is None:
+            shape = _size(())
+        self._shape = _size(shape)
+        self._specs = {}
+        self.step_mdp_static = step_mdp_static
+
+        # Initialize names
+        if names is not None:
+            self._td_dim_names = list(names)
+        else:
+            self._td_dim_names = None
+
+        _device = (
+            _make_ordinal_device(torch.device(device)) if device is not None else device
+        )
+        self._device = _device
+        if len(args):
+            if len(args) > 1:
+                raise RuntimeError(
+                    "Got multiple arguments, when at most one is expected for Composite."
+                )
+            argdict = args[0]
+            if not isinstance(argdict, (dict, Composite)):
+                raise RuntimeError(
+                    f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
+                )
+            for k, item in argdict.items():
+                if isinstance(item, dict):
+                    # Create nested Composite with appropriate names
+                    # Note: nested specs will get their names propagated later in the names setter
+                    item = Composite(item, shape=shape, device=_device)
+                self[k] = item
+        for k, item in kwargs.items():
+            self[k] = item
+        self.data_cls = data_cls
+        self.encode = self._encode_eager
+        self._encode_memo_dict = {}
+
+        # Propagate names to nested specs if names were provided
+        if names is not None:
+            self._propagate_names_to_nested()
+
+    def memoize_encode(self, mode: bool = True) -> None:
+        super().memoize_encode(mode=mode)
+        for spec in self._specs.values():
+            if spec is None:
+                continue
+            spec.memoize_encode(mode=mode)
+
+    def erase_memoize_cache(self) -> None:
+        self._encode_memo_dict.clear()
+        for spec in self._specs.values():
+            if spec is None:
+                continue
+            spec.erase_memoize_cache()
+
+    @property
+    def batch_size(self):
+        return self._shape
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size):
+        self._shape = value
 
     @property
     def shape(self):
@@ -4278,8 +5207,40 @@ class Composite(TensorSpec):
                     )
         self._shape = _size(value)
 
-    def is_empty(self):
-        """Whether the composite spec contains specs or not."""
+    def _project(
+        self, val: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        if self.data_cls is None:
+            cls = TensorDict
+        else:
+            cls = self.data_cls
+        return cls.from_dict(
+            {k: item._project(val[k]) for k, item in self.items()},
+            batch_size=self.shape,
+            device=self.device,
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError("`index` is not implemented for Composite specs.")
+
+    def is_empty(self, recurse: bool = False):
+        """Whether the composite spec contains specs or not.
+
+        Args:
+            recurse (bool): whether to recursively assess if the spec is empty.
+                If ``True``, will return ``True`` if there are no leaves. If ``False``
+                (default) will return whether there is any spec defined at the root level.
+
+        """
+        if recurse:
+            for spec in self._specs.values():
+                if spec is None:
+                    continue
+                if isinstance(spec, Composite) and spec.is_empty(recurse=True):
+                    continue
+                return False
         return len(self._specs) == 0
 
     @property
@@ -4289,70 +5250,101 @@ class Composite(TensorSpec):
     def ndimension(self):
         return len(self.shape)
 
-    def set(self, name, spec):
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> Any:
+        """Removes and returns the value associated with the specified key from the composite spec.
+
+        This method searches for the given key in the composite spec, removes it, and returns its associated value.
+        If the key is not found, it returns the provided default value if specified, otherwise raises a `KeyError`.
+
+        Args:
+            key (NestedKey):
+                The key to be removed from the composite spec. It can be a single key or a nested key.
+            default (Any, optional):
+                The value to return if the specified key is not found in the composite spec.
+                If not provided and the key is not found, a `KeyError` is raised.
+
+        Returns:
+            Any: The value associated with the specified key that was removed from the composite spec.
+
+        Raises:
+            KeyError: If the specified key is not found in the composite spec and no default value is provided.
+        """
+        key = unravel_key(key)
+        if key in self.keys(True, True):
+            result = self[key]
+            del self[key]
+            return result
+        elif default is not NO_DEFAULT:
+            return default
+        raise KeyError(f"{key} not found in composite spec.")
+
+    def separates(self, *keys: NestedKey, default: Any = None) -> Composite:
+        """Splits the composite spec by extracting specified keys and their associated values into a new composite spec.
+
+        This method iterates over the provided keys, removes them from the current composite spec, and adds them to a new
+        composite spec. If a key is not found, the specified default value is used. The new composite spec is returned.
+
+        Args:
+            *keys (NestedKey):
+                One or more keys to be extracted from the composite spec. Each key can be a single key or a nested key.
+            default (Any, optional):
+                The value to use if a specified key is not found in the composite spec. Defaults to `None`.
+
+        Returns:
+            Composite: A new composite spec containing the extracted keys and their associated values.
+
+        Note:
+            If none of the specified keys are found, the method returns `None`.
+        """
+        out = None
+        for key in keys:
+            result = self.pop(key, default=default)
+            if result is not None:
+                if out is None:
+                    out = Composite(batch_size=self.batch_size, device=self.device)
+                out[key] = result
+        return out
+
+    def set(self, name: str, spec: TensorSpec) -> Composite:
+        """Sets a spec in the Composite spec."""
+        if not isinstance(name, str):
+            self[name] = spec
+            return self
         if self.locked:
             raise RuntimeError("Cannot modify a locked Composite.")
+        if spec is not None and self.device is not None and spec.device != self.device:
+            if spec.device is None:
+                # We make a clone not to mess up the spec that was provided.
+                # in set() we do the same for shape - these two ops should be grouped.
+                # we don't care about the overhead of cloning twice though because in theory
+                # we don't set specs often.
+                spec = spec.clone().to(self._device)
+            else:
+                raise RuntimeError(
+                    f"Setting a new attribute ({name}) with spec type {type(spec).__name__} on another device ({spec.device} against {self.device}). "
+                    f"All devices of Composite must match."
+                )
         if spec is not None:
             shape = spec.shape
             if shape[: self.ndim] != self.shape:
-                raise ValueError(
-                    "The shape of the spec and the Composite mismatch: the first "
-                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
-                    f"Composite.shape={self.shape}."
-                )
-        self._specs[name] = spec
-
-    def __init__(
-        self, *args, shape: torch.Size = None, device: torch.device = None, **kwargs
-    ):
-        # For compatibility with TensorDict
-        batch_size = kwargs.pop("batch_size", None)
-        if batch_size is not None:
-            if shape is not None:
-                raise TypeError("Cannot specify both batch_size and shape.")
-            shape = batch_size
-
-        if shape is None:
-            shape = _size(())
-        self._shape = _size(shape)
-        self._specs = {}
-        for key, value in kwargs.items():
-            self.set(key, value)
-
-        _device = (
-            _make_ordinal_device(torch.device(device)) if device is not None else device
-        )
-        if len(kwargs):
-            for key, item in self.items():
-                if item is None:
-                    continue
                 if (
-                    isinstance(item, Composite)
-                    and item.device is None
-                    and _device is not None
+                    isinstance(spec, (Composite, NonTensor))
+                    and spec.ndim < self.ndim
+                    and self.shape[: spec.ndim] == spec.shape
                 ):
-                    item = item.clone().to(_device)
-                elif (_device is not None) and (item.device != _device):
-                    raise RuntimeError(
-                        f"Setting a new attribute ({key}) on another device "
-                        f"({item.device} against {_device}). All devices of "
-                        "Composite must match."
+                    # Try to set the composite shape
+                    spec = spec.clone()
+                    spec.shape = self.shape
+                else:
+                    raise ValueError(
+                        f"The shapes of the spec {type(spec).__name__} and the {type(self).__name__} mismatch: the first "
+                        f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
+                        f"Composite.shape={self.shape}."
                     )
-        self._device = _device
-        if len(args):
-            if len(args) > 1:
-                raise RuntimeError(
-                    "Got multiple arguments, when at most one is expected for Composite."
-                )
-            argdict = args[0]
-            if not isinstance(argdict, (dict, Composite)):
-                raise RuntimeError(
-                    f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
-                )
-            for k, item in argdict.items():
-                if isinstance(item, dict):
-                    item = Composite(item, shape=shape, device=_device)
-                self[k] = item
+        if isinstance(spec, Bounded):
+            spec._register_batch_size(self.shape)
+        self._specs[name] = spec
+        return self
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -4371,8 +5363,131 @@ class Composite(TensorSpec):
         """Clears the device of the Composite."""
         self._device = None
         for spec in self._specs.values():
+            if spec is None:
+                continue
             spec.clear_device_()
         return self
+
+    def _has_names(self):
+        """Returns True if names are set for this Composite."""
+        return self._td_dim_names is not None
+
+    def _erase_names(self):
+        """Erases the names of this Composite."""
+        self._td_dim_names = None
+
+    def _propagate_names_to_nested(self):
+        """Propagates names to nested Composite specs."""
+        if not self._has_names():
+            return
+        for spec in self._specs.values():
+            if isinstance(spec, Composite):
+                # For nested specs, we need to propagate the names
+                # The nested spec should have the same leading dimensions
+                if spec.ndim >= self.ndim:
+                    nested_names = list(self.names) + [None] * (spec.ndim - self.ndim)
+                    spec.names = nested_names
+
+    @property
+    def names(self):
+        """Returns the names of the dimensions of this Composite."""
+        names = self._td_dim_names
+        if names is None:
+            return [None for _ in range(self.ndim)]
+        # Return a copy but don't use copy to make dynamo happy
+        return list(names)
+
+    @names.setter
+    def names(self, value):
+        """Sets the names of the dimensions of this Composite."""
+        if value is None:
+            self._td_dim_names = None
+            return
+        if len(value) != self.ndim:
+            raise ValueError(
+                f"Expected {self.ndim} names, but got {len(value)} names: {value}"
+            )
+        self._td_dim_names = list(value)
+        # Propagate names to nested Composite specs
+        for spec in self._specs.values():
+            if isinstance(spec, Composite):
+                # For nested specs, we need to propagate the names
+                # The nested spec should have the same leading dimensions
+                if spec.ndim >= self.ndim:
+                    nested_names = list(value) + [None] * (spec.ndim - self.ndim)
+                    spec.names = nested_names
+
+    def refine_names(self, *names):
+        """Refines the dimension names of self according to names.
+
+        Refining is a special case of renaming that "lifts" unnamed dimensions.
+        A None dim can be refined to have any name; a named dim can only be
+        refined to have the same name.
+
+        Because named specs can coexist with unnamed specs, refining names
+        gives a nice way to write named-spec-aware code that works with both
+        named and unnamed specs.
+
+        names may contain up to one Ellipsis (...). The Ellipsis is expanded
+        greedily; it is expanded in-place to fill names to the same length as
+        self.ndim using names from the corresponding indices of self.names.
+
+        Returns: the same composite spec with dimensions named according to the input.
+
+        Examples:
+            >>> spec = Composite({}, shape=[3, 4, 5, 6])
+            >>> spec_refined = spec.refine_names(None, None, None, "d")
+            >>> assert spec_refined.names == [None, None, None, "d"]
+            >>> spec_refined = spec.refine_names("a", None, None, "d")
+            >>> assert spec_refined.names == ["a", None, None, "d"]
+
+        """
+        # replace ellipsis if any
+        names_copy = copy(names)
+        if any(name is Ellipsis for name in names):
+            ellipsis_name = [None for _ in range(self.ndim - len(names) + 1)]
+            names = []
+            for name in names_copy:
+                if name is Ellipsis:
+                    names += ellipsis_name
+                else:
+                    names.append(name)
+
+        # check that the names that are set are either None or identical
+        curr_names = self.names
+        for i, name in enumerate(names):
+            if curr_names[i] is None:
+                continue
+            if curr_names[i] == name:
+                continue
+            else:
+                raise RuntimeError(
+                    f"refine_names: cannot coerce Composite names {self.names} with {names_copy}."
+                )
+        self.names = names
+        return self
+
+    def _get_names_idx(self, idx):
+        """Helper method to get names after indexing."""
+        if not self._has_names():
+            return None
+
+        names = copy(self.names)
+        if isinstance(idx, (int, slice)):
+            # Single dimension indexing
+            if isinstance(idx, int):
+                names.pop(idx)
+            else:
+                # For slice, we keep the names but adjust for the slice
+                pass
+        elif isinstance(idx, tuple):
+            # Multi-dimensional indexing
+            for i, sub_idx in enumerate(idx):
+                if isinstance(sub_idx, int):
+                    # Remove the dimension
+                    names.pop(i)
+                # For slices, we keep the name
+        return names
 
     def __getitem__(self, idx):
         """Indexes the current Composite based on the provided index."""
@@ -4413,10 +5528,15 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
 
+        names = None
+        if self._has_names():
+            names = self._get_names_idx(idx)
+
         return self.__class__(
             indexed_specs,
             shape=indexed_shape,
             device=device,
+            names=names,
         )
 
     def get(self, item, default=NO_DEFAULT):
@@ -4433,10 +5553,17 @@ class Composite(TensorSpec):
             raise
 
     def __setitem__(self, key, value):
+        dest = self
         if isinstance(key, tuple) and len(key) > 1:
-            if key[0] not in self.keys(True):
-                self[key[0]] = Composite(shape=self.shape, device=self.device)
-            self[key[0]][key[1:]] = value
+            while key[0] not in dest.keys():
+                dest[key[0]] = dest = Composite(shape=self.shape, device=self.device)
+                if len(key) > 2:
+                    key = key[1:]
+                else:
+                    break
+            else:
+                dest = self[key[0]]
+            dest[key[1:]] = value
             return
         elif isinstance(key, tuple):
             self[key[0]] = value
@@ -4447,18 +5574,6 @@ class Composite(TensorSpec):
             raise AttributeError(f"Composite[{key}] cannot be set")
         if isinstance(value, dict):
             value = Composite(value, device=self._device, shape=self.shape)
-        if (
-            value is not None
-            and self.device is not None
-            and value.device != self.device
-        ):
-            if isinstance(value, Composite) and value.device is None:
-                value = value.clone().to(self.device)
-            else:
-                raise RuntimeError(
-                    f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
-                    f"All devices of Composite must match."
-                )
 
         self.set(key, value)
 
@@ -4480,11 +5595,13 @@ class Composite(TensorSpec):
             raise ValueError(f"Key name {key} is prohibited.")
         del self._specs[key]
 
-    def encode(
-        self, vals: Dict[str, Any], *, ignore_device: bool = False
-    ) -> Dict[str, torch.Tensor]:
+    def _encode_eager(
+        self, vals: dict[str, Any], *, ignore_device: bool = False
+    ) -> dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.empty()  # create and empty tensordict similar to vals
+        elif self.data_cls is not None:
+            out = {}
         else:
             out = TensorDict._new_unsafe({}, _size([]))
         for key, item in vals.items():
@@ -4502,19 +5619,83 @@ class Composite(TensorSpec):
                 raise RuntimeError(
                     f"Encoding key {key} raised a RuntimeError. Scroll up to know more."
                 ) from err
+        if self.data_cls is not None:
+            return self.data_cls.from_dict(out)
         return out
+
+    def _encode_memo(
+        self, vals: dict[str, Any], *, ignore_device: bool = False
+    ) -> dict[str, torch.Tensor]:
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(vals)
+        funcs = []
+        vals_orig = vals
+        if isinstance(vals, TensorDictBase):
+
+            def empty(vals):
+                out = vals.empty()  # create and empty tensordict similar to vals
+                return vals, out
+
+        elif self.data_cls is not None:
+
+            def empty(vals):
+                out = {}
+                return vals, out
+
+        else:
+
+            def empty(vals):
+                out = TensorDict._new_unsafe({}, _size([]))
+                return vals, out
+
+        funcs.append(empty)
+
+        def populate(vals_out):
+            vals, out = vals_out
+            for key, item in vals.items():
+                if item is None:
+                    raise RuntimeError(
+                        "Composite.encode cannot be used with missing values."
+                    )
+                try:
+                    out[key] = self[key].encode(item, ignore_device=ignore_device)
+                except KeyError:
+                    raise KeyError(
+                        f"The Composite instance with keys {self.keys()} does not have a '{key}' key."
+                    )
+                except RuntimeError as err:
+                    raise RuntimeError(
+                        f"Encoding key {key} raised a RuntimeError. Scroll up to know more."
+                    ) from err
+            return out
+
+        funcs.append(populate)
+        if self.data_cls is not None:
+            funcs.append(self.data_cls.from_dict)
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._encode_memo_dict[ignore_device](vals_orig)
 
     def __repr__(self) -> str:
         sub_str = [
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
+        if len(sub_str) == 0:
+            return f"{self.__class__.__name__}(device={self._device}, shape={self.shape}, data_cls={self.data_cls})"
         sub_str = ",\n".join(sub_str)
-        return f"Composite(\n{sub_str},\n    device={self._device},\n    shape={self.shape})"
+        return f"{self.__class__.__name__}(\n{sub_str},\n    device={self._device},\n    shape={self.shape},\n    data_cls={self.data_cls})"
 
     def type_check(
         self,
-        value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[str, Optional[Sequence[str]]] = None,
+        value: torch.Tensor | TensorDictBase,
+        selected_keys: str | Sequence[str] | None = None,
     ):
         if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
             value = {selected_keys: value}
@@ -4526,7 +5707,15 @@ class Composite(TensorSpec):
             ):
                 self._specs[_key].type_check(value[_key], _key)
 
-    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
+    def is_in(self, val: dict | TensorDictBase) -> bool:
+        # TODO: make warnings for these
+        # if val.device != self.device:
+        #     print(val.device, self.device)
+        #     return False
+        # if val.shape[-self.ndim:] != self.shape:
+        #     return False
+        if self.data_cls is not None and type(val) is not self.data_cls:
+            return False
         for key, item in self._specs.items():
             if item is None or (isinstance(item, Composite) and item.is_empty()):
                 continue
@@ -4544,19 +5733,52 @@ class Composite(TensorSpec):
                 val.set(key, self._specs[key].project(_val))
         return val
 
+    def rand_update(self, val: TensorDictBase) -> TensorDictBase:
+        """Updates a TensorDict with random values according to the specs.
+
+        Shapes are expected to be compatible with the specs.
+        """
+        return val.update(self.rand())
+
+    def zeros_update(self, val: TensorDictBase) -> TensorDictBase:
+        """Updates a TensorDict with zeroed values according to the specs.
+
+        Shapes are expected to be compatible with the specs.
+        """
+        return val.update(self.zeros())
+
+    def ones_update(self, val: TensorDictBase) -> TensorDictBase:
+        """Updates a TensorDict with 1-values according to the specs.
+
+        Shapes are expected to be compatible with the specs.
+        """
+        return val.update(self.ones())
+
     def rand(self, shape: torch.Size = None) -> TensorDictBase:
         if shape is None:
             shape = _size([])
+        if isinstance(shape, list):
+            shape = _size(shape)
         _dict = {}
         for key, item in self.items():
             if item is not None:
                 _dict[key] = item.rand(shape)
+
+        cls = self.data_cls if self.data_cls is not None else TensorDict
+        if cls is not TensorDict:
+            kwargs = {}
+            if self._td_dim_names is not None:
+                warnings.warn(f"names for cls {cls} is not supported for rand.")
+        else:
+            kwargs = {"names": self._td_dim_names}
+
         # No need to run checks since we know Composite is compliant with
         # TensorDict requirements
-        return TensorDict._new_unsafe(
+        return cls.from_dict(
             _dict,
-            batch_size=_size([*shape, *self.shape]),
-            device=self._device,
+            batch_size=_size([*shape, *_remove_neg_shapes(self.shape)]),
+            device=self.device,
+            **kwargs,
         )
 
     def keys(
@@ -4565,6 +5787,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecKeysView:  # noqa: D417
         """Keys of the Composite.
 
@@ -4585,6 +5808,8 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
 
         """
         return _CompositeSpecItemsView(
@@ -4592,6 +5817,7 @@ class Composite(TensorSpec):
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._keys()
 
     def items(
@@ -4600,6 +5826,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecItemsView:  # noqa: D417
         """Items of the Composite.
 
@@ -4618,12 +5845,15 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
         """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )
 
     def values(
@@ -4632,6 +5862,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecValuesView:  # noqa: D417
         """Values of the Composite.
 
@@ -4650,34 +5881,59 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
         """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._values()
 
-    def _reshape(self, shape):
+    def _reshape(self, shape: torch.Size) -> Composite:
         _specs = {
             key: val.reshape((*shape, *val.shape[self.ndimension() :]))
             for key, val in self._specs.items()
         }
-        return Composite(_specs, shape=shape)
+        return self.__class__(
+            _specs,
+            shape=shape,
+            device=self.device,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
+        )
 
-    def _unflatten(self, dim, sizes):
+    def _unflatten(self, dim: int, sizes: tuple[int, ...]) -> Composite:
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
         return self._reshape(shape)
 
     def __len__(self):
         return len(self.keys())
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Composite:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> Composite:
         if dest is None:
             return self
+        if isinstance(dest, torch.dtype):
+            items = list(self.items())
+            kwargs = {}
+            for key, value in items:
+                if value is None:
+                    kwargs[key] = value
+                    continue
+                kwargs[key] = value.to(dest)
+            return self.__class__(
+                **kwargs,
+                device=self.device,
+                shape=self.shape,
+                data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
+                names=self.names if self._has_names() else None,
+            )
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
-                "Only device casting is allowed with specs of type Composite."
+                "Only device/dtype casting is allowed with specs of type Composite."
             )
         if self._device and self._device == torch.device(dest):
             return self
@@ -4690,9 +5946,20 @@ class Composite(TensorSpec):
                 kwargs[key] = value
                 continue
             kwargs[key] = value.to(dest)
-        return self.__class__(**kwargs, device=_device, shape=self.shape)
+        return self.__class__(
+            **kwargs,
+            device=_device,
+            shape=self.shape,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
+            names=self.names if self._has_names() else None,
+        )
 
     def clone(self) -> Composite:
+        """Clones the Composite spec.
+
+        Locked specs will not produce locked clones.
+        """
         try:
             device = self.device
         except RuntimeError:
@@ -4704,15 +5971,36 @@ class Composite(TensorSpec):
             },
             device=device,
             shape=self.shape,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
+            names=self.names if self._has_names() else None,
         )
 
-    def enumerate(self) -> TensorDictBase:
+    def cardinality(self) -> int:
+        n = None
+        for spec in self.values():
+            if spec is None:
+                continue
+            if n is None:
+                n = 1
+            n = n * spec.cardinality()
+        if n is None:
+            n = 0
+        return n
+
+    def enumerate(self, use_mask: bool = False) -> TensorDictBase:
         # We are going to use meshgrid to create samples of all the subspecs in here
         #  but first let's get rid of the batch size, we'll put it back later
         self_without_batch = self
         while self_without_batch.ndim:
             self_without_batch = self_without_batch[0]
-        samples = {key: spec.enumerate() for key, spec in self_without_batch.items()}
+        samples = {
+            key: spec.enumerate(use_mask) for key, spec in self_without_batch.items()
+        }
+        if self.data_cls is not None:
+            cls = self.data_cls
+        else:
+            cls = TensorDict
         if samples:
             idx_rep = torch.meshgrid(
                 *(torch.arange(s.shape[0]) for s in samples.values()), indexing="ij"
@@ -4722,7 +6010,7 @@ class Composite(TensorSpec):
                 key: sample[idx]
                 for ((key, sample), idx) in zip(samples.items(), idx_rep)
             }
-            samples = TensorDict(
+            samples = cls.from_dict(
                 samples, batch_size=idx_rep[0].shape[:1], device=self.device
             )
             # Expand
@@ -4730,10 +6018,10 @@ class Composite(TensorSpec):
                 samples = samples.reshape(-1, *(1,) * self.ndim)
                 samples = samples.expand(samples.shape[0], *self.shape)
         else:
-            samples = TensorDict(batch_size=self.shape, device=self.device)
+            samples = cls.from_dict({}, batch_size=self.shape, device=self.device)
         return samples
 
-    def empty(self):
+    def empty(self) -> Composite:
         """Create a spec like self, but with no entries."""
         try:
             device = self.device
@@ -4743,9 +6031,11 @@ class Composite(TensorSpec):
             {},
             device=device,
             shape=self.shape,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
-    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool | None = None) -> dict:
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape: torch.Size = None) -> TensorDictBase:
@@ -4755,26 +6045,37 @@ class Composite(TensorSpec):
             device = self.device
         except RuntimeError:
             device = self._device
-        return TensorDict(
+
+        cls = self.data_cls if self.data_cls is not None else TensorDict
+        if cls is not TensorDict:
+            kwargs = {}
+            if self._td_dim_names is not None:
+                warnings.warn(f"names for cls {cls} is not supported for zero.")
+        else:
+            kwargs = {"names": self._td_dim_names}
+
+        return cls.from_dict(
             {
                 key: self[key].zero(shape)
                 for key in self.keys(True)
                 if isinstance(key, str) and self[key] is not None
             },
-            _size([*shape, *self._safe_shape]),
+            batch_size=_size([*shape, *self._safe_shape]),
             device=device,
+            **kwargs,
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (
             type(self) is type(other)
             and self.shape == other.shape
             and self._device == other._device
             and set(self._specs.keys()) == set(other._specs.keys())
             and all((self._specs[key] == spec) for (key, spec) in other._specs.items())
+            and other.data_cls == self.data_cls
         )
 
-    def update(self, dict_or_spec: Union[Composite, Dict[str, TensorSpec]]) -> None:
+    def update(self, dict_or_spec: Composite | dict[str, TensorSpec]) -> None:
         for key, item in dict_or_spec.items():
             if key in self.keys(True) and isinstance(self[key], Composite):
                 self[key].update(item)
@@ -4799,7 +6100,7 @@ class Composite(TensorSpec):
             self[key] = item
         return self
 
-    def expand(self, *shape):
+    def expand(self, *shape: tuple[int, ...] | torch.Size) -> Composite:
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
@@ -4817,14 +6118,21 @@ class Composite(TensorSpec):
             else None
             for key, value in tuple(self.items())
         }
+        names = None
+        if self._has_names():
+            names = [None] * (len(shape) - self.ndim) + self.names
+
         out = Composite(
             specs,
             shape=shape,
             device=device,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
+            names=names,
         )
         return out
 
-    def squeeze(self, dim: int | None = None):
+    def squeeze(self, dim: int | None = None) -> Composite:
         if dim is not None:
             if dim < 0:
                 dim += len(self.shape)
@@ -4838,10 +6146,21 @@ class Composite(TensorSpec):
             except RuntimeError:
                 device = self._device
 
-            return Composite(
+            names = None
+            if self._has_names():
+                names = copy(self.names)
+                names.pop(dim)
+                # If all names are None after popping, set to None
+                if all(name is None for name in names):
+                    names = None
+
+            return self.__class__(
                 {key: value.squeeze(dim) for key, value in self.items()},
                 shape=shape,
                 device=device,
+                data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
+                names=names,
             )
 
         if self.shape.count(1) == 0:
@@ -4853,7 +6172,7 @@ class Composite(TensorSpec):
         out = self.squeeze(self.shape.index(1))
         return out.squeeze()
 
-    def unsqueeze(self, dim: int):
+    def unsqueeze(self, dim: int) -> Composite:
         if dim < 0:
             dim += len(self.shape) + 1
 
@@ -4864,16 +6183,24 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
 
-        return Composite(
+        names = None
+        if self._has_names():
+            names = copy(self.names)
+            names.insert(dim, None)
+
+        return self.__class__(
             {
                 key: value.unsqueeze(dim) if value is not None else None
                 for key, value in self.items()
             },
             shape=shape,
             device=device,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
+            names=names,
         )
 
-    def unbind(self, dim: int = 0):
+    def unbind(self, dim: int = 0) -> tuple[Composite, ...]:
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -4881,25 +6208,109 @@ class Composite(TensorSpec):
             raise ValueError(
                 f"Cannot unbind along dim {orig_dim} with shape {self.shape}."
             )
-        shape = (s for i, s in enumerate(self.shape) if i != dim)
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
         unbound_vals = {key: val.unbind(dim) for key, val in self.items()}
+
+        names = None
+        if self._has_names():
+            names = copy(self.names)
+            names.pop(dim)
+            # If all names are None after popping, set to None
+            if all(name is None for name in names):
+                names = None
+
         return tuple(
             self.__class__(
                 {key: val[i] for key, val in unbound_vals.items()},
                 shape=shape,
                 device=self.device,
+                data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
+                names=names,
             )
             for i in range(self.shape[dim])
         )
 
-    def lock_(self, recurse=False):
+    # Locking functionality
+    @property
+    def is_locked(self) -> bool:
+        return self._is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool) -> None:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def __getstate__(self) -> dict:
+        result = self.__dict__.copy()
+        __lock_parents_weakrefs = result.pop("__lock_parents_weakrefs", None)
+        if __lock_parents_weakrefs is not None:
+            result["_lock_recurse"] = True
+        return result
+
+    def __setstate__(self, state: dict) -> None:
+        _lock_recurse = state.pop("_lock_recurse", False)
+        for key, value in state.items():
+            setattr(self, key, value)
+        if self._is_locked:
+            self._is_locked = False
+            self.lock_(recurse=_lock_recurse)
+
+    def _propagate_lock(
+        self,
+        *,
+        recurse: bool,
+        lock_parents_weakrefs: list[weakref.ref] | None = None,
+        is_compiling: bool,
+    ) -> None:
+        """Registers the parent composite that handles the lock."""
+        self._is_locked = True
+        if lock_parents_weakrefs is not None:
+            lock_parents_weakrefs = [
+                ref
+                for ref in lock_parents_weakrefs
+                if not any(refref is ref for refref in self._lock_parents_weakrefs)
+            ]
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
+            else:
+                self._lock_parents_weakrefs = (
+                    self._lock_parents_weakrefs + lock_parents_weakrefs
+                )
+            lock_parents_weakrefs = list(lock_parents_weakrefs)
+            lock_parents_weakrefs.append(weakref.ref(self))
+
+        if recurse:
+            for value in self.values():
+                if isinstance(value, Composite):
+                    value._propagate_lock(
+                        recurse=True,
+                        lock_parents_weakrefs=lock_parents_weakrefs,
+                        is_compiling=is_compiling,
+                    )
+
+    @property
+    def _lock_parents_weakrefs(self) -> list[weakref.ref]:
+        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs")
+        if _lock_parents_weakrefs is None:
+            self.__dict__["__lock_parents_weakrefs"] = []
+            _lock_parents_weakrefs = self.__dict__["__lock_parents_weakrefs"]
+        return _lock_parents_weakrefs
+
+    @_lock_parents_weakrefs.setter
+    def _lock_parents_weakrefs(self, value: list[weakref.ref]) -> None:
+        self.__dict__["__lock_parents_weakrefs"] = value
+
+    def lock_(self, recurse: bool | None = None) -> None:
         """Locks the Composite and prevents modification of its content.
 
-        This is only a first-level lock, unless specified otherwise through the
-        ``recurse`` arg.
-
-        Leaf specs can always be modified in place, but they cannot be replaced
-        in their Composite parent.
+        The recurse argument control whether the lock will be propagated to sub-specs.
+        The current default is ``False`` but it will be turned to ``True`` for consistency
+        with the TensorDict API in v0.8.
 
         Examples:
             >>> shape = [3, 4, 5]
@@ -4933,30 +6344,87 @@ class Composite(TensorSpec):
             failed!
 
         """
-        self._locked = True
-        if recurse:
-            for value in self.values():
-                if isinstance(value, Composite):
-                    value.lock_(recurse)
+        if self.is_locked:
+            return self
+        is_comp = is_compiling()
+        if is_comp:
+            # TODO: See what to do when compiling
+            pass
+        if recurse is None:
+            recurse = True
+        self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
-    def unlock_(self, recurse=False):
+    def _propagate_unlock(self, recurse: bool) -> list[Composite]:
+        # if we end up here, we can clear the graph associated with this td
+        self._is_locked = False
+
+        self._is_shared = False
+        self._is_memmap = False
+
+        if recurse:
+            sub_specs = []
+            for value in self.values():
+                if isinstance(value, Composite):
+                    sub_specs.extend(value._propagate_unlock(recurse=recurse))
+                    sub_specs.append(value)
+            return sub_specs
+        return []
+
+    def _check_unlock(self, first_attempt: bool = True) -> None:
+        if not first_attempt:
+            gc.collect()
+        obj = None
+        for ref in self._lock_parents_weakrefs:
+            obj = ref()
+            # check if the locked parent exists and if it's locked
+            # we check _is_locked because it can be False or None in the case of Lazy stacks,
+            # but if we check obj.is_locked it will be True for this class.
+            if obj is not None and obj._is_locked:
+                break
+
+        else:
+            try:
+                self._lock_parents_weakrefs = []
+            except AttributeError:
+                # Some tds (eg, LazyStack) have an automated way of creating the _lock_parents_weakref
+                pass
+            return
+
+        if first_attempt:
+            del obj
+            return self._check_unlock(False)
+        raise RuntimeError(
+            "Cannot unlock a Composite that is part of a locked graph. "
+            "Graphs are locked when a Composite is locked with recurse=True. "
+            "Unlock the root Composite first. If the Composite is part of multiple graphs, "
+            "group the graphs under a common Composite an unlock this root. "
+            f"self: {self}, obj: {obj}"
+        )
+
+    def unlock_(self, recurse: bool | None = None) -> T:
         """Unlocks the Composite and allows modification of its content.
 
         This is only a first-level lock modification, unless specified
         otherwise through the ``recurse`` arg.
 
         """
-        self._locked = False
-        if recurse:
-            for value in self.values():
-                if isinstance(value, Composite):
-                    value.unlock_(recurse)
+        try:
+            if recurse is None:
+                recurse = True
+            sub_specs = self._propagate_unlock(recurse=recurse)
+            if recurse:
+                for sub_spec in sub_specs:
+                    sub_spec._check_unlock()
+            self._check_unlock()
+        except RuntimeError as err:
+            self.lock_(recurse=recurse)
+            raise err
         return self
 
     @property
     def locked(self):
-        return self._locked
+        return self._is_locked
 
 
 class StackedComposite(_LazyStackedMixin[Composite], Composite):
@@ -4972,10 +6440,35 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
 
     """
 
+    def _reshape(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`reshape` is not implemented for {type(self).__name__} specs."
+        )
+
+    def cardinality(
+        self,
+        *args,
+        **kwargs,
+    ) -> Any:
+        raise NotImplementedError(
+            f"`cardinality` is not implemented for {type(self).__name__} specs."
+        )
+
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor | TensorDictBase:
+        raise NotImplementedError(
+            f"`index` is not implemented for {type(self).__name__} specs."
+        )
+
     def update(self, dict) -> None:
         for key, item in dict.items():
             if key in self.keys() and isinstance(
-                item, (Dict, Composite, StackedComposite)
+                item, (Mapping, Composite, StackedComposite)
             ):
                 for spec, sub_item in zip(self._specs, item.unbind(self.dim)):
                     spec[key].update(sub_item)
@@ -4983,10 +6476,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             self[key] = item
         return self
 
-    def enumerate(self) -> TensorDictBase:
+    def enumerate(self, use_mask: bool = False) -> TensorDictBase:
         dim = self.stack_dim
         return LazyStackedTensorDict.maybe_dense_stack(
-            [spec.enumerate() for spec in self._specs], dim + 1
+            [spec.enumerate(use_mask) for spec in self._specs], dim + 1
         )
 
     def __eq__(self, other):
@@ -5003,7 +6496,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
                 return False
         return True
 
-    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool | None = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         if safe:
@@ -5025,12 +6518,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecKeysView:
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._keys()
 
     def items(
@@ -5039,6 +6534,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecItemsView:
         return list(
             _CompositeSpecItemsView(
@@ -5046,6 +6542,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,
+                step_mdp_static_only=step_mdp_static_only,
             )
         )
 
@@ -5055,12 +6552,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecValuesView:
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._values()
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
@@ -5077,8 +6576,8 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
 
     def type_check(
         self,
-        value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[NestedKey, Optional[Sequence[NestedKey]]] = None,
+        value: torch.Tensor | TensorDictBase,
+        selected_keys: NestedKey | Sequence[NestedKey] | None = None,
     ):
         if selected_keys is None:
             if isinstance(value, torch.Tensor):
@@ -5202,9 +6701,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
     def ndimension(self):
         return len(self.shape)
 
-    def set(self, name, spec):
+    def set(self, name: str, spec: TensorSpec) -> StackedComposite:
         for sub_spec, sub_item in zip(self._specs, spec.unbind(self.dim)):
             sub_spec[name] = sub_item
+        return self
 
     @property
     def shape(self):
@@ -5249,9 +6749,9 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             [spec.empty() for spec in self._specs], dim=self.stack_dim
         )
 
-    def encode(
-        self, vals: Dict[str, Any], ignore_device: bool = False
-    ) -> Dict[str, torch.Tensor]:
+    def _encode_eager(
+        self, vals: dict[str, Any], ignore_device: bool = False
+    ) -> dict[str, torch.Tensor]:
         raise NOT_IMPLEMENTED_ERROR
 
     def zero(self, shape: torch.Size = None) -> TensorDictBase:
@@ -5313,7 +6813,10 @@ def _stack_specs(list_of_spec, dim=0, out=None):
             if dim < 0:
                 dim += len(shape) + 1
             shape.insert(dim, len(list_of_spec))
-            return spec0.clone().unsqueeze(dim).expand(shape)
+            spec0 = spec0.clone()
+            spec0 = spec0.unsqueeze(dim)
+            spec0 = spec0.expand(shape)
+            return spec0
         return Stacked(*list_of_spec, dim=dim)
     else:
         raise NotImplementedError
@@ -5430,7 +6933,7 @@ def _unsqueezed_shape(shape: torch.Size, dim: int) -> torch.Size:
     n = len(shape)
     if dim < -(n + 1) or dim > n:
         raise ValueError(
-            f"Dimension out of range, expected value in the range [{-(n+1)}, {n}], but "
+            f"Dimension out of range, expected value in the range [{-(n + 1)}, {n}], but "
             f"got {dim}"
         )
     if dim < 0:
@@ -5447,15 +6950,17 @@ class _CompositeSpecItemsView:
     def __init__(
         self,
         composite: Composite,
-        include_nested,
-        leaves_only,
+        include_nested: bool,
+        leaves_only: bool,
         *,
-        is_leaf,
+        is_leaf: Callable[[type], bool] | None,
+        step_mdp_static_only: bool = False,
     ):
         self.composite = composite
         self.leaves_only = leaves_only
         self.include_nested = include_nested
         self.is_leaf = is_leaf
+        self.step_mdp_static_only = step_mdp_static_only
 
     def __iter__(self):
         from tensordict.base import _NESTED_TENSORS_AS_LISTS
@@ -5475,23 +6980,29 @@ class _CompositeSpecItemsView:
                     include_nested=True,
                     leaves_only=self.leaves_only,
                     is_leaf=is_leaf,
+                    step_mdp_static_only=self.step_mdp_static_only,
                 ):
                     if not isinstance(subkey, tuple):
                         subkey = (subkey,)
                     yield (key, *subkey), subitem
-            if not self.leaves_only and not _is_leaf(type(item)):
-                yield (key, item)
-            elif not self.leaves_only or _is_leaf(type(item)):
-                yield key, item
-
-        for key, item in self._get_composite_items(is_leaf):
-            if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
-                item, _LazyStackedMixin
+            if (
+                (self.step_mdp_static_only and getattr(item, "step_mdp_static", False))
+                or (not self.leaves_only and not _is_leaf(type(item)))
+                or (not self.leaves_only or _is_leaf(type(item)))
             ):
-                for (i, spec) in enumerate(item._specs):
-                    yield from _iter_from_item(unravel_key((key, str(i))), spec)
-            else:
-                yield from _iter_from_item(key, item)
+                yield (key, item)
+
+        if not self.step_mdp_static_only or not getattr(
+            self.composite, "step_mdp_static", False
+        ):
+            for key, item in self._get_composite_items(is_leaf):
+                if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
+                    item, _LazyStackedMixin
+                ):
+                    for (i, spec) in enumerate(item._specs):
+                        yield from _iter_from_item(unravel_key((key, str(i))), spec)
+                else:
+                    yield from _iter_from_item(key, item)
 
     def _get_composite_items(self, is_leaf):
 
@@ -5589,142 +7100,5 @@ def _remove_neg_shapes(*shape):
     return _size([int(d) if d >= 0 else 1 for d in shape])
 
 
-##############
-# Legacy
-#
-class _LegacySpecMeta(abc.ABCMeta):
-    def __call__(cls, *args, **kwargs):
-        warnings.warn(
-            f"The {cls.__name__} has been deprecated and will be removed in v0.7. Please use "
-            f"{cls.__bases__[-1].__name__} instead.",
-            category=DeprecationWarning,
-        )
-        instance = super().__call__(*args, **kwargs)
-        if (
-            type(instance) in (UnboundedDiscreteTensorSpec, UnboundedDiscrete)
-            and instance.domain == "continuous"
-        ):
-            instance.__class__ = UnboundedContinuous
-        elif (
-            type(instance) in (UnboundedContinuousTensorSpec, UnboundedContinuous)
-            and instance.domain == "discrete"
-        ):
-            instance.__class__ = UnboundedDiscrete
-        return instance
-
-    def __instancecheck__(cls, instance):
-        check0 = super().__instancecheck__(instance)
-        if check0:
-            return True
-        parent_cls = cls.__bases__[-1]
-        return isinstance(instance, parent_cls)
-
-
-class CompositeSpec(Composite, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Composite`."""
-
-    ...
-
-
-class OneHotDiscreteTensorSpec(OneHot, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.OneHot`."""
-
-    ...
-
-
-class MultiOneHotDiscreteTensorSpec(MultiOneHot, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.MultiOneHot`."""
-
-    ...
-
-
-class NonTensorSpec(NonTensor, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.NonTensor`."""
-
-    ...
-
-
-class MultiDiscreteTensorSpec(MultiCategorical, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.MultiCategorical`."""
-
-    ...
-
-
-class LazyStackedTensorSpec(Stacked, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Stacked`."""
-
-    ...
-
-
-class LazyStackedCompositeSpec(StackedComposite, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.StackedComposite`."""
-
-    ...
-
-
-class DiscreteTensorSpec(Categorical, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Categorical`."""
-
-    ...
-
-
-class BinaryDiscreteTensorSpec(Binary, metaclass=_LegacySpecMeta):
-    """Deprecated version of :class:`torchrl.data.Binary`."""
-
-    ...
-
-
-_BoundedLegacyMeta = type("_BoundedLegacyMeta", (_LegacySpecMeta, _BoundedMeta), {})
-
-
-class BoundedTensorSpec(Bounded, metaclass=_BoundedLegacyMeta):
-    """Deprecated version of :class:`torchrl.data.Bounded`."""
-
-    ...
-
-
-class _UnboundedContinuousMetaclass(_UnboundedMeta):
-    def __instancecheck__(cls, instance):
-        return isinstance(instance, Unbounded) and instance.domain == "continuous"
-
-
-_LegacyUnboundedContinuousMetaclass = type(
-    "_LegacyUnboundedDiscreteMetaclass",
-    (_UnboundedContinuousMetaclass, _LegacySpecMeta),
-    {},
-)
-
-
-class UnboundedContinuousTensorSpec(
-    Unbounded, metaclass=_LegacyUnboundedContinuousMetaclass
-):
-    """Deprecated version of :class:`torchrl.data.Unbounded` with continuous space."""
-
-    ...
-
-
-class _UnboundedDiscreteMetaclass(_UnboundedMeta):
-    def __instancecheck__(cls, instance):
-        return isinstance(instance, Unbounded) and instance.domain == "discrete"
-
-
-_LegacyUnboundedDiscreteMetaclass = type(
-    "_LegacyUnboundedDiscreteMetaclass",
-    (_UnboundedDiscreteMetaclass, _LegacySpecMeta),
-    {},
-)
-
-
-class UnboundedDiscreteTensorSpec(
-    Unbounded, metaclass=_LegacyUnboundedDiscreteMetaclass
-):
-    """Deprecated version of :class:`torchrl.data.Unbounded` with discrete space."""
-
-    def __init__(
-        self,
-        shape: Union[torch.Size, int] = _DEFAULT_SHAPE,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.int64,
-        **kwargs,
-    ):
-        super().__init__(shape=shape, device=device, dtype=dtype, **kwargs)
+def _reduce_funcs(funcs):
+    return functools.partial(functools.reduce, lambda x, f: f(x), funcs)

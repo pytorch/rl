@@ -18,23 +18,37 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build-docs:
     strategy:
       matrix:
-        python_version: ["3.10"]
-        cuda_arch_version: ["12.1"]
+        python_version: [ "3.12" ]
+        cuda_arch_version: [ "12.8" ]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
+      runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
       upload-artifact: docs
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
         set -e
         set -v
-        apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
+        yum makecache
+        # Install Mesa and OpenGL Libraries:
+        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL python39-pip
+        yum install epel-release -y  # for missing librhash0 when installing tensordict
+        yum install rhash -y  # Provides librhash.so.0 needed by cmake
+        # Install DRI Drivers:
+        yum install -y mesa-dri-drivers
+        # Install Xvfb for Headless Environments:
+        yum install -y xorg-x11-server-Xvfb
+        # xhost +local:docker
+        # Xvfb :1 -screen 0 1024x768x24 &
+
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"
         env_dir="${root_dir}/env"
@@ -46,32 +60,35 @@ jobs:
         bash ./miniconda.sh -b -f -p "${conda_dir}"
         eval "$(${conda_dir}/bin/conda shell.bash hook)"
         printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.10
+        conda create --prefix "${env_dir}" -y python=3.12
         printf "* Activating\n"
         conda activate "${env_dir}"
 
         # 2. upgrade pip, ninja and packaging
-        apt-get install python3-pip unzip -y -f
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools ninja packaging cmake -U
+        conda install anaconda::cmake -y
+        python -m pip install --upgrade pip
+        python -m pip install setuptools ninja packaging "pybind11[global]" -U
         
         # 3. check python version
-        python3 --version
+        python --version
         
         # 4. Check git version
         git version
         
         # 5. Install PyTorch
-        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-        
-        # 6. Install tensordict
-        python3 -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          python -m pip install torch torchvision
+          python -m pip install tensordict
+        else
+          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
+          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+        fi
         
         # 7. Install TorchRL
-        python3 setup.py develop
+        python -m pip install -e . --no-build-isolation
         
         # 8. Install requirements
-        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
 
         # 9. Set sanitize version
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
@@ -85,15 +102,17 @@ jobs:
         # 10. Test torchrl installation
         mkdir _tmp
         cd _tmp
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from torchrl.envs.libs.dm_control import DMControlEnv
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
         
         # 11. Build doc
+        export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
+        export BATCHED_PIPE_TIMEOUT=180
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
-        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
         cd ..
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
@@ -104,11 +123,11 @@ jobs:
 
   upload:
     needs: build-docs
-    if: github.repository == 'pytorch/rl' && github.event_name == 'push' && 
-        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    if: github.repository == 'pytorch/rl' && github.event_name == 'push' &&
+      ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
     permissions:
       contents: write
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
       download-artifact: docs

@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 import warnings
-
-from typing import Dict, Optional, Union
 
 import torch
 from packaging import version
@@ -25,6 +25,8 @@ from torchrl.envs.libs.jax_utils import (
 from torchrl.envs.utils import _classproperty
 
 _has_brax = importlib.util.find_spec("brax") is not None
+
+_DEFAULT_CACHE_CLEAR_FREQUENCY = 20
 
 
 def _get_envs():
@@ -54,6 +56,9 @@ class BraxWrapper(_EnvWrapper):
             specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
             otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
+        cache_clear_frequency (int, optional): automatically clear JAX's internal
+            cache every N steps to prevent memory leaks when using ``requires_grad=True``.
+            Defaults to `False` (deactivates automatic cache clearing).
 
     Keyword Args:
         from_pixels (bool, optional): Not yet supported.
@@ -67,11 +72,11 @@ class BraxWrapper(_EnvWrapper):
             In ``brax``, this indicates the number of vectorized environments.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> import brax.envs
@@ -150,7 +155,7 @@ class BraxWrapper(_EnvWrapper):
         >>> from torch import nn
         >>> import torch
         >>>
-        >>> env = BraxWrapper(brax.envs.get_environment("ant"), batch_size=[10], requires_grad=True)
+        >>> env = BraxWrapper(brax.envs.get_environment("ant"), batch_size=[10], requires_grad=True, cache_clear_frequency=100)
         >>> env.set_seed(0)
         >>> torch.manual_seed(0)
         >>> policy = TensorDictModule(nn.Linear(27, 8), in_keys=["observation"], out_keys=["action"])
@@ -197,11 +202,25 @@ class BraxWrapper(_EnvWrapper):
         cls._jax = jax
         return jax
 
-    def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
+    def __init__(
+        self,
+        env=None,
+        categorical_action_encoding=False,
+        cache_clear_frequency: int | None = None,
+        **kwargs,
+    ):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
+        # If user passes None or False, deactivate automatic cache clearing
+        if cache_clear_frequency in (False,):
+            self._cache_clear_frequency = False
+        elif cache_clear_frequency in (None, True):
+            self._cache_clear_frequency = _DEFAULT_CACHE_CLEAR_FREQUENCY
+        else:
+            self._cache_clear_frequency = cache_clear_frequency
+        self._step_count = 0
         super().__init__(**kwargs)
         if not self.device:
             warnings.warn(
@@ -209,7 +228,7 @@ class BraxWrapper(_EnvWrapper):
                 f"Setting a device in Brax wrapped environments is strongly recommended."
             )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         brax = self.lib
         if version.parse(brax.__version__) < version.parse("0.10.4"):
             raise ImportError("Brax v0.10.4 or greater is required.")
@@ -223,12 +242,12 @@ class BraxWrapper(_EnvWrapper):
     def _build_env(
         self,
         env,
-        _seed: Optional[int] = None,
+        _seed: int | None = None,
         from_pixels: bool = False,
-        render_kwargs: Optional[dict] = None,
+        render_kwargs: dict | None = None,
         pixels_only: bool = False,
         requires_grad: bool = False,
-        camera_id: Union[int, str] = 0,
+        camera_id: int | str = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
@@ -241,7 +260,7 @@ class BraxWrapper(_EnvWrapper):
             )
         return env
 
-    def _make_state_spec(self, env: "brax.envs.env.Env"):  # noqa: F821
+    def _make_state_spec(self, env: brax.envs.env.Env):  # noqa: F821
         jax = self.jax
 
         key = jax.random.PRNGKey(0)
@@ -250,7 +269,7 @@ class BraxWrapper(_EnvWrapper):
         state_spec = _extract_spec(state_dict).expand(self.batch_size)
         return state_spec
 
-    def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
+    def _make_specs(self, env: brax.envs.env.Env) -> None:  # noqa: F821
         self.action_spec = Bounded(
             low=-1,
             high=1,
@@ -291,14 +310,14 @@ class BraxWrapper(_EnvWrapper):
         state = _tree_reshape(state, self.batch_size)
         return state
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self) -> int | None:
         jax = self.jax
         self._key = None
         self._vmap_jit_env_reset = jax.vmap(jax.jit(self._env.reset))
         self._vmap_jit_env_step = jax.vmap(jax.jit(self._env.step))
         self._state_example = self._make_state_example()
 
-    def _set_seed(self, seed: int):
+    def _set_seed(self, seed: int | None) -> None:
         jax = self.jax
         if seed is None:
             raise Exception("Brax requires an integer seed.")
@@ -416,7 +435,40 @@ class BraxWrapper(_EnvWrapper):
             out = self._step_with_grad(tensordict)
         else:
             out = self._step_without_grad(tensordict)
+
+        self._step_count += 1
+        if (
+            self._cache_clear_frequency
+            and (self._step_count % self._cache_clear_frequency) == 0
+        ):
+            self.clear_cache()
+
         return out
+
+    def clear_cache(self):
+        """Clear JAX's internal cache to prevent memory leaks.
+
+        This method should be called periodically when using requires_grad=True
+        to prevent memory accumulation from JAX's internal computation graph.
+        """
+        if hasattr(self, "jax"):
+            try:
+                # Clear JAX's compilation cache
+                if hasattr(self.jax.jit, "clear_caches"):
+                    self.jax.jit.clear_caches()
+                # Alternative: clear JAX's internal cache
+                if hasattr(self.jax, "clear_caches"):
+                    self.jax.clear_caches()
+                # Clear JAX's XLA compilation cache if available
+                try:
+                    import jaxlib
+
+                    if hasattr(jaxlib, "xla_extension"):
+                        jaxlib.xla_extension.clear_caches()
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
 
 class BraxEnv(BraxWrapper):
@@ -438,6 +490,9 @@ class BraxEnv(BraxWrapper):
             specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
             otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
             Defaults to ``False``.
+        cache_clear_frequency (int, optional): automatically clear JAX's internal
+            cache every N steps to prevent memory leaks when using ``requires_grad=True``.
+            Defaults to `False` (deactivates automatic cache clearing).
 
     Keyword Args:
         from_pixels (bool, optional): Not yet supported.
@@ -451,11 +506,11 @@ class BraxEnv(BraxWrapper):
             In ``brax``, this indicates the number of vectorized environments.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> from torchrl.envs import BraxEnv
@@ -530,7 +585,7 @@ class BraxEnv(BraxWrapper):
         >>> from torch import nn
         >>> import torch
         >>>
-        >>> env = BraxEnv("ant", batch_size=[10], requires_grad=True)
+        >>> env = BraxEnv("ant", batch_size=[10], requires_grad=True, cache_clear_frequency=100)
         >>> env.set_seed(0)
         >>> torch.manual_seed(0)
         >>> policy = TensorDictModule(nn.Linear(27, 8), in_keys=["observation"], out_keys=["action"])
@@ -551,7 +606,7 @@ class BraxEnv(BraxWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "brax.envs.env.Env":  # noqa: F821
+    ) -> brax.envs.env.Env:  # noqa: F821
         if not _has_brax:
             raise ImportError(
                 f"brax not found, unable to create {env_name}. "
@@ -561,6 +616,7 @@ class BraxEnv(BraxWrapper):
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)
+        cache_clear_frequency = kwargs.pop("cache_clear_frequency", False)
         if kwargs:
             raise ValueError("kwargs not supported.")
         self.wrapper_frame_skip = 1
@@ -570,13 +626,14 @@ class BraxEnv(BraxWrapper):
             pixels_only=pixels_only,
             from_pixels=from_pixels,
             requires_grad=requires_grad,
+            cache_clear_frequency=cache_clear_frequency,
         )
 
     @property
     def env_name(self):
         return self._constructor_kwargs["env_name"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env_name" not in kwargs:
             raise TypeError("Expected 'env_name' to be part of kwargs")
 
@@ -612,6 +669,8 @@ class _BraxEnvStep(torch.autograd.Function):
         ctx.vjp_fn = vjp_fn
         ctx.next_state = next_state_tensor
         ctx.env = env
+        # Mark that backward hasn't been called yet
+        ctx._backward_called = False
 
         return (
             next_state_tensor,  # no gradient
@@ -622,6 +681,11 @@ class _BraxEnvStep(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, _, grad_next_obs, grad_next_reward, *grad_next_qp_values):
+        # Prevent multiple backward calls on the same context
+        if hasattr(ctx, "_backward_called") and ctx._backward_called:
+            return (None, None, *([None] * len(grad_next_qp_values)))
+
+        ctx._backward_called = True
 
         pipeline_state = dict(
             zip(ctx.next_state.get("pipeline_state").keys(), grad_next_qp_values)
@@ -684,4 +748,27 @@ class _BraxEnvStep(torch.autograd.Function):
             for key, val in grad_state_qp.items()
         }
         grads = (grad_action, *grad_state_qp.values())
+
+        # Clean up context to prevent memory leaks
+        try:
+            # Clear JAX VJP function reference
+            del ctx.vjp_fn
+        except AttributeError:
+            pass
+        try:
+            # Clear stored tensors
+            del ctx.next_state
+        except AttributeError:
+            pass
+        try:
+            # Clear environment reference
+            del ctx.env
+        except AttributeError:
+            pass
+        try:
+            # Clear the backward flag
+            del ctx._backward_called
+        except AttributeError:
+            pass
+
         return (None, None, *grads)

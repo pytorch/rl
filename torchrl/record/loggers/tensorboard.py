@@ -2,10 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import os
-from typing import Dict, Sequence, Union
+from collections.abc import Sequence
 
 from torch import Tensor
 
@@ -31,7 +33,7 @@ class TensorboardLogger(Logger):
 
         self._has_imported_moviepy = False
 
-    def _create_experiment(self) -> "SummaryWriter":  # noqa
+    def _create_experiment(self) -> SummaryWriter:  # noqa
         """Creates a tensorboard experiment.
 
         Args:
@@ -49,18 +51,20 @@ class TensorboardLogger(Logger):
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return SummaryWriter(log_dir=log_dir)
 
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.
 
         Args:
             name (str): The name of the scalar.
-            value (:obj:`float`): The value of the scalar.
+            value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged. Defaults to None.
 
         """
         self.experiment.add_scalar(name, value, global_step=step)
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int | None = None, **kwargs
+    ) -> None:
         """Log videos inputs to the tensorboard.
 
         Args:
@@ -91,7 +95,7 @@ class TensorboardLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:

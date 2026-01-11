@@ -10,11 +10,11 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, Tuple
+from typing import Any
 
 import torch
-
 from tensordict import make_tensordict, NonTensorData, pad, TensorDict
 from tensordict.utils import _is_non_tensor
 
@@ -66,7 +66,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
             sampling strategy.
             If the ``batch_size`` is ``None`` (default), iterating over the
             dataset will deliver trajectories one at a time *whereas* calling
-            :meth:`~.sample` will *still* require a batch-size to be provided.
+            :meth:`sample` will *still* require a batch-size to be provided.
 
     Keyword Args:
         shuffle (bool, optional): if ``True``, trajectories are delivered in a
@@ -115,7 +115,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         replacement (bool, optional): if ``False``, sampling will be done
             without replacement. Defaults to ``True`` for downloaded datasets,
             ``False`` for streamed datasets.
-        pad (bool, float or None): if ``True``, trajectories of insufficient length
+        pad (bool, :obj:`float` or None): if ``True``, trajectories of insufficient length
             given the `slice_len` or `num_slices` arguments will be padded with
             0s. If another value is provided, it will be used for padding. If
             ``False`` or ``None`` (default) any encounter with a trajectory of
@@ -123,7 +123,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The OpenX dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/openx`.
+            `~/.cache/torchrl/atari`.openx`.
         streaming (bool, optional): if ``True``, the data won't be downloaded but
             read from a stream instead.
 
@@ -304,7 +304,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         num_slices: int | None = None,
         slice_len: int | None = None,
         pad: float | bool | None = None,
-        replacement: bool = None,
+        replacement: bool | None = None,
         streaming: bool | None = None,
         root: str | Path | None = None,
         download: bool | None = None,
@@ -313,7 +313,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         strict_length: bool = True,
     ):
@@ -578,9 +578,17 @@ class _StreamingStorage(Storage):
             )
         import datasets
 
-        dataset = datasets.load_dataset(
-            self.repo, self.dataset_id, streaming=True, split=self.split
-        )
+        try:
+            dataset = datasets.load_dataset(
+                self.repo, self.dataset_id, streaming=True, split=self.split
+            )
+        except Exception as e:
+            if "Dataset scripts are no longer supported" in str(e):
+                raise RuntimeError(
+                    f"Failed to load dataset {self.dataset_id}. Your version of `datasets` is too new - please downgrade to <4.0.0."
+                ) from e
+            raise e
+
         if self.shuffle:
             dataset = dataset.shuffle()
         self.dataset = dataset
@@ -656,7 +664,7 @@ class _StreamingStorage(Storage):
         state_dict = self.state_dict()
         json.dump(state_dict, path / "state_dict.json")
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "repo": self.repo,
             "split": self.split,
@@ -674,7 +682,7 @@ class _StreamingStorage(Storage):
         state_dict = json.load(path / "state_dict.json")
         self.load_state_dict(state_dict)
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         for key, val in state_dict.items():
             setattr(self, key, val)
         self._init()
@@ -722,7 +730,7 @@ class _StreamingSampler(Sampler):
     def __init__(self):
         ...
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
         return range(batch_size), {}
 
     def _empty(self):
@@ -734,10 +742,10 @@ class _StreamingSampler(Sampler):
     def loads(self, path):
         ...
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
 
@@ -787,4 +795,4 @@ def _make_tensordict_image_conv(data):
         data["observation"]["image"] = tensor
     except KeyError:
         pass
-    return make_tensordict(data)
+    return make_tensordict(data, auto_batch_size=True)

@@ -2,9 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss, HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
@@ -12,8 +13,8 @@ from torchrl.objectives.utils import TargetNetUpdater
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
-) -> Optional[TargetNetUpdater]:
+    cfg: DictConfig, loss_module: LossModule  # noqa: F821
+) -> TargetNetUpdater | None:
     """Builds a target network weight update object."""
     if cfg.loss == "double":
         if not cfg.hard_update:
@@ -35,7 +36,7 @@ def make_target_updater(
     return target_net_updater
 
 
-def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
+def make_dqn_loss(model, cfg) -> tuple[DQNLoss, TargetNetUpdater | None]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if cfg.distributional:
@@ -83,9 +84,9 @@ class A2CLossConfig:
 
     gamma: float = 0.99
     # Decay factor for return computation. Default=0.99.
-    entropy_coef: float = 1e-3
+    entropy_coeff: float = 1e-3
     # Entropy factor for the A2C loss
-    critic_coef: float = 1.0
+    critic_coeff: float = 1.0
     # Critic factor for the A2C loss
     critic_loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
@@ -105,13 +106,13 @@ class PPOLossConfig:
     # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
     entropy_bonus: bool = True
     # whether to add an entropy term to the PPO loss.
-    entropy_coef: float = 1e-3
+    entropy_coeff: float = 1e-3
     # Entropy factor for the PPO loss
     samples_mc_entropy: int = 1
     # Number of samples to use for a Monte-Carlo estimate if the policy distribution has not closed formula.
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
-    critic_coef: float = 1.0
+    critic_coeff: float = 1.0
     # Critic loss multiplier when computing the total loss.
 
     # ClipPPOLoss parameters:

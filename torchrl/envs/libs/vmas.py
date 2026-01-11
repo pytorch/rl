@@ -5,8 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
-
-from typing import Dict, List, Optional, Union
+import warnings
 
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
@@ -121,7 +120,7 @@ class VmasWrapper(_EnvWrapper):
         env (``vmas.simulator.environment.environment.Environment``): the vmas environment to wrap.
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+        num_envs (int): Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.
             This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to the default device. All the tensors created by VMAS
@@ -151,7 +150,7 @@ class VmasWrapper(_EnvWrapper):
         unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
-        het_specs (bool): whether the enviornment has any lazy spec
+        het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
 
@@ -236,9 +235,9 @@ class VmasWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: "vmas.simulator.environment.environment.Environment" = None,  # noqa
+        env: vmas.simulator.environment.environment.Environment = None,  # noqa
         categorical_actions: bool = True,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -252,7 +251,7 @@ class VmasWrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: "vmas.simulator.environment.environment.Environment",  # noqa
+        env: vmas.simulator.environment.environment.Environment,  # noqa
         from_pixels: bool = False,
         pixels_only: bool = False,
     ):
@@ -280,7 +279,7 @@ class VmasWrapper(_EnvWrapper):
 
         return env
 
-    def _get_default_group_map(self, agent_names: List[str]):
+    def _get_default_group_map(self, agent_names: list[str]):
         # This function performs the default grouping in vmas.
         # Agents with names "<name>_<int>" will be grouped in group name "<name>".
         # If any of the agents does not follow the naming convention, we fall back
@@ -315,7 +314,7 @@ class VmasWrapper(_EnvWrapper):
         return group_map
 
     def _make_specs(
-        self, env: "vmas.simulator.environment.environment.Environment"  # noqa
+        self, env: vmas.simulator.environment.environment.Environment  # noqa
     ) -> None:
         # Create and check group map
         self.agent_names = [agent.name for agent in self.agents]
@@ -328,9 +327,9 @@ class VmasWrapper(_EnvWrapper):
             self.group_map = self.group_map.get_group_map(self.agent_names)
         check_marl_grouping(self.group_map, self.agent_names)
 
-        self.unbatched_action_spec = Composite(device=self.device)
-        self.unbatched_observation_spec = Composite(device=self.device)
-        self.unbatched_reward_spec = Composite(device=self.device)
+        full_action_spec_unbatched = Composite(device=self.device)
+        full_observation_spec_unbatched = Composite(device=self.device)
+        full_reward_spec_unbatched = Composite(device=self.device)
 
         self.het_specs = False
         self.het_specs_map = {}
@@ -341,18 +340,18 @@ class VmasWrapper(_EnvWrapper):
                 group_reward_spec,
                 group_info_spec,
             ) = self._make_unbatched_group_specs(group)
-            self.unbatched_action_spec[group] = group_action_spec
-            self.unbatched_observation_spec[group] = group_observation_spec
-            self.unbatched_reward_spec[group] = group_reward_spec
+            full_action_spec_unbatched[group] = group_action_spec
+            full_observation_spec_unbatched[group] = group_observation_spec
+            full_reward_spec_unbatched[group] = group_reward_spec
             if group_info_spec is not None:
-                self.unbatched_observation_spec[(group, "info")] = group_info_spec
+                full_observation_spec_unbatched[(group, "info")] = group_info_spec
             group_het_specs = isinstance(
                 group_observation_spec, StackedComposite
             ) or isinstance(group_action_spec, StackedComposite)
             self.het_specs_map[group] = group_het_specs
             self.het_specs = self.het_specs or group_het_specs
 
-        self.unbatched_done_spec = Composite(
+        full_done_spec_unbatched = Composite(
             {
                 "done": Categorical(
                     n=2,
@@ -363,18 +362,42 @@ class VmasWrapper(_EnvWrapper):
             },
         )
 
-        self.action_spec = self.unbatched_action_spec.expand(
-            *self.batch_size, *self.unbatched_action_spec.shape
+        self.full_action_spec_unbatched = full_action_spec_unbatched
+        self.full_observation_spec_unbatched = full_observation_spec_unbatched
+        self.full_reward_spec_unbatched = full_reward_spec_unbatched
+        self.full_done_spec_unbatched = full_done_spec_unbatched
+
+    @property
+    def unbatched_action_spec(self):
+        warnings.warn(
+            "unbatched_action_spec is deprecated and will be removed in v0.9. "
+            "Please use full_action_spec_unbatched instead."
         )
-        self.observation_spec = self.unbatched_observation_spec.expand(
-            *self.batch_size, *self.unbatched_observation_spec.shape
+        return self.full_action_spec_unbatched
+
+    @property
+    def unbatched_observation_spec(self):
+        warnings.warn(
+            "unbatched_observation_spec is deprecated and will be removed in v0.9. "
+            "Please use full_observation_spec_unbatched instead."
         )
-        self.reward_spec = self.unbatched_reward_spec.expand(
-            *self.batch_size, *self.unbatched_reward_spec.shape
+        return self.full_observation_spec_unbatched
+
+    @property
+    def unbatched_reward_spec(self):
+        warnings.warn(
+            "unbatched_reward_spec is deprecated and will be removed in v0.9. "
+            "Please use full_reward_spec_unbatched instead."
         )
-        self.done_spec = self.unbatched_done_spec.expand(
-            *self.batch_size, *self.unbatched_done_spec.shape
+        return self.full_reward_spec_unbatched
+
+    @property
+    def unbatched_done_spec(self):
+        warnings.warn(
+            "unbatched_done_spec is deprecated and will be removed in v0.9. "
+            "Please use full_done_spec_unbatched instead."
         )
+        return self.full_done_spec_unbatched
 
     def _make_unbatched_group_specs(self, group: str):
         # Agent specs
@@ -453,7 +476,7 @@ class VmasWrapper(_EnvWrapper):
             group_info_spec,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         vmas = self.lib
 
         if "env" not in kwargs:
@@ -464,14 +487,14 @@ class VmasWrapper(_EnvWrapper):
                 "env is not of type 'vmas.simulator.environment.Environment'."
             )
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self) -> int | None:
         pass
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         self._env.seed(seed)
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset")
@@ -582,9 +605,7 @@ class VmasWrapper(_EnvWrapper):
         )
         return tensordict_out
 
-    def read_obs(
-        self, observations: Union[Dict, torch.Tensor]
-    ) -> Union[Dict, torch.Tensor]:
+    def read_obs(self, observations: dict | torch.Tensor) -> dict | torch.Tensor:
         if isinstance(observations, torch.Tensor):
             return _selective_unsqueeze(observations, batch_size=self.batch_size)
         return TensorDict(
@@ -592,7 +613,7 @@ class VmasWrapper(_EnvWrapper):
             batch_size=self.batch_size,
         )
 
-    def read_info(self, infos: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def read_info(self, infos: dict[str, torch.Tensor]) -> torch.Tensor:
         if len(infos) == 0:
             return None
         infos = TensorDict(
@@ -618,7 +639,9 @@ class VmasWrapper(_EnvWrapper):
 
     def read_action(self, action, group: str = "agents"):
         if not self.continuous_actions and not self.categorical_actions:
-            action = self.unbatched_action_spec[group, "action"].to_categorical(action)
+            action = self.full_action_spec_unbatched[group, "action"].to_categorical(
+                action
+            )
         agent_actions = action.unbind(dim=1)
         return agent_actions
 
@@ -647,14 +670,14 @@ class VmasEnv(VmasWrapper):
 
 
     Keyword Args:
-        num_envs (int): Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+        num_envs (int): Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.
             This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
             determine the batch size of the environment.
         device (torch.device, optional): Device for simulation. Defaults to the defaultt device. All the tensors created by VMAS
             will be placed on this device.
         continuous_actions (bool, optional): Whether to use continuous actions. Defaults to ``True``. If ``False``, actions
             will be discrete. The number of actions and their size will depend on the chosen scenario.
-            See the VMAS repositiory for more info.
+            See the VMAS repository for more info.
         max_steps (int, optional): Horizon of the task. Defaults to ``None`` (infinite horizon). Each VMAS scenario can
             be terminating or not. If ``max_steps`` is specified,
             the scenario is also terminated (and the ``"terminated"`` flag is set) whenever this horizon is reached.
@@ -678,11 +701,11 @@ class VmasEnv(VmasWrapper):
         group_map (Dict[str, List[str]]): how to group agents in tensordicts for
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
-        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the enviornment
+        agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
         unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
         unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
-        het_specs (bool): whether the enviornment has any lazy spec
+        het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
 
@@ -750,14 +773,14 @@ class VmasEnv(VmasWrapper):
 
     def __init__(
         self,
-        scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],  # noqa
+        scenario: str | vmas.simulator.scenario.BaseScenario,  # noqa
         *,
         num_envs: int,
         continuous_actions: bool = True,
-        max_steps: Optional[int] = None,
+        max_steps: int | None = None,
         categorical_actions: bool = True,
-        seed: Optional[int] = None,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        seed: int | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         **kwargs,
     ):
         if not _has_vmas:
@@ -776,7 +799,7 @@ class VmasEnv(VmasWrapper):
             **kwargs,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "scenario" not in kwargs:
             raise TypeError("Could not find environment key 'scenario' in kwargs.")
         if "num_envs" not in kwargs:
@@ -784,13 +807,13 @@ class VmasEnv(VmasWrapper):
 
     def _build_env(
         self,
-        scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],  # noqa
+        scenario: str | vmas.simulator.scenario.BaseScenario,  # noqa
         num_envs: int,
         continuous_actions: bool,
-        max_steps: Optional[int],
-        seed: Optional[int],
+        max_steps: int | None,
+        seed: int | None,
         **scenario_kwargs,
-    ) -> "vmas.simulator.environment.environment.Environment":  # noqa
+    ) -> vmas.simulator.environment.environment.Environment:  # noqa
         vmas = self.lib
 
         self.scenario_name = scenario
@@ -803,7 +826,9 @@ class VmasEnv(VmasWrapper):
                 num_envs=num_envs,
                 device=self.device
                 if self.device is not None
-                else torch.get_default_device(),
+                else getattr(
+                    torch, "get_default_device", lambda: torch.device("cpu")
+                )(),
                 continuous_actions=continuous_actions,
                 max_steps=max_steps,
                 seed=seed,

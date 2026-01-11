@@ -16,6 +16,7 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
     ObsDecoder,
@@ -46,3 +47,40 @@ from .multiagent import (
     VDNMixer,
 )
 from .utils import Squeeze2dLayer, SqueezeLayer
+
+__all__ = [
+    "DistributionalDQNnet",
+    "BatchRenorm1d",
+    "DecisionTransformer",
+    "GPT2RewardModel",
+    "ConsistentDropout",
+    "ConsistentDropoutModule",
+    "NoisyLazyLinear",
+    "NoisyLinear",
+    "reset_noise",
+    "DreamerActor",
+    "ObsDecoder",
+    "ObsEncoder",
+    "RSSMPosterior",
+    "RSSMPrior",
+    "RSSMRollout",
+    "Conv2dNet",
+    "Conv3dNet",
+    "ConvNet",
+    "DdpgCnnActor",
+    "DdpgCnnQNet",
+    "DdpgMlpActor",
+    "DdpgMlpQNet",
+    "DTActor",
+    "DuelingCnnDQNet",
+    "DuelingMlpDQNet",
+    "MLP",
+    "OnlineDTActor",
+    "MultiAgentConvNet",
+    "MultiAgentMLP",
+    "MultiAgentNetBase",
+    "QMixer",
+    "VDNMixer",
+    "Squeeze2dLayer",
+    "SqueezeLayer",
+]

@@ -2,19 +2,22 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+from collections.abc import Callable
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any
 
 from tensordict import TensorDictBase
 
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
 
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
+from torchrl.collectors import (
+    BaseCollector,
+    Collector,
+    MultiAsyncCollector,
+    MultiSyncCollector,
 )
 from torchrl.data.postprocs import MultiStep
 from torchrl.envs.batched_envs import ParallelEnv
@@ -22,19 +25,19 @@ from torchrl.envs.common import EnvBase
 
 
 def sync_async_collector(
-    env_fns: Union[Callable, List[Callable]],
-    env_kwargs: Optional[Union[dict, List[dict]]],
-    num_env_per_collector: Optional[int] = None,
-    num_collectors: Optional[int] = None,
+    env_fns: Callable | list[Callable],
+    env_kwargs: dict | list[dict] | None,
+    num_env_per_collector: int | None = None,
+    num_collectors: int | None = None,
     **kwargs,
-) -> MultiaSyncDataCollector:
+) -> MultiAsyncCollector:
     """Runs asynchronous collectors, each running synchronous environments.
 
     .. aafig::
 
 
             +----------------------------------------------------------------------+
-            |           "MultiaSyncDataCollector"                 |                |
+            |           "MultiAsyncCollector"                     |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |  "Collector 1"  |  "Collector 2"  |  "Collector 3"  |     "Main"     |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -72,7 +75,7 @@ def sync_async_collector(
 
     """
     return _make_collector(
-        MultiaSyncDataCollector,
+        MultiAsyncCollector,
         env_fns=env_fns,
         env_kwargs=env_kwargs,
         num_env_per_collector=num_env_per_collector,
@@ -82,12 +85,12 @@ def sync_async_collector(
 
 
 def sync_sync_collector(
-    env_fns: Union[Callable, List[Callable]],
-    env_kwargs: Optional[Union[dict, List[dict]]],
-    num_env_per_collector: Optional[int] = None,
-    num_collectors: Optional[int] = None,
+    env_fns: Callable | list[Callable],
+    env_kwargs: dict | list[dict] | None,
+    num_env_per_collector: int | None = None,
+    num_collectors: int | None = None,
     **kwargs,
-) -> Union[SyncDataCollector, MultiSyncDataCollector]:
+) -> Collector | MultiSyncCollector:
     """Runs synchronous collectors, each running synchronous environments.
 
     E.g.
@@ -95,7 +98,7 @@ def sync_sync_collector(
     .. aafig::
 
             +----------------------------------------------------------------------+
-            |            "MultiSyncDataCollector"                 |                |
+            |            "MultiSyncCollector"                     |                |
             |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
             |   "Collector 1" |  "Collector 2"  |  "Collector 3"  |     Main       |
             |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
@@ -146,7 +149,7 @@ def sync_sync_collector(
         if "storing_device" in kwargs:
             kwargs["storing_device"] = kwargs.pop("storing_device")
         return _make_collector(
-            SyncDataCollector,
+            Collector,
             env_fns=env_fns,
             env_kwargs=env_kwargs,
             num_env_per_collector=num_env_per_collector,
@@ -154,7 +157,7 @@ def sync_sync_collector(
             **kwargs,
         )
     return _make_collector(
-        MultiSyncDataCollector,
+        MultiSyncCollector,
         env_fns=env_fns,
         env_kwargs=env_kwargs,
         num_env_per_collector=num_env_per_collector,
@@ -164,18 +167,18 @@ def sync_sync_collector(
 
 
 def _make_collector(
-    collector_class: Type,
-    env_fns: Union[Callable, List[Callable]],
-    env_kwargs: Optional[Union[dict, List[dict]]],
+    collector_class: type,
+    env_fns: Callable | list[Callable],
+    env_kwargs: dict | list[dict] | None,
     policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int = -1,
     frames_per_batch: int = 200,
-    total_frames: Optional[int] = None,
-    postproc: Optional[Callable] = None,
-    num_env_per_collector: Optional[int] = None,
-    num_collectors: Optional[int] = None,
+    total_frames: int | None = None,
+    postproc: Callable | None = None,
+    num_env_per_collector: int | None = None,
+    num_collectors: int | None = None,
     **kwargs,
-) -> DataCollectorBase:
+) -> BaseCollector:
     if env_kwargs is None:
         env_kwargs = {}
     if isinstance(env_fns, list):
@@ -228,7 +231,7 @@ def _make_collector(
             for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)
         ]
         env_kwargs = None
-    if collector_class is SyncDataCollector:
+    if collector_class is Collector:
         if len(env_fns) > 1:
             raise RuntimeError(
                 f"Something went wrong: expected a single env constructor but got {len(env_fns)}"
@@ -249,12 +252,10 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[
-        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
-    ],
-    cfg: "DictConfig",  # noqa: F821
-    make_env_kwargs: Optional[Dict] = None,
-) -> DataCollectorBase:
+    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
+    cfg: DictConfig,  # noqa: F821
+    make_env_kwargs: dict | None = None,
+) -> BaseCollector:
     """Returns a data collector for off-policy sota-implementations.
 
     Args:
@@ -313,12 +314,10 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: Union[
-        TensorDictModuleWrapper, ProbabilisticTensorDictSequential
-    ],
-    cfg: "DictConfig",  # noqa: F821
-    make_env_kwargs: Optional[Dict] = None,
-) -> DataCollectorBase:
+    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
+    cfg: DictConfig,  # noqa: F821
+    make_env_kwargs: dict | None = None,
+) -> BaseCollector:
     """Makes a collector in on-policy settings.
 
     Args:
@@ -400,7 +399,7 @@ class OnPolicyCollectorConfig:
     exploration_type: str = "random"
     # exploration mode of the data collector.
     async_collection: bool = False
-    # whether data collection should be done asynchrously. Asynchrounous data collection means
+    # whether data collection should be done asynchronously. Asynchronous data collection means
     # that the data collector will keep on running the environment with the previous weights
     # configuration while the optimization loop is being done. If the algorithm is trained
     # synchronously, data collection and optimization will occur iteratively, not concurrently.

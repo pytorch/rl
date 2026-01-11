@@ -62,6 +62,19 @@ or via a ``git clone`` if you're willing to contribute to the library:
   $ cd ../rl
   $ python setup.py develop
 
+If you use ``uv`` and you installed a specific PyTorch build beforehand (e.g. a nightly wheel),
+use ``--no-deps`` for the editable installs to prevent dependency re-resolution (and potential PyTorch downgrades):
+
+.. code-block:: bash
+
+  $ cd path/to/root
+  $ git clone https://github.com/pytorch/tensordict
+  $ git clone https://github.com/pytorch/rl
+  $ cd tensordict
+  $ uv pip install --no-deps -e .
+  $ cd ../rl
+  $ uv pip install --no-deps -e .
+
 Getting started
 ===============
 
@@ -105,6 +118,7 @@ Intermediate
    tutorials/dqn_with_rnn
    tutorials/rb_tutorial
    tutorials/export
+   tutorials/llm_browser
 
 Advanced
 --------

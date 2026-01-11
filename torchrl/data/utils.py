@@ -6,13 +6,12 @@ from __future__ import annotations
 
 import functools
 import typing
-from typing import Any, Callable, List, Tuple, Union
+from collections.abc import Callable
+from typing import Any, Union
 
 import numpy as np
 import torch
-
 from torch import Tensor
-
 from torchrl.data.tensor_specs import (
     Binary,
     Categorical,
@@ -47,7 +46,7 @@ if hasattr(typing, "get_args"):
 else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
-INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+INDEX_TYPING = Union[None, int, slice, str, Tensor, list[Any], tuple[Any, ...]]
 
 
 ACTION_SPACE_MAP = {
@@ -139,7 +138,7 @@ def consolidate_spec(
     return spec
 
 
-def _empty_like_spec(specs: List[TensorSpec], shape):
+def _empty_like_spec(specs: list[TensorSpec], shape):
     for spec in specs[1:]:
         if spec.__class__ != specs[0].__class__:
             raise ValueError(
@@ -147,12 +146,12 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
             )
     spec = specs[0]
     if isinstance(spec, (Composite, StackedComposite)):
-        # the exclusive key has values which are CompositeSpecs ->
+        # the exclusive key has values which are Composite specs ->
         # we create an empty composite spec with same batch size
         return spec.empty()
     elif isinstance(spec, Stacked):
-        # the exclusive key has values which are LazyStackedTensorSpecs ->
-        # we create a LazyStackedTensorSpec with the same shape (aka same -1s) as the first in the list.
+        # the exclusive key has values which are Stacked specs ->
+        # we create a Stacked spec with the same shape (aka same -1s) as the first in the list.
         # this will not add any new -1s when they are stacked
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
         return Stacked(
@@ -224,7 +223,15 @@ def contains_lazy_spec(spec: TensorSpec) -> bool:
     return False
 
 
-class CloudpickleWrapper(object):
+class _CloudpickleWrapperMeta(type):
+    def __call__(cls, obj):
+        if isinstance(obj, cls):
+            return obj
+        else:
+            return super().__call__(obj)
+
+
+class CloudpickleWrapper(metaclass=_CloudpickleWrapperMeta):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
     def __init__(self, fn: Callable, **kwargs):
@@ -307,7 +314,7 @@ def _process_action_space_spec(action_space, spec):
     return action_space, spec
 
 
-def _find_action_space(action_space):
+def _find_action_space(action_space) -> str:
     if isinstance(action_space, TensorSpec):
         if isinstance(action_space, Composite):
             if "action" in action_space.keys():

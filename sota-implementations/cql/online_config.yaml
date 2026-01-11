@@ -11,11 +11,11 @@ env:
 # Collector
 collector:
   frames_per_batch: 1000
-  total_frames: 20000
+  total_frames: 1_000_000
   multi_step: 0
   init_random_frames: 5_000
   env_per_collector: 1
-  device: cpu
+  device:
   max_frames_per_traj: 1000
 
 
@@ -66,3 +66,8 @@ loss:
   num_random: 10
   with_lagrange: True
   lagrange_thresh: 10.0
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

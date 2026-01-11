@@ -13,8 +13,8 @@ import shutil
 import subprocess
 import tempfile
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import torch
@@ -22,7 +22,6 @@ from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
-
 from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
@@ -60,7 +59,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The AtariDQN dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/atari`.
+            `~/.cache/torchrl/atari`.atari`.
         num_procs (int, optional): number of processes to launch for preprocessing.
             Has no effect whenever the data is already downloaded. Defaults to 0
             (no multiprocessing used).
@@ -403,7 +402,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         download: bool | str = True,
         sampler=None,
         writer=None,
-        transform: "Transform" | None = None,  # noqa: F821
+        transform: Transform | None = None,  # noqa: F821
         num_procs: int = 0,
         num_slices: int | None = None,
         slice_len: int | None = None,
@@ -412,10 +411,16 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         mp_start_method: str = "fork",
         **kwargs,
     ):
+        import warnings
+
+        warnings.warn(
+            "This dataset is no longer available. We are working on a fix, or possibly a deprecation.",
+            DeprecationWarning,
+        )
         if dataset_id not in self.available_datasets:
             raise ValueError(
                 "The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "
-                "where <game_name> is one of the Atari 2600 games and the run is a number betweeen 1 and 5. "
+                "where <game_name> is one of the Atari 2600 games and the run is a number between 1 and 5. "
                 "The full list of accepted dataset_ids is available under AtariDQNExperienceReplay.available_datasets."
             )
         self.dataset_id = dataset_id
@@ -493,7 +498,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         if os.path.exists(self.dataset_path / "meta.json"):
             return True
         if os.path.exists(self.dataset_path / "processed.json"):
-            with open(self.dataset_path / "processed.json", "r") as jsonfile:
+            with open(self.dataset_path / "processed.json") as jsonfile:
                 return json.load(jsonfile).get("processed", False) == self._max_runs
         return False
 
@@ -509,21 +514,25 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             if not os.listdir(tempdir):
                 os.makedirs(tempdir, exist_ok=True)
                 # get the list of runs
+                try:
+                    subprocess.run(
+                        ["gsutil", "version"], check=True, capture_output=True
+                    )
+                except subprocess.CalledProcessError:
+                    raise RuntimeError("gsutil is not installed or not found in PATH.")
                 command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
                 output = subprocess.run(
                     command, shell=True, capture_output=True
                 )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 files = [
-                    file.decode("utf-8").replace("$", "\$")  # noqa: W605
+                    file.decode("utf-8").replace("$", r"\$")  # noqa: W605
                     for file in output.stdout.splitlines()
                     if file.endswith(b".gz")
                 ]
                 self.remote_gz_files = self._list_runs(None, files)
                 remote_gz_files = list(self.remote_gz_files)
                 if not len(remote_gz_files):
-                    raise RuntimeError(
-                        "Could not load the file list. Did you install gsutil?"
-                    )
+                    raise RuntimeError("No files in file list.")
 
                 total_runs = remote_gz_files[-1]
                 if self.num_procs == 0:
@@ -819,7 +828,7 @@ class _AtariStorage(Storage):
 
     def _proc_td(self, td, index):
         td_data = td.get("data")
-        obs_ = td_data.get(("observation"))[index + 1]
+        obs_ = td_data.get("observation")[index + 1]
         done = td_data.get(("next", "terminated"))[index].squeeze(-1).bool()
         if done.ndim and done.any():
             obs_ = torch.index_fill(obs_, 0, done.nonzero().squeeze(), 0)

@@ -17,8 +17,8 @@ from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptData
+from torchrl.data.llm.dataset import get_dataloader
+from torchrl.data.llm.prompt import PromptData
 from utils import get_file_logger, resolve_name_or_path, setup
 
 
@@ -147,7 +147,7 @@ def main(cfg):
         elif it % log_interval == 0:
             # loss as float. note: this is a CPU-GPU sync point
             loss = batch.loss.item()
-            msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt*1000:.2f}ms"
+            msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt * 1000:.2f}ms"
             torchrl_logger.info(msg)
             loss_logger.info(msg)
 

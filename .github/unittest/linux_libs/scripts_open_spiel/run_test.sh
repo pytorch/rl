@@ -5,7 +5,7 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update && apt-get install -y git wget
+apt-get update && apt-get install -y git wget cmake
 
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
@@ -24,5 +24,5 @@ python -c "import pyspiel"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenSpiel --error-for-skips --runslow
 
-coverage combine
+coverage combine -q
 coverage xml -i

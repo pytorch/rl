@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import os
-import warnings
-from typing import Dict, Optional, Sequence, Union
+from collections.abc import Sequence
 
 from torch import Tensor
 
@@ -35,6 +36,9 @@ class WandbLogger(Logger):
         project (str, optional): The name of the project where you're sending
             the new run. If the project is not specified, the run is put in
             an ``"Uncategorized"`` project.
+
+    Keyword Args:
+        fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
         **kwargs: Extra keyword arguments for ``wandb.init``. See relevant page for
             more info.
 
@@ -42,16 +46,17 @@ class WandbLogger(Logger):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._prev_video_step = -1
         return super().__new__(cls)
 
     def __init__(
         self,
         exp_name: str,
         offline: bool = False,
-        save_dir: str = None,
-        id: str = None,
-        project: str = None,
+        save_dir: str | None = None,
+        id: str | None = None,
+        project: str | None = None,
+        *,
+        video_fps: int = 32,
         **kwargs,
     ) -> None:
         if not _has_wandb:
@@ -68,6 +73,7 @@ class WandbLogger(Logger):
         self.save_dir = save_dir
         self.id = id
         self.project = project
+        self.video_fps = video_fps
         self._wandb_kwargs = {
             "name": exp_name,
             "dir": save_dir,
@@ -76,25 +82,19 @@ class WandbLogger(Logger):
             "resume": "allow",
             **kwargs,
         }
-        self._has_imported_wandb = False
+
         super().__init__(exp_name=exp_name, log_dir=save_dir)
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
 
-        self._has_imported_moviepy = False
-
-        self._has_imported_omgaconf = False
-
-        self.video_log_counter = 0
-
-    def _create_experiment(self) -> "WandbLogger":
+    def _create_experiment(self):
         """Creates a wandb experiment.
 
         Args:
             exp_name (str): The name of the experiment.
 
         Returns:
-            WandbLogger: The wandb experiment logger.
+            A wandb.Experiment object.
         """
         if not _has_wandb:
             raise ImportError("Wandb is not installed")
@@ -105,19 +105,20 @@ class WandbLogger(Logger):
 
         return wandb.init(**self._wandb_kwargs)
 
-    def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
+    def log_scalar(
+        self, name: str, value: float, step: int | None = None, commit: bool = False
+    ) -> None:
         """Logs a scalar value to wandb.
 
         Args:
             name (str): The name of the scalar.
-            value (:obj:`float`): The value of the scalar.
+            value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
+            commit: If true, data for current step is assumed to be final (and
+                no further data for this step should be logged).
         """
-        if step is not None:
-            self.experiment.log({name: value, "trainer/step": step})
-        else:
-            self.experiment.log({name: value})
+        self.experiment.log({name: value}, step=step, commit=commit)
 
     def log_video(self, name: str, video: Tensor, **kwargs) -> None:
         """Log videos inputs to wandb.
@@ -127,47 +128,19 @@ class WandbLogger(Logger):
             video (Tensor): The video to be logged.
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index), 'format'
-                (default is 'mp4') and 'fps' (default: 6). Other kwargs are
+                (default is 'mp4') and 'fps' (defaults to ``self.video_fps``). Other kwargs are
                 passed as-is to the :obj:`experiment.log` method.
         """
         import wandb
 
-        # check for correct format of the video tensor ((N), T, C, H, W)
-        # check that the color channel (C) is either 1 or 3
-        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
-            raise Exception(
-                "Wrong format of the video tensor. Should be ((N), T, C, H, W)"
-            )
-        if not self._has_imported_moviepy:
-            try:
-                import moviepy  # noqa
-
-                self._has_imported_moviepy = True
-            except ImportError:
-                raise Exception(
-                    "moviepy not found, videos cannot be logged with TensorboardLogger"
-                )
-        self.video_log_counter += 1
-        fps = kwargs.pop("fps", 6)
-        step = kwargs.pop("step", None)
+        fps = kwargs.pop("fps", self.video_fps)
         format = kwargs.pop("format", "mp4")
-        if step not in (None, self._prev_video_step, self._prev_video_step + 1):
-            warnings.warn(
-                "when using step with wandb_logger.log_video, it is expected "
-                "that the step is equal to the previous step or that value incremented "
-                f"by one. Got step={step} but previous value was {self._prev_video_step}. "
-                f"The step value will be set to {self._prev_video_step+1}. This warning will "
-                f"be silenced from now on but the values will keep being incremented."
-            )
-            step = self._prev_video_step + 1
-        self._prev_video_step = step if step is not None else self._prev_video_step + 1
         self.experiment.log(
             {name: wandb.Video(video, fps=fps, format=format)},
-            # step=step,
             **kwargs,
         )
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
@@ -197,7 +170,7 @@ class WandbLogger(Logger):
 
         Keyword Args:
             step (int): Global step value to record
-            bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
+            bins (str): One of {'tensorflow','auto', 'fd', …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
 
         """
         import wandb
@@ -210,3 +183,22 @@ class WandbLogger(Logger):
         self.experiment.log(
             {name: wandb.Histogram(data, num_bins=num_bins), **extra_kwargs}
         )
+
+    def log_str(self, name: str, value: str, step: int | None = None) -> None:
+        """Logs a string value to wandb using a table format for better visualization.
+
+        Args:
+            name (str): The name of the string data.
+            value (str): The string value to log.
+            step (int, optional): The step at which the string is logged.
+                Defaults to None.
+        """
+        import wandb
+
+        # Create a table with a single row
+        table = wandb.Table(columns=["text"], data=[[value]])
+
+        if step is not None:
+            self.experiment.log({name: value}, step=step)
+        else:
+            self.experiment.log({name: table})

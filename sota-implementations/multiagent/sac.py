@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import time
 
 import hydra
 import torch
-
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
@@ -31,7 +32,7 @@ def rendering_callback(env, td):
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="sac")
-def train(cfg: "DictConfig"):  # noqa: F821
+def train(cfg: DictConfig):  # noqa: F821
     # Device
     cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device
@@ -76,8 +77,11 @@ def train(cfg: "DictConfig"):  # noqa: F821
     if cfg.env.continuous_actions:
         actor_net = nn.Sequential(
             MultiAgentMLP(
-                n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-                n_agent_outputs=2 * env.action_spec.shape[-1],
+                n_agent_inputs=env.unbatched_observation_spec[
+                    "agents", "observation"
+                ].shape[-1],
+                n_agent_outputs=2
+                * env.full_action_spec_unbatched["agents", "action"].shape[-1],
                 n_agents=env.n_agents,
                 centralised=False,
                 share_params=cfg.model.shared_parameters,
@@ -96,13 +100,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
         policy = ProbabilisticActor(
             module=policy_module,
-            spec=env.unbatched_action_spec,
+            spec=env.full_action_spec_unbatched,
             in_keys=[("agents", "loc"), ("agents", "scale")],
             out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={
-                "low": env.unbatched_action_spec[("agents", "action")].space.low,
-                "high": env.unbatched_action_spec[("agents", "action")].space.high,
+                "low": env.full_action_spec_unbatched[("agents", "action")].space.low,
+                "high": env.full_action_spec_unbatched[("agents", "action")].space.high,
             },
             return_log_prob=True,
         )
@@ -110,7 +114,9 @@ def train(cfg: "DictConfig"):  # noqa: F821
         # Critic
         module = MultiAgentMLP(
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1]
-            + env.action_spec.shape[-1],  # Q critic takes action and value
+            + env.full_action_spec_unbatched["agents", "action"].shape[
+                -1
+            ],  # Q critic takes action and value
             n_agent_outputs=1,
             n_agents=env.n_agents,
             centralised=cfg.model.centralised_critic,
@@ -129,7 +135,9 @@ def train(cfg: "DictConfig"):  # noqa: F821
         actor_net = nn.Sequential(
             MultiAgentMLP(
                 n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-                n_agent_outputs=env.action_spec.space.n,
+                n_agent_outputs=env.full_action_spec_unbatched[
+                    "agents", "action"
+                ].space.n,
                 n_agents=env.n_agents,
                 centralised=False,
                 share_params=cfg.model.shared_parameters,
@@ -146,7 +154,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         )
         policy = ProbabilisticActor(
             module=policy_module,
-            spec=env.unbatched_action_spec,
+            spec=env.full_action_spec_unbatched["agents", "action"],
             in_keys=[("agents", "logits")],
             out_keys=[env.action_key],
             distribution_class=OneHotCategorical
@@ -158,7 +166,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         # Critic
         module = MultiAgentMLP(
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-            n_agent_outputs=env.action_spec.space.n,
+            n_agent_outputs=env.full_action_spec_unbatched["agents", "action"].space.n,
             n_agents=env.n_agents,
             centralised=cfg.model.centralised_critic,
             share_params=cfg.model.shared_parameters,
@@ -194,7 +202,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             actor_network=policy,
             qvalue_network=value_module,
             delay_qvalue=True,
-            action_spec=env.unbatched_action_spec,
+            action_spec=env.full_action_spec_unbatched,
         )
         loss_module.set_keys(
             state_action_value=("agents", "state_action_value"),
@@ -208,8 +216,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             actor_network=policy,
             qvalue_network=value_module,
             delay_qvalue=True,
-            num_actions=env.action_spec.space.n,
-            action_space=env.unbatched_action_spec,
+            num_actions=env.full_action_spec_unbatched["agents", "action"].space.n,
+            action_space=env.full_action_spec_unbatched,
         )
         loss_module.set_keys(
             action_value=("agents", "action_value"),

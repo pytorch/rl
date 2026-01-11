@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.0.1
+    rev: v5.0.0
     hooks:
       - id: check-docstring-first
       - id: check-toml
@@ -11,27 +11,49 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/omnilib/ufmt
-    rev: v2.0.0b2
+    rev: v2.8.0
     hooks:
       - id: ufmt
+        exclude: ^torchrl/trainers/helpers/envs\.py$
         additional_dependencies:
           - black == 22.3.0
           - usort == 1.0.3
-          - libcst == 0.4.7
+          - libcst == 1.0.1
 
   - repo: https://github.com/pycqa/flake8
-    rev: 4.0.1
+    rev: 6.1.0
     hooks:
       - id: flake8
         args: [--config=setup.cfg]
         additional_dependencies:
           - flake8-bugbear==22.10.27
           - flake8-comprehensions==3.10.1
-          - torchfix==0.0.2
-          - flake8-print==5.0.0
+          - flake8-print==4.0.1
 
   - repo: https://github.com/PyCQA/pydocstyle
-    rev: 6.1.1
+    rev: 6.3.0
     hooks:
       - id: pydocstyle
         files: ^torchrl/
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py311-plus]
+        exclude: ^torchrl/trainers/helpers/envs\.py$
+
+  - repo: local
+    hooks:
+    - id: autoflake
+      name: autoflake
+      entry: autoflake --in-place --remove-unused-variables --remove-all-unused-imports
+      language: system
+      types: [python]
+    - id: check-sphinx-section-underline
+      name: Check Sphinx section underline lengths
+      entry: ./scripts/check-sphinx-section-underline --fix
+      language: script
+      files: ^docs/.*\.rst$
+      pass_filenames: true
+      description: Ensure Sphinx section underline lengths match section titles.

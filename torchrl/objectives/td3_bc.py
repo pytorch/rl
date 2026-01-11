@@ -5,18 +5,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 
+from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _reduce,
@@ -90,6 +87,8 @@ class TD3BCLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -216,8 +215,10 @@ class TD3BCLoss(LossModule):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
+        priority_weight: NestedKey = "priority_weight"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss_actor",
@@ -240,10 +241,10 @@ class TD3BCLoss(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         action_spec: TensorSpec = None,
-        bounds: Optional[Tuple[float]] = None,
+        bounds: tuple[float] | None = None,
         num_qvalue_nets: int = 2,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
@@ -251,18 +252,22 @@ class TD3BCLoss(LossModule):
         loss_function: str = "smooth_l1",
         delay_actor: bool = True,
         delay_qvalue: bool = True,
-        priority_key: str = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
+        deactivate_vmap: bool = False,
+        use_prioritized_weights: str | bool = "auto",
     ) -> None:
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
 
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue
+        self.deactivate_vmap = deactivate_vmap
 
         self.convert_to_functional(
             actor_network,
@@ -336,10 +341,14 @@ class TD3BCLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
+            self.qvalue_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
         self._vmap_actor_network00 = _vmap_func(
-            self.actor_network, randomness=self.vmap_randomness
+            self.actor_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -386,7 +395,7 @@ class TD3BCLoss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and is usually delayed 1-3 critic updates.
@@ -398,6 +407,7 @@ class TD3BCLoss(LossModule):
                 used in the combined actor loss as well as the detached `"state_action_value_actor"` used to calculate the lambda
                 value, and the lambda value `"lmbd"` itself.
         """
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -430,10 +440,17 @@ class TD3BCLoss(LossModule):
             "bc_loss": bc_loss.detach(),
             "lmbd": lmbd,
         }
-        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return loss_actor, metadata
 
-    def qvalue_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def qvalue_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.
@@ -444,6 +461,7 @@ class TD3BCLoss(LossModule):
         Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
             the detached `"td_error"` to be used for prioritized sampling, the detached `"next_state_value"`, the detached `"pred_value"`, and the detached `"target_value"`.
         """
+        weights = self._maybe_get_priority_weight(tensordict)
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)
@@ -517,7 +535,14 @@ class TD3BCLoss(LossModule):
             "pred_value": current_qvalue.detach(),
             "target_value": target_value.detach(),
         }
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return loss_qval, metadata
 
     @dispatch
@@ -546,7 +571,14 @@ class TD3BCLoss(LossModule):
                 **metadata_actor,
                 **metadata_value,
             },
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return td_out
 

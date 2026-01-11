@@ -15,6 +15,7 @@ from .continuous import (
     TruncatedNormal,
 )
 from .discrete import (
+    LLMMaskedCategorical,
     MaskedCategorical,
     MaskedOneHotCategorical,
     OneHotCategorical,
@@ -45,9 +46,28 @@ HAS_ENTROPY = {
     TanhDelta: False,
     TanhNormal: False,
     TruncatedNormal: False,
-    MaskedCategorical: False,
+    MaskedCategorical: True,
     MaskedOneHotCategorical: False,
     OneHotCategorical: True,
     torch_dist.Categorical: True,
     torch_dist.Normal: True,
 }
+
+__all__ = [
+    "NormalParamExtractor",
+    "distributions",
+    "Delta",
+    "IndependentNormal",
+    "LLMMaskedCategorical",
+    "NormalParamWrapper",
+    "TanhDelta",
+    "TanhNormal",
+    "TruncatedNormal",
+    "MaskedCategorical",
+    "MaskedOneHotCategorical",
+    "OneHotCategorical",
+    "OneHotOrdinal",
+    "LLMMaskedCategorical",
+    "Ordinal",
+    "ReparamGradientStrategy",
+]

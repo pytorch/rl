@@ -43,3 +43,8 @@ logger:
   eval_steps: 1000
   eval_envs: 1
   video: False
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

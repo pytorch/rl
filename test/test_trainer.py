@@ -2,7 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
+import importlib.util
 import os
 import tempfile
 from argparse import Namespace
@@ -22,10 +25,6 @@ try:
 except ImportError:
     _has_tb = False
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import PONG_VERSIONED
-else:
-    from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,
@@ -35,14 +34,15 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.trainers import Recorder, Trainer
+from torchrl.testing import PONG_VERSIONED
+from torchrl.trainers import LogValidationReward, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
     _has_ts,
     BatchSubSampler,
     CountFramesLog,
-    LogReward,
+    LogScalar,
     mask_batch,
     OptimizerHook,
     ReplayBufferTrainer,
@@ -51,6 +51,8 @@ from torchrl.trainers.trainers import (
     SelectKeys,
     UpdateWeights,
 )
+
+_has_ale = importlib.util.find_spec("ale_py") is not None
 
 
 def _fun_checker(fun, checker):
@@ -228,7 +230,11 @@ class TestRB:
             [batch],
         )
         td_out = trainer._process_batch_hook(td)
-        assert td_out is td
+        # The ReplayBufferTrainer.extend method calls .cpu() which creates a new TensorDict
+        # so we can't expect the same object identity, but the content should be the same
+        assert td_out.shape == td.shape
+        assert td_out.device == torch.device("cpu")
+        assert td.device is None or td.device == torch.device("cpu")
 
         td_out = trainer._process_optim_batch_hook(td)
         assert td_out is not td
@@ -638,7 +644,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogReward(logname, log_pbar=pbar)
+        log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -654,7 +660,7 @@ class TestLogReward:
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
-        log_reward = LogReward(logname, log_pbar=pbar)
+        log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         log_reward.register(trainer)
         td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
@@ -837,6 +843,10 @@ class TestSubSampler:
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
+@pytest.mark.skipif(
+    not _has_ale,
+    reason="ALE not available (missing ale_py); skipping Atari gym tests.",
+)
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
@@ -873,7 +883,7 @@ class TestRecorder:
                 logger=logger,
             )()
 
-            recorder = Recorder(
+            recorder = LogValidationReward(
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
@@ -919,13 +929,12 @@ class TestRecorder:
         os.environ["CKPT_BACKEND"] = backend
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
-        Recorder.state_dict, Recorder_state_dict = _fun_checker(
-            Recorder.state_dict, state_dict_has_been_called
+        LogValidationReward.state_dict, Recorder_state_dict = _fun_checker(
+            LogValidationReward.state_dict, state_dict_has_been_called
         )
-        (
-            Recorder.load_state_dict,
-            Recorder_load_state_dict,
-        ) = _fun_checker(Recorder.load_state_dict, load_state_dict_has_been_called)
+        (LogValidationReward.load_state_dict, Recorder_load_state_dict,) = _fun_checker(
+            LogValidationReward.load_state_dict, load_state_dict_has_been_called
+        )
 
         args = self._get_args()
 
@@ -948,7 +957,7 @@ class TestRecorder:
             )()
             environment.rollout(2)
 
-            recorder = Recorder(
+            recorder = LogValidationReward(
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
@@ -969,8 +978,8 @@ class TestRecorder:
             assert recorder2._count == 8
             assert state_dict_has_been_called[0]
             assert load_state_dict_has_been_called[0]
-        Recorder.state_dict = Recorder_state_dict
-        Recorder.load_state_dict = Recorder_load_state_dict
+        LogValidationReward.state_dict = Recorder_state_dict
+        LogValidationReward.load_state_dict = Recorder_load_state_dict
 
 
 def test_updateweights():
@@ -1066,6 +1075,73 @@ class TestCountFrames:
             assert load_state_dict_has_been_called[0]
         CountFramesLog.state_dict = CountFramesLog_state_dict
         CountFramesLog.load_state_dict = CountFramesLog_load_state_dict
+
+
+class TestProcessLossHook:
+    @pytest.mark.parametrize("factor", [0.5, 2.0, 10.0])
+    def test_scale_loss(self, factor):
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"sub_batch": torch.tensor(1.0)}, [])
+
+        class ScaleLoss:
+            def __init__(self, scale):
+                self.scale = scale
+
+            def __call__(self, sub_batch, losses):
+                return losses.apply(lambda t: t * self.scale)
+
+        scale_hook = ScaleLoss(factor)
+        trainer.register_op("process_loss", scale_hook)
+        td_out = trainer._process_loss_hook(td_sub_batch.clone(), td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(factor))
+
+    def test_chained_hooks(self):
+        """Test that multiple process_loss hooks are applied in order."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(2.0)}, [])
+        td_sub_batch = TensorDict({}, [])
+
+        call_order = []
+
+        class AddOne:
+            def __call__(self, sub_batch, losses):
+                call_order.append("add")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] + 1
+                return losses
+
+        class MultiplyTwo:
+            def __call__(self, sub_batch, losses):
+                call_order.append("mul")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * 2
+                return losses
+
+        trainer.register_op("process_loss", AddOne())
+        trainer.register_op("process_loss", MultiplyTwo())
+
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        # (2 + 1) * 2 = 6
+        assert torch.allclose(td_out["loss_a"], torch.tensor(6.0))
+        assert call_order == ["add", "mul"]
+
+    def test_hook_receives_sub_batch(self):
+        """Test that the hook can use information from the sub_batch."""
+        trainer = mocking_trainer()
+        td_loss = TensorDict({"loss_a": torch.tensor(1.0)}, [])
+        td_sub_batch = TensorDict({"importance_weight": torch.tensor(0.5)}, [])
+
+        class WeightedLoss:
+            def __call__(self, sub_batch, losses):
+                weight = sub_batch.get("importance_weight")
+                losses = losses.clone()
+                losses["loss_a"] = losses["loss_a"] * weight
+                return losses
+
+        trainer.register_op("process_loss", WeightedLoss())
+        td_out = trainer._process_loss_hook(td_sub_batch, td_loss.clone())
+        assert torch.allclose(td_out["loss_a"], torch.tensor(0.5))
 
 
 if __name__ == "__main__":

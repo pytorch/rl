@@ -15,7 +15,7 @@ collector:
   multi_step: 0
   init_random_frames: 5000
   env_per_collector: 1
-  device: cpu
+  device:
   max_frames_per_traj: 200
 
 # logger
@@ -43,7 +43,7 @@ optim:
   lr: 3e-4
   weight_decay: 0.0
   batch_size: 256
-  optim_steps_per_batch: 200
+  optim_dialog_turns_per_batch: 200
 
 # network
 model:
@@ -61,3 +61,8 @@ loss:
 # IQL specific hyperparameter
   temperature: 3.0
   expectile: 0.7
+
+compile:
+  compile: False
+  compile_mode:
+  cudagraphs: False

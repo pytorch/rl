@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import torch
 import torch.nn as nn
@@ -17,7 +18,7 @@ class _ResNetBlock(nn.Module):
         self,
         num_ch,
     ):
-        super(_ResNetBlock, self).__init__()
+        super().__init__()
         resnet_block = []
         resnet_block.append(nn.ReLU(inplace=True))
         resnet_block.append(

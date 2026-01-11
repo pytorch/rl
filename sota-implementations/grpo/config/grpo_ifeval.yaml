@@ -1,0 +1,158 @@
+# @package _global_
+defaults:
+  - mode: ${mode:async}  # Default to async mode, can be overridden by scripts
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+# Environment configuration
+env:
+  dataset: ifeval  # choices: [gsm8k, ifeval]
+  # Number of environments to run in parallel. This determines the batch size passed to vLLM.
+  # More envs do not consume more GPU memory but there will be a sync on the call to vLLM.
+  num_envs: 16
+  # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
+  repeats: 16
+  # Whether to use the reasoning prompt
+  reasoning: false
+  # Maximum number of dialog turns per episode.
+  max_steps: 2
+
+# Base model configuration
+model:
+  # A 7B model works well for this task.
+  name: Qwen/Qwen2.5-7b
+  compile: false
+
+# Base training configuration - will be merged with mode-specific settings
+train:
+  # Some fields are defined in mode configs (async.yaml and sync.yaml)
+  # The following fields are task-specific:
+  exp_name: "grpo-ifeval"
+
+  # Whether to use mixed precision training.
+  mixed_precision: true
+
+  # Total number of dialog turns to collect during training.
+  total_dialog_turns: 100_000
+
+  # Number of steps in each batch. Higher values will cause the inference step to be slower, but won't use more GPU memory.
+  #  If multi-turn, the actual number available may be lower as the buffer will only write trajectories which prompts have been
+  #  repeated `env.repeats` times.
+  dialog_turns_per_batch: 64
+
+  # Number of gradient accumulation steps. Higher values will use less GPU memory (comparing with bigger batches and lower gradient_accumulation_steps), 
+  # but will make the optimization step slower.
+  gradient_accumulation_steps: 8
+
+  # Fields used by both scripts but with different semantics
+  checkpoint_frequency: 100  # Save checkpoint every N steps/batches
+
+  # Whether to use packing instead of padding for the model input.
+  packing: false
+
+  # Batch size for optimization. Higher values will use more GPU memory.
+  optim_batch_size: 32
+
+  # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
+  kl_coef_in_loss: false
+
+  # Whether to use KL divergence to reference model (requires reference model instantiation)
+  use_kl_to_ref: true
+
+  # KL coefficients for the KL divergence to the reference and inference policies
+  kl_to_ref_coeff: 0.0
+  kl_to_inference_coeff: 1e-2
+  entropy_coeff: 1e-4  
+
+  # Fields used only by grpo-async.py / grpo-sync.py
+  logging_frequency: 1  # Log metrics every N steps - here at each optimization step
+
+  # Whether to empty the replay buffer at the end of training epochs (sync only). Guarantees that data
+  # is used only once.
+  empty_replay_buffer: true
+
+# Training model configuration
+train_model:
+  gradient_checkpointing: true  # Enabled for memory efficiency
+  num_devices: 4  # Number of devices to use
+  lora:
+    enabled: true  # Using LoRA for memory efficiency
+    r: 8  # LoRA rank - controls capacity of adaptations
+    alpha: 16  # LoRA alpha - scales the adaptations
+    dropout: 0.1  # Dropout probability for LoRA layers
+  quantization:
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  torch_dtype: bfloat16
+
+# Inference model configuration
+inference_model:
+  num_devices: 2  # Number of devices to use
+  quantization:
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  torch_dtype: bfloat16
+  gpu_memory_utilization: 0.9  # Limit GPU memory usage
+  temperature: 1.0
+  top_p: 0.95
+  max_tokens: 2048
+  include_stop_str_in_output: true
+  enforce_eager: false
+  # compile: false  # Whether to enable model compilation (disabled by default for GRPO)
+  # verbose: true   # Whether to show vLLM throughput statistics (enabled by default)
+
+# Reference model configuration
+ref_model:
+  gradient_checkpointing: false  # Always false, no backprop
+  num_devices: 2  # Number of devices to use
+  lora:
+    enabled: true  # Using LoRA for memory efficiency
+    r: 8  # LoRA rank - controls capacity of adaptations
+    alpha: 16  # LoRA alpha - scales the adaptations
+    dropout: 0.1  # Dropout probability for LoRA layers
+  quantization:
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  torch_dtype: bfloat16
+
+# Optimizer configuration
+optimizer:
+  name: AdamW
+  lr: 1e-5
+  clip_grad_norm: 10.0
+  weight_decay: 0.0
+
+# Ray configuration
+ray:
+  init_config:
+    num_cpus: 96  # Total available CPUs
+    num_gpus: 8  # Explicitly set number of GPUs
+    runtime_env:
+      working_dir: "."
+    _temp_dir: "/tmp/ray_grpo"  # Custom temp directory
+    _system_config:
+      object_spilling_threshold: 0.8  # Spill when 80% full
+      max_direct_memory_size: 10 * 1024 * 1024 * 1024  # 10GB limit
+      object_store_full_delay_ms: 100  # Delay when store is full
+      object_store_full_max_retries: 3  # Max retries when store is full
+  collector_config:
+    num_cpus: 4  # CPUs for inference and ref model (co-located)
+  train_handler_config:
+    num_cpus: 4  # Dedicated CPUs for training
+  replay_buffer_config:
+    num_cpus: 4  # CPUs for replay buffer
+    num_gpus: 0.0  # No GPU needed for replay buffer
+
+# Logging configuration
+logging:
+  experiment_name: null  # Will be auto-generated if not provided
+  checkpoint_dir: "checkpoints"
+  checkpoint_frequency: 10  # Save checkpoint every N batches
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num} 

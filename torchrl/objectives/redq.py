@@ -7,19 +7,16 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import List, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -71,7 +68,8 @@ class REDQLoss(LossModule):
         fixed_alpha (bool, optional): whether alpha should be trained to match
             a target entropy. Default is ``False``.
         target_entropy (Union[str, Number], optional): Target entropy for the
-            stochastic policy. Default is "auto".
+            stochastic policy. Default is "auto", where target entropy is
+            computed as :obj:`-prod(n_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
             for data collection. Default is ``False``.
@@ -89,6 +87,8 @@ class REDQLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -207,7 +207,9 @@ class REDQLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             action (NestedKey): The input tensordict key where the action is expected. Defaults to ``"action"``.
             sample_log_prob (NestedKey): The input tensordict key where the
-                sample log probability is expected. Defaults to ``"sample_log_prob"``.
+                sample log probability is expected.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
             priority (NestedKey): The input tensordict key where the target
                 priority is written to. Defaults to ``"td_error"``.
             state_action_value (NestedKey): The input tensordict key where the
@@ -224,14 +226,22 @@ class REDQLoss(LossModule):
 
         action: NestedKey = "action"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey = "sample_log_prob"
+        sample_log_prob: NestedKey | None = None
         priority: NestedKey = "td_error"
         state_action_value: NestedKey = "state_action_value"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
@@ -256,7 +266,7 @@ class REDQLoss(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
@@ -266,13 +276,14 @@ class REDQLoss(LossModule):
         max_alpha: float = 10.0,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: str | Number = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
-        gamma: float = None,
-        priority_key: str = None,
+        gamma: float | None = None,
+        priority_key: str | None = None,
         separate_losses: bool = False,
-        reduction: str = None,
+        reduction: str | None = None,
+        deactivate_vmap: bool = False,
     ):
         if reduction is None:
             reduction = "mean"
@@ -288,6 +299,7 @@ class REDQLoss(LossModule):
 
         # let's make sure that actor_network has `return_log_prob` set to True
         self.actor_network.return_log_prob = True
+        self.deactivate_vmap = deactivate_vmap
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
@@ -309,7 +321,7 @@ class REDQLoss(LossModule):
         try:
             device = next(self.parameters()).device
         except AttributeError:
-            device = torch.device("cpu")
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.register_buffer(
@@ -344,10 +356,15 @@ class REDQLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
+            self.qvalue_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
         self._vmap_getdist = _vmap_func(
-            self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
+            self.actor_network,
+            func="get_dist_params",
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
@@ -368,7 +385,7 @@ class REDQLoss(LossModule):
                 if action_spec is None:
                     raise RuntimeError(
                         "Cannot infer the dimensionality of the action. Consider providing "
-                        "the target entropy explicitely or provide the spec of the "
+                        "the target entropy explicitly or provide the spec of the "
                         "action tensor in the actor network."
                     )
                 if not isinstance(action_spec, Composite):
@@ -589,7 +606,14 @@ class REDQLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return td_out
 

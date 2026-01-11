@@ -11,19 +11,36 @@ import os
 import socket
 import time
 import warnings
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from copy import copy, deepcopy
-from typing import Callable, List, OrderedDict
+from typing import Any
 
-from torchrl._utils import logger as torchrl_logger
+import torch.cuda
 
-from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
+from tensordict import TensorDict, TensorDictBase
+from torch import nn
+
+from torch.distributed import rpc
+from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+
+from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
+from torchrl.collectors._single import Collector
 from torchrl.collectors.distributed.default_configs import (
+    DEFAULT_SLURM_CONF,
     DEFAULT_TENSORPIPE_OPTIONS,
     IDLE_TIMEOUT,
     TCP_PORT,
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 SUBMITIT_ERR = None
 try:
@@ -33,22 +50,6 @@ try:
 except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
-import torch.cuda
-from tensordict import TensorDict
-from torch import nn
-
-from torch.distributed import rpc
-from torchrl._utils import _ProcessNoWarn, VERBOSE
-
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
-from torchrl.envs.common import EnvBase
-from torchrl.envs.env_creator import EnvCreator
 
 
 def _rpc_init_collection_node(
@@ -58,10 +59,22 @@ def _rpc_init_collection_node(
     world_size,
     visible_device,
     tensorpipe_options,
+    backend="gloo",
     verbose=VERBOSE,
 ):
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcp_port)
+
+    # Initialize torch.distributed process group for efficient weight transfer
+    if verbose:
+        torchrl_logger.debug(
+            f"init distributed with rank={rank}, world_size={world_size}, backend={backend}"
+        )
+    torch.distributed.init_process_group(
+        backend=backend,
+        rank=rank,
+        world_size=world_size,
+    )
 
     if isinstance(visible_device, list):
         pass
@@ -77,7 +90,7 @@ def _rpc_init_collection_node(
         **tensorpipe_options,
     )
     if verbose:
-        torchrl_logger.info(
+        torchrl_logger.debug(
             f"init rpc with master addr: {os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
         )
     rpc.init_rpc(
@@ -88,9 +101,10 @@ def _rpc_init_collection_node(
         world_size=world_size,
     )
     rpc.shutdown()
+    torch.distributed.destroy_process_group()
 
 
-class RPCDataCollector(DataCollectorBase):
+class RPCCollector(BaseCollector):
     """An RPC-based distributed data collector.
 
     Supports sync and async data collection.
@@ -110,21 +124,31 @@ class RPCDataCollector(DataCollectorBase):
             instances) it will be wrapped in a `nn.Module` first.
             Then, the collector will try to assess if these
             modules require wrapping in a :class:`~tensordict.nn.TensorDictModule` or not.
+
             - If the policy forward signature matches any of ``forward(self, tensordict)``,
               ``forward(self, td)`` or ``forward(self, <anything>: TensorDictBase)`` (or
               any typing with a single argument typed as a subclass of ``TensorDictBase``)
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
+
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the ``policy_factory`` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
             number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
-             Endless collectors can be created by passing ``total_frames=-1``.
-             Defaults to ``-1`` (endless collector).
+            Endless collectors can be created by passing ``total_frames=-1``.
+            Defaults to ``-1`` (endless collector).
         device (int, str or torch.device, optional): The generic device of the
             collector. The ``device`` args fills any non-specified device: if
             ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or
@@ -190,18 +214,18 @@ class RPCDataCollector(DataCollectorBase):
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
             Defaults to ``torchrl.envs.utils.ExplorationType.RANDOM``.
-        collector_class (type or str, optional): a collector class for the remote node. Can be
-            :class:`~torchrl.collectors.SyncDataCollector`,
-            :class:`~torchrl.collectors.MultiSyncDataCollector`,
-            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+        collector_class (Type or str, optional): a collector class for the remote node. Can be
+            :class:`~torchrl.collectors.Collector`,
+            :class:`~torchrl.collectors.MultiSyncCollector`,
+            :class:`~torchrl.collectors.MultiAsyncCollector`
             or a derived class of these. The strings "single", "sync" and
             "async" correspond to respective class.
-            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+            Defaults to :class:`~torchrl.collectors.Collector`.
 
             .. note::
 
-              Support for :class:`MultiSyncDataCollector` and :class:`MultiaSyncDataCollector`
-              is experimental, and :class:`~torchrl.collectors.SyncDataCollector`
+              Support for :class:`MultiSyncCollector` and :class:`MultiAsyncCollector`
+              is experimental, and :class:`~torchrl.collectors.Collector`
               should always be preferred. If multiple simultaneous environment
               need to be executed on a single node, consider using a
               :class:`~torchrl.envs.ParallelEnv` instance.
@@ -247,11 +271,29 @@ class RPCDataCollector(DataCollectorBase):
             https://github.com/facebookincubator/submitit
             Defaults to "submitit".
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
+        backend (str, optional): the torch.distributed backend to use for weight synchronization.
+            Must be one of ``"gloo"``, ``"mpi"``, ``"nccl"`` or ``"ucc"``. See the torch.distributed
+            documentation for more information. Defaults to ``"gloo"``.
         visible_devices (list of Union[int, torch.device, str], optional): a
             list of the same length as the number of nodes containing the
             device used to pass data to main.
         tensorpipe_options (dict, optional): a dictionary of keyword argument
             to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.
+        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on remote inference workers using RPC.
+            If not provided, an :class:`~torchrl.collectors.distributed.RPCWeightUpdater` will be used by default, which
+            handles weight synchronization via RPC.
+            Consider using a constructor if the updater needs to be serialized.
+        weight_sync_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            SENDING weights to remote collector workers. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to send weights via RPC.
+            If not provided, an :class:`~torchrl.weight_update.RPCWeightSyncScheme` will be used by default.
+            This is for propagating weights from the main process to remote collectors.
+        weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
+            RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
+            and values are WeightSyncScheme instances configured to receive weights.
+            This is typically used when RPCDataCollector is itself a worker in a larger distributed setup.
+            Defaults to ``None``.
 
     """
 
@@ -260,38 +302,51 @@ class RPCDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn,
-        policy,
+        policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[]], Callable]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Callable | None = None,
         split_trajs: bool = False,
-        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class=SyncDataCollector,
-        collector_kwargs=None,
-        num_workers_per_collector=1,
-        sync=False,
-        slurm_kwargs=None,
-        update_after_each_batch=False,
-        max_weight_update_interval=-1,
-        launcher="submitit",
-        tcp_port=None,
-        visible_devices=None,
-        tensorpipe_options=None,
+        exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
+        collector_class: type = Collector,
+        collector_kwargs: dict[str, Any] | None = None,
+        num_workers_per_collector: int = 1,
+        sync: bool = False,
+        slurm_kwargs: dict[str, Any] | None = None,
+        update_after_each_batch: bool = False,
+        max_weight_update_interval: int = -1,
+        launcher: str = "submitit",
+        tcp_port: str | None = None,
+        backend: str = "gloo",
+        visible_devices: list[torch.device] | None = None,
+        tensorpipe_options: dict[str, Any] | None = None,
+        weight_updater: WeightUpdaterBase
+        | Callable[[], WeightUpdaterBase]
+        | None = None,
+        weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
+        weight_recv_schemes: dict[str, WeightSyncScheme] | None = None,
     ):
+
+        if self._VERBOSE:
+            torchrl_logger.setLevel("DEBUG")
+
         if collector_class == "async":
-            collector_class = MultiaSyncDataCollector
+            collector_class = MultiAsyncCollector
         elif collector_class == "sync":
-            collector_class = MultiSyncDataCollector
+            collector_class = MultiSyncCollector
         elif collector_class == "single":
-            collector_class = SyncDataCollector
+            collector_class = Collector
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         self.policy = policy
@@ -299,8 +354,16 @@ class RPCDataCollector(DataCollectorBase):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            if weight_updater is None and (
+                policy_factory is None
+                or (isinstance(policy_factory, Sequence) and not any(policy_factory))
+            ):
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
+
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * len(create_env_fn)
+        self.policy_factory = policy_factory
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
@@ -318,7 +381,7 @@ class RPCDataCollector(DataCollectorBase):
         self.max_weight_update_interval = max_weight_update_interval
         if self.update_after_each_batch and self.max_weight_update_interval > -1:
             raise RuntimeError(
-                "Got conflicting udpate instructions: `update_after_each_batch` "
+                "Got conflicting update instructions: `update_after_each_batch` "
                 "`max_weight_update_interval` are incompatible."
             )
         self.launcher = launcher
@@ -374,6 +437,7 @@ class RPCDataCollector(DataCollectorBase):
 
         self.postproc = postproc
         self.split_trajs = split_trajs
+        self.backend = backend
 
         if tensorpipe_options is None:
             self.tensorpipe_options = copy(DEFAULT_TENSORPIPE_OPTIONS)
@@ -381,22 +445,61 @@ class RPCDataCollector(DataCollectorBase):
             self.tensorpipe_options = copy(DEFAULT_TENSORPIPE_OPTIONS).update(
                 tensorpipe_options
             )
+
+        # Set up weight synchronization - prefer new schemes over legacy updater
+        if weight_updater is None and weight_sync_schemes is None:
+            # Default to RPC weight sync scheme for RPC collectors
+            from torchrl.weight_update import RPCWeightSyncScheme
+
+            weight_sync_schemes = {"policy": RPCWeightSyncScheme()}
+
+        if weight_sync_schemes is not None:
+            # Use new weight synchronization system
+            self._weight_sync_schemes = weight_sync_schemes
+            self.weight_updater = None
+        else:
+            # Fall back to legacy weight updater system
+            if weight_updater is None:
+                weight_updater = RPCWeightUpdater(
+                    collector_infos=self.collector_infos,
+                    collector_class=self.collector_class,
+                    collector_rrefs=self.collector_rrefs,
+                    policy_weights=self.policy_weights,
+                    num_workers=self.num_workers,
+                )
+            self.weight_updater = weight_updater
+            self._weight_sync_schemes = None
+
         self._init()
 
+        if weight_sync_schemes is not None:
+            # Set up weight senders now that remote collectors exist
+            for model_id, scheme in self._weight_sync_schemes.items():
+                scheme.init_on_sender(
+                    model_id=model_id,
+                    num_workers=self.num_workers,
+                    context=self,
+                )
+                scheme.connect()
+
+        # Set up weight receivers if provided
+        if weight_recv_schemes is not None:
+            self.register_scheme_receiver(weight_recv_schemes)
+
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -447,17 +550,27 @@ class RPCDataCollector(DataCollectorBase):
         self,
         world_size,
     ):
-        """Init RPC on main node."""
+        """Init torch.distributed and RPC on main node."""
+        # Initialize torch.distributed process group for efficient weight transfer
+        torchrl_logger.debug(
+            f"init distributed with rank=0, world_size={world_size}, backend={self.backend}"
+        )
+        torch.distributed.init_process_group(
+            backend=self.backend,
+            rank=0,
+            world_size=world_size,
+        )
+
+        # Initialize RPC for control/signaling
         options = rpc.TensorPipeRpcBackendOptions(**self.tensorpipe_options)
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             if self.visible_devices:
                 for i in range(self.num_workers):
                     rank = i + 1
                     options.set_device_map(
                         f"COLLECTOR_NODE_{rank}", {0: self.visible_devices[i]}
                     )
-        if self._VERBOSE:
-            torchrl_logger.info("init rpc")
+        torchrl_logger.debug("init rpc")
         rpc.init_rpc(
             "TRAINER_NODE",
             rank=0,
@@ -473,6 +586,7 @@ class RPCDataCollector(DataCollectorBase):
         collector_class,
         num_workers_per_collector,
         policy,
+        policy_factory,
         frames_per_batch,
         total_frames,
         collector_kwargs,
@@ -487,10 +601,7 @@ class RPCDataCollector(DataCollectorBase):
                 counter += 1
                 time.sleep(time_interval)
                 try:
-                    if self._VERBOSE:
-                        torchrl_logger.info(
-                            f"trying to connect to collector node {i + 1}"
-                        )
+                    torchrl_logger.debug(f"trying to connect to collector node {i + 1}")
                     collector_info = rpc.get_worker_info(f"COLLECTOR_NODE_{i + 1}")
                     break
                 except RuntimeError as err:
@@ -504,37 +615,63 @@ class RPCDataCollector(DataCollectorBase):
             env_make = env_constructors[i]
             if not isinstance(env_make, (EnvBase, EnvCreator)):
                 env_make = CloudpickleWrapper(env_make)
-            if self._VERBOSE:
-                torchrl_logger.info("Making collector in remote node")
+            torchrl_logger.debug("Making collector in remote node")
+            # When using weight sync schemes together with a policy_factory, the
+            # main-node `policy` should be used only as a weight source on the
+            # trainer, and NOT sent to remote collectors (which will build their
+            # own policies from the factory). This mirrors the behaviour of
+            # `DistributedDataCollector` with multi-process collectors.
+            policy_to_send = (
+                None
+                if (
+                    policy is not None
+                    and policy_factory[i] is not None
+                    and getattr(self, "_weight_sync_schemes", None) is not None
+                )
+                else policy
+            )
+
             collector_rref = rpc.remote(
                 collector_infos[i],
                 collector_class,
                 args=(
                     [env_make] * num_workers_per_collector
-                    if collector_class is not SyncDataCollector
+                    if collector_class is not Collector
                     else env_make,
-                    policy,
+                    policy_to_send,
                 ),
                 kwargs={
+                    "policy_factory": policy_factory[i],
                     "frames_per_batch": frames_per_batch,
                     "total_frames": -1,
                     "split_trajs": False,
+                    "weight_recv_schemes": self._weight_sync_schemes,
+                    "worker_idx": i,
                     **collector_kwargs[i],
                 },
             )
             collector_rrefs.append(collector_rref)
 
+        # Set up receiver schemes on remote collectors (if using new weight sync system)
+        # This enables cascading: RPC -> MultiSync -> Sync
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            for i in range(num_workers):
+                torchrl_logger.debug(
+                    f"Setting up receiver schemes on remote collector {i}"
+                )
+                # Call register_scheme_receiver on the remote collector using rref.rpc_sync()
+                # This properly dereferences the rref and calls the instance method
+                collector_rrefs[i].rpc_sync().register_scheme_receiver(
+                    self._weight_sync_schemes
+                )
+
         futures = collections.deque(maxlen=self.num_workers)
 
         if not self._sync:
             for i in range(num_workers):
-                if self._VERBOSE:
-                    torchrl_logger.info("Asking for the first batch")
-                future = rpc.rpc_async(
-                    collector_infos[i],
-                    collector_class.next,
-                    args=(collector_rrefs[i],),
-                )
+                torchrl_logger.debug("Asking for the first batch")
+                # Use rref.rpc_async() to properly call instance method
+                future = collector_rrefs[i].rpc_async().next()
                 futures.append((future, i))
         self.futures = futures
         self.collector_rrefs = collector_rrefs
@@ -556,10 +693,10 @@ class RPCDataCollector(DataCollectorBase):
                 self.num_workers + 1,
                 visible_device,
                 self.tensorpipe_options,
+                self.backend,
                 self._VERBOSE,
             )
-            if self._VERBOSE:
-                torchrl_logger.info(f"job id {job.job_id}")  # ID of your job
+            torchrl_logger.debug(f"job id {job.job_id}")  # ID of your job
             return job
         elif self.launcher == "mp":
             job = _ProcessNoWarn(
@@ -571,6 +708,7 @@ class RPCDataCollector(DataCollectorBase):
                     self.num_workers + 1,
                     visible_device,
                     self.tensorpipe_options,
+                    self.backend,
                     self._VERBOSE,
                 ),
             )
@@ -602,8 +740,7 @@ class RPCDataCollector(DataCollectorBase):
 
         self.jobs = []
         for i in range(self.num_workers):
-            if self._VERBOSE:
-                torchrl_logger.info(f"Submitting job {i}")
+            torchrl_logger.debug(f"Submitting job {i}")
             job = self._init_worker_rpc(
                 executor,
                 i,
@@ -619,6 +756,7 @@ class RPCDataCollector(DataCollectorBase):
             collector_class=self.collector_class,
             num_workers_per_collector=self.num_workers_per_collector,
             policy=self.policy,
+            policy_factory=self.policy_factory,
             frames_per_batch=self._frames_per_batch_corrected,
             total_frames=self.total_frames,
             collector_kwargs=self.collector_kwargs,
@@ -644,7 +782,10 @@ class RPCDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
                     ):
-                        self.update_policy_weights_([j], wait=False)
+                        torchrl_logger.debug(
+                            f"Updating policy of worker {j} with wait=False"
+                        )
+                        self.update_policy_weights_(worker_ids=[j], wait=False)
             elif self.max_weight_update_interval > -1:
                 ranks = [
                     1
@@ -652,33 +793,13 @@ class RPCDataCollector(DataCollectorBase):
                     if self._batches_since_weight_update[j]
                     > self.max_weight_update_interval
                 ]
-                self.update_policy_weights_(ranks, wait=True)
-
-    def update_policy_weights_(self, workers=None, wait=True) -> None:
-        if workers is None:
-            workers = list(range(self.num_workers))
-        futures = []
-        for i in workers:
-            if self._VERBOSE:
-                torchrl_logger.info(f"calling update on worker {i}")
-            futures.append(
-                rpc.rpc_async(
-                    self.collector_infos[i],
-                    self.collector_class.update_policy_weights_,
-                    args=(self.collector_rrefs[i], self.policy_weights.detach()),
+                torchrl_logger.debug(
+                    f"Updating policy of workers {ranks} with wait=True"
                 )
-            )
-        if wait:
-            for i in workers:
-                if self._VERBOSE:
-                    torchrl_logger.info(f"waiting for worker {i}")
-                futures[i].wait()
-                if self._VERBOSE:
-                    torchrl_logger.info("got it!")
+                self.update_policy_weights_(worker_ids=ranks, wait=True)
 
     def _next_async_rpc(self):
-        if self._VERBOSE:
-            torchrl_logger.info("next async")
+        torchrl_logger.debug("next async")
         if not len(self.futures):
             raise StopIteration(
                 f"The queue is empty, the collector has ran out of data after {self._collected_frames} collected frames."
@@ -687,32 +808,24 @@ class RPCDataCollector(DataCollectorBase):
             future, i = self.futures.popleft()
             if future.done():
                 if self.update_after_each_batch:
-                    self.update_policy_weights_(workers=(i,), wait=False)
-                if self._VERBOSE:
-                    torchrl_logger.info(f"future {i} is done")
+                    self.update_policy_weights_(worker_ids=(i,), wait=False)
+                torchrl_logger.debug(f"future {i} is done")
                 data = future.value()
                 self._collected_frames += data.numel()
                 if self._collected_frames < self.total_frames:
-                    future = rpc.rpc_async(
-                        self.collector_infos[i],
-                        self.collector_class.next,
-                        args=(self.collector_rrefs[i],),
-                    )
+                    # Use rref.rpc_async() to properly call instance method
+                    future = self.collector_rrefs[i].rpc_async().next()
                     self.futures.append((future, i))
                 return data
             self.futures.append((future, i))
 
     def _next_sync_rpc(self):
-        if self._VERBOSE:
-            torchrl_logger.info("next sync: futures")
+        torchrl_logger.debug("next sync: futures")
         if self.update_after_each_batch:
             self.update_policy_weights_()
         for i in range(self.num_workers):
-            future = rpc.rpc_async(
-                self.collector_infos[i],
-                self.collector_class.next,
-                args=(self.collector_rrefs[i],),
-            )
+            # Use rref.rpc_async() to properly call instance method
+            future = self.collector_rrefs[i].rpc_async().next()
             self.futures.append((future, i))
         data = []
         while len(self.futures):
@@ -720,10 +833,9 @@ class RPCDataCollector(DataCollectorBase):
             # the order is NOT guaranteed: should we change that?
             if future.done():
                 data += [future.value()]
-                if self._VERBOSE:
-                    torchrl_logger.info(
-                        f"got data from {i} // data has len {len(data)} / {self.num_workers}"
-                    )
+                torchrl_logger.debug(
+                    f"got data from {i} // data has len {len(data)} / {self.num_workers}"
+                )
             else:
                 self.futures.append((future, i))
         data = torch.cat(data)
@@ -745,31 +857,26 @@ class RPCDataCollector(DataCollectorBase):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         if not hasattr(self, "_shutdown"):
             warnings.warn("shutdown has no effect has `_init` has not been called yet.")
             return
         if self._shutdown:
             return
-        if self._VERBOSE:
-            torchrl_logger.info("shutting down")
+
+        torchrl_logger.debug("shutting down")
         for future, i in self.futures:
             # clear the futures
             while future is not None and not future.done():
-                torchrl_logger.info(f"waiting for proc {i} to clear")
+                torchrl_logger.debug(f"waiting for proc {i} to clear")
                 future.wait()
         for i in range(self.num_workers):
-            if self._VERBOSE:
-                torchrl_logger.info(f"shutting down {i}")
-            rpc.rpc_sync(
-                self.collector_infos[i],
-                self.collector_class.shutdown,
-                args=(self.collector_rrefs[i],),
-                timeout=int(IDLE_TIMEOUT),
-            )
-        if self._VERBOSE:
-            torchrl_logger.info("rpc shutdown")
+            torchrl_logger.debug(f"shutting down {i}")
+            # Use rref.rpc_sync() to properly call instance method
+            self.collector_rrefs[i].rpc_sync(timeout=int(IDLE_TIMEOUT)).shutdown()
+        torchrl_logger.debug("rpc shutdown")
         rpc.shutdown(timeout=int(IDLE_TIMEOUT))
+
         if self.launcher == "mp":
             for job in self.jobs:
                 job.join(int(IDLE_TIMEOUT))
@@ -780,4 +887,120 @@ class RPCDataCollector(DataCollectorBase):
             pass
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
+
+        # Clean up weight sync schemes AFTER workers have exited
+        if getattr(self, "_weight_sync_schemes", None) is not None:
+            torchrl_logger.debug("shutting down weight sync schemes")
+            for scheme in self._weight_sync_schemes.values():
+                try:
+                    scheme.shutdown()
+                except Exception as e:
+                    torchrl_logger.warning(
+                        f"Error shutting down weight sync scheme: {e}"
+                    )
+            self._weight_sync_schemes = None
+
+        # Destroy torch.distributed process group
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
+
         self._shutdown = True
+
+
+class RPCWeightUpdater(WeightUpdaterBase):
+    """A remote weight updater for synchronizing policy weights across remote workers using RPC.
+
+    The `RPCWeightUpdater` class provides a mechanism for updating the weights of a policy
+    across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCDataCollector`
+    to ensure that each worker receives the latest policy weights.
+    This class is typically used in distributed data collection scenarios where remote workers
+    are managed via RPC and need to be kept in sync with the central policy weights.
+
+    Args:
+        collector_infos: Information about the collectors, used for RPC communication.
+        collector_class: The class of the collectors being used.
+        collector_rrefs: Remote references to the collectors.
+        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed
+            to the workers.
+        num_workers (int): The number of remote workers that will receive the updated policy weights.
+
+    Methods:
+        update_weights: Updates the weights on specified or all remote workers using RPC.
+        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).
+        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).
+        _get_server_weights: Retrieves the latest weights from the server (not implemented).
+        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).
+
+    .. note::
+        This class assumes that the server weights can be directly applied to the remote workers
+        without any additional processing. If your use case requires more complex weight mapping or
+        synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation.
+
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
+        :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+
+    """
+
+    _VERBOSE = VERBOSE  # for debugging
+
+    def __init__(
+        self,
+        collector_infos,
+        collector_class,
+        collector_rrefs,
+        policy_weights: TensorDictBase,
+        num_workers: int,
+    ):
+        super().__init__()
+        self.collector_infos = collector_infos
+        self.collector_class = collector_class
+        self.collector_rrefs = collector_rrefs
+        self.policy_weights = policy_weights
+        self.num_workers = num_workers
+
+    def _sync_weights_with_worker(
+        self, worker_id: int | torch.device, server_weights: TensorDictBase
+    ) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _get_server_weights(self) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError
+
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
+        raise NotImplementedError
+
+    def push_weights(
+        self,
+        weights: TensorDictBase | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
+        **kwargs,
+    ):
+        workers = worker_ids
+        if isinstance(workers, int):
+            workers = [workers]
+        if workers is None:
+            workers = list(range(self.num_workers))
+        else:
+            workers = list(workers)
+        futures = []
+        weights = self.policy_weights if weights is None else weights
+        for i in workers:
+            torchrl_logger.debug(f"calling update on worker {i}")
+            # Use rref.rpc_async() to properly call instance method
+            futures.append(
+                self.collector_rrefs[i].rpc_async().update_policy_weights_(weights)
+            )
+        if kwargs.get("wait", True):
+            for i in workers:
+                torchrl_logger.debug(f"waiting for worker {i}")
+                futures[i].wait()
+                torchrl_logger.debug("got it!")
+
+
+class RPCDataCollector(RPCCollector, metaclass=_LegacyCollectorMeta):
+    """Deprecated version of :class:`~torchrl.collectors.distributed.RPCCollector`."""
+
+    ...

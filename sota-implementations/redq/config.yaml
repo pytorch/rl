@@ -30,7 +30,7 @@ collector:
   async_collection: 1
   frames_per_batch: 1024
   total_frames: 1_000_000
-  device: cpu
+  device:
   env_per_collector: 1
   init_random_frames: 50_000
   multi_step: 1

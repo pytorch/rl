@@ -4,26 +4,26 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable, List
+from collections.abc import Callable
 
 from tensordict import NestedKey
 
 
 def _plot_plotly_tree(
-    tree: "Tree", make_labels: Callable[[Tree], str] | None = None  # noqa: F821
+    tree: Tree, make_labels: Callable[[Tree], str] | None = None  # noqa: F821
 ):
     import plotly.graph_objects as go
     from igraph import Graph
 
     if make_labels is None:
 
-        def make_labels(tree):
+        def make_labels(tree, path, *args, **kwargs):
             return str((tree.node_id, tree.hash))
 
     nr_vertices = tree.num_vertices()
-    vertices = tree.vertices()
+    vertices = tree.vertices(key_type="path")
 
-    v_label = [make_labels(subtree) for subtree in vertices.values()]
+    v_label = [make_labels(subtree, path) for path, subtree in vertices.items()]
     G = Graph(nr_vertices, tree.edges())
 
     layout = G.layout_sugiyama(range(nr_vertices))
@@ -78,7 +78,7 @@ def _plot_plotly_tree(
     fig.show()
 
 
-def _plot_plotly_box(tree: "Tree", info: List[NestedKey] = None):  # noqa: F821
+def _plot_plotly_box(tree: Tree, info: list[NestedKey] = None):  # noqa: F821
     import plotly.graph_objects as go
 
     if info is None:
@@ -89,7 +89,7 @@ def _plot_plotly_box(tree: "Tree", info: List[NestedKey] = None):  # noqa: F821
 
     _tree = tree
 
-    def extend(tree: "Tree", parent):  # noqa: F821
+    def extend(tree: Tree, parent):  # noqa: F821
         children = tree.subtree
         if children is None:
             return

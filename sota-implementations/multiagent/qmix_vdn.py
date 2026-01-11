@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import time
 
 import hydra
 import torch
-
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
@@ -29,7 +30,7 @@ def rendering_callback(env, td):
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="qmix_vdn")
-def train(cfg: "DictConfig"):  # noqa: F821
+def train(cfg: DictConfig):  # noqa: F821
     # Device
     cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
     cfg.env.device = cfg.train.device
@@ -72,7 +73,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
     # Policy
     net = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-        n_agent_outputs=env.action_spec.space.n,
+        n_agent_outputs=env.full_action_spec["agents", "action"].space.n,
         n_agents=env.n_agents,
         centralised=False,
         share_params=cfg.model.shared_parameters,
@@ -91,7 +92,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             ("agents", "action_value"),
             ("agents", "chosen_action_value"),
         ],
-        spec=env.unbatched_action_spec,
+        spec=env.full_action_spec_unbatched,
         action_space=None,
     )
     qnet = SafeSequential(module, value_module)
@@ -103,14 +104,14 @@ def train(cfg: "DictConfig"):  # noqa: F821
             eps_end=0,
             annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
             action_key=env.action_key,
-            spec=env.unbatched_action_spec,
+            spec=env.full_action_spec_unbatched,
         ),
     )
 
     if cfg.loss.mixer_type == "qmix":
         mixer = TensorDictModule(
             module=QMixer(
-                state_shape=env.unbatched_observation_spec[
+                state_shape=env.observation_spec_unbatched[
                     "agents", "observation"
                 ].shape,
                 mixing_embed_dim=32,

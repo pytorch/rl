@@ -883,12 +883,12 @@ collector = SyncDataCollector(
 #
 # As the training data is obtained using some exploration strategy, the true
 # performance of our algorithm needs to be assessed in deterministic mode. We
-# do this using a dedicated class, ``Recorder``, which executes the policy in
+# do this using a dedicated class, ``LogValidationReward``, which executes the policy in
 # the environment at a given frequency and returns some statistics obtained
 # from these simulations.
 #
 # The following helper function builds this object:
-from torchrl.trainers import Recorder
+from torchrl.trainers import LogValidationReward
 
 
 def make_recorder(actor_model_explore, transform_state_dict, record_interval):
@@ -899,7 +899,7 @@ def make_recorder(actor_model_explore, transform_state_dict, record_interval):
     )  # must be instantiated to load the state dict
     environment.transform[2].load_state_dict(transform_state_dict)
 
-    recorder_obj = Recorder(
+    recorder_obj = LogValidationReward(
         record_frames=1000,
         policy_exploration=actor_model_explore,
         environment=environment,
@@ -1185,6 +1185,12 @@ for i, tensordict in enumerate(collector):
 collector.shutdown()
 del collector
 
+try:
+    parallel_env.close()
+    del parallel_env
+except Exception:
+    pass
+
 ###############################################################################
 # Experiment results
 # ------------------
@@ -1228,3 +1234,18 @@ plt.tight_layout()
 # - Using `@dispatch` (see `[Feature] Distpatch IQL loss module <https://github.com/pytorch/rl/pull/1230>`_.)
 # - Allowing flexible TensorDict keys.
 #
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore

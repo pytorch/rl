@@ -1,9 +1,10 @@
 # Environment
 env:
-  env_name: PongNoFrameskip-v4
+  env_name: ALE/Pong-v5
+  backend: gymnasium
 
 # Device for the forward and backward passes
-device: "cuda:0"
+device:
 
 # collector
 collector:

@@ -12,19 +12,18 @@ from collections import OrderedDict
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
-
+from pyvers import implement_for
 from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
-
+from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
-
-from torchrl._utils import _replace_last, logger
+from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
-from torchrl.data.replay_buffers.utils import _is_int, unravel_index
+from torchrl.data.replay_buffers.utils import _auto_device, _is_int, unravel_index
 
 try:
     from torchrl._torchrl import (
@@ -34,7 +33,11 @@ try:
         SumSegmentTreeFp64,
     )
 except ImportError:
-    warnings.warn(EXTENSION_WARNING)
+    # Make default values
+    MinSegmentTreeFp32 = None
+    MinSegmentTreeFp64 = None
+    SumSegmentTreeFp32 = None
+    SumSegmentTreeFp64 = None
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -50,7 +53,7 @@ class Sampler(ABC):
     _rng: torch.Generator | None = None
 
     @abstractmethod
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
         ...
 
     def add(self, index: int) -> None:
@@ -61,8 +64,8 @@ class Sampler(ABC):
 
     def update_priority(
         self,
-        index: Union[int, torch.Tensor],
-        priority: Union[float, torch.Tensor],
+        index: int | torch.Tensor,
+        priority: float | torch.Tensor,
         *,
         storage: Storage | None = None,
     ) -> dict | None:
@@ -72,7 +75,7 @@ class Sampler(ABC):
         return
 
     def mark_update(
-        self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
+        self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
         return
 
@@ -81,11 +84,11 @@ class Sampler(ABC):
         return 1.0
 
     @abstractmethod
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
     @property
@@ -119,11 +122,11 @@ class RandomSampler(Sampler):
 
     Args:
         batch_size (int, optional): if provided, the batch size to be used by
-            the replay buffer when calling :meth:`~.ReplayBuffer.sample`.
+            the replay buffer when calling :meth:`ReplayBuffer.sample`.
 
     """
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
         index = storage._rand_given_ndim(batch_size)
@@ -140,10 +143,10 @@ class RandomSampler(Sampler):
         # no op
         ...
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return
 
 
@@ -232,7 +235,7 @@ class SamplerWithoutReplacement(Sampler):
 
     def sample(
         self, storage: Storage, batch_size: int
-    ) -> Tuple[Any, dict]:  # noqa: F811
+    ) -> tuple[Any, dict]:  # noqa: F811
         len_storage = self._storage_len(storage)
         if len_storage == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
@@ -269,7 +272,7 @@ class SamplerWithoutReplacement(Sampler):
         self.len_storage = 0
         self._ran_out = False
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return OrderedDict(
             len_storage=self.len_storage,
             _sample_list=self._sample_list,
@@ -277,7 +280,7 @@ class SamplerWithoutReplacement(Sampler):
             _ran_out=self._ran_out,
         )
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.len_storage = state_dict["len_storage"]
         self._sample_list = state_dict["_sample_list"]
         self.drop_last = state_dict["drop_last"]
@@ -292,23 +295,61 @@ class SamplerWithoutReplacement(Sampler):
 
 
 class PrioritizedSampler(Sampler):
-    """Prioritized sampler for replay buffer.
+    r"""Prioritized sampler for replay buffer.
 
-    Presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay." (https://arxiv.org/abs/1511.05952)
+    This sampler implements Prioritized Experience Replay (PER) as presented in
+    "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay."
+    (https://arxiv.org/abs/1511.05952)
+
+    **Core Idea**: Instead of sampling experiences uniformly from the replay buffer,
+    PER samples experiences with probability proportional to their "importance" - typically
+    measured by the magnitude of their temporal-difference (TD) error. This prioritization
+    can lead to faster learning by focusing on experiences that are most informative.
+
+    **How it works**:
+    1. Each experience is assigned a priority based on its TD error: :math:`p_i = |\delta_i| + \epsilon`
+    2. Sampling probability is computed as: :math:`P(i) = \frac{p_i^\alpha}{\sum_j p_j^\alpha}`
+    3. Importance sampling weights correct for the bias: :math:`w_i = (N \cdot P(i))^{-\beta}`
 
     Args:
         max_capacity (int): maximum capacity of the buffer.
-        alpha (:obj:`float`): exponent α determines how much prioritization is used,
-            with α = 0 corresponding to the uniform case.
-        beta (:obj:`float`): importance sampling negative exponent.
-        eps (:obj:`float`, optional): delta added to the priorities to ensure that the buffer
-            does not contain null priorities. Defaults to 1e-8.
+        alpha (:obj:`float`): exponent :math:`\alpha` determines how much prioritization is used.
+            - :math:`\alpha = 0`: uniform sampling (no prioritization)
+            - :math:`\alpha = 1`: full prioritization based on TD error magnitude
+            - Typical values: 0.4-0.7 for balanced prioritization
+            - Higher :math:`\alpha` means more aggressive prioritization of high-error experiences
+        beta (:obj:`float`): importance sampling negative exponent :math:`\beta`.
+            - :math:`\beta` controls the correction for the bias introduced by prioritization
+            - :math:`\beta = 0`: no correction (biased towards high-priority samples)
+            - :math:`\beta = 1`: full correction (unbiased but potentially unstable)
+            - Typical values: start at 0.4-0.6 and anneal to 1.0 during training
+            - Lower :math:`\beta` early in training provides stability, higher :math:`\beta` later reduces bias
+        eps (:obj:`float`, optional): small constant added to priorities to ensure
+            no experience has zero priority. This prevents experiences from never
+            being sampled. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectory). Can be one of "max", "min",
             "median" or "mean".
         max_priority_within_buffer (bool, optional): if ``True``, the max-priority
             is tracked within the buffer. When ``False``, the max-priority tracks
             the maximum value since the instantiation of the sampler.
+
+    **Parameter Guidelines**:
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error experiences
+        - 0.4-0.7: Good balance between learning speed and stability
+        - 1.0: Maximum prioritization (may be unstable)
+        - 0.0: Uniform sampling (no prioritization benefit)
+
+    - **:math:`\beta` (beta)**: Controls importance sampling correction
+        - Start at 0.4-0.6 for training stability
+        - Anneal to 1.0 over training to reduce bias
+        - Lower values = more stable but biased
+        - Higher values = less biased but potentially unstable
+
+    - **:math:`\epsilon`**: Small constant to prevent zero priorities
+        - 1e-8: Good default value
+        - Too small: may cause numerical issues
+        - Too large: reduces prioritization effect
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -332,7 +373,7 @@ class PrioritizedSampler(Sampler):
                 device=cpu,
                 is_shared=False)
         >>> print(info)
-        {'_weight': array([1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11,
+        {'priority_weight': array([1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11, 1.e-11,
                1.e-11, 1.e-11], dtype=float32), 'index': array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])}
 
     .. note:: Using a :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer` can smoothen the
@@ -382,6 +423,8 @@ class PrioritizedSampler(Sampler):
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
         self._init()
+        if rl_warnings() and SumSegmentTreeFp32 is None:
+            logger.warning(EXTENSION_WARNING)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(alpha={self._alpha}, beta={self._beta}, eps={self._eps}, reduction={self.reduction})"
@@ -413,7 +456,23 @@ class PrioritizedSampler(Sampler):
             )
         return super().__getstate__()
 
-    def _init(self):
+    def _init(self) -> None:
+        if SumSegmentTreeFp32 is None:
+            raise RuntimeError(
+                "SumSegmentTreeFp32 is not available. See warning above."
+            )
+        if MinSegmentTreeFp32 is None:
+            raise RuntimeError(
+                "MinSegmentTreeFp32 is not available. See warning above."
+            )
+        if SumSegmentTreeFp64 is None:
+            raise RuntimeError(
+                "SumSegmentTreeFp64 is not available. See warning above."
+            )
+        if MinSegmentTreeFp64 is None:
+            raise RuntimeError(
+                "MinSegmentTreeFp64 is not available. See warning above."
+            )
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
@@ -426,21 +485,23 @@ class PrioritizedSampler(Sampler):
             )
         self._max_priority = None
 
-    def _empty(self):
+    def _empty(self) -> None:
         self._init()
 
     @property
-    def _max_priority(self):
+    def _max_priority(self) -> tuple[float | None, int | None]:
         max_priority_index = self.__dict__.get("_max_priority")
         if max_priority_index is None:
             return (None, None)
         return max_priority_index
 
     @_max_priority.setter
-    def _max_priority(self, value):
+    def _max_priority(self, value: tuple[float | None, int | None]) -> None:
         self.__dict__["_max_priority"] = value
 
-    def _maybe_erase_max_priority(self, index):
+    def _maybe_erase_max_priority(
+        self, index: torch.Tensor | int | slice | tuple
+    ) -> None:
         if not self._max_priority_within_buffer:
             return
         max_priority_index = self._max_priority[1]
@@ -527,9 +588,7 @@ class PrioritizedSampler(Sampler):
         weight = torch.pow(weight / p_min, -self._beta)
         if storage.ndim > 1:
             index = unravel_index(index, storage.shape)
-        return index, {"_weight": weight}
-
-        return index, {"_weight": weight}
+        return index, {"priority_weight": weight}
 
     def add(self, index: torch.Tensor | int) -> None:
         super().add(index)
@@ -542,8 +601,8 @@ class PrioritizedSampler(Sampler):
     @torch.no_grad()
     def update_priority(
         self,
-        index: Union[int, torch.Tensor],
-        priority: Union[float, torch.Tensor],
+        index: int | torch.Tensor,
+        priority: float | torch.Tensor,
         *,
         storage: TensorStorage | None = None,
     ) -> None:  # noqa: D417
@@ -626,11 +685,11 @@ class PrioritizedSampler(Sampler):
             self._max_priority = (maxval, maxidx)
 
     def mark_update(
-        self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
+        self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
         self.update_priority(index, self.default_priority, storage=storage)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "_alpha": self._alpha,
             "_beta": self._beta,
@@ -640,7 +699,7 @@ class PrioritizedSampler(Sampler):
             "_min_tree": deepcopy(self._min_tree),
         }
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._alpha = state_dict["_alpha"]
         self._beta = state_dict["_beta"]
         self._eps = state_dict["_eps"]
@@ -648,7 +707,12 @@ class PrioritizedSampler(Sampler):
         self._sum_tree = state_dict.pop("_sum_tree")
         self._min_tree = state_dict.pop("_min_tree")
 
+    @implement_for("torch", None, "2.5.0")
     def dumps(self, path):
+        raise NotImplementedError("This method is not implemented for Torch < 2.5.0")
+
+    @implement_for("torch", "2.5.0", None)
+    def dumps(self, path):  # noqa: F811
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         try:
@@ -681,24 +745,38 @@ class PrioritizedSampler(Sampler):
         )
         with open(path / "sampler_metadata.json", "w") as file:
             json.dump(
-                {
-                    "_alpha": self._alpha,
-                    "_beta": self._beta,
-                    "_eps": self._eps,
-                    "_max_priority": self._max_priority,
-                    "_max_capacity": self._max_capacity,
-                },
+                tree_map(
+                    float,
+                    {
+                        "_alpha": self._alpha,
+                        "_beta": self._beta,
+                        "_eps": self._eps,
+                        "_max_priority": self._max_priority,
+                        "_max_capacity": self._max_capacity,
+                    },
+                ),
                 file,
             )
 
+    @implement_for("torch", None, "2.5.0")
     def loads(self, path):
+        raise NotImplementedError("This method is not implemented for Torch < 2.5.0")
+
+    @implement_for("torch", "2.5.0", None)
+    def loads(self, path):  # noqa: F811
         path = Path(path).absolute()
-        with open(path / "sampler_metadata.json", "r") as file:
+        with open(path / "sampler_metadata.json") as file:
             metadata = json.load(file)
         self._alpha = metadata["_alpha"]
         self._beta = metadata["_beta"]
         self._eps = metadata["_eps"]
-        self._max_priority = metadata["_max_priority"]
+        maxp = tree_map(
+            lambda dest, orig: dest.copy_(orig) if dest is not None else orig,
+            tuple(self._max_priority),
+            tuple(metadata["_max_priority"]),
+        )
+        if all(x is None for x in self._max_priority):
+            self._max_priority = maxp
         _max_capacity = metadata["_max_capacity"]
         if _max_capacity != self._max_capacity:
             raise RuntimeError(
@@ -725,6 +803,10 @@ class SliceSampler(Sampler):
 
     This class samples sub-trajectories with replacement. For a version without
     replacement, see :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`.
+
+    .. note:: `SliceSampler` can be slow to retrieve the trajectory indices. To accelerate
+        its execution, prefer using `end_key` over `traj_key`, and consider the following
+        keyword arguments: :attr:`compile`, :attr:`cache_values` and :attr:`use_gpu`.
 
     Keyword Args:
         num_slices (int): the number of slices to be sampled. The batch-size
@@ -796,11 +878,121 @@ class SliceSampler(Sampler):
             that at least `slice_len - i` samples will be gathered for each sampled trajectory.
             Using tuples allows a fine grained control over the span on the left (beginning
             of the stored trajectory) and on the right (end of the stored trajectory).
+        use_gpu (bool or torch.device): if ``True`` (or is a device is passed), an accelerator
+            will be used to retrieve the indices of the trajectory starts. This can significantly
+            accelerate the sampling when the buffer content is large.
+            Defaults to ``False``.
 
     .. note:: To recover the trajectory splits in the storage,
         :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` will first
         attempt to find the ``traj_key`` entry in the storage. If it cannot be
         found, the ``end_key`` will be used to reconstruct the episodes.
+
+    .. note:: When using `strict_length=False`, it is recommended to use
+        :func:`~torchrl.collectors.utils.split_trajectories` to split the sampled trajectories.
+        However, if two samples from the same episode are placed next to each other,
+        this may produce incorrect results. To avoid this issue, consider one of these solutions:
+
+        - using a :class:`~torchrl.data.TensorDictReplayBuffer` instance with the slice sampler
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.collectors.utils import split_trajectories
+            >>> from torchrl.data import TensorDictReplayBuffer, ReplayBuffer, LazyTensorStorage, SliceSampler, SliceSamplerWithoutReplacement
+            >>>
+            >>> rb = TensorDictReplayBuffer(storage=LazyTensorStorage(max_size=1000),
+            ...                   sampler=SliceSampler(
+            ...                       slice_len=5, traj_key="episode",strict_length=False,
+            ...                   ))
+            ...
+            >>> ep_1 = TensorDict(
+            ...     {"obs": torch.arange(100),
+            ...     "episode": torch.zeros(100),},
+            ...     batch_size=[100]
+            ... )
+            >>> ep_2 = TensorDict(
+            ...     {"obs": torch.arange(4),
+            ...     "episode": torch.ones(4),},
+            ...     batch_size=[4]
+            ... )
+            >>> rb.extend(ep_1)
+            >>> rb.extend(ep_2)
+            >>>
+            >>> s = rb.sample(50)
+            >>> print(s)
+            TensorDict(
+                fields={
+                    episode: Tensor(shape=torch.Size([46]), device=cpu, dtype=torch.float32, is_shared=False),
+                    index: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            terminated: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([46, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([46]),
+                        device=cpu,
+                        is_shared=False),
+                    obs: Tensor(shape=torch.Size([46]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([46]),
+                device=cpu,
+                is_shared=False)
+            >>> t = split_trajectories(s, done_key="truncated")
+            >>> print(t["obs"])
+            tensor([[73, 74, 75, 76, 77],
+                    [ 0,  1,  2,  3,  0],
+                    [ 0,  1,  2,  3,  0],
+                    [41, 42, 43, 44, 45],
+                    [ 0,  1,  2,  3,  0],
+                    [67, 68, 69, 70, 71],
+                    [27, 28, 29, 30, 31],
+                    [80, 81, 82, 83, 84],
+                    [17, 18, 19, 20, 21],
+                    [ 0,  1,  2,  3,  0]])
+            >>> print(t["episode"])
+            tensor([[0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.],
+                    [1., 1., 1., 1., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.]])
+
+        - using a :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.collectors.utils import split_trajectories
+            >>> from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler, SliceSamplerWithoutReplacement
+            >>>
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(max_size=1000),
+            ...                   sampler=SliceSamplerWithoutReplacement(
+            ...                       slice_len=5, traj_key="episode",strict_length=False
+            ...                   ))
+            ...
+            >>> ep_1 = TensorDict(
+            ...     {"obs": torch.arange(100),
+            ...     "episode": torch.zeros(100),},
+            ...     batch_size=[100]
+            ... )
+            >>> ep_2 = TensorDict(
+            ...     {"obs": torch.arange(4),
+            ...     "episode": torch.ones(4),},
+            ...     batch_size=[4]
+            ... )
+            >>> rb.extend(ep_1)
+            >>> rb.extend(ep_2)
+            >>>
+            >>> s = rb.sample(50)
+            >>> t = split_trajectories(s, trajectory_key="episode")
+            >>> print(t["obs"])
+            tensor([[75, 76, 77, 78, 79],
+                    [ 0,  1,  2,  3,  0]])
+            >>> print(t["episode"])
+            tensor([[0., 0., 0., 0., 0.],
+                    [1., 1., 1., 1., 0.]])
 
     Examples:
         >>> import torch
@@ -862,11 +1054,14 @@ class SliceSampler(Sampler):
 
     """
 
+    # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
+    _batch_size_multiplier: int | None = 1
+
     def __init__(
         self,
         *,
-        num_slices: int = None,
-        slice_len: int = None,
+        num_slices: int | None = None,
+        slice_len: int | None = None,
         end_key: NestedKey | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
@@ -875,7 +1070,8 @@ class SliceSampler(Sampler):
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         compile: bool | dict = False,
-        span: bool | int | Tuple[bool | int, bool | int] = False,
+        span: bool | int | tuple[bool | int, bool | int] = False,
+        use_gpu: torch.device | bool = False,
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
@@ -886,6 +1082,14 @@ class SliceSampler(Sampler):
         self._fetch_traj = True
         self.strict_length = strict_length
         self._cache = {}
+        self.use_gpu = bool(use_gpu)
+        self._gpu_device = (
+            None
+            if not self.use_gpu
+            else torch.device(use_gpu)
+            if not isinstance(use_gpu, bool)
+            else _auto_device()
+        )
 
         if isinstance(span, (bool, int)):
             span = (span, span)
@@ -923,6 +1127,10 @@ class SliceSampler(Sampler):
             self._cache["stop-and-length"] = vals
 
         else:
+            if traj_key is not None:
+                self._fetch_traj = True
+            elif end_key is not None:
+                self._fetch_traj = False
             if end_key is None:
                 end_key = ("next", "done")
             if traj_key is None:
@@ -977,9 +1185,8 @@ class SliceSampler(Sampler):
             f"strict_length={self.strict_length})"
         )
 
-    @classmethod
     def _find_start_stop_traj(
-        cls, *, trajectory=None, end=None, at_capacity: bool, cursor=None
+        self, *, trajectory=None, end=None, at_capacity: bool, cursor=None
     ):
         if trajectory is not None:
             # slower
@@ -1032,10 +1239,15 @@ class SliceSampler(Sampler):
             raise RuntimeError(
                 "Expected the end-of-trajectory signal to be at least 1-dimensional."
             )
-        return cls._end_to_start_stop(length=length, end=end)
+        return self._end_to_start_stop(length=length, end=end)
 
-    @staticmethod
-    def _end_to_start_stop(end, length):
+    def _end_to_start_stop(self, end, length):
+        device = None
+        if self.use_gpu:
+            gpu_device = self._gpu_device
+            if end.device != gpu_device:
+                device = end.device
+                end = end.to(self._gpu_device)
         # Using transpose ensures the start and stop are sorted the same way
         stop_idx = end.transpose(0, -1).nonzero()
         stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
@@ -1062,6 +1274,8 @@ class SliceSampler(Sampler):
             pass
         lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
         lengths[lengths <= 0] = lengths[lengths <= 0] + length
+        if device is not None:
+            return start_idx.to(device), stop_idx.to(device), lengths.to(device)
         return start_idx, stop_idx, lengths
 
     def _start_to_end(self, st: torch.Tensor, length: int):
@@ -1134,7 +1348,7 @@ class SliceSampler(Sampler):
                             "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
                         )
                 vals = self._find_start_stop_traj(
-                    trajectory=trajectory.clone(),
+                    trajectory=trajectory,
                     at_capacity=storage._is_full,
                     cursor=getattr(storage, "_last_cursor", None),
                 )
@@ -1188,7 +1402,9 @@ class SliceSampler(Sampler):
             num_slices = batch_size // self.slice_len
         return seq_length, num_slices
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
+        if self._batch_size_multiplier is not None:
+            batch_size = batch_size * self._batch_size_multiplier
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
@@ -1197,7 +1413,7 @@ class SliceSampler(Sampler):
         if start_idx.shape[1] != storage.ndim:
             raise RuntimeError(
                 f"Expected the end-of-trajectory signal to be "
-                f"{storage.ndim}-dimensional. Got a {start_idx.shape[1]} tensor "
+                f"{storage.ndim}-dimensional. Got a tensor with shape[1]={start_idx.shape[1]} "
                 "instead."
             )
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
@@ -1223,7 +1439,7 @@ class SliceSampler(Sampler):
         traj_idx: torch.Tensor | None = None,
         *,
         storage,
-    ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any]]:
+    ) -> tuple[tuple[torch.Tensor, ...], dict[str, Any]]:
         # start_idx and stop_idx are 2d tensors organized like a non-zero
 
         def get_traj_idx(maxval):
@@ -1304,7 +1520,7 @@ class SliceSampler(Sampler):
         traj_idx: torch.Tensor | None = None,
         *,
         storage,
-    ) -> Tuple[torch.Tensor, dict]:
+    ) -> tuple[torch.Tensor, dict]:
         # end_point is the last possible index for start
         last_indexable_start = lengths[traj_idx] - seq_length + 1
         if not self.span[1]:
@@ -1374,13 +1590,13 @@ class SliceSampler(Sampler):
                 truncated[seq_length.cumsum(0) - 1] = 1
             index = index.to(torch.long).unbind(-1)
             st_index = storage[index]
-            try:
-                done = st_index[done_key] | truncated
-            except KeyError:
+            done = st_index.get(done_key, default=None)
+            if done is None:
                 done = truncated.clone()
-            try:
-                terminated = st_index[terminated_key]
-            except KeyError:
+            else:
+                done = done | truncated
+            terminated = st_index.get(terminated_key, default=None)
+            if terminated is None:
                 terminated = torch.zeros_like(truncated)
             return index, {
                 truncated_key: truncated,
@@ -1417,20 +1633,28 @@ class SliceSampler(Sampler):
         # no op
         ...
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
 
 class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     """Samples slices of data along the first dimension, given start and stop signals, without replacement.
 
+    In this context, ``without replacement`` means that the same element (NOT trajectory) will not be sampled twice
+    before the counter is automatically reset. Within a single sample, however, only one slice of a given trajectory
+    will appear (see example below).
+
     This class is to be used with static replay buffers or in between two
     replay buffer extensions. Extending the replay buffer will reset the
     the sampler, and continuous sampling without replacement is currently not
     allowed.
+
+    .. note:: `SliceSamplerWithoutReplacement` can be slow to retrieve the trajectory indices. To accelerate
+        its execution, prefer using `end_key` over `traj_key`, and consider the following
+        keyword arguments: :attr:`compile`, :attr:`cache_values` and :attr:`use_gpu`.
 
     Keyword Args:
         drop_last (bool, optional): if ``True``, the last incomplete sample (if any) will be dropped.
@@ -1473,6 +1697,10 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
+            Defaults to ``False``.
+        use_gpu (bool or torch.device): if ``True`` (or is a device is passed), an accelerator
+            will be used to retrieve the indices of the trajectory starts. This can significantly
+            accelerate the sampling when the buffer content is large.
             Defaults to ``False``.
 
     .. note:: To recover the trajectory splits in the storage,
@@ -1533,6 +1761,51 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         tensor([ 1,  2,  7,  9, 10, 13, 15, 18, 21, 22])
         tensor([ 0,  3,  4, 20, 23])
 
+    When requesting a large total number of samples with few trajectories and small span, the batch will contain
+    only at most one sample of each trajectory:
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.collectors.utils import split_trajectories
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler, SliceSamplerWithoutReplacement
+        >>>
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(max_size=1000),
+        ...                   sampler=SliceSamplerWithoutReplacement(
+        ...                       slice_len=5, traj_key="episode",strict_length=False
+        ...                   ))
+        ...
+        >>> ep_1 = TensorDict(
+        ...     {"obs": torch.arange(100),
+        ...     "episode": torch.zeros(100),},
+        ...     batch_size=[100]
+        ... )
+        >>> ep_2 = TensorDict(
+        ...     {"obs": torch.arange(51),
+        ...     "episode": torch.ones(51),},
+        ...     batch_size=[51]
+        ... )
+        >>> rb.extend(ep_1)
+        >>> rb.extend(ep_2)
+        >>>
+        >>> s = rb.sample(50)
+        >>> t = split_trajectories(s, trajectory_key="episode")
+        >>> print(t["obs"])
+        tensor([[14, 15, 16, 17, 18],
+                [ 3,  4,  5,  6,  7]])
+        >>> print(t["episode"])
+        tensor([[0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1.]])
+        >>>
+        >>> s = rb.sample(50)
+        >>> t = split_trajectories(s, trajectory_key="episode")
+        >>> print(t["obs"])
+        tensor([[ 4,  5,  6,  7,  8],
+                [26, 27, 28, 29, 30]])
+        >>> print(t["episode"])
+        tensor([[0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1.]])
+
     """
 
     def __init__(
@@ -1549,6 +1822,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         strict_length: bool = True,
         shuffle: bool = True,
         compile: bool | dict = False,
+        use_gpu: bool | torch.device = False,
     ):
         SliceSampler.__init__(
             self,
@@ -1562,6 +1836,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             ends=ends,
             trajectories=trajectories,
             compile=compile,
+            use_gpu=use_gpu,
         )
         SamplerWithoutReplacement.__init__(self, drop_last=drop_last, shuffle=shuffle)
 
@@ -1590,7 +1865,9 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 
     def sample(
         self, storage: Storage, batch_size: int
-    ) -> Tuple[Tuple[torch.Tensor, ...], dict]:
+    ) -> tuple[tuple[torch.Tensor, ...], dict]:
+        if self._batch_size_multiplier is not None:
+            batch_size = batch_size * self._batch_size_multiplier
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
         # is the same as the stop/start signals since we will
@@ -1628,19 +1905,29 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         )
         return idx, info
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return SamplerWithoutReplacement.state_dict(self)
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return SamplerWithoutReplacement.load_state_dict(self, state_dict)
 
 
 class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
-    """Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
+    r"""Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
 
-    This class samples sub-trajectories with replacement following a priority weighting presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
-        Prioritized experience replay."
-        (https://arxiv.org/abs/1511.05952)
+    This class combines trajectory sampling with Prioritized Experience Replay (PER) as presented in
+    "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay."
+    (https://arxiv.org/abs/1511.05952)
+
+    **Core Idea**: Instead of sampling trajectory slices uniformly, this sampler prioritizes
+    trajectory start points based on the importance of the transitions at those positions.
+    This allows focusing learning on the most informative parts of trajectories.
+
+    **How it works**:
+    1. Each transition is assigned a priority based on its TD error: :math:`p_i = |\\delta_i| + \\epsilon`
+    2. Trajectory start points are sampled with probability: :math:`P(i) = \frac{p_i^\alpha}{\\sum_j p_j^\alpha}`
+    3. Importance sampling weights correct for bias: :math:`w_i = (N \\cdot P(i))^{-\beta}`
+    4. Complete trajectory slices are extracted from the sampled start points
 
     For more info see :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` and :class:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler`.
 
@@ -1649,17 +1936,44 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         samples if they follow another of higher priority, and transitions with a high priority but closer to the
         end of a trajectory may never be sampled if they cannot be used as start points.
         Currently, it is the user responsibility to aggregate priorities across items of a trajectory using
-        :meth:`~.update_priority`.
+        :meth:`update_priority`.
 
     Args:
-        alpha (:obj:`float`): exponent α determines how much prioritization is used,
-            with α = 0 corresponding to the uniform case.
-        beta (:obj:`float`): importance sampling negative exponent.
-        eps (:obj:`float`, optional): delta added to the priorities to ensure that the buffer
-            does not contain null priorities. Defaults to 1e-8.
+        max_capacity (int): maximum capacity of the buffer.
+        alpha (:obj:`float`): exponent :math:`\alpha` determines how much prioritization is used.
+            - :math:`\alpha = 0`: uniform sampling of trajectory start points
+            - :math:`\alpha = 1`: full prioritization based on TD error magnitude at start points
+            - Typical values: 0.4-0.7 for balanced prioritization
+            - Higher :math:`\alpha` means more aggressive prioritization of high-error trajectory regions
+        beta (:obj:`float`): importance sampling negative exponent :math:`\beta`.
+            - :math:`\beta` controls the correction for the bias introduced by prioritization
+            - :math:`\beta = 0`: no correction (biased towards high-priority trajectory regions)
+            - :math:`\beta = 1`: full correction (unbiased but potentially unstable)
+            - Typical values: start at 0.4-0.6 and anneal to 1.0 during training
+            - Lower :math:`\beta` early in training provides stability, higher :math:`\beta` later reduces bias
+        eps (:obj:`float`, optional): small constant added to priorities to ensure
+            no transition has zero priority. This prevents trajectory regions from never
+            being sampled. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (i.e., stored trajectory). Can be one of "max", "min",
             "median" or "mean".
+
+    **Parameter Guidelines**:
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error trajectory regions
+        - 0.4-0.7: Good balance between learning speed and stability
+        - 1.0: Maximum prioritization (may be unstable)
+        - 0.0: Uniform sampling (no prioritization benefit)
+
+    - **:math:`\beta` (beta)**: Controls importance sampling correction
+        - Start at 0.4-0.6 for training stability
+        - Anneal to 1.0 over training to reduce bias
+        - Lower values = more stable but biased
+        - Higher values = less biased but potentially unstable
+
+    - **:math:`\\epsilon`**: Small constant to prevent zero priorities
+        - 1e-8: Good default value
+        - Too small: may cause numerical issues
+        - Too large: reduces prioritization effect
 
     Keyword Args:
         num_slices (int): the number of slices to be sampled. The batch-size
@@ -1754,7 +2068,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         episode [2, 2, 2, 2, 1, 1]
         >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 1, 2]
-        >>> print("weight", info["_weight"].tolist())
+        >>> print("weight", info["priority_weight"].tolist())
         weight [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         >>> priority = torch.tensor([0,3,3,0,0,0,1,1,1])
         >>> rb.update_priority(torch.arange(0,9,1), priority=priority)
@@ -1763,7 +2077,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         episode [2, 2, 2, 2, 2, 2]
         >>> print("steps", sample["steps"].tolist())
         steps [1, 2, 0, 1, 0, 1]
-        >>> print("weight", info["_weight"].tolist())
+        >>> print("weight", info["priority_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
     """
 
@@ -1776,8 +2090,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
         *,
-        num_slices: int = None,
-        slice_len: int = None,
+        num_slices: int | None = None,
+        slice_len: int | None = None,
         end_key: NestedKey | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
@@ -1786,7 +2100,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
         compile: bool | dict = False,
-        span: bool | int | Tuple[bool | int, bool | int] = False,
+        span: bool | int | tuple[bool | int, bool | int] = False,
         max_priority_within_buffer: bool = False,
     ):
         SliceSampler.__init__(
@@ -1846,7 +2160,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         return state
 
     def mark_update(
-        self, index: Union[int, torch.Tensor], *, storage: Storage | None = None
+        self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
         return PrioritizedSampler.mark_update(self, index, storage=storage)
 
@@ -1912,7 +2226,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             self._cache["preceding_stop_idx"] = preceding_stop_idx
         return preceding_stop_idx
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         # Sample `batch_size` indices representing the start of a slice.
         # The sampling is based on a weight vector.
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
@@ -1980,7 +2294,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         if isinstance(starts, tuple):
             starts = torch.stack(starts, -1)
         # starts = torch.as_tensor(starts, device=lengths.device)
-        info["_weight"] = torch.as_tensor(info["_weight"], device=lengths.device)
+        info["priority_weight"] = torch.as_tensor(
+            info["priority_weight"], device=lengths.device
+        )
 
         # extends starting indices of each slice with sequence_length to get indices of all steps
         index = self._tensor_slices_from_startend(
@@ -1988,7 +2304,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         )
 
         # repeat the weight of each slice to match the number of steps
-        info["_weight"] = torch.repeat_interleave(info["_weight"], seq_length)
+        info["priority_weight"] = torch.repeat_interleave(
+            info["priority_weight"], seq_length
+        )
 
         if self.truncated_key is not None:
             # following logics borrowed from SliceSampler
@@ -2189,13 +2507,13 @@ class SamplerEnsemble(Sampler):
         for i, sampler in enumerate(self._samplers):
             sampler.loads(path / str(i))
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         state_dict = OrderedDict()
         for i, sampler in enumerate(self._samplers):
             state_dict[str(i)] = sampler.state_dict()
         return state_dict
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         for i, sampler in enumerate(self._samplers):
             sampler.load_state_dict(state_dict[str(i)])
 
@@ -2225,7 +2543,7 @@ class SamplerEnsemble(Sampler):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:

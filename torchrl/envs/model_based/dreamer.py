@@ -2,13 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from typing import Optional, Tuple
+from __future__ import annotations
 
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -17,23 +15,47 @@ from torchrl.envs.transforms.transforms import Transform
 
 
 class DreamerEnv(ModelBasedEnvBase):
-    """Dreamer simulation environment."""
+    """Dreamer simulation environment.
+
+    This environment is used for imagination rollouts in Dreamer training.
+    It never terminates (done is always False) since imagination runs for a
+    fixed horizon. The done-checking methods are overridden to avoid CUDA
+    synchronization overhead from Python control flow on CUDA tensors.
+    """
 
     def __init__(
         self,
         world_model: TensorDictModule,
-        prior_shape: Tuple[int, ...],
-        belief_shape: Tuple[int, ...],
+        prior_shape: tuple[int, ...],
+        belief_shape: tuple[int, ...],
         obs_decoder: TensorDictModule = None,
         device: DEVICE_TYPING = "cpu",
-        batch_size: Optional[torch.Size] = None,
+        batch_size: torch.Size | None = None,
     ):
-        super(DreamerEnv, self).__init__(
-            world_model, device=device, batch_size=batch_size
+        super().__init__(
+            world_model,
+            device=device,
+            batch_size=batch_size,
+            # Skip done validation in reset() — imagination never terminates.
+            allow_done_after_reset=True,
         )
         self.obs_decoder = obs_decoder
         self.prior_shape = prior_shape
         self.belief_shape = belief_shape
+
+    def any_done(self, tensordict) -> bool:
+        """Returns False — imagination rollouts never terminate.
+
+        Overridden to avoid CUDA sync from `done.any()` in parent class.
+        """
+        return False
+
+    def maybe_reset(self, tensordict):
+        """No-op — imagination rollouts don't need partial resets.
+
+        Overridden to avoid CUDA sync from done checks in parent class.
+        """
+        return tensordict
 
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
@@ -80,8 +102,8 @@ class DreamerDecoder(Transform):
         >>> model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
     """
 
-    def _call(self, tensordict):
-        return self.parent.base_env.obs_decoder(tensordict)
+    def _call(self, next_tensordict):
+        return self.parent.base_env.obs_decoder(next_tensordict)
 
     def _reset(self, tensordict, tensordict_reset):
         return self._call(tensordict_reset)

@@ -15,12 +15,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   tests:
     strategy:
       matrix:
         python_version: ["3.9"]
-        cuda_arch_version: ["12.1"]
+        cuda_arch_version: ["12.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:

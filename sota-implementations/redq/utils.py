@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 from copy import copy
-from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
 import torch
 from omegaconf import OmegaConf
@@ -19,57 +20,60 @@ from torch import distributions as d, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl._utils import logger as torchrl_logger, VERBOSE
-from torchrl.collectors.collectors import DataCollectorBase
-
-from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
-from torchrl.data.postprocs import MultiStep
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.collectors import DataCollectorBase
+from torchrl.data import (
+    LazyMemmapStorage,
+    MultiStep,
+    PrioritizedSampler,
+    RandomSampler,
+    ReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs import ParallelEnv
-from torchrl.envs.common import EnvBase
-from torchrl.envs.env_creator import env_creator, EnvCreator
-from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import (
+from torchrl.envs import (
     CatFrames,
     CatTensors,
     CenterCrop,
     Compose,
+    DMControlEnv,
     DoubleToFloat,
+    env_creator,
+    EnvBase,
+    EnvCreator,
+    FlattenObservation,
     GrayScale,
+    gSDENoise,
+    GymEnv,
+    InitTracker,
     NoopResetEnv,
     ObservationNorm,
+    ParallelEnv,
     Resize,
     RewardScaling,
+    StepCounter,
     ToTensorImage,
     TransformedEnv,
     VecNorm,
-)
-from torchrl.envs.transforms.transforms import (
-    FlattenObservation,
-    gSDENoise,
-    InitTracker,
-    StepCounter,
 )
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     ActorCriticOperator,
     ActorValueOperator,
+    DdpgCnnActor,
+    DdpgCnnQNet,
+    MLP,
     NoisyLinear,
     NormalParamExtractor,
+    ProbabilisticActor,
     SafeModule,
     SafeSequential,
+    TanhNormal,
+    ValueOperator,
 )
-from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.models import DdpgCnnActor, DdpgCnnQNet, MLP
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
-from torchrl.objectives import HardUpdate, SoftUpdate
-from torchrl.objectives.common import LossModule
+from torchrl.objectives import HardUpdate, LossModule, SoftUpdate, TargetNetUpdater
 from torchrl.objectives.deprecated import REDQLoss_deprecated
-from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
 from torchrl.trainers.helpers import sync_async_collector, sync_sync_collector
@@ -77,8 +81,8 @@ from torchrl.trainers.trainers import (
     BatchSubSampler,
     ClearCudaCache,
     CountFramesLog,
-    LogReward,
-    Recorder,
+    LogScalar,
+    LogValidationReward,
     ReplayBufferTrainer,
     RewardNormalizer,
     Trainer,
@@ -101,10 +105,10 @@ OPTIMIZERS = {
 }
 
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
+def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:  # noqa: F821
     """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
 
-    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
+    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames
     of 1M but actually collecting frame_skip * 1M frames.
 
     Args:
@@ -168,7 +172,7 @@ def make_trainer(
     policy_exploration: TensorDictModuleWrapper | TensorDictModule | None,
     replay_buffer: ReplayBuffer | None,
     logger: Logger | None,
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
@@ -192,7 +196,7 @@ def make_trainer(
         >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
-        >>> from torchrl.collectors.collectors import SyncDataCollector
+        >>> from torchrl.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, SafeModule, ValueOperator, EGreedyWrapper
@@ -327,7 +331,7 @@ def make_trainer(
 
     if recorder is not None:
         # create recorder object
-        recorder_obj = Recorder(
+        recorder_obj = LogValidationReward(
             record_frames=cfg.logger.record_frames,
             frame_skip=cfg.env.frame_skip,
             policy_exploration=policy_exploration,
@@ -343,7 +347,7 @@ def make_trainer(
         # call recorder - could be removed
         recorder_obj(None)
         # create explorative recorder - could be optional
-        recorder_obj_explore = Recorder(
+        recorder_obj_explore = LogValidationReward(
             record_frames=cfg.logger.record_frames,
             frame_skip=cfg.env.frame_skip,
             policy_exploration=policy_exploration,
@@ -365,7 +369,7 @@ def make_trainer(
         "post_steps", UpdateWeights(collector, update_weights_interval=1)
     )
 
-    trainer.register_op("pre_steps_log", LogReward())
+    trainer.register_op("pre_steps_log", LogScalar())
     trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.env.frame_skip))
 
     return trainer
@@ -373,7 +377,7 @@ def make_trainer(
 
 def make_redq_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     device: DEVICE_TYPING = "cpu",
     in_keys: Sequence[str] | None = None,
     actor_net_kwargs=None,
@@ -406,7 +410,7 @@ def make_redq_model(
     default_policy_scale = cfg.network.default_policy_scale
     gSDE = cfg.exploration.gSDE
 
-    action_spec = proof_environment.action_spec
+    action_spec = proof_environment.action_spec_unbatched
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
@@ -518,7 +522,7 @@ def make_redq_model(
         actor_module = SafeSequential(
             actor_module,
             SafeModule(
-                LazygSDEModule(transform=transform),
+                LazygSDEModule(transform=transform, device=device),
                 in_keys=["action", gSDE_state_key, "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
             ),
@@ -551,7 +555,7 @@ def make_redq_model(
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",  # noqa: F821
+    cfg: DictConfig,  # noqa: F821
     video_tag: str = "",
     logger: Logger | None = None,
     stats: dict | None = None,
@@ -564,7 +568,7 @@ def transformed_env_constructor(
     state_dim_gsde: int | None = None,
     batch_dims: int | None = 0,
     obs_norm_state_dict: dict | None = None,
-) -> Union[Callable, EnvCreator]:
+) -> Callable | EnvCreator:
     """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
@@ -574,7 +578,7 @@ def transformed_env_constructor(
         stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
-        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
+        use_env_creator (bool, optional): whether the `EnvCreator` class should be used. By using `EnvCreator`,
             one can make sure that running statistics will be put in shared memory and accessible for all workers
             when using a `VecNorm` transform. Default is `True`.
         custom_env_maker (callable, optional): if your env maker is not part
@@ -606,7 +610,9 @@ def transformed_env_constructor(
         categorical_action_encoding = cfg.env.categorical_action_encoding
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector.device, str):
+            if cfg.collector.device in ("", None):
+                device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+            elif isinstance(cfg.collector.device, str):
                 device = cfg.collector.device
             elif isinstance(cfg.collector.device, Sequence):
                 device = cfg.collector.device[0]
@@ -638,7 +644,7 @@ def transformed_env_constructor(
         elif custom_env_maker is None and custom_env is not None:
             env = custom_env
         else:
-            raise RuntimeError("cannot provive both custom_env and custom_env_maker")
+            raise RuntimeError("cannot provide both custom_env and custom_env_maker")
 
         if cfg.env.noops and custom_env is None:
             # this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv
@@ -682,7 +688,7 @@ def get_norm_state_dict(env):
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: Union[str, Tuple[str, ...]] = None,
+    key: str | tuple[str, ...] = None,
 ):
     """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
@@ -693,7 +699,7 @@ def initialize_observation_norm_transforms(
 
     Args:
         proof_environment (EnvBase instance, optional): if provided, this env will
-            be used ot execute the rollouts. If not, it will be created using
+            be used to execute the rollouts. If not, it will be created using
             the cfg object.
         num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`
         key (str, optional): if provided, the stats of this key will be gathered.
@@ -723,8 +729,8 @@ def initialize_observation_norm_transforms(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs  # noqa: F821
-) -> Union[ParallelEnv, EnvCreator]:
+    cfg: DictConfig, **kwargs  # noqa: F821
+) -> ParallelEnv | EnvCreator:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
@@ -910,9 +916,7 @@ def make_env_transforms(
     return env
 
 
-def make_redq_loss(
-    model, cfg
-) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
+def make_redq_loss(model, cfg) -> tuple[REDQLoss_deprecated, TargetNetUpdater | None]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     loss_kwargs.update({"loss_function": cfg.loss.loss_function})
@@ -944,7 +948,7 @@ def make_redq_loss(
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
+    cfg: DictConfig, loss_module: LossModule  # noqa: F821
 ) -> TargetNetUpdater | None:
     """Builds a target network weight update object."""
     if cfg.loss.type == "double":
@@ -970,8 +974,8 @@ def make_target_updater(
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: TensorDictModuleWrapper | ProbabilisticTensorDictSequential,
-    cfg: "DictConfig",  # noqa: F821
-    make_env_kwargs: Dict | None = None,
+    cfg: DictConfig,  # noqa: F821
+    make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
     """Returns a data collector for off-policy sota-implementations.
 
@@ -1000,11 +1004,14 @@ def make_collector_offpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    cfg.collector.device = (
-        cfg.collector.device
-        if len(cfg.collector.device) > 1
-        else cfg.collector.device[0]
-    )
+    if cfg.collector.device in ("", None):
+        cfg.collector.device = "cpu" if not torch.cuda.is_available() else "cuda:0"
+    else:
+        cfg.collector.device = (
+            cfg.collector.device
+            if len(cfg.collector.device) > 1
+            else cfg.collector.device[0]
+        )
     collector_helper_kwargs = {
         "env_fns": make_env,
         "env_kwargs": env_kwargs,
@@ -1017,7 +1024,6 @@ def make_collector_offpolicy(
         # we already took care of building the make_parallel_env function
         "num_collectors": -cfg.num_workers // -cfg.collector.env_per_collector,
         "device": cfg.collector.device,
-        "storing_device": cfg.collector.device,
         "init_random_frames": cfg.collector.init_random_frames,
         "split_trajs": True,
         # trajectories must be separated if multi-step is used
@@ -1029,7 +1035,7 @@ def make_collector_offpolicy(
 
 
 def make_replay_buffer(
-    device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821
+    device: DEVICE_TYPING, cfg: DictConfig  # noqa: F821
 ) -> ReplayBuffer:  # noqa: F821
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)

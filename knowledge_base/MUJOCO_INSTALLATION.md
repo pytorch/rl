@@ -189,7 +189,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     /path/to/conda/envs/mj_envs/lib/python3.8/site-packages/glfw/__init__.py:912: GLFWError: (65537) b'The GLFW library is not initialized'
     ```
 
-    _Solution_: This can usually be sovled by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
+    _Solution_: This can usually be solved by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
 
 
 
@@ -208,7 +208,7 @@ RuntimeError: Failed to initialize OpenGL
 > Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES 
   (when used with job schedulers like slurm) returns the local device ids. 
   This can be worked around by setting the `GPUS` environment variable to the 
-  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
+  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` environment variable.
 
 8. Rendered images are completely black.
 
@@ -266,3 +266,11 @@ RuntimeError: Failed to initialize OpenGL
     - Ubuntu: `sudo apt-get install libosmesa6-dev`
     - CentOS: `sudo yum install mesa-libOSMesa-devel`
     - Conda: `conda install -c menpo osmesa`
+
+16. ```
+    AttributeError: 'NoneType' object has no attribute 'glGetError'
+    ```
+
+    _Solution_: :
+
+    - Ubuntu: `this_dir=$(pwd) && cd /usr/lib/x86_64-linux-gnu && sudo ln -s libglut.so.3.12 libglut.so.3 && cd $this_dir`

@@ -5,18 +5,15 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
-
 import torch
-
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
-
 from torchrl.modules.models import ConvNet, MLP
 from torchrl.modules.models.utils import _reset_parameters_recursive
 
@@ -25,7 +22,7 @@ class MultiAgentNetBase(nn.Module):
     """A base class for multi-agent networks.
 
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
-        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        module, please refer to :meth:`get_stateful_net` and :meth:`from_stateful_net`
         methods.
 
     """
@@ -129,24 +126,38 @@ class MultiAgentNetBase(nn.Module):
 
         return torch.vmap(exec_module, *args, **kwargs)
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+    def forward(self, *inputs: tuple[torch.Tensor]) -> torch.Tensor:
         if len(inputs) > 1:
             inputs = torch.cat([*inputs], -1)
         else:
             inputs = inputs[0]
 
+        # Convert agent_dim to positive index for consistent output placement.
+        # This ensures the agent dimension stays at the same position relative
+        # to batch dimensions, even if the network changes the number of dimensions
+        # (e.g., ConvNet collapses spatial dims).
+        # NOTE: Must compute this BEFORE _pre_forward_check, which may modify input shape
+        # (e.g., centralized mode flattens the agent dimension).
+        agent_dim_positive = self.agent_dim
+        if agent_dim_positive < 0:
+            agent_dim_positive = inputs.ndim + agent_dim_positive
+
         inputs = self._pre_forward_check(inputs)
+
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
             if self.centralized:
                 output = self.vmap_func_module(
-                    self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
+                    self._empty_net,
+                    (0, None),
+                    (agent_dim_positive,),
+                    randomness=self.vmap_randomness,
                 )(self.params, inputs)
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
-                    (0, self.agent_dim),
-                    (-2,),
+                    (0, agent_dim_positive),
+                    (agent_dim_positive,),
                     randomness=self.vmap_randomness,
                 )(self.params, inputs)
 
@@ -160,14 +171,16 @@ class MultiAgentNetBase(nn.Module):
                 # We expand it to maintain the agent dimension, but values will be the same for all agents
                 n_agent_outputs = output.shape[-1]
                 output = output.view(*output.shape[:-1], n_agent_outputs)
-                output = output.unsqueeze(-2)
-                output = output.expand(
-                    *output.shape[:-2], self.n_agents, n_agent_outputs
-                )
+                # Insert agent dimension at the correct position
+                output = output.unsqueeze(agent_dim_positive)
+                # Build the expanded shape
+                expand_shape = list(output.shape)
+                expand_shape[agent_dim_positive] = self.n_agents
+                output = output.expand(*expand_shape)
 
-        if output.shape[-2] != (self.n_agents):
+        if output.shape[agent_dim_positive] != (self.n_agents):
             raise ValueError(
-                f"Multi-agent network expected output with shape[-2]={self.n_agents}"
+                f"Multi-agent network expected output with shape[{agent_dim_positive}]={self.n_agents}"
                 f" but got {output.shape}"
             )
 
@@ -187,7 +200,7 @@ class MultiAgentNetBase(nn.Module):
 
         If the parameters are modified in-place (recommended) there is no need to copy the
         parameters back into the MARL module.
-        See :meth:`~.from_stateful_net` for details on how to re-populate the MARL model with
+        See :meth:`from_stateful_net` for details on how to re-populate the MARL model with
         parameters that have been re-initialized out-of-place.
 
         Examples:
@@ -230,7 +243,7 @@ class MultiAgentNetBase(nn.Module):
     def from_stateful_net(self, stateful_net: nn.Module):
         """Populates the parameters given a stateful version of the network.
 
-        See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
+        See :meth:`get_stateful_net` for details on how to gather a stateful version of the network.
 
         Args:
             stateful_net (nn.Module): the stateful network from which the params should be
@@ -243,8 +256,8 @@ class MultiAgentNetBase(nn.Module):
         if keyset0 != keyset1:
             raise RuntimeError(
                 f"The keys of params and provided module differ: "
-                f"{keyset1-keyset0} are in self.params and not in the module, "
-                f"{keyset0-keyset1} are in the module but not in self.params."
+                f"{keyset1 - keyset0} are in self.params and not in the module, "
+                f"{keyset0 - keyset1} are in the module but not in self.params."
             )
         self.params.data.update_(params.data)
 
@@ -326,7 +339,7 @@ class MultiAgentMLP(MultiAgentNetBase):
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
-        module, please refer to :meth:`~.get_stateful_net` and :meth:`~.from_stateful_net`
+        module, please refer to :meth:`get_stateful_net` and :meth:`from_stateful_net`
         methods.
 
     Examples:
@@ -418,10 +431,10 @@ class MultiAgentMLP(MultiAgentNetBase):
         *,
         centralized: bool | None = None,
         share_params: bool | None = None,
-        device: Optional[DEVICE_TYPING] = None,
-        depth: Optional[int] = None,
-        num_cells: Optional[Union[Sequence, int]] = None,
-        activation_class: Optional[Type[nn.Module]] = nn.Tanh,
+        device: DEVICE_TYPING | None = None,
+        depth: int | None = None,
+        num_cells: Sequence | int | None = None,
+        activation_class: type[nn.Module] | None = nn.Tanh,
         use_td_params: bool = True,
         **kwargs,
     ):
@@ -631,10 +644,10 @@ class MultiAgentConvNet(MultiAgentNetBase):
         in_features: int | None = None,
         device: DEVICE_TYPING | None = None,
         num_cells: Sequence[int] | None = None,
-        kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 5,
-        strides: Union[Sequence, int] = 2,
-        paddings: Union[Sequence, int] = 0,
-        activation_class: Type[nn.Module] = nn.ELU,
+        kernel_sizes: Sequence[int | Sequence[int]] | int = 5,
+        strides: Sequence | int = 2,
+        paddings: Sequence | int = 0,
+        activation_class: type[nn.Module] = nn.ELU,
         use_td_params: bool = True,
         **kwargs,
     ):
@@ -789,7 +802,7 @@ class Mixer(nn.Module):
         self,
         n_agents: int,
         needs_state: bool,
-        state_shape: Union[Tuple[int, ...], torch.Size],
+        state_shape: tuple[int, ...] | torch.Size,
         device: DEVICE_TYPING,
     ):
         super().__init__()
@@ -799,7 +812,7 @@ class Mixer(nn.Module):
         self.needs_state = needs_state
         self.state_shape = state_shape
 
-    def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+    def forward(self, *inputs: tuple[torch.Tensor]) -> torch.Tensor:
         """Forward pass of the mixer.
 
         Args:
@@ -1001,7 +1014,7 @@ class QMixer(Mixer):
 
     def __init__(
         self,
-        state_shape: Union[Tuple[int, ...], torch.Size],
+        state_shape: tuple[int, ...] | torch.Size,
         mixing_embed_dim: int,
         n_agents: int,
         device: DEVICE_TYPING,

@@ -6,16 +6,20 @@
 from __future__ import annotations
 
 import abc
+import itertools
 import pathlib
+import time
 import warnings
 from collections import defaultdict, OrderedDict
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import pad, TensorDictBase
+from tensordict import NestedKey, pad, TensorDict, TensorDictBase
+from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
@@ -24,11 +28,14 @@ from torchrl._utils import (
     _CKPT_BACKEND,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
+    rl_warnings,
+    timeit,
     VERBOSE,
 )
-from torchrl.collectors.collectors import DataCollectorBase
+from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
+    PrioritizedSampler,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -36,6 +43,7 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 
 try:
@@ -57,11 +65,13 @@ REPLAY_BUFFER_CLASS = {
     "circular": TensorDictReplayBuffer,
 }
 
+# Mapping of metric names to logger methods - controls how different metrics are logged
 LOGGER_METHODS = {
     "grad_norm": "log_scalar",
     "loss": "log_scalar",
 }
 
+# Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
 
@@ -70,11 +80,11 @@ class TrainerHookBase:
     """An abstract hooking class for torchrl Trainer class."""
 
     @abc.abstractmethod
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -115,10 +125,11 @@ class Trainer:
         optimizer (optim.Optimizer): An optimizer that trains the parameters
             of the model.
         logger (Logger, optional): a Logger that will handle the logging.
-        optim_steps_per_batch (int): number of optimization steps
+        optim_steps_per_batch (int, optional): number of optimization steps
             per collection of data. An trainer works as follows: a main loop
             collects batches of data (epoch loop), and a sub-loop (training
             loop) performs model updates in between two collections of data.
+            If `None`, the trainer will use the number of workers as the number of optimization steps.
         clip_grad_norm (bool, optional): If True, the gradients will be clipped
             based on the total norm of the model parameters. If False,
             all the partial derivatives will be clamped to
@@ -136,36 +147,51 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+        async_collection (bool, optional): Whether to collect data asynchronously.
+            This will only work if the replay buffer is registed within the data collector.
+            If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
+            Default is False.
+        log_timings (bool, optional): If True, automatically register a LogTiming hook to log
+            timing information for all hooks to the logger (e.g., wandb, tensorboard).
+            Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
+            Default is False.
     """
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        # trackers
-        cls._optim_count: int = 0
-        cls._collected_frames: int = 0
-        cls._last_log: Dict[str, Any] = {}
-        cls._last_save: int = 0
-        cls.collected_frames = 0
-        cls._app_state = None
+        # Training state trackers (used for logging and checkpointing)
+        cls._optim_count: int = 0  # Total number of optimization steps completed
+        cls._collected_frames: int = 0  # Total number of frames collected (deprecated)
+        cls._last_log: dict[
+            str, Any
+        ] = {}  # Tracks when each metric was last logged (for log_interval control)
+        cls._last_save: int = (
+            0  # Tracks when trainer was last saved (for save_interval control)
+        )
+        cls.collected_frames = 0  # Total number of frames collected (current)
+        cls._app_state = None  # Application state for checkpointing
         return super().__new__(cls)
 
     def __init__(
         self,
         *,
-        collector: DataCollectorBase,
+        collector: BaseCollector,
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: Union[LossModule, Callable[[TensorDictBase], TensorDictBase]],
-        optimizer: Optional[optim.Optimizer] = None,
-        logger: Optional[Logger] = None,
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
+        optimizer: optim.Optimizer | None = None,
+        logger: Logger | None = None,
         clip_grad_norm: bool = True,
-        clip_norm: float = None,
+        clip_norm: float | None = None,
         progress_bar: bool = True,
-        seed: int = None,
+        seed: int | None = None,
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
-        save_trainer_file: Optional[Union[str, pathlib.Path]] = None,
+        save_trainer_file: str | pathlib.Path | None = None,
+        num_epochs: int = 1,
+        async_collection: bool = False,
+        log_timings: bool = False,
     ) -> None:
 
         # objects
@@ -174,7 +200,9 @@ class Trainer:
         self.loss_module = loss_module
         self.optimizer = optimizer
         self.logger = logger
+        self.async_collection = async_collection
 
+        # Logging frequency control - how often to log each metric (in frames)
         self._log_interval = log_interval
 
         # seeding
@@ -185,6 +213,7 @@ class Trainer:
         # constants
         self.optim_steps_per_batch = optim_steps_per_batch
         self.total_frames = total_frames
+        self.num_epochs = num_epochs
         self.clip_grad_norm = clip_grad_norm
         self.clip_norm = clip_norm
         if progress_bar and not _has_tqdm:
@@ -196,23 +225,62 @@ class Trainer:
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
 
-        self._log_dict = defaultdict(lambda: [])
+        self._log_dict = defaultdict(list)
 
-        self._batch_process_ops = []
-        self._post_steps_ops = []
-        self._post_steps_log_ops = []
-        self._pre_steps_log_ops = []
-        self._post_optim_log_ops = []
-        self._pre_optim_ops = []
-        self._post_loss_ops = []
-        self._optimizer_ops = []
-        self._process_optim_batch_ops = []
-        self._post_optim_ops = []
+        # Hook collections for different stages of the training loop
+        self._batch_process_ops = (
+            []
+        )  # Process collected batches (e.g., reward normalization)
+        self._post_steps_ops = []  # After optimization steps (e.g., weight updates)
+
+        # Logging hook collections - different points in training loop where logging can occur
+        self._post_steps_log_ops = (
+            []
+        )  # After optimization steps (e.g., validation rewards)
+        self._pre_steps_log_ops = (
+            []
+        )  # Before optimization steps (e.g., rewards, frame counts)
+        self._post_optim_log_ops = (
+            []
+        )  # After each optimization step (e.g., gradient norms)
+        self._pre_epoch_log_ops = (
+            []
+        )  # Before each epoch logging (e.g., epoch-specific metrics)
+        self._post_epoch_log_ops = (
+            []
+        )  # After each epoch logging (e.g., epoch completion metrics)
+
+        # Regular hook collections for non-logging operations
+        self._pre_epoch_ops = (
+            []
+        )  # Before each epoch (e.g., epoch setup, cache clearing)
+        self._post_epoch_ops = (
+            []
+        )  # After each epoch (e.g., epoch cleanup, weight syncing)
+
+        # Optimization-related hook collections
+        self._pre_optim_ops = []  # Before optimization steps (e.g., cache clearing)
+        self._post_loss_ops = (
+            []
+        )  # After loss computation, operates on batch (e.g., priority updates)
+        self._process_loss_ops = (
+            []
+        )  # Transform loss values before optimizer (e.g., scaling, clipping)
+        self._optimizer_ops = []  # During optimization (e.g., gradient clipping)
+        self._process_optim_batch_ops = (
+            []
+        )  # Process batches for optimization (e.g., subsampling)
+        self._post_optim_ops = []  # After optimization (e.g., weight syncing)
+
         self._modules = {}
 
         if self.optimizer is not None:
             optimizer_hook = OptimizerHook(self.optimizer)
             optimizer_hook.register(self)
+
+        if log_timings:
+            log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
+            log_timing_hook.register(self)
 
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
@@ -220,6 +288,34 @@ class Trainer:
                 f"{module_name} is already registered, choose a different name."
             )
         self._modules[module_name] = module
+
+    def _wrap_hook_with_timing(
+        self, op: Callable, hook_name: str | None = None
+    ) -> Callable:
+        """Wrap a hook with timing measurement.
+
+        Args:
+            op: The hook/operation to wrap
+            hook_name: Optional name for the hook. If not provided, will be inferred from op.
+
+        Returns:
+            A wrapped version of the hook that measures execution time.
+        """
+        if hook_name is None:
+            hook_name = getattr(
+                op,
+                "__name__",
+                op.__class__.__name__ if hasattr(op, "__class__") else "unknown_hook",
+            )
+
+        def timed_hook(*args, **kwargs):
+            with timeit(f"hook/{hook_name}"):
+                return op(*args, **kwargs)
+
+        # Preserve original attributes for debugging
+        timed_hook.__wrapped__ = op
+        timed_hook.__name__ = hook_name
+        return timed_hook
 
     def _get_state(self):
         if _CKPT_BACKEND == "torchsnapshot":
@@ -248,7 +344,7 @@ class Trainer:
         }
         return self._app_state
 
-    def state_dict(self) -> Dict:
+    def state_dict(self) -> dict:
         state = self._get_state()
         state_dict = OrderedDict(
             collector=self.collector.state_dict(),
@@ -258,7 +354,7 @@ class Trainer:
         )
         return state_dict
 
-    def load_state_dict(self, state_dict: Dict) -> None:
+    def load_state_dict(self, state_dict: dict) -> None:
         model_state_dict = state_dict["loss_module"]
         collector_state_dict = state_dict["collector"]
 
@@ -296,7 +392,7 @@ class Trainer:
         if _save and self.save_trainer_file:
             self._save_trainer()
 
-    def load_from_file(self, file: Union[str, pathlib.Path], **kwargs) -> Trainer:
+    def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
@@ -316,74 +412,135 @@ class Trainer:
         np.random.seed(seed)
 
     @property
-    def collector(self) -> DataCollectorBase:
+    def collector(self) -> BaseCollector:
         return self._collector
 
     @collector.setter
-    def collector(self, collector: DataCollectorBase) -> None:
+    def collector(self, collector: BaseCollector) -> None:
         self._collector = collector
 
-    def register_op(self, dest: str, op: Callable, **kwargs) -> None:
+    def register_op(
+        self,
+        dest: Literal[
+            "batch_process",
+            "pre_optim_steps",
+            "process_optim_batch",
+            "post_loss",
+            "process_loss",
+            "optimizer",
+            "post_steps",
+            "post_optim",
+            "pre_steps_log",
+            "post_steps_log",
+            "post_optim_log",
+            "pre_epoch_log",
+            "post_epoch_log",
+            "pre_epoch",
+            "post_epoch",
+        ],
+        op: Callable,
+        **kwargs,
+    ) -> None:
+        # Wrap hook with timing for performance monitoring
+        # Get hook name from registered modules if available
+        hook_name = None
+        for name, module in self._modules.items():
+            if module is op or (callable(module) and module.__call__ is op):
+                hook_name = name
+                break
+
+        timed_op = self._wrap_hook_with_timing(op, hook_name)
+
         if dest == "batch_process":
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
-            self._batch_process_ops.append((op, kwargs))
+            self._batch_process_ops.append((timed_op, kwargs))
 
         elif dest == "pre_optim_steps":
             _check_input_output_typehint(op, input=None, output=None)
-            self._pre_optim_ops.append((op, kwargs))
+            self._pre_optim_ops.append((timed_op, kwargs))
 
         elif dest == "process_optim_batch":
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
-            self._process_optim_batch_ops.append((op, kwargs))
+            self._process_optim_batch_ops.append((timed_op, kwargs))
 
         elif dest == "post_loss":
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
-            self._post_loss_ops.append((op, kwargs))
+            self._post_loss_ops.append((timed_op, kwargs))
+
+        elif dest == "process_loss":
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
+            self._process_loss_ops.append((timed_op, kwargs))
 
         elif dest == "optimizer":
             _check_input_output_typehint(
                 op, input=[TensorDictBase, bool, float, int], output=TensorDictBase
             )
-            self._optimizer_ops.append((op, kwargs))
+            self._optimizer_ops.append((timed_op, kwargs))
 
         elif dest == "post_steps":
             _check_input_output_typehint(op, input=None, output=None)
-            self._post_steps_ops.append((op, kwargs))
+            self._post_steps_ops.append((timed_op, kwargs))
 
         elif dest == "post_optim":
             _check_input_output_typehint(op, input=None, output=None)
-            self._post_optim_ops.append((op, kwargs))
+            self._post_optim_ops.append((timed_op, kwargs))
 
         elif dest == "pre_steps_log":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=Tuple[str, float]
+                op, input=TensorDictBase, output=tuple[str, float]
             )
-            self._pre_steps_log_ops.append((op, kwargs))
+            self._pre_steps_log_ops.append((timed_op, kwargs))
 
         elif dest == "post_steps_log":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=Tuple[str, float]
+                op, input=TensorDictBase, output=tuple[str, float]
             )
-            self._post_steps_log_ops.append((op, kwargs))
+            self._post_steps_log_ops.append((timed_op, kwargs))
 
         elif dest == "post_optim_log":
             _check_input_output_typehint(
-                op, input=TensorDictBase, output=Tuple[str, float]
+                op, input=TensorDictBase, output=tuple[str, float]
             )
-            self._post_optim_log_ops.append((op, kwargs))
+            self._post_optim_log_ops.append((timed_op, kwargs))
+
+        elif dest == "pre_epoch_log":
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=tuple[str, float]
+            )
+            self._pre_epoch_log_ops.append((timed_op, kwargs))
+
+        elif dest == "post_epoch_log":
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=tuple[str, float]
+            )
+            self._post_epoch_log_ops.append((timed_op, kwargs))
+
+        elif dest == "pre_epoch":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._pre_epoch_ops.append((timed_op, kwargs))
+
+        elif dest == "post_epoch":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._post_epoch_ops.append((timed_op, kwargs))
 
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
-                f"(batch_process, pre_steps, pre_step, post_loss, post_steps, "
-                f"post_steps_log, post_optim_log)"
+                f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
+                f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
+                f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
+                f"pre_epoch, post_epoch)"
             )
+
+    register_hook = register_op
 
     # Process batch
     def _process_batch_hook(self, batch: TensorDictBase) -> TensorDictBase:
@@ -398,6 +555,12 @@ class Trainer:
             op(**kwargs)
 
     def _post_optim_log(self, batch: TensorDictBase) -> None:
+        """Execute logging hooks that run AFTER EACH optimization step.
+
+        These hooks log metrics that are computed after each individual optimization step,
+        such as gradient norms, individual loss components, or step-specific metrics.
+        Called after each optimization step within the optimization loop.
+        """
         for op, kwargs in self._post_optim_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
@@ -421,6 +584,30 @@ class Trainer:
                 batch = out
         return batch
 
+    def _process_loss_hook(
+        self, sub_batch: TensorDictBase, losses_td: TensorDictBase
+    ) -> TensorDictBase:
+        """Apply registered loss transformation hooks before optimization.
+
+        Unlike ``post_loss`` hooks which operate on the batch (e.g., for priority updates),
+        ``process_loss`` hooks transform the loss TensorDict itself. These hooks receive
+        both the sub_batch and the losses, and should return the modified losses.
+
+        Use cases include loss scaling, clipping, or applying importance weights.
+
+        Args:
+            sub_batch: The batch of data used to compute the losses.
+            losses_td: The TensorDict containing loss components from the loss module.
+
+        Returns:
+            The (possibly modified) losses TensorDict.
+        """
+        for op, kwargs in self._process_loss_ops:
+            out = op(sub_batch, losses_td, **kwargs)
+            if isinstance(out, TensorDictBase):
+                losses_td = out
+        return losses_td
+
     def _optimizer_hook(self, batch):
         for i, (op, kwargs) in enumerate(self._optimizer_ops):
             out = op(batch, self.clip_grad_norm, self.clip_norm, i, **kwargs)
@@ -432,13 +619,66 @@ class Trainer:
         for op, kwargs in self._post_optim_ops:
             op(**kwargs)
 
+    def _pre_epoch_log_hook(self, batch: TensorDictBase) -> None:
+        """Execute logging hooks that run BEFORE each epoch of optimization.
+
+        These hooks log metrics that should be computed before starting a new epoch
+        of optimization steps. Called once per epoch within the optimization loop.
+        """
+        for op, kwargs in self._pre_epoch_log_ops:
+            result = op(batch, **kwargs)
+            if result is not None:
+                self._log(**result)
+
+    def _pre_epoch_hook(self, batch: TensorDictBase, **kwargs) -> None:
+        """Execute regular hooks that run BEFORE each epoch of optimization.
+
+        These hooks perform non-logging operations before starting a new epoch
+        of optimization steps. Called once per epoch within the optimization loop.
+        """
+        for op, kwargs in self._pre_epoch_ops:
+            batch = op(batch, **kwargs)
+        return batch
+
+    def _post_epoch_log_hook(self, batch: TensorDictBase) -> None:
+        """Execute logging hooks that run AFTER each epoch of optimization.
+
+        These hooks log metrics that should be computed after completing an epoch
+        of optimization steps. Called once per epoch within the optimization loop.
+        """
+        for op, kwargs in self._post_epoch_log_ops:
+            result = op(batch, **kwargs)
+            if result is not None:
+                self._log(**result)
+
+    def _post_epoch_hook(self) -> None:
+        """Execute regular hooks that run AFTER each epoch of optimization.
+
+        These hooks perform non-logging operations after completing an epoch
+        of optimization steps. Called once per epoch within the optimization loop.
+        """
+        for op, kwargs in self._post_epoch_ops:
+            op(**kwargs)
+
     def _pre_steps_log_hook(self, batch: TensorDictBase) -> None:
+        """Execute logging hooks that run BEFORE optimization steps.
+
+        These hooks typically log metrics from the collected batch data,
+        such as rewards, frame counts, or other batch-level statistics.
+        Called once per batch collection, before any optimization occurs.
+        """
         for op, kwargs in self._pre_steps_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
                 self._log(**result)
 
     def _post_steps_log_hook(self, batch: TensorDictBase) -> None:
+        """Execute logging hooks that run AFTER optimization steps.
+
+        These hooks typically log metrics that depend on the optimization results,
+        such as validation rewards, evaluation metrics, or post-training statistics.
+        Called once per batch collection, after all optimization steps are complete.
+        """
         for op, kwargs in self._post_steps_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
@@ -449,21 +689,41 @@ class Trainer:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = {}
 
-        for batch in self.collector:
-            batch = self._process_batch_hook(batch)
-            current_frames = (
-                batch.get(("collector", "mask"), torch.tensor(batch.numel()))
-                .sum()
-                .item()
-                * self.frame_skip
-            )
-            self.collected_frames += current_frames
+        if self.async_collection:
+            self.collector.start()
+            while self.collector.getattr_rb("write_count") == 0:
+                time.sleep(0.1)
+
+            # Create async iterator that monitors write_count progress
+            iterator = self._async_iterator()
+        else:
+            iterator = self.collector
+
+        for batch in iterator:
+            if not self.async_collection:
+                batch = self._process_batch_hook(batch)
+                current_frames = (
+                    batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                    .sum()
+                    .item()
+                    * self.frame_skip
+                )
+                self.collected_frames += current_frames
+            else:
+                # In async mode, batch is None and we track frames via write_count
+                batch = None
+                cf = self.collected_frames
+                self.collected_frames = self.collector.getattr_rb("write_count")
+                current_frames = self.collected_frames - cf
+
+            # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
             self._pre_steps_log_hook(batch)
 
-            if self.collected_frames > self.collector.init_random_frames:
+            if self.collected_frames >= self.collector.init_random_frames:
                 self.optim_steps(batch)
             self._post_steps_hook()
 
+            # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
             self._post_steps_log_hook(batch)
 
             if self.progress_bar:
@@ -476,6 +736,21 @@ class Trainer:
             self.save_trainer()
 
         self.collector.shutdown()
+
+    def _async_iterator(self):
+        """Create an iterator for async collection that monitors replay buffer write_count.
+
+        This iterator yields None batches and terminates when total_frames is reached
+        based on the replay buffer's write_count rather than using a fixed range.
+        This ensures the training loop properly consumes the entire collector output.
+        """
+        while True:
+            current_write_count = self.collector.getattr_rb("write_count")
+            # Check if we've reached the target frames
+            if current_write_count >= self.total_frames:
+                break
+            else:
+                yield None
 
     def __del__(self):
         try:
@@ -492,50 +767,101 @@ class Trainer:
         average_losses = None
 
         self._pre_optim_hook()
+        optim_steps_per_batch = self.optim_steps_per_batch
+        j = -1
 
-        for j in range(self.optim_steps_per_batch):
-            self._optim_count += 1
+        for _ in range(self.num_epochs):
+            # LOGGING POINT 3: Pre-epoch logging (e.g., epoch-specific metrics)
+            self._pre_epoch_log_hook(batch)
+            # Regular pre-epoch operations (e.g., epoch setup)
+            batch_processed = self._pre_epoch_hook(batch)
 
-            sub_batch = self._process_optim_batch_hook(batch)
-            losses_td = self.loss_module(sub_batch)
-            self._post_loss_hook(sub_batch)
-
-            losses_detached = self._optimizer_hook(losses_td)
-            self._post_optim_hook()
-            self._post_optim_log(sub_batch)
-
-            if average_losses is None:
-                average_losses: TensorDictBase = losses_detached
+            if optim_steps_per_batch is None:
+                prog = itertools.count()
             else:
-                for key, item in losses_detached.items():
-                    val = average_losses.get(key)
-                    average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-            del sub_batch, losses_td, losses_detached
+                prog = range(optim_steps_per_batch)
 
-        if self.optim_steps_per_batch > 0:
+            for j in prog:
+                self._optim_count += 1
+                try:
+                    sub_batch = self._process_optim_batch_hook(batch_processed)
+                except StopIteration:
+                    break
+                if sub_batch is None:
+                    break
+                losses_td = self.loss_module(sub_batch)
+                self._post_loss_hook(sub_batch)
+
+                losses_td = self._process_loss_hook(sub_batch, losses_td)
+
+                losses_detached = self._optimizer_hook(losses_td)
+                self._post_optim_hook()
+
+                # LOGGING POINT 4: Post-optimization step logging (e.g., gradient norms, step-specific metrics)
+                self._post_optim_log(sub_batch)
+
+                if average_losses is None:
+                    average_losses: TensorDictBase = losses_detached
+                else:
+                    for key, item in losses_detached.items():
+                        val = average_losses.get(key)
+                        average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+                del sub_batch, losses_td, losses_detached
+
+            # LOGGING POINT 5: Post-epoch logging (e.g., epoch completion metrics)
+            self._post_epoch_log_hook(batch)
+            # Regular post-epoch operations (e.g., epoch cleanup)
+            self._post_epoch_hook()
+
+        if j >= 0:
+            # Log optimization statistics and average losses after completing all optimization steps
+            # This is the main logging point for training metrics like loss values and optimization step count
             self._log(
                 optim_steps=self._optim_count,
                 **average_losses,
             )
 
     def _log(self, log_pbar=False, **kwargs) -> None:
+        """Main logging method that handles both logger output and progress bar updates.
+
+        This method is called from various hooks throughout the training loop to log metrics.
+        It maintains a history of logged values and controls logging frequency based on log_interval.
+
+        Args:
+            log_pbar: If True, the value will also be displayed in the progress bar
+            **kwargs: Key-value pairs to log, where key is the metric name and value is the metric value
+        """
         collected_frames = self.collected_frames
         for key, item in kwargs.items():
+            # Store all values in history regardless of logging frequency
             self._log_dict[key].append(item)
+
+            # Check if enough frames have passed since last logging for this key
             if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
             else:
                 _log = False
+
+            # Determine logging method (defaults to "log_scalar")
             method = LOGGER_METHODS.get(key, "log_scalar")
+
+            # Log to external logger (e.g., tensorboard, wandb) if conditions are met
             if _log and self.logger is not None:
                 getattr(self.logger, method)(key, item, step=collected_frames)
+
+            # Update progress bar if requested and method is scalar
             if method == "log_scalar" and self.progress_bar and log_pbar:
                 if isinstance(item, torch.Tensor):
                     item = item.item()
                 self._pbar_str[key] = item
 
     def _pbar_description(self) -> None:
+        """Update the progress bar description with current metric values.
+
+        This method formats and displays the current values of metrics that have
+        been marked for progress bar display (log_pbar=True) in the logging hooks.
+        """
         if self.progress_bar:
             self._pbar.set_description(
                 ", ".join(
@@ -617,10 +943,10 @@ class SelectKeys(TrainerHookBase):
     def __call__(self, batch: TensorDictBase) -> TensorDictBase:
         return batch.select(*self.keys)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         pass
 
     def register(self, trainer, name="select_keys") -> None:
@@ -640,7 +966,7 @@ class ReplayBufferTrainer(TrainerHookBase):
         memmap (bool, optional): if ``True``, a memmap tensordict is created.
             Default is ``False``.
         device (device, optional): device where the samples must be placed.
-            Default is ``cpu``.
+            Default to ``None``.
         flatten_tensordicts (bool, optional): if ``True``, the tensordicts will be
             flattened (or equivalently masked with the valid mask obtained from
             the collector) before being passed to the replay buffer. Otherwise,
@@ -652,6 +978,8 @@ class ReplayBufferTrainer(TrainerHookBase):
             this list of sizes will be used to pad the tensordict and make their shape
             match before they are passed to the replay buffer. If there is no
             maximum value, a -1 value should be provided.
+        iterate (bool, optional): if ``True``, the replay buffer will be iterated over
+            in a loop. Defaults to ``False`` (call to :meth:`~torchrl.data.ReplayBuffer.sample` will be used).
 
     Examples:
         >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -664,24 +992,38 @@ class ReplayBufferTrainer(TrainerHookBase):
     def __init__(
         self,
         replay_buffer: TensorDictReplayBuffer,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         memmap: bool = False,
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING | None = None,
         flatten_tensordicts: bool = False,
-        max_dims: Optional[Sequence[int]] = None,
+        max_dims: Sequence[int] | None = None,
+        iterate: bool = False,
     ) -> None:
         self.replay_buffer = replay_buffer
+        if hasattr(replay_buffer, "update_tensordict_priority"):
+            self._update_priority = self.replay_buffer.update_tensordict_priority
+        else:
+            if isinstance(replay_buffer.sampler, PrioritizedSampler):
+                raise ValueError(
+                    "Prioritized sampler not supported for replay buffer trainer if not within a TensorDictReplayBuffer"
+                )
+            self._update_priority = None
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
         self.flatten_tensordicts = flatten_tensordicts
         self.max_dims = max_dims
+        self.iterate = iterate
+        if iterate:
+            self.replay_buffer_iter = iter(self.replay_buffer)
 
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
         if self.flatten_tensordicts:
             if ("collector", "mask") in batch.keys(True):
                 batch = batch[batch.get(("collector", "mask"))]
             else:
+                if "truncated" in batch["next"]:
+                    batch["next", "truncated"][..., -1] = True
                 batch = batch.reshape(-1)
         else:
             if self.max_dims is not None:
@@ -695,20 +1037,26 @@ class ReplayBufferTrainer(TrainerHookBase):
                     pads += [0, pad_value]
                 batch = pad(batch, pads)
         batch = batch.cpu()
-        if self.memmap:
-            # We can already place the tensords on the device if they're memmap,
-            # as this is a lazy op
-            batch = batch.memmap_().to(self.device)
         self.replay_buffer.extend(batch)
+        return batch
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
-        sample = self.replay_buffer.sample(batch_size=self.batch_size)
-        return sample.to(self.device, non_blocking=True)
+        if self.iterate:
+            try:
+                sample = next(self.replay_buffer_iter)
+            except StopIteration:
+                # reset the replay buffer
+                self.replay_buffer_iter = iter(self.replay_buffer)
+                raise
+        else:
+            sample = self.replay_buffer.sample(batch_size=self.batch_size)
+        return sample.to(self.device) if self.device is not None else sample
 
     def update_priority(self, batch: TensorDictBase) -> None:
-        self.replay_buffer.update_tensordict_priority(batch)
+        if self._update_priority is not None:
+            self._update_priority(batch)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "replay_buffer": self.replay_buffer.state_dict(),
         }
@@ -742,7 +1090,7 @@ class OptimizerHook(TrainerHookBase):
     def __init__(
         self,
         optimizer: optim.Optimizer,
-        loss_components: Optional[Sequence[str]] = None,
+        loss_components: Sequence[str] | None = None,
     ):
         if loss_components is not None and not loss_components:
             raise ValueError(
@@ -792,10 +1140,10 @@ class OptimizerHook(TrainerHookBase):
 
         return losses_td
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         pass
 
     def register(self, trainer, name="optimizer") -> None:
@@ -822,52 +1170,201 @@ class ClearCudaCache(TrainerHookBase):
             torch.cuda.empty_cache()
 
 
-class LogReward(TrainerHookBase):
-    """Reward logger hook.
+class LogTiming(TrainerHookBase):
+    """Hook to log timing information collected by timeit context managers.
+
+    This hook extracts timing data from the global timeit registry and logs it
+    to the trainer's logger (e.g., wandb, tensorboard). It's useful for profiling
+    different parts of the training loop.
 
     Args:
-        logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.
-        log_pbar (bool, optional): if ``True``, the reward value will be logged on
-            the progression bar. Default is ``False``.
-        reward_key (str or tuple, optional): the key where to find the reward
-            in the input batch. Defaults to ``("next", "reward")``
+        prefix (str, optional): Prefix to add to timing metric names.
+            Default is "time".
+        percall (bool, optional): If True, log average time per call.
+            If False, log total time. Default is True.
+        erase (bool, optional): If True, reset timing data after each log.
+            Default is False.
 
     Examples:
-        >>> log_reward = LogReward(("next", "reward"))
+        >>> # Log timing data after each optimization step
+        >>> log_timing = LogTiming(prefix="time", percall=True)
+        >>> trainer.register_op("post_optim_log", log_timing)
+
+        >>> # Log timing data after each batch collection
+        >>> log_timing = LogTiming(prefix="time", erase=True)
+        >>> trainer.register_op("post_steps_log", log_timing)
+
+    Note:
+        This hook works with timing data collected using the `timeit` context manager.
+        For example, hooks registered with `register_op` are automatically wrapped
+        with timing measurement.
+    """
+
+    def __init__(
+        self,
+        prefix: str = "time",
+        percall: bool = True,
+        erase: bool = False,
+    ):
+        self.prefix = prefix
+        self.percall = percall
+        self.erase = erase
+
+    def __call__(self, batch: TensorDictBase | None = None) -> dict:
+        """Extract timing data and return as a dict for logging.
+
+        Args:
+            batch: The batch (unused, but required by hook signature)
+
+        Returns:
+            Dictionary of timing metrics with the format {metric_name: value}
+        """
+        timing_dict = timeit.todict(percall=self.percall, prefix=self.prefix)
+
+        if self.erase:
+            timeit.erase()
+
+        return timing_dict
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return state dict for checkpointing."""
+        return {
+            "prefix": self.prefix,
+            "percall": self.percall,
+            "erase": self.erase,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load state dict from checkpoint."""
+        self.prefix = state_dict.get("prefix", "time")
+        self.percall = state_dict.get("percall", True)
+        self.erase = state_dict.get("erase", False)
+
+    def register(self, trainer: Trainer, name: str | None = None):
+        if name is None:
+            name = "log_timing"
+        trainer.register_module(name, self)
+        trainer.register_op("post_steps_log", self)
+
+
+class LogScalar(TrainerHookBase):
+    """Generic scalar logger hook for any tensor values in the batch.
+
+    This hook can log any scalar values from the collected batch data, including
+    rewards, action norms, done states, and any other metrics. It automatically
+    handles masking and computes both mean and standard deviation.
+
+    Args:
+        key (NestedKey): the key where to find the value in the input batch.
+            Can be a string for simple keys or a tuple for nested keys.
+            Default is `torchrl.trainers.trainers.REWARD_KEY` (= `("next", "reward")`).
+        logname (str, optional): name of the metric to be logged. If None, will use
+            the key as the log name. Default is None.
+        log_pbar (bool, optional): if ``True``, the value will be logged on
+            the progression bar. Default is ``False``.
+        include_std (bool, optional): if ``True``, also log the standard deviation
+            of the values. Default is ``True``.
+        reduction (str, optional): reduction method to apply. Can be "mean", "sum",
+            "min", "max". Default is "mean".
+
+    Examples:
+        >>> # Log training rewards
+        >>> log_reward = LogScalar(("next", "reward"), "r_training", log_pbar=True)
         >>> trainer.register_op("pre_steps_log", log_reward)
+
+        >>> # Log action norms
+        >>> log_action_norm = LogScalar("action", "action_norm", include_std=True)
+        >>> trainer.register_op("pre_steps_log", log_action_norm)
+
+        >>> # Log done states (as percentage)
+        >>> log_done = LogScalar(("next", "done"), "done_percentage", reduction="mean")
+        >>> trainer.register_op("pre_steps_log", log_done)
 
     """
 
     def __init__(
         self,
-        logname="r_training",
+        key: NestedKey = REWARD_KEY,
+        logname: str | None = None,
         log_pbar: bool = False,
-        reward_key: Union[str, tuple] = None,
+        include_std: bool = True,
+        reduction: str = "mean",
     ):
-        self.logname = logname
+        self.key = key
+        self.logname = logname if logname is not None else str(key)
         self.log_pbar = log_pbar
-        if reward_key is None:
-            reward_key = REWARD_KEY
-        self.reward_key = reward_key
+        self.include_std = include_std
+        self.reduction = reduction
 
-    def __call__(self, batch: TensorDictBase) -> Dict:
+        # Validate reduction method
+        if reduction not in ["mean", "sum", "min", "max"]:
+            raise ValueError(
+                f"reduction must be one of ['mean', 'sum', 'min', 'max'], got {reduction}"
+            )
+
+    def _apply_reduction(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Apply the specified reduction to the tensor."""
+        if self.reduction == "mean":
+            return tensor.float().mean()
+        elif self.reduction == "sum":
+            return tensor.sum()
+        elif self.reduction == "min":
+            return tensor.min()
+        elif self.reduction == "max":
+            return tensor.max()
+        else:
+            raise ValueError(f"Unknown reduction: {self.reduction}")
+
+    def __call__(self, batch: TensorDictBase) -> dict:
+        # Get the tensor from the batch
+        tensor = batch.get(self.key)
+
+        # Apply mask if available
         if ("collector", "mask") in batch.keys(True):
-            return {
-                self.logname: batch.get(self.reward_key)[
-                    batch.get(("collector", "mask"))
-                ]
-                .mean()
-                .item(),
-                "log_pbar": self.log_pbar,
-            }
-        return {
-            self.logname: batch.get(self.reward_key).mean().item(),
+            mask = batch.get(("collector", "mask"))
+            tensor = tensor[mask]
+
+        # Compute the main statistic
+        main_value = self._apply_reduction(tensor).item()
+
+        # Prepare the result dictionary
+        result = {
+            self.logname: main_value,
             "log_pbar": self.log_pbar,
         }
 
-    def register(self, trainer: Trainer, name: str = "log_reward"):
+        # Add standard deviation if requested
+        if self.include_std and tensor.numel() > 1:
+            std_value = tensor.std().item()
+            result[f"{self.logname}_std"] = std_value
+
+        return result
+
+    def register(self, trainer: Trainer, name: str | None = None):
+        if name is None:
+            name = f"log_{self.logname}"
         trainer.register_op("pre_steps_log", self)
         trainer.register_module(name, self)
+
+
+class LogReward(LogScalar):
+    """Deprecated class. Use LogScalar instead."""
+
+    def __init__(
+        self,
+        logname="r_training",
+        log_pbar: bool = False,
+        reward_key: str | tuple = None,
+    ):
+        warnings.warn(
+            "The 'LogReward' class is deprecated and will be removed in v0.9. Please use 'LogScalar' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # Convert old API to new API
+        if reward_key is None:
+            reward_key = REWARD_KEY
+        super().__init__(key=reward_key, logname=logname, log_pbar=log_pbar)
 
 
 class RewardNormalizer(TrainerHookBase):
@@ -895,7 +1392,7 @@ class RewardNormalizer(TrainerHookBase):
         self,
         decay: float = 0.999,
         scale: float = 1.0,
-        eps: float = None,
+        eps: float | None = None,
         log_pbar: bool = False,
         reward_key=None,
     ):
@@ -958,7 +1455,7 @@ class RewardNormalizer(TrainerHookBase):
         self._normalize_has_been_called = True
         return tensordict
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "_reward_stats": deepcopy(self._reward_stats),
             "scale": self.scale,
@@ -966,7 +1463,7 @@ class RewardNormalizer(TrainerHookBase):
             "_update_has_been_called": self._update_has_been_called,
         }
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         for key, value in state_dict.items():
             setattr(self, key, value)
 
@@ -1113,10 +1610,10 @@ class BatchSubSampler(TrainerHookBase):
             raise RuntimeError("Sampled invalid steps")
         return td
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         pass
 
     def register(self, trainer: Trainer, name: str = "batch_subsampler"):
@@ -1127,7 +1624,7 @@ class BatchSubSampler(TrainerHookBase):
         trainer.register_module(name, self)
 
 
-class Recorder(TrainerHookBase):
+class LogValidationReward(TrainerHookBase):
     """Recorder hook for :class:`~torchrl.trainers.Trainer`.
 
     Args:
@@ -1181,9 +1678,9 @@ class Recorder(TrainerHookBase):
         policy_exploration: TensorDictModule,
         environment: EnvBase = None,
         exploration_type: ExplorationType = ExplorationType.RANDOM,
-        log_keys: Optional[List[Union[str, Tuple[str]]]] = None,
-        out_keys: Optional[Dict[Union[str, Tuple[str]], str]] = None,
-        suffix: Optional[str] = None,
+        log_keys: list[str | tuple[str]] | None = None,
+        out_keys: dict[str | tuple[str], str] | None = None,
+        suffix: str | None = None,
         log_pbar: bool = False,
         recorder: EnvBase = None,
     ) -> None:
@@ -1210,7 +1707,7 @@ class Recorder(TrainerHookBase):
         self.log_pbar = log_pbar
 
     @torch.inference_mode()
-    def __call__(self, batch: TensorDictBase) -> Dict:
+    def __call__(self, batch: TensorDictBase) -> dict:
         out = None
         if self._count % self.record_interval == 0:
             with set_exploration_type(self.exploration_type):
@@ -1246,13 +1743,13 @@ class Recorder(TrainerHookBase):
         self.environment.close()
         return out
 
-    def state_dict(self) -> Dict:
+    def state_dict(self) -> dict:
         return {
             "_count": self._count,
             "recorder_state_dict": self.environment.state_dict(),
         }
 
-    def load_state_dict(self, state_dict: Dict) -> None:
+    def load_state_dict(self, state_dict: dict) -> None:
         self._count = state_dict["_count"]
         self.environment.load_state_dict(state_dict["recorder_state_dict"])
 
@@ -1264,6 +1761,67 @@ class Recorder(TrainerHookBase):
         )
 
 
+class Recorder(LogValidationReward):
+    """Deprecated class. Use LogValidationReward instead."""
+
+    def __init__(
+        self,
+        *,
+        record_interval: int,
+        record_frames: int,
+        frame_skip: int = 1,
+        policy_exploration: TensorDictModule,
+        environment: EnvBase = None,
+        exploration_type: ExplorationType = ExplorationType.RANDOM,
+        log_keys: list[str | tuple[str]] | None = None,
+        out_keys: dict[str | tuple[str], str] | None = None,
+        suffix: str | None = None,
+        log_pbar: bool = False,
+        recorder: EnvBase = None,
+    ) -> None:
+        warnings.warn(
+            "The 'Recorder' class is deprecated and will be removed in v0.9. Please use 'LogValidationReward' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(
+            record_interval=record_interval,
+            record_frames=record_frames,
+            frame_skip=frame_skip,
+            policy_exploration=policy_exploration,
+            environment=environment,
+            exploration_type=exploration_type,
+            log_keys=log_keys,
+            out_keys=out_keys,
+            suffix=suffix,
+            log_pbar=log_pbar,
+            recorder=recorder,
+        )
+
+
+def _resolve_module(trainer: Trainer, path: str):
+    """Resolve a module from a trainer using a string path.
+
+    Args:
+        trainer (Trainer): The trainer instance to resolve from.
+        path (str): A dot-separated path to the module (e.g., "loss_module.actor_network").
+
+    Returns:
+        The resolved module.
+
+    Raises:
+        AttributeError: If the path cannot be resolved.
+
+    Examples:
+        >>> module = _resolve_module(trainer, "loss_module.actor_network")
+        >>> module = _resolve_module(trainer, "collector.policy")
+    """
+    obj = trainer
+    for attr in path.split("."):
+        obj = getattr(obj, attr)
+    return obj
+
+
 class UpdateWeights(TrainerHookBase):
     """A collector weights update hook class.
 
@@ -1273,26 +1831,105 @@ class UpdateWeights(TrainerHookBase):
     intervals. If the devices match, this will result in a no-op.
 
     Args:
-        collector (DataCollectorBase): A data collector where the policy weights
+        collector (BaseCollector): A data collector where the policy weights
             must be synced.
         update_weights_interval (int): Interval (in terms of number of batches
             collected) where the sync must take place.
+        policy_weights_getter (Callable, optional): A callable that returns the policy
+            weights to sync. Used for backward compatibility. If both this and
+            weight_update_map are provided, weight_update_map takes precedence.
+        weight_update_map (dict[str, str], optional): A mapping from destination paths
+            (keys in collector's weight_sync_schemes) to source paths on the trainer.
+            Example: {"policy": "loss_module.actor_network",
+                     "replay_buffer.transforms[0]": "loss_module.critic_network"}
+        trainer (Trainer, optional): The trainer instance, required when using
+            weight_update_map to resolve source paths.
 
     Examples:
-        >>> update_weights = UpdateWeights(trainer.collector, T)
+        >>> # Legacy usage with policy_weights_getter
+        >>> update_weights = UpdateWeights(
+        ...     trainer.collector, T,
+        ...     policy_weights_getter=lambda: TensorDict.from_module(policy)
+        ... )
+        >>> trainer.register_op("post_steps", update_weights)
+
+        >>> # New usage with weight_update_map
+        >>> update_weights = UpdateWeights(
+        ...     trainer.collector, T,
+        ...     weight_update_map={
+        ...         "policy": "loss_module.actor_network",
+        ...         "replay_buffer.transforms[0]": "loss_module.critic_network"
+        ...     },
+        ...     trainer=trainer
+        ... )
         >>> trainer.register_op("post_steps", update_weights)
 
     """
 
-    def __init__(self, collector: DataCollectorBase, update_weights_interval: int):
+    def __init__(
+        self,
+        collector: BaseCollector,
+        update_weights_interval: int,
+        policy_weights_getter: Callable[[Any], Any] | None = None,
+        weight_update_map: dict[str, str] | None = None,
+        trainer: Trainer | None = None,
+    ):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
         self.counter = 0
+        self.policy_weights_getter = policy_weights_getter
+        self.weight_update_map = weight_update_map
+        self.trainer = trainer
+
+        # Validate inputs
+        if weight_update_map is not None and trainer is None:
+            raise ValueError("trainer must be provided when using weight_update_map")
 
     def __call__(self):
         self.counter += 1
         if self.counter % self.update_weights_interval == 0:
-            self.collector.update_policy_weights_()
+            # New approach: use weight_update_map if provided
+            if self.weight_update_map is not None:
+                self._update_with_map()
+            # Legacy approach: use policy_weights_getter
+            else:
+                weights = (
+                    self.policy_weights_getter()
+                    if self.policy_weights_getter is not None
+                    else None
+                )
+                if weights is not None:
+                    self.collector.update_policy_weights_(weights)
+                else:
+                    self.collector.update_policy_weights_()
+
+    def _update_with_map(self):
+        """Update weights using the weight_update_map."""
+        from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+
+        weights_dict = {}
+
+        for destination, source_path in self.weight_update_map.items():
+            # Resolve the source module from the trainer
+            source_module = _resolve_module(self.trainer, source_path)
+
+            # Get the scheme for this destination to know the extraction strategy
+            if (
+                hasattr(self.collector, "_weight_sync_schemes")
+                and self.collector._weight_sync_schemes
+                and destination in self.collector._weight_sync_schemes
+            ):
+                scheme = self.collector._weight_sync_schemes[destination]
+                strategy = WeightStrategy(extract_as=scheme.strategy_str)
+                weights = strategy.extract_weights(source_module)
+            else:
+                # Fallback: use TensorDict extraction if no scheme found
+                weights = TensorDict.from_module(source_module)
+
+            weights_dict[destination] = weights
+
+        # Send all weights atomically
+        self.collector.update_policy_weights_(weights_dict=weights_dict)
 
     def register(self, trainer: Trainer, name: str = "update_weights"):
         trainer.register_module(name, self)
@@ -1301,7 +1938,7 @@ class UpdateWeights(TrainerHookBase):
             self,
         )
 
-    def state_dict(self) -> Dict:
+    def state_dict(self) -> dict:
         return {}
 
     def load_state_dict(self, state_dict) -> None:
@@ -1334,7 +1971,7 @@ class CountFramesLog(TrainerHookBase):
         self.frame_skip = frame_skip
         self.log_pbar = log_pbar
 
-    def __call__(self, batch: TensorDictBase) -> Dict:
+    def __call__(self, batch: TensorDictBase) -> dict:
         if ("collector", "mask") in batch.keys(True):
             current_frames = (
                 batch.get(("collector", "mask")).sum().item() * self.frame_skip
@@ -1351,7 +1988,7 @@ class CountFramesLog(TrainerHookBase):
             self,
         )
 
-    def state_dict(self) -> Dict:
+    def state_dict(self) -> dict:
         return {"frame_count": self.frame_count}
 
     def load_state_dict(self, state_dict) -> None:
@@ -1359,7 +1996,7 @@ class CountFramesLog(TrainerHookBase):
 
 
 def _check_input_output_typehint(
-    func: Callable, input: Type | List[Type], output: Type
+    func: Callable, input: type | list[type], output: type
 ):
     # Placeholder for a function that checks the types input / output against expectations
     return
@@ -1376,3 +2013,100 @@ def flatten_dict(d):
         else:
             out[key] = item
     return out
+
+
+class TargetNetUpdaterHook(TrainerHookBase):
+    """A hook for target parameters update.
+
+    Examples:
+        >>> # define a loss module
+        >>> loss_module = SACLoss(actor_network, qvalue_network)
+        >>> # define a target network updater
+        >>> target_net_updater = SoftUpdate(loss_module)
+        >>> # define a target network updater hook
+        >>> target_net_updater_hook = TargetNetUpdaterHook(target_net_updater)
+        >>> # register the target network updater hook
+        >>> trainer.register_op("post_optim", target_net_updater_hook)
+    """
+
+    def __init__(self, target_params_updater: TargetNetUpdater):
+        if not isinstance(target_params_updater, TargetNetUpdater):
+            raise ValueError(
+                f"Expected a target network updater, got {type(target_params_updater)=}"
+            )
+        self.target_params_updater = target_params_updater
+
+    def __call__(self, tensordict: TensorCollection | None = None):
+        self.target_params_updater.step()
+        return tensordict
+
+    def register(self, trainer: Trainer, name: str):
+        trainer.register_op("post_steps", self)
+
+
+class UTDRHook(TrainerHookBase):
+    """Hook for logging Update-to-Data (UTD) ratio during async collection.
+
+    The UTD ratio measures how many optimization steps are performed per
+    collected data sample, providing insight into training efficiency during
+    asynchronous data collection. This metric is particularly useful for
+    off-policy algorithms where data collection and training happen concurrently.
+
+    The UTD ratio is calculated as: (batch_size * update_count) / write_count
+    where:
+    - batch_size: Size of batches sampled from replay buffer
+    - update_count: Total number of optimization steps performed
+    - write_count: Total number of samples written to replay buffer
+
+    Args:
+        trainer (Trainer): The trainer instance to monitor for UTD calculation.
+                          Must have async_collection=True for meaningful results.
+
+    Note:
+        This hook is only meaningful when async_collection is enabled, as it
+        relies on the replay buffer's write_count to track data collection progress.
+    """
+
+    def __init__(self, trainer: Trainer):
+        self.trainer = trainer
+
+    def __call__(self, batch: TensorDictBase | None = None) -> dict:
+        if (
+            hasattr(self.trainer, "replay_buffer")
+            and self.trainer.replay_buffer is not None
+        ):
+            write_count = self.trainer.replay_buffer.write_count
+            batch_size = self.trainer.replay_buffer.batch_size
+        else:
+            write_count = self.trainer.collector.getattr_rb("write_count")
+            batch_size = self.trainer.collector.getattr_rb("batch_size")
+        if not write_count:
+            return {}
+        if batch_size is None and rl_warnings():
+            warnings.warn("Batch size is not set. Using 1.")
+            batch_size = 1
+        update_count = self.trainer._optim_count
+        utd_ratio = batch_size * update_count / write_count
+        return {
+            "utd_ratio": utd_ratio,
+            "write_count": write_count,
+            "update_count": update_count,
+            "log_pbar": False,
+        }
+
+    def register(self, trainer: Trainer, name: str = "utdr_hook"):
+        """Register the UTD ratio hook with the trainer.
+
+        Args:
+            trainer (Trainer): The trainer to register with.
+            name (str): Name to use when registering the hook module.
+        """
+        trainer.register_op("pre_steps_log", self)
+        trainer.register_module(name, self)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return state dictionary for checkpointing."""
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load state from dictionary."""

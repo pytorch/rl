@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, Optional, Sequence, Union
 
 import tensordict.utils
 import torch
-
 from tensordict import MemoryMappedTensor
 from torch import Tensor
 
@@ -21,10 +20,10 @@ from .common import Logger
 class CSVExperiment:
     """A CSV logger experiment class."""
 
-    def __init__(self, log_dir: str, *, video_format="pt", video_fps=30):
-        self.scalars = defaultdict(lambda: [])
-        self.videos_counter = defaultdict(lambda: 0)
-        self.text_counter = defaultdict(lambda: 0)
+    def __init__(self, log_dir: str, *, video_format="pt", video_fps: int = 30):
+        self.scalars = defaultdict(list)
+        self.videos_counter = defaultdict(int)
+        self.text_counter = defaultdict(int)
         self.log_dir = log_dir
         self.video_format = video_format
         self.video_fps = video_fps
@@ -35,7 +34,7 @@ class CSVExperiment:
 
         self.files = {}
 
-    def add_scalar(self, name: str, value: float, global_step: Optional[int] = None):
+    def add_scalar(self, name: str, value: float, global_step: int | None = None):
         if global_step is None:
             global_step = len(self.scalars[name])
         value = float(value)
@@ -50,17 +49,18 @@ class CSVExperiment:
         fd.write(",".join([str(global_step), str(value)]) + "\n")
         fd.flush()
 
-    def add_video(self, tag, vid_tensor, global_step: Optional[int] = None, **kwargs):
+    def add_video(self, tag, vid_tensor, global_step: int | None = None, **kwargs):
         """Writes a video on a file on disk.
 
         The video format can be one of
-          - `"pt"`: uses :func:`~torch.save` to save the video tensor);
-          - `"memmap"`: saved the file as memory-mapped array (reading this file will require
-            the dtype and shape to be known at read time);
-          - `"mp4"`: saves the file as an `.mp4` file using torchvision :func:`~torchvision.io.write_video`
-            API. Any ``kwargs`` passed to ``add_video`` will be transmitted to ``write_video``.
-            These include ``preset``, ``crf`` and others.
-            See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
+
+        - `"pt"`: uses :func:`~torch.save` to save the video tensor);
+        - `"memmap"`: saved the file as memory-mapped array (reading this file will require
+          the dtype and shape to be known at read time);
+        - `"mp4"`: saves the file as an `.mp4` file using torchvision :func:`~torchvision.io.write_video`
+          API. Any ``kwargs`` passed to ``add_video`` will be transmitted to ``write_video``.
+          These include ``preset``, ``crf`` and others.
+          See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
 
         """
         if global_step is None:
@@ -105,7 +105,7 @@ class CSVExperiment:
                 f"Unknown video format {self.video_format}. Must be one of 'pt', 'memmap' or 'mp4'."
             )
 
-    def add_text(self, tag, text, global_step: Optional[int] = None):
+    def add_text(self, tag, text, global_step: int | None = None):
         if global_step is None:
             global_step = self.videos_counter[tag]
             self.videos_counter[tag] += 1
@@ -129,7 +129,7 @@ class CSVExperiment:
 
 
 class CSVLogger(Logger):
-    """A minimal-dependecy CSV logger.
+    """A minimal-dependency CSV logger.
 
     Args:
         exp_name (str): The name of the experiment.
@@ -143,6 +143,8 @@ class CSVLogger(Logger):
         video_fps (int, optional): the video frames-per-seconds if `video_format="mp4"`. Defaults to 30.
 
     """
+
+    experiment: CSVExperiment
 
     def __init__(
         self,
@@ -158,24 +160,26 @@ class CSVLogger(Logger):
         super().__init__(exp_name=exp_name, log_dir=log_dir)
         self._has_imported_moviepy = False
 
-    def _create_experiment(self) -> "CSVExperiment":
+    def _create_experiment(self) -> CSVExperiment:
         """Creates a CSV experiment."""
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return CSVExperiment(
             log_dir, video_format=self.video_format, video_fps=self.video_fps
         )
 
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.
 
         Args:
             name (str): The name of the scalar.
-            value (:obj:`float`): The value of the scalar.
+            value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged. Defaults to None.
         """
         self.experiment.add_scalar(name, value, global_step=step)
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int | None = None, **kwargs
+    ) -> None:
         """Log videos inputs to a .pt (or other format) file.
 
         Args:
@@ -202,7 +206,7 @@ class CSVLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:

@@ -7,15 +7,18 @@ from __future__ import annotations
 import functools
 import re
 import warnings
+from collections.abc import Callable, Iterable
+from copy import copy
 from enum import Enum
-from typing import Iterable, Optional, Union
+from typing import Any, TypeVar
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictModule
 from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.nn.modules import dropout
+from torch.utils._pytree import tree_map
 
 try:
     from torch import vmap
@@ -24,6 +27,7 @@ except ImportError as err:
         from functorch import vmap
     except ImportError as err_ft:
         raise err_ft from err
+from torchrl._utils import implement_for
 from torchrl.envs.utils import step_mdp
 
 try:
@@ -99,54 +103,44 @@ class _context_manager:
         return decorate_context
 
 
+TensorLike = TypeVar("TensorLike", Tensor, TensorDict)
+
+
 def distance_loss(
-    v1: torch.Tensor,
-    v2: torch.Tensor,
+    v1: TensorLike,
+    v2: TensorLike,
     loss_function: str,
     strict_shape: bool = True,
-) -> torch.Tensor:
+) -> TensorLike:
     """Computes a distance loss between two tensors.
 
     Args:
-        v1 (Tensor): a tensor with a shape compatible with v2
-        v2 (Tensor): a tensor with a shape compatible with v1
+        v1 (Tensor | TensorDict): a tensor or tensordict with a shape compatible with v2.
+        v2 (Tensor | TensorDict): a tensor or tensordict with a shape compatible with v1.
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
             Default is ``True``.
 
     Returns:
-         A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
-        two.
+         A tensor or tensordict of the shape v1.view_as(v2) or v2.view_as(v1)
+        with values equal to the distance loss between the two.
 
     """
     if v1.shape != v2.shape and strict_shape:
         raise RuntimeError(
-            f"The input tensors have shapes {v1.shape} and {v2.shape} which are incompatible."
+            f"The input tensors or tensordicts have shapes {v1.shape} and {v2.shape} which are incompatible."
         )
 
     if loss_function == "l2":
-        value_loss = F.mse_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+        return F.mse_loss(v1, v2, reduction="none")
 
-    elif loss_function == "l1":
-        value_loss = F.l1_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+    if loss_function == "l1":
+        return F.l1_loss(v1, v2, reduction="none")
 
-    elif loss_function == "smooth_l1":
-        value_loss = F.smooth_l1_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
-    else:
-        raise NotImplementedError(f"Unknown loss {loss_function}")
-    return value_loss
+    if loss_function == "smooth_l1":
+        return F.smooth_l1_loss(v1, v2, reduction="none")
+
+    raise NotImplementedError(f"Unknown loss {loss_function}.")
 
 
 class TargetNetUpdater:
@@ -159,7 +153,7 @@ class TargetNetUpdater:
 
     def __init__(
         self,
-        loss_module: "LossModule",  # noqa: F821
+        loss_module: LossModule,  # noqa: F821
     ):
         from torchrl.objectives.common import LossModule
 
@@ -284,7 +278,7 @@ class TargetNetUpdater:
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
         for key, param in self._sources.items():
-            target = self._targets.get("target_{}".format(key))
+            target = self._targets.get(f"target_{key}")
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
             self._step(param, target)
@@ -320,16 +314,16 @@ class SoftUpdate(TargetNetUpdater):
 
     def __init__(
         self,
-        loss_module: Union[
-            "DQNLoss",  # noqa: F821
-            "DDPGLoss",  # noqa: F821
-            "SACLoss",  # noqa: F821
-            "REDQLoss",  # noqa: F821
-            "TD3Loss",  # noqa: F821
-        ],
+        loss_module: (
+            DQNLoss  # noqa: F821
+            | DDPGLoss  # noqa: F821
+            | SACLoss  # noqa: F821
+            | REDQLoss  # noqa: F821
+            | TD3Loss  # noqa: F821  # noqa: F821
+        ),
         *,
-        eps: float = None,
-        tau: Optional[float] = None,
+        eps: float | None = None,
+        tau: float | None = None,
     ):
         if eps is None and tau is None:
             raise RuntimeError(
@@ -350,7 +344,7 @@ class SoftUpdate(TargetNetUpdater):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
             )
-        super(SoftUpdate, self).__init__(loss_module)
+        super().__init__(loss_module)
         self.eps = eps
 
     def _step(
@@ -375,11 +369,11 @@ class HardUpdate(TargetNetUpdater):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        loss_module: DQNLoss | DDPGLoss | SACLoss | TD3Loss,  # noqa: F821
         *,
         value_network_update_interval: float = 1000,
     ):
-        super(HardUpdate, self).__init__(loss_module)
+        super().__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
         self.counter = 0
 
@@ -441,15 +435,15 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: TensorDictBase,
-    operator: Optional[TensorDictModule] = None,
+    operator: TensorDictModule | None = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
-    pred_next_val: Optional[Tensor] = None,
+    pred_next_val: Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     """Computes the next state value (without gradient) to compute a target value.
 
-    The target value is ususally used to compute a distance loss (e.g. MSE):
+    The target value is usually used to compute a distance loss (e.g. MSE):
         L = Sum[ (q_value - target_value)^2 ]
     The target value is computed as
         r + gamma ** n_steps_to_next * value_next_state
@@ -527,7 +521,7 @@ def _cache_values(func):
     return new_func
 
 
-def _vmap_func(module, *args, func=None, **kwargs):
+def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
     try:
 
         def decorated_module(*module_args_params):
@@ -535,11 +529,14 @@ def _vmap_func(module, *args, func=None, **kwargs):
             module_args = module_args_params[:-1]
             with params.to_module(module):
                 if func is None:
-                    return module(*module_args)
+                    r = module(*module_args)
                 else:
-                    return getattr(module, func)(*module_args)
+                    r = getattr(module, func)(*module_args)
+                return r
 
-        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+        if not pseudo_vmap:
+            return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+        return _pseudo_vmap(decorated_module, *args, **kwargs)
 
     except RuntimeError as err:
         if re.match(
@@ -550,27 +547,153 @@ def _vmap_func(module, *args, func=None, **kwargs):
             ) from err
 
 
-def _reduce(tensor: torch.Tensor, reduction: str) -> Union[float, torch.Tensor]:
-    """Reduces a tensor given the reduction method."""
+@implement_for("torch", "2.7")
+def _pseudo_vmap(
+    func: Callable,
+    in_dims: Any = 0,
+    out_dims: Any = 0,
+    randomness: str | None = None,
+    *,
+    chunk_size=None,
+):
+    if randomness is not None and randomness not in ("different", "error"):
+        raise ValueError(
+            f"pseudo_vmap only supports 'different' or 'error' randomness modes, but got {randomness=}. If another mode is required, please "
+            "submit an issue in TorchRL."
+        )
+    from tensordict.nn.functional_modules import _exclude_td_from_pytree
+
+    def _unbind(d, x):
+        if d is not None and hasattr(x, "unbind"):
+            return x.unbind(d)
+        # Generator to reprod the value
+        return (copy(x) for _ in range(1000))
+
+    def _stack(d, x):
+        if d is not None:
+            x = list(x)
+            return torch.stack(list(x), d)
+        return x
+
+    @functools.wraps(func)
+    def new_func(*args, in_dims=in_dims, out_dims=out_dims, **kwargs):
+        with _exclude_td_from_pytree():
+            # Unbind inputs
+            if isinstance(in_dims, int):
+                in_dims = (in_dims,) * len(args)
+            if isinstance(out_dims, int):
+                out_dims = (out_dims,)
+
+            vs = zip(*tuple(tree_map(_unbind, in_dims, args)))
+            rs = []
+            for v in vs:
+                r = func(*v, **kwargs)
+                if not isinstance(r, tuple):
+                    r = (r,)
+                rs.append(r)
+            rs = tuple(zip(*rs))
+            vs = tuple(tree_map(_stack, out_dims, rs))
+            if len(vs) == 1:
+                return vs[0]
+            return vs
+
+    return new_func
+
+
+@implement_for("torch", None, "2.7")
+def _pseudo_vmap(  # noqa: F811
+    func: Callable,
+    in_dims: Any = 0,
+    out_dims: Any = 0,
+    randomness: str | None = None,
+    *,
+    chunk_size=None,
+):
+    @functools.wraps(func)
+    def new_func(*args, in_dims=in_dims, out_dims=out_dims, **kwargs):
+        raise NotImplementedError("This implementation is not supported for torch<2.7")
+
+    return new_func
+
+
+def _reduce(
+    tensor: torch.Tensor,
+    reduction: str,
+    mask: torch.Tensor | None = None,
+    weights: torch.Tensor | None = None,
+) -> float | torch.Tensor:
+    """Reduces a tensor given the reduction method.
+
+    Args:
+        tensor (torch.Tensor): The tensor to reduce.
+        reduction (str): The reduction method.
+        mask (torch.Tensor, optional): A mask to apply to the tensor before reducing.
+        weights (torch.Tensor, optional): Importance sampling weights for weighted reduction.
+            When provided with reduction="mean", computes: (tensor * weights).sum() / weights.sum()
+            When provided with reduction="sum", computes: (tensor * weights).sum()
+            This is used for proper bias correction with prioritized replay buffers.
+
+    Returns:
+        float | torch.Tensor: The reduced tensor.
+    """
     if reduction == "none":
-        result = tensor
+        if weights is None:
+            result = tensor
+            if mask is not None:
+                result = result[mask]
+        elif mask is not None:
+            masked_weight = weights[mask]
+            masked_tensor = tensor[mask]
+            result = masked_tensor * masked_weight
+        else:
+            result = tensor * weights
     elif reduction == "mean":
-        result = tensor.mean()
+        if weights is not None:
+            # Weighted average: (tensor * weights).sum() / weights.sum()
+            if mask is not None:
+                masked_weight = weights[mask]
+                masked_tensor = tensor[mask]
+                result = (masked_tensor * masked_weight).sum() / masked_weight.sum()
+            else:
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                result = (tensor * weights).sum() / weights.sum()
+        elif mask is not None:
+            result = tensor[mask].mean()
+        else:
+            result = tensor.mean()
     elif reduction == "sum":
-        result = tensor.sum()
+        if weights is not None:
+            # Weighted sum: (tensor * weights).sum()
+            if mask is not None:
+                masked_weight = weights[mask]
+                masked_tensor = tensor[mask]
+                result = (masked_tensor * masked_weight).sum()
+            else:
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                result = (tensor * weights).sum()
+        elif mask is not None:
+            result = tensor[mask].sum()
+        else:
+            result = tensor.sum()
     else:
         raise NotImplementedError(f"Unknown reduction method {reduction}")
     return result
 
 
 def _clip_value_loss(
-    old_state_value: torch.Tensor,
-    state_value: torch.Tensor,
-    clip_value: torch.Tensor,
-    target_return: torch.Tensor,
-    loss_value: torch.Tensor,
+    old_state_value: torch.Tensor | TensorDict,
+    state_value: torch.Tensor | TensorDict,
+    clip_value: torch.Tensor | TensorDict,
+    target_return: torch.Tensor | TensorDict,
+    loss_value: torch.Tensor | TensorDict,
     loss_critic_type: str,
-):
+) -> tuple[torch.Tensor | TensorDict, torch.Tensor]:
     """Value clipping method for loss computation.
 
     This method computes a clipped state value from the old state value and the state value,
@@ -588,7 +711,7 @@ def _clip_value_loss(
         loss_function=loss_critic_type,
     )
     # Chose the most pessimistic value prediction between clipped and non-clipped
-    loss_value = torch.max(loss_value, loss_value_clipped)
+    loss_value = torch.maximum(loss_value, loss_value_clipped)
     return loss_value, clip_fraction
 
 
@@ -596,7 +719,7 @@ def _get_default_device(net):
     for p in net.parameters():
         return p.device
     else:
-        return torch.get_default_device()
+        return getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
 
 
 def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
@@ -615,3 +738,45 @@ def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimize
             raise ValueError("Cannot group optimizers of different type.")
         params.extend(optimizer.param_groups)
     return cls(params)
+
+
+def _sum_td_features(data: TensorDictBase) -> torch.Tensor:
+    # Sum all features and return a tensor
+    return data.sum(dim="feature", reduce=True)
+
+
+def _maybe_get_or_select(
+    td,
+    key_or_keys,
+    target_shape=None,
+    padding_side: str = "left",
+    padding_value: int = 0,
+):
+    if isinstance(key_or_keys, (str, tuple)):
+        return td.get(
+            key_or_keys,
+            as_padded_tensor=True,
+            padding_side=padding_side,
+            padding_value=padding_value,
+        )
+    result = td.select(*key_or_keys)
+    if target_shape is not None and result.shape != target_shape:
+        result.batch_size = target_shape
+    return result
+
+
+def _maybe_add_or_extend_key(
+    tensor_keys: list[NestedKey],
+    key_or_list_of_keys: NestedKey | list[NestedKey],
+    prefix: NestedKey = None,
+):
+    if prefix is not None:
+        if isinstance(key_or_list_of_keys, NestedKey):
+            tensor_keys.append(unravel_key((prefix, key_or_list_of_keys)))
+        else:
+            tensor_keys.extend([unravel_key((prefix, k)) for k in key_or_list_of_keys])
+        return
+    if isinstance(key_or_list_of_keys, NestedKey):
+        tensor_keys.append(key_or_list_of_keys)
+    else:
+        tensor_keys.extend(key_or_list_of_keys)

@@ -1,0 +1,2 @@
+include torchrl/version.py
+include version.txt

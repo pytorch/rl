@@ -2,373 +2,345 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import contextlib
-import os
-import warnings
 
 import numpy as np
 import pytest
 import torch
+
 import torchrl.data.tensor_specs
 from scipy.stats import chisquare
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict.utils import _unravel_key_to_tuple
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.utils import _unravel_key_to_tuple, set_capture_non_tensor_stack
 from torchrl._utils import _make_ordinal_device
-
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     Binary,
-    BinaryDiscreteTensorSpec,
     Bounded,
-    BoundedTensorSpec,
     Categorical,
+    Choice,
     Composite,
-    CompositeSpec,
     ContinuousBox,
-    DiscreteTensorSpec,
     MultiCategorical,
-    MultiDiscreteTensorSpec,
     MultiOneHot,
-    MultiOneHotDiscreteTensorSpec,
     NonTensor,
-    NonTensorSpec,
     OneHot,
-    OneHotDiscreteTensorSpec,
     StackedComposite,
     TensorSpec,
     Unbounded,
-    UnboundedContinuous,
-    UnboundedContinuousTensorSpec,
     UnboundedDiscrete,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
+from torchrl.testing import get_available_devices, get_default_devices, set_global_var
+
+pytestmark = [
+    pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings("ignore: memoized encoding is an experimental feature"),
+]
+
+
+class TestRanges:
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.float16, torch.float64, None]
     )
-else:
-    from _utils_internal import (
-        get_available_devices,
-        get_default_devices,
-        set_global_var,
-    )
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_bounded(self, dtype, memo):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        for _ in range(100):
+            bounds = torch.randn(2).sort()[0]
+            ts = Bounded(
+                bounds[0].item(), bounds[1].item(), torch.Size((1,)), dtype=dtype
+            )
+            ts.memoize_encode(mode=memo)
+            _dtype = dtype
+            if dtype is None:
+                _dtype = torch.get_default_dtype()
 
-
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-def test_bounded(dtype):
-    torch.manual_seed(0)
-    np.random.seed(0)
-    for _ in range(100):
-        bounds = torch.randn(2).sort()[0]
-        ts = Bounded(bounds[0].item(), bounds[1].item(), torch.Size((1,)), dtype=dtype)
-        _dtype = dtype
-        if dtype is None:
-            _dtype = torch.get_default_dtype()
-
-        r = ts.rand()
-        assert ts.is_in(r)
-        assert r.dtype is _dtype
-        ts.is_in(ts.encode(bounds.mean()))
-        ts.is_in(ts.encode(bounds.mean().item()))
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
-
-
-@pytest.mark.parametrize("cls", [OneHot, Categorical])
-def test_discrete(cls):
-    torch.manual_seed(0)
-    np.random.seed(0)
-
-    ts = cls(10)
-    for _ in range(100):
-        r = ts.rand()
-        ts.to_numpy(r)
-        ts.encode(torch.tensor([5]))
-        ts.encode(torch.tensor(5).numpy())
-        ts.encode(9)
-        with pytest.raises(AssertionError), set_global_var(
-            torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
-        ):
-            ts.encode(torch.tensor([11]))  # out of bounds
-        assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
-        assert ts.is_in(r)
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
-
-
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-def test_unbounded(dtype):
-    torch.manual_seed(0)
-    np.random.seed(0)
-    ts = Unbounded(dtype=dtype)
-
-    if dtype is None:
-        dtype = torch.get_default_dtype()
-    for _ in range(100):
-        r = ts.rand()
-        ts.to_numpy(r)
-        assert ts.is_in(r)
-        assert r.dtype is dtype
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
-
-
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize("shape", [[], torch.Size([3])])
-def test_ndbounded(dtype, shape):
-    torch.manual_seed(0)
-    np.random.seed(0)
-
-    for _ in range(100):
-        lb = torch.rand(10) - 1
-        ub = torch.rand(10) + 1
-        ts = Bounded(lb, ub, dtype=dtype)
-        _dtype = dtype
-        if dtype is None:
-            _dtype = torch.get_default_dtype()
-
-        r = ts.rand(shape)
-        assert r.dtype is _dtype
-        assert r.shape == torch.Size([*shape, 10])
-        assert (r >= lb.to(dtype)).all() and (
-            r <= ub.to(dtype)
-        ).all(), f"{r[r <= lb] - lb.expand_as(r)[r <= lb]} -- {r[r >= ub] - ub.expand_as(r)[r >= ub]} "
-        ts.to_numpy(r)
-        assert ts.is_in(r)
-        ts.encode(lb + torch.rand(10) * (ub - lb))
-        ts.encode((lb + torch.rand(10) * (ub - lb)).numpy())
-
-        if not shape:
+            r = ts.rand()
+            assert (ts._project(r) == r).all()
+            assert ts.is_in(r)
+            assert r.dtype is _dtype
+            ts.is_in(ts.encode(bounds.mean()))
+            ts.erase_memoize_cache()
+            ts.is_in(ts.encode(bounds.mean().item()))
+            ts.erase_memoize_cache()
             assert (ts.encode(ts.to_numpy(r)) == r).all()
-        else:
-            with pytest.raises(RuntimeError, match="Shape mismatch"):
-                ts.encode(ts.to_numpy(r))
-            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
 
-        with pytest.raises(AssertionError), set_global_var(
-            torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
-        ):
-            ts.encode(torch.rand(10) + 3)  # out of bounds
-        with pytest.raises(AssertionError), set_global_var(
-            torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
-        ):
-            ts.to_numpy(torch.rand(10) + 3)  # out of bounds
-        assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
+    @pytest.mark.parametrize("cls", [OneHot, Categorical])
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_discrete(self, cls, memo):
+        torch.manual_seed(0)
+        np.random.seed(0)
 
+        ts = cls(10)
+        ts.memoize_encode(memo)
+        for _ in range(100):
+            r = ts.rand()
+            assert (ts._project(r) == r).all()
+            ts.to_numpy(r)
+            ts.encode(torch.tensor([5]))
+            ts.erase_memoize_cache()
+            ts.encode(torch.tensor(5).numpy())
+            ts.erase_memoize_cache()
+            ts.encode(9)
+            with pytest.raises(AssertionError), set_global_var(
+                torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
+            ):
+                ts.erase_memoize_cache()
+                ts.encode(torch.tensor([11]))  # out of bounds
+            assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
+            assert ts.is_in(r)
+            ts.erase_memoize_cache()
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
 
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize("n", range(3, 10))
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [],
-        torch.Size(
-            [
-                3,
-            ]
-        ),
-    ],
-)
-def test_ndunbounded(dtype, n, shape):
-    torch.manual_seed(0)
-    np.random.seed(0)
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.float16, torch.float64, None]
+    )
+    def test_unbounded(self, dtype):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        ts = Unbounded(dtype=dtype)
 
-    ts = Unbounded(
-        shape=[
-            n,
+        if dtype is None:
+            dtype = torch.get_default_dtype()
+        for _ in range(100):
+            r = ts.rand()
+            assert (ts._project(r) == r).all()
+            ts.to_numpy(r)
+            assert ts.is_in(r)
+            assert r.dtype is dtype
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.float16, torch.float64, None]
+    )
+    @pytest.mark.parametrize("shape", [[], torch.Size([3])])
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_ndbounded(self, dtype, shape, memo):
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        for _ in range(100):
+            lb = torch.rand(10) - 1
+            ub = torch.rand(10) + 1
+            ts = Bounded(lb, ub, dtype=dtype)
+            ts.memoize_encode(memo)
+            _dtype = dtype
+            if dtype is None:
+                _dtype = torch.get_default_dtype()
+
+            r = ts.rand(shape)
+            assert (ts._project(r) == r).all()
+            assert r.dtype is _dtype
+            assert r.shape == torch.Size([*shape, 10])
+            assert (r >= lb.to(dtype)).all() and (
+                r <= ub.to(dtype)
+            ).all(), f"{r[r <= lb] - lb.expand_as(r)[r <= lb]} -- {r[r >= ub] - ub.expand_as(r)[r >= ub]} "
+            ts.to_numpy(r)
+            assert ts.is_in(r)
+            ts.erase_memoize_cache()
+            ts.encode(lb + torch.rand(10) * (ub - lb))
+            ts.erase_memoize_cache()
+            ts.encode((lb + torch.rand(10) * (ub - lb)).numpy())
+
+            if not shape:
+                assert (ts.encode(ts.to_numpy(r)) == r).all()
+            else:
+                with pytest.raises(RuntimeError, match="Shape mismatch"):
+                    ts.erase_memoize_cache()
+                    ts.encode(ts.to_numpy(r))
+                assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
+
+            with pytest.raises(AssertionError), set_global_var(
+                torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
+            ):
+                ts.erase_memoize_cache()
+                ts.encode(torch.rand(10) + 3)  # out of bounds
+            with pytest.raises(AssertionError), set_global_var(
+                torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
+            ):
+                ts.to_numpy(torch.rand(10) + 3)  # out of bounds
+            assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.float16, torch.float64, None]
+    )
+    @pytest.mark.parametrize("n", range(3, 10))
+    @pytest.mark.parametrize("shape", [(), torch.Size([3])])
+    def test_ndunbounded(self, dtype, n, shape):
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        ts = Unbounded(shape=[n], dtype=dtype)
+
+        if dtype is None:
+            dtype = torch.get_default_dtype()
+
+        for _ in range(100):
+            r = ts.rand(shape)
+            assert (ts._project(r) == r).all()
+            assert r.shape == torch.Size(
+                [
+                    *shape,
+                    n,
+                ]
+            )
+            ts.to_numpy(r)
+            assert ts.is_in(r)
+            assert r.dtype is dtype
+            if not shape:
+                assert (ts.encode(ts.to_numpy(r)) == r).all()
+            else:
+                with pytest.raises(RuntimeError, match="Shape mismatch"):
+                    ts.encode(ts.to_numpy(r))
+                assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
+
+    @pytest.mark.parametrize("n", range(3, 10))
+    @pytest.mark.parametrize("shape", [(), torch.Size([3])])
+    def test_binary(self, n, shape):
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        ts = Binary(n)
+        for _ in range(100):
+            r = ts.rand(shape)
+            assert (ts._project(r) == r).all()
+            assert r.shape == torch.Size([*shape, n])
+            assert ts.is_in(r)
+            assert ((r == 0) | (r == 1)).all()
+            if not shape:
+                assert (ts.encode(ts.to_numpy(r)) == r).all()
+            else:
+                with pytest.raises(RuntimeError, match="Shape mismatch"):
+                    ts.encode(ts.to_numpy(r))
+                assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
+
+    @pytest.mark.parametrize(
+        "ns",
+        [
+            [5],
+            [5, 2, 3],
+            [4, 4, 1],
         ],
-        dtype=dtype,
     )
+    @pytest.mark.parametrize("shape", [(), torch.Size([3])])
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_mult_onehot(self, shape, ns, memo):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        ts = MultiOneHot(nvec=ns)
+        ts.memoize_encode(memo)
+        for _ in range(100):
+            r = ts.rand(shape)
+            assert (ts._project(r) == r).all()
+            assert r.shape == torch.Size([*shape, sum(ns)])
+            assert ts.is_in(r)
+            assert ((r == 0) | (r == 1)).all()
+            rsplit = r.split(ns, dim=-1)
+            for _r, _n in zip(rsplit, ns):
+                assert (_r.sum(-1) == 1).all()
+                assert _r.shape[-1] == _n
+            categorical = ts.to_categorical(r)
+            assert not ts.is_in(categorical)
+            # assert (ts.encode(categorical) == r).all()
+            if not shape:
+                ts.erase_memoize_cache()
+                assert (ts.encode(categorical) == r).all()
+            else:
+                with pytest.raises(RuntimeError, match="is invalid for input of size"):
+                    ts.erase_memoize_cache()
+                    ts.encode(categorical)
+                assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
 
-    if dtype is None:
-        dtype = torch.get_default_dtype()
-
-    for _ in range(100):
-        r = ts.rand(shape)
-        assert r.shape == torch.Size(
-            [
-                *shape,
-                n,
-            ]
-        )
-        ts.to_numpy(r)
-        assert ts.is_in(r)
-        assert r.dtype is dtype
-        if not shape:
-            assert (ts.encode(ts.to_numpy(r)) == r).all()
-        else:
-            with pytest.raises(RuntimeError, match="Shape mismatch"):
-                ts.encode(ts.to_numpy(r))
-            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
-
-
-@pytest.mark.parametrize("n", range(3, 10))
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [],
-        torch.Size(
-            [
-                3,
-            ]
-        ),
-    ],
-)
-def test_binary(n, shape):
-    torch.manual_seed(0)
-    np.random.seed(0)
-
-    ts = Binary(n)
-    for _ in range(100):
-        r = ts.rand(shape)
-        assert r.shape == torch.Size(
-            [
-                *shape,
-                n,
-            ]
-        )
-        assert ts.is_in(r)
-        assert ((r == 0) | (r == 1)).all()
-        if not shape:
-            assert (ts.encode(ts.to_numpy(r)) == r).all()
-        else:
-            with pytest.raises(RuntimeError, match="Shape mismatch"):
-                ts.encode(ts.to_numpy(r))
-            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
-
-
-@pytest.mark.parametrize(
-    "ns",
-    [
+    @pytest.mark.parametrize(
+        "ns",
         [
             5,
+            [5, 2, 3],
+            [4, 5, 1, 3],
+            [[1, 2], [3, 4]],
+            [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
         ],
-        [5, 2, 3],
-        [4, 4, 1],
-    ],
-)
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [],
-        torch.Size(
-            [
-                3,
-            ]
-        ),
-    ],
-)
-def test_mult_onehot(shape, ns):
-    torch.manual_seed(0)
-    np.random.seed(0)
-    ts = MultiOneHot(nvec=ns)
-    for _ in range(100):
-        r = ts.rand(shape)
-        assert r.shape == torch.Size(
-            [
-                *shape,
-                sum(ns),
-            ]
-        )
-        assert ts.is_in(r)
-        assert ((r == 0) | (r == 1)).all()
-        rsplit = r.split(ns, dim=-1)
-        for _r, _n in zip(rsplit, ns):
-            assert (_r.sum(-1) == 1).all()
-            assert _r.shape[-1] == _n
-        categorical = ts.to_categorical(r)
-        assert not ts.is_in(categorical)
-        # assert (ts.encode(categorical) == r).all()
-        if not shape:
-            assert (ts.encode(categorical) == r).all()
-        else:
-            with pytest.raises(RuntimeError, match="is invalid for input of size"):
-                ts.encode(categorical)
-            assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
-
-
-@pytest.mark.parametrize(
-    "ns",
-    [
-        5,
-        [5, 2, 3],
-        [4, 5, 1, 3],
-        [[1, 2], [3, 4]],
-        [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
-    ],
-)
-@pytest.mark.parametrize("shape", [None, [], torch.Size([3]), torch.Size([4, 5])])
-@pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
-def test_multi_discrete(shape, ns, dtype):
-    torch.manual_seed(0)
-    np.random.seed(0)
-    ts = MultiCategorical(ns, dtype=dtype)
-    _real_shape = shape if shape is not None else []
-    nvec_shape = torch.tensor(ns).size()
-    for _ in range(100):
-        r = ts.rand(shape)
-
-        assert r.shape == torch.Size(
-            [
-                *_real_shape,
-                *nvec_shape,
-            ]
-        ), (r.shape, ns, shape, _real_shape, nvec_shape)
-        assert ts.is_in(r), (r, r.shape, ns)
-    rand = torch.rand(
-        torch.Size(
-            [
-                *_real_shape,
-                *nvec_shape,
-            ]
-        )
     )
-    projection = ts._project(rand)
+    @pytest.mark.parametrize("shape", [None, [], torch.Size([3]), torch.Size([4, 5])])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
+    def test_multi_discrete(self, shape, ns, dtype):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        ts = MultiCategorical(ns, dtype=dtype)
+        _real_shape = shape if shape is not None else []
+        nvec_shape = torch.tensor(ns).size()
+        for _ in range(100):
+            r = ts.rand(shape)
 
-    assert rand.shape == projection.shape
-    assert ts.is_in(projection)
-    if projection.ndim < 1:
-        projection.fill_(-1)
-    else:
-        projection[..., 0] = -1
-    assert not ts.is_in(projection)
+            assert r.shape == torch.Size(
+                [
+                    *_real_shape,
+                    *nvec_shape,
+                ]
+            ), (r.shape, ns, shape, _real_shape, nvec_shape)
+            assert ts.is_in(r), (r, r.shape, ns)
+        rand = torch.rand(
+            torch.Size(
+                [
+                    *_real_shape,
+                    *nvec_shape,
+                ]
+            )
+        )
+        projection = ts._project(rand)
 
+        assert rand.shape == projection.shape
+        assert ts.is_in(projection)
+        if projection.ndim < 1:
+            projection.fill_(-1)
+        else:
+            projection[..., 0] = -1
+        assert not ts.is_in(projection)
 
-@pytest.mark.parametrize("n", [1, 4, 7, 99])
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])
-def test_discrete_conversion(n, device, shape):
-    categorical = Categorical(n, device=device, shape=shape)
-    shape_one_hot = [n] if not shape else [*shape, n]
-    one_hot = OneHot(n, device=device, shape=shape_one_hot)
+    @pytest.mark.parametrize("n", [1, 4, 7, 99])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])
+    def test_discrete_conversion(self, n, device, shape):
+        categorical = Categorical(n, device=device, shape=shape)
+        shape_one_hot = [n] if not shape else [*shape, n]
+        one_hot = OneHot(n, device=device, shape=shape_one_hot)
 
-    assert categorical != one_hot
-    assert categorical.to_one_hot_spec() == one_hot
-    assert one_hot.to_categorical_spec() == categorical
+        assert categorical != one_hot
+        assert categorical.to_one_hot_spec() == one_hot
+        assert one_hot.to_categorical_spec() == categorical
 
-    categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
-    assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
-    one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
-    assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
+        categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
+        assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
+        one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
+        assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
+    @pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
+    @pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_multi_discrete_conversion(self, ns, shape, device):
+        categorical = MultiCategorical(ns, device=device)
+        one_hot = MultiOneHot(ns, device=device)
 
-@pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
-@pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
-@pytest.mark.parametrize("device", get_default_devices())
-def test_multi_discrete_conversion(ns, shape, device):
-    categorical = MultiCategorical(ns, device=device)
-    one_hot = MultiOneHot(ns, device=device)
+        assert categorical != one_hot
+        assert categorical.to_one_hot_spec() == one_hot
+        assert one_hot.to_categorical_spec() == categorical
 
-    assert categorical != one_hot
-    assert categorical.to_one_hot_spec() == one_hot
-    assert one_hot.to_categorical_spec() == categorical
-
-    categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
-    assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
-    one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
-    assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
+        categorical_recon = one_hot.to_categorical(one_hot.rand(shape))
+        assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
+        one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
+        assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
@@ -412,6 +384,15 @@ class TestComposite:
         with pytest.raises(KeyError):
             _ = ts["UNK"]
 
+    def test_setitem_newshape(self, shape, is_complete, device, dtype):
+        ts = self._composite_spec(shape, is_complete, device, dtype)
+        new_spec = ts.clone()
+        new_spec.shape = torch.Size(())
+        new_spec.clear_device_()
+        ts["new_spec"] = new_spec
+        assert ts["new_spec"].shape == ts.shape
+        assert ts["new_spec"].device == ts.device
+
     def test_setitem_forbidden_keys(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         for key in {"shape", "device", "dtype", "space"}:
@@ -439,6 +420,30 @@ class TestComposite:
             )
             assert ts["bad"].device == (device if device is not None else dest)
 
+    def test_setitem_nested(self, shape, is_complete, device, dtype):
+        f = Unbounded(shape=shape, device=device, dtype=dtype)
+        g = (
+            None
+            if not is_complete
+            else Unbounded(shape=shape, device=device, dtype=dtype)
+        )
+        test = Composite(
+            a=Composite(b=Composite(c=Composite(d=Composite(e=Composite(f=f, g=g))))),
+            shape=shape,
+            device=device,
+        )
+        trials = Composite(shape=shape, device=device)
+        assert trials != test
+        trials["a", "b", "c", "d", "e", "f"] = Unbounded(
+            shape=shape, device=device, dtype=dtype
+        )
+        trials["a", "b", "c", "d", "e", "g"] = (
+            None
+            if not is_complete
+            else Unbounded(shape=shape, device=device, dtype=dtype)
+        )
+        assert trials == test
+
     def test_del(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
         assert "obs" in ts.keys()
@@ -447,8 +452,10 @@ class TestComposite:
         assert "obs" not in ts.keys()
         assert "act" in ts.keys()
 
-    def test_encode(self, shape, is_complete, device, dtype):
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_encode(self, shape, is_complete, device, dtype, memo):
         ts = self._composite_spec(shape, is_complete, device, dtype)
+        ts.memoize_encode(memo)
         if dtype is None:
             dtype = torch.get_default_dtype()
 
@@ -457,6 +464,7 @@ class TestComposite:
             raw_vals = {"obs": r["obs"].cpu().numpy()}
             if is_complete:
                 raw_vals["act"] = r["act"].cpu().numpy()
+            ts.erase_memoize_cache()
             encoded_vals = ts.encode(raw_vals)
 
             assert encoded_vals["obs"].dtype == dtype
@@ -517,8 +525,10 @@ class TestComposite:
 
     def test_device_cast_with_dtype_fails(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
-        with pytest.raises(ValueError, match="Only device casting is allowed"):
-            ts.to(torch.float16)
+        ts = ts.to(torch.float16)
+        for spec in ts.values(True, True):
+            if spec is not None:
+                assert spec.dtype == torch.float16
 
     @pytest.mark.parametrize("dest", get_available_devices())
     def test_device_cast(self, shape, is_complete, device, dtype, dest):
@@ -707,6 +717,63 @@ class TestComposite:
         assert ts["nested"].shape == (3,)
 
 
+class TestChoiceSpec:
+    @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
+    def test_choice(self, input_type):
+        if input_type == "spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+            example_in = torch.tensor(11.0)
+            example_out = torch.tensor(9.0)
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+            example_in = NonTensorData("b")
+            example_out = NonTensorData("c")
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+            example_in = NonTensorStack("a", "b", "c")
+            example_out = NonTensorStack("a", "c", "b")
+        torch.manual_seed(0)
+        for _ in range(10):
+            spec = Choice(choices)
+            res = spec.rand()
+        assert spec.is_in(res)
+        assert spec.is_in(example_in)
+        assert not spec.is_in(example_out)
+
+    def test_errors(self):
+        with pytest.raises(TypeError, match="must be a list"):
+            Choice("abc")
+
+        with pytest.raises(
+            TypeError,
+            match="must be either a TensorSpec, NonTensorData, or NonTensorStack",
+        ):
+            Choice(["abc"])
+
+        with pytest.raises(TypeError, match="must be the same type"):
+            Choice([Bounded(0, 1, (1,)), Categorical(10, (1,))])
+
+        with pytest.raises(ValueError, match="must have the same shape"):
+            Choice([Categorical(10, (1,)), Categorical(10, (2,))])
+
+        with pytest.raises(ValueError, match="must have the same dtype"):
+            Choice(
+                [
+                    Categorical(10, (2,), dtype=torch.long),
+                    Categorical(10, (2,), dtype=torch.float),
+                ]
+            )
+
+        if torch.cuda.is_available():
+            with pytest.raises(ValueError, match="must have the same device"):
+                Choice(
+                    [
+                        Categorical(10, (2,), device="cpu"),
+                        Categorical(10, (2,), device="cuda"),
+                    ]
+                )
+
+
 @pytest.mark.parametrize("shape", [(), (2, 3)])
 @pytest.mark.parametrize("device", get_default_devices())
 def test_create_composite_nested(shape, device):
@@ -726,36 +793,92 @@ def test_create_composite_nested(shape, device):
         assert c["a"].device == device
 
 
-@pytest.mark.parametrize("recurse", [True, False])
-def test_lock(recurse):
-    shape = [3, 4, 5]
-    spec = Composite(
-        a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
-        shape=shape[:1],
-    )
-    spec["a"] = spec["a"].clone()
-    spec["a", "b"] = spec["a", "b"].clone()
-    assert not spec.locked
-    spec.lock_(recurse=recurse)
-    assert spec.locked
-    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+class TestLock:
+    @pytest.mark.parametrize("recurse", [None, True, False])
+    def test_lock(self, recurse):
+        shape = [3, 4, 5]
+        spec = Composite(
+            a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
+            shape=shape[:1],
+        )
         spec["a"] = spec["a"].clone()
-    with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
-        spec.set("a", spec["a"].clone())
-    if recurse:
-        assert spec["a"].locked
+        spec["a", "b"] = spec["a", "b"].clone()
+        assert not spec.locked
+        spec.lock_(recurse=recurse)
+        assert spec.locked
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
-            spec["a"].set("b", spec["a", "b"].clone())
+            spec["a"] = spec["a"].clone()
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+            spec.set("a", spec["a"].clone())
+        if recurse in (None, True):
+            assert spec["a"].locked
+            with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+                spec["a"].set("b", spec["a", "b"].clone())
+            with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+                spec["a", "b"] = spec["a", "b"].clone()
+        else:
+            assert not spec["a"].locked
             spec["a", "b"] = spec["a", "b"].clone()
-    else:
-        assert not spec["a"].locked
+            spec["a"].set("b", spec["a", "b"].clone())
+        spec.unlock_(recurse=recurse)
+        spec["a"] = spec["a"].clone()
         spec["a", "b"] = spec["a", "b"].clone()
         spec["a"].set("b", spec["a", "b"].clone())
-    spec.unlock_(recurse=recurse)
-    spec["a"] = spec["a"].clone()
-    spec["a", "b"] = spec["a", "b"].clone()
-    spec["a"].set("b", spec["a", "b"].clone())
+
+    def test_edge_cases(self):
+        level3 = Composite()
+        level2 = Composite(level3=level3)
+        level1 = Composite(level2=level2)
+        level0 = Composite(level1=level1)
+        # locking level0 locks them all
+        level0.lock_(recurse=True)
+        assert level3.is_locked
+        # We cannot unlock level3
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a Composite that is part of a locked graph",
+        ):
+            level3.unlock_(recurse=True)
+        assert level3.is_locked
+        # Adding level2 to a new spec and locking it makes it hard to unlock the level0 root
+        new_spec = Composite(level2=level2)
+        new_spec.lock_(recurse=True)
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a Composite that is part of a locked graph",
+        ):
+            level0.unlock_(recurse=True)
+        assert level0.is_locked
+
+    def test_lock_mix_recurse_nonrecurse(self):
+        # lock with recurse
+        level3 = Composite()
+        level2 = Composite(level3=level3)
+        level1 = Composite(level2=level2)
+        level0 = Composite(level1=level1)
+        # locking level0 locks them all
+        level0.lock_(recurse=True)
+        new_spec = Composite(level2=level2)
+        new_spec.lock_(recurse=True)
+
+        # Unlock with recurse=False
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level3.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert new_spec.is_locked
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level2.unlock_(recurse=False)
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            level1.unlock_(recurse=False)
+        level0.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert level1.is_locked
+        new_spec.unlock_(recurse=False)
+        assert level3.is_locked
+        assert level2.is_locked
+        assert level1.is_locked
 
 
 def test_keys_to_empty_composite_spec():
@@ -792,7 +915,7 @@ class TestEquality:
 
         ts_other = Bounded(minimum, maximum + 1, torch.Size((1,)), device, dtype)
         assert ts != ts_other
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Bounded(minimum, maximum, torch.Size((1,)), "cuda:0", dtype)
             assert ts != ts_other
 
@@ -820,7 +943,7 @@ class TestEquality:
         )
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = OneHot(
                 n=n, device="cuda:0", dtype=dtype, use_register=use_register
             )
@@ -850,7 +973,7 @@ class TestEquality:
         ts_same = Unbounded(device=device, dtype=dtype)
         assert ts == ts_same
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Unbounded(device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -883,7 +1006,7 @@ class TestEquality:
         ts_other = Bounded(low=minimum, high=maximum + 1, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Bounded(low=minimum, high=maximum, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -911,7 +1034,7 @@ class TestEquality:
         ts_other = Categorical(n=n + 1, shape=shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Categorical(n=n, shape=shape, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -949,7 +1072,7 @@ class TestEquality:
         ts_other = Unbounded(shape=other_shape, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Unbounded(shape=shape, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -975,7 +1098,7 @@ class TestEquality:
         ts_other = Binary(n=n + 5, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = Binary(n=n, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -986,6 +1109,9 @@ class TestEquality:
             Bounded(0, 1, torch.Size((1,)), device, dtype), ts
         )
         assert ts != ts_other
+
+    def test_equality_binary_empty_shape(self):
+        assert Binary(shape=()) == Binary(shape=()).clone()
 
     @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
     def test_equality_multi_onehot(self, nvec):
@@ -1009,7 +1135,7 @@ class TestEquality:
         ts_other = MultiOneHot(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = MultiOneHot(nvec=nvec, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1043,7 +1169,7 @@ class TestEquality:
         ts_other = MultiCategorical(nvec=other_nvec, device=device, dtype=dtype)
         assert ts != ts_other
 
-        if torch.cuda.device_count():
+        if torch.cuda.is_available():
             ts_other = MultiCategorical(nvec=nvec, device="cuda:0", dtype=dtype)
             assert ts != ts_other
 
@@ -1129,7 +1255,7 @@ class TestSpec:
             (a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)
         )
 
-        actions_numpy = [int(np.random.randint(0, 10, (1,))) for a in actions_tensors]
+        actions_numpy = torch.randint(10, (len(actions_tensors),)).tolist()
         actions_tensors = [action_spec.encode(a) for a in actions_numpy]
         actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
         assert all((a1 == a2) for a1, a2 in zip(actions_numpy, actions_numpy_2))
@@ -1160,15 +1286,15 @@ class TestSpec:
         torch.manual_seed(0)
         action_spec = OneHot(10)
 
-        sample = action_spec.rand((100000,))
+        sample = action_spec.rand((20000,))
 
         sample_list = sample.long().argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
-        assert chisquare(sample_list).pvalue > 0.1
+        assert chisquare(sample_list).pvalue > 0.01
 
         sample = action_spec.to_numpy(sample)
         sample = [sum(sample == i) for i in range(10)]
-        assert chisquare(sample).pvalue > 0.1
+        assert chisquare(sample).pvalue > 0.01
 
     def test_categorical_action_spec_rand(self):
         torch.manual_seed(1)
@@ -1184,10 +1310,18 @@ class TestSpec:
         sample = [sum(sample == i) for i in range(10)]
         assert chisquare(sample).pvalue > 0.1
 
+    @pytest.mark.parametrize("dtype", [torch.int, torch.int32, torch.int64])
+    def test_categorical_action_spec_rand_masked_right_dtype(self, dtype: torch.dtype):
+        torch.manual_seed(1)
+        action_spec = Categorical(2, dtype=dtype)
+        action_spec.update_mask(torch.tensor([True, False]))
+        sample = action_spec.rand()
+        assert sample.dtype == dtype
+
     def test_mult_discrete_action_spec_rand(self):
-        torch.manual_seed(0)
+        torch.manual_seed(42)
         ns = (10, 5)
-        N = 100000
+        N = 20000
         action_spec = MultiOneHot((10, 5))
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
@@ -1206,11 +1340,11 @@ class TestSpec:
 
         sample0 = sample[:, 0]
         sample_list = [sum(sample0 == i) for i in range(ns[0])]
-        assert chisquare(sample_list).pvalue > 0.1
+        assert chisquare(sample_list).pvalue > 0.05
 
         sample1 = sample[:, 1]
         sample_list = [sum(sample1 == i) for i in range(ns[1])]
-        assert chisquare(sample_list).pvalue > 0.1
+        assert chisquare(sample_list).pvalue > 0.05
 
     def test_categorical_action_spec_encode(self):
         action_spec = Categorical(10)
@@ -1239,6 +1373,9 @@ class TestSpec:
         sample = torch.stack([spec.rand() for _ in range(100)], 0)
         assert (-3 <= sample).all() and (3 >= sample).all()
         assert sample.shape == torch.Size([100, 10, 5])
+
+    def test_binary_empty_shape_construct(self):
+        assert len(Binary(shape=()).shape) == 0
 
 
 class TestExpand:
@@ -1321,7 +1458,7 @@ class TestExpand:
             device="cpu",
             dtype=torch.float64,
         )
-        spec8 = UnboundedDiscreteTensorSpec(
+        spec8 = UnboundedDiscrete(
             shape=(*batch_size, 9),
             device="cpu",
             dtype=torch.long,
@@ -1431,12 +1568,26 @@ class TestExpand:
         assert spec2.zero().shape == spec2.shape
 
     def test_non_tensor(self):
-        spec = NonTensor((3, 4), device="cpu")
+        spec = NonTensor((3, 4), device="cpu", example_data="example_data")
         assert (
             spec.expand(2, 3, 4)
             == spec.expand((2, 3, 4))
-            == NonTensor((2, 3, 4), device="cpu")
+            == NonTensor((2, 3, 4), device="cpu", example_data="example_data")
         )
+        assert spec.expand(2, 3, 4).example_data == "example_data"
+
+    @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
+    def test_choice(self, input_type):
+        if input_type == "spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
+        res = spec.expand([3])
+        assert res.shape == torch.Size([3])
 
     @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
@@ -1497,7 +1648,7 @@ class TestExpand:
             shape1 = (15,)
         else:
             shape1 = (*shape1, 15)
-        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        spec = UnboundedDiscrete(shape=shape1, device="cpu", dtype=torch.long)
         if shape1 is not None:
             shape2_real = (*shape2, *shape1)
         else:
@@ -1576,7 +1727,7 @@ class TestClone:
             device="cpu",
             dtype=torch.float64,
         )
-        spec8 = UnboundedDiscreteTensorSpec(
+        spec8 = UnboundedDiscrete(
             shape=(*batch_size, 9),
             device="cpu",
             dtype=torch.long,
@@ -1636,7 +1787,21 @@ class TestClone:
         assert spec is not spec.clone()
 
     def test_non_tensor(self):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
+        assert spec.clone() == spec
+        assert spec.clone() is not spec
+        assert spec.clone().example_data == "example_data"
+
+    @pytest.mark.parametrize("input_type", ["spec", "nontensor", "nontensorstack"])
+    def test_choice(self, input_type):
+        if input_type == "spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
         assert spec.clone() == spec
         assert spec.clone() is not spec
 
@@ -1675,9 +1840,113 @@ class TestClone:
             shape1 = (15,)
         else:
             shape1 = (*shape1, 15)
-        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        spec = UnboundedDiscrete(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == spec.clone()
         assert spec is not spec.clone()
+
+
+class TestCardinality:
+    @pytest.mark.parametrize("shape1", [(5, 4)])
+    def test_binary(self, shape1):
+        spec = Binary(n=4, shape=shape1, device="cpu", dtype=torch.bool)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_discrete(
+        self,
+        shape1,
+    ):
+        spec = Categorical(n=4, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multidiscrete(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (3,)
+        else:
+            shape1 = (*shape1, 3)
+        spec = MultiCategorical(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec.cardinality() == len(spec.enumerate())
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multionehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = MultiOneHot(nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    def test_non_tensor(self):
+        spec = NonTensor(shape=(3, 4), device="cpu")
+        with pytest.raises(RuntimeError, match="Cannot enumerate a NonTensor."):
+            spec.cardinality()
+
+    @pytest.mark.parametrize(
+        "input_type",
+        ["bounded_spec", "categorical_spec", "nontensor", "nontensorstack"],
+    )
+    def test_choice(self, input_type):
+        if input_type == "bounded_spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "categorical_spec":
+            choices = [Categorical(10), Categorical(20)]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
+
+        if input_type == "bounded_spec":
+            assert spec.cardinality() == float("inf")
+        elif input_type == "categorical_spec":
+            assert spec.cardinality() == 30
+        elif input_type == "nontensor":
+            assert spec.cardinality() == 3
+        elif input_type == "nontensorstack":
+            assert spec.cardinality() == 2
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_onehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = OneHot(n=15, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec.cardinality() == len(list(spec.enumerate()))
+
+    def test_composite(self):
+        batch_size = (5,)
+        spec2 = Binary(n=4, shape=(*batch_size, 4), device="cpu", dtype=torch.bool)
+        spec3 = Categorical(n=4, shape=batch_size, device="cpu", dtype=torch.long)
+        spec4 = MultiCategorical(
+            nvec=(4, 5, 6), shape=(*batch_size, 3), device="cpu", dtype=torch.long
+        )
+        spec5 = MultiOneHot(
+            nvec=(4, 5, 6), shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec6 = OneHot(n=15, shape=(*batch_size, 15), device="cpu", dtype=torch.long)
+        spec = Composite(
+            spec2=spec2,
+            spec3=spec3,
+            spec4=spec4,
+            spec5=spec5,
+            spec6=spec6,
+            shape=batch_size,
+        )
+        assert spec.cardinality() == len(spec.enumerate())
 
 
 class TestUnbind:
@@ -1731,7 +2000,7 @@ class TestUnbind:
             device="cpu",
             dtype=torch.float64,
         )
-        spec8 = UnboundedDiscreteTensorSpec(
+        spec8 = UnboundedDiscrete(
             shape=(*batch_size, 9),
             device="cpu",
             dtype=torch.long,
@@ -1790,9 +2059,10 @@ class TestUnbind:
             spec.unbind(-1)
 
     def test_non_tensor(self):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
         assert spec.unbind(1)[0] == spec[:, 0]
         assert spec.unbind(1)[0] is not spec[:, 0]
+        assert spec.unbind(1)[0].example_data == "example_data"
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(
@@ -1830,7 +2100,7 @@ class TestUnbind:
             shape1 = (15,)
         else:
             shape1 = (*shape1, 15)
-        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        spec = UnboundedDiscrete(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
 
@@ -1903,7 +2173,7 @@ class TestTo:
             device="cpu",
             dtype=torch.float64,
         )
-        spec8 = UnboundedDiscreteTensorSpec(
+        spec8 = UnboundedDiscrete(
             shape=(*batch_size, 9),
             device="cpu",
             dtype=torch.long,
@@ -1951,7 +2221,25 @@ class TestTo:
         assert spec.to(device).device == device
 
     def test_non_tensor(self, device):
-        spec = NonTensor(shape=(3, 4), device="cpu")
+        spec = NonTensor(shape=(3, 4), device="cpu", example_data="example_data")
+        assert spec.to(device).device == device
+        assert spec.to(device).example_data == "example_data"
+
+    @pytest.mark.parametrize(
+        "input_type",
+        ["bounded_spec", "categorical_spec", "nontensor", "nontensorstack"],
+    )
+    def test_choice(self, input_type, device):
+        if input_type == "bounded_spec":
+            choices = [Bounded(0, 2.5, ()), Bounded(10, 12, ())]
+        elif input_type == "categorical_spec":
+            choices = [Categorical(10), Categorical(20)]
+        elif input_type == "nontensor":
+            choices = [NonTensorData("a"), NonTensorData("b")]
+        elif input_type == "nontensorstack":
+            choices = [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")]
+
+        spec = Choice(choices)
         assert spec.to(device).device == device
 
     @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
@@ -1978,7 +2266,7 @@ class TestTo:
             shape1 = (15,)
         else:
             shape1 = (*shape1, 15)
-        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        spec = UnboundedDiscrete(shape=shape1, device="cpu", dtype=torch.long)
         assert spec.to(device).device == device
 
 
@@ -1987,7 +2275,7 @@ class TestTo:
     [[(), 0], [(2,), 0], [(2,), 1], [(2, 3), 0], [(2, 3), 1], [(2, 3), 2]],
 )
 class TestStack:
-    def test_stack_binarydiscrete(self, shape, stack_dim):
+    def test_stack_Binary(self, shape, stack_dim):
         n = 5
         shape = (*shape, n)
         c1 = Binary(n=n, shape=shape)
@@ -2000,7 +2288,7 @@ class TestStack:
         shape.insert(stack_dim, 2)
         assert c.shape == torch.Size(shape)
 
-    def test_stack_binarydiscrete_expand(self, shape, stack_dim):
+    def test_stack_Binary_expand(self, shape, stack_dim):
         n = 5
         shape = (*shape, n)
         c1 = Binary(n=n, shape=shape)
@@ -2013,7 +2301,7 @@ class TestStack:
         cexpand = c.expand(3, 2, *shape)
         assert cexpand.shape == torch.Size([3, 2, *shape])
 
-    def test_stack_binarydiscrete_rand(self, shape, stack_dim):
+    def test_stack_Binary_rand(self, shape, stack_dim):
         n = 5
         shape = (*shape, n)
         c1 = Binary(n=n, shape=shape)
@@ -2022,7 +2310,7 @@ class TestStack:
         r = c.rand()
         assert r.shape == c.shape
 
-    def test_stack_binarydiscrete_zero(self, shape, stack_dim):
+    def test_stack_Binary_zero(self, shape, stack_dim):
         n = 5
         shape = (*shape, n)
         c1 = Binary(n=n, shape=shape)
@@ -2212,13 +2500,42 @@ class TestStack:
         assert r.shape == c.shape
 
     def test_stack_non_tensor(self, shape, stack_dim):
-        spec0 = NonTensor(shape=shape, device="cpu")
-        spec1 = NonTensor(shape=shape, device="cpu")
+        spec0 = NonTensor(shape=shape, device="cpu", example_data="example_data")
+        spec1 = NonTensor(shape=shape, device="cpu", example_data="example_data")
         new_spec = torch.stack([spec0, spec1], stack_dim)
         shape_insert = list(shape)
         shape_insert.insert(stack_dim, 2)
         assert new_spec.shape == torch.Size(shape_insert)
         assert new_spec.device == torch.device("cpu")
+        assert new_spec.example_data == "example_data"
+
+    @pytest.mark.parametrize(
+        "input_type",
+        ["bounded_spec", "categorical_spec", "nontensor"],
+    )
+    @set_capture_non_tensor_stack(False)
+    def test_stack_choice(self, input_type, shape, stack_dim):
+        if input_type == "bounded_spec":
+            choices = [Bounded(0, 2.5, shape), Bounded(10, 12, shape)]
+        elif input_type == "categorical_spec":
+            choices = [Categorical(10, shape), Categorical(20, shape)]
+        elif input_type == "nontensor":
+            if len(shape) == 0:
+                choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
+            else:
+                choices = [
+                    NonTensorData("a", batch_size=shape),
+                    NonTensorData("d", batch_size=shape),
+                ]
+
+        spec0 = Choice(choices)
+        spec1 = Choice(choices)
+        res = torch.stack([spec0, spec1], stack_dim)
+        assert isinstance(res, Choice)
+        assert (
+            res.shape
+            == torch.stack([torch.empty(shape), torch.empty(shape)], stack_dim).shape
+        )
 
     def test_stack_onehot(self, shape, stack_dim):
         n = 5
@@ -2298,7 +2615,7 @@ class TestStack:
 
     def test_stack_unboundedcont_zero(self, shape, stack_dim):
         shape = (*shape,)
-        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c1 = UnboundedDiscrete(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], 0)
         r = c.zero()
@@ -2306,10 +2623,10 @@ class TestStack:
 
     def test_stack_unboundeddiscrete(self, shape, stack_dim):
         shape = (*shape,)
-        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c1 = UnboundedDiscrete(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
-        assert isinstance(c, UnboundedDiscreteTensorSpec)
+        assert isinstance(c, UnboundedDiscrete)
         shape = list(shape)
         if stack_dim < 0:
             stack_dim = len(shape) + stack_dim + 1
@@ -2318,7 +2635,7 @@ class TestStack:
 
     def test_stack_unboundeddiscrete_expand(self, shape, stack_dim):
         shape = (*shape,)
-        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c1 = UnboundedDiscrete(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
         shape = list(shape)
@@ -2330,7 +2647,7 @@ class TestStack:
 
     def test_stack_unboundeddiscrete_rand(self, shape, stack_dim):
         shape = (*shape,)
-        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c1 = UnboundedDiscrete(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
         r = c.rand()
@@ -2338,7 +2655,7 @@ class TestStack:
 
     def test_stack_unboundeddiscrete_zero(self, shape, stack_dim):
         shape = (*shape,)
-        c1 = UnboundedDiscreteTensorSpec(shape=shape)
+        c1 = UnboundedDiscrete(shape=shape)
         c2 = c1.clone()
         c = torch.stack([c1, c2], stack_dim)
         r = c.zero()
@@ -2373,7 +2690,7 @@ class TestStack:
 
         c1 = Bounded(-1, 1, shape=shape, dtype=torch.float32)
         c2 = Unbounded(shape=shape, dtype=torch.float32)
-        c3 = UnboundedDiscreteTensorSpec(shape=shape, dtype=torch.float32)
+        c3 = UnboundedDiscrete(shape=shape, dtype=torch.float32)
         with pytest.raises(
             RuntimeError,
             match="Stacking specs cannot occur: Found more than one type of specs in the list.",
@@ -2481,7 +2798,7 @@ class TestLazyStackedComposite:
 
     def test_stack_index(self):
         c1 = Composite(a=Unbounded())
-        c2 = Composite(a=Unbounded(), b=UnboundedDiscreteTensorSpec())
+        c2 = Composite(a=Unbounded(), b=UnboundedDiscrete())
         c = torch.stack([c1, c2], 0)
         assert c.shape == torch.Size([2])
         assert c[0] is c1
@@ -2497,7 +2814,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2568,7 +2885,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2599,7 +2916,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2621,7 +2938,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2644,7 +2961,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2666,7 +2983,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2690,7 +3007,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], stack_dim)
@@ -2707,7 +3024,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Unbounded(shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Unbounded(shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], 0)
@@ -2719,7 +3036,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Bounded(-1, 1, shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Bounded(-1, 1, shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], 0)
@@ -2737,7 +3054,7 @@ class TestLazyStackedComposite:
         c1 = Composite(a=Bounded(-1, 1, shape=(1, 3)), shape=(1, 3))
         c2 = Composite(
             a=Bounded(-1, 1, shape=(1, 3)),
-            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            b=UnboundedDiscrete(shape=(1, 3)),
             shape=(1, 3),
         )
         c = torch.stack([c1, c2], 1)
@@ -2921,7 +3238,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3])),
+                shape=torch.Size([3]),
+                data_cls=None),
         1 ->
             lidar: BoundedContinuous(
                 shape=torch.Size([20]),
@@ -2941,7 +3259,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3])),
+                shape=torch.Size([3]),
+                data_cls=None),
         2 ->
             individual_2_obs: Composite(
                 individual_1_obs_0: UnboundedContinuous(
@@ -2953,7 +3272,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3]))}},
+                shape=torch.Size([3]),
+                data_cls=None)}},
     device=cpu,
     shape={torch.Size((3,))},
     stack_dim={c.stack_dim})"""
@@ -3122,7 +3442,7 @@ class TestLazyStackedComposite:
         assert spec["comp", "a"] == new.to(spec.device)
 
 
-# MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
+# MultiCategorical: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
     "spec_class",
     [
@@ -3153,12 +3473,12 @@ def test_invalid_indexing(spec_class, idx):
     elif spec_class == MultiOneHot:
         spec = spec_class([4], shape=[3, 4])
     elif spec_class == Composite:
-        spec = spec_class(k=UnboundedDiscreteTensorSpec(shape=(3, 4)), shape=(3,))
+        spec = spec_class(k=UnboundedDiscrete(shape=(3, 4)), shape=(3,))
     with pytest.raises(IndexError):
         spec[idx]
 
 
-# BoundedTensorSpec, MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
+# Bounded, MultiCategorical: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
     "spec_class",
     [
@@ -3167,12 +3487,12 @@ def test_invalid_indexing(spec_class, idx):
         MultiOneHot,
         OneHot,
         Unbounded,
-        UnboundedDiscreteTensorSpec,
+        UnboundedDiscrete,
         Composite,
     ],
 )
 def test_valid_indexing(spec_class):
-    # Default args. UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec
+    # Default args. UnboundedContinuous, UnboundedDiscrete, MultiCategorical, MultiOneHot
     args = {"0d": [], "2d": [], "3d": [], "4d": [], "5d": []}
     kwargs = {}
     if spec_class in [
@@ -3202,14 +3522,14 @@ def test_valid_indexing(spec_class):
         }
     elif spec_class == Composite:
         kwargs = {
-            "k1": UnboundedDiscreteTensorSpec(shape=(5, 3, 4, 6, 7, 8)),
+            "k1": UnboundedDiscrete(shape=(5, 3, 4, 6, 7, 8)),
             "k2": OneHot(n=7, shape=(5, 3, 4, 6, 7)),
         }
 
     spec_0d = spec_class(*args["0d"], **kwargs)
     if spec_class in [
         Unbounded,
-        UnboundedDiscreteTensorSpec,
+        UnboundedDiscrete,
         Composite,
     ]:
         spec_0d = spec_class(*args["0d"], shape=[], **kwargs)
@@ -3266,8 +3586,8 @@ def test_valid_indexing(spec_class):
     assert spec_3d[1:, range(3)].shape == torch.Size([4, 3, 4])
     assert spec_3d[[[[[0, 1]]]], [[0]]].shape == torch.Size([1, 1, 1, 2, 4])
     assert spec_3d[0, [[[[0, 1]]]]].shape == torch.Size([1, 1, 1, 2, 4])
-    assert spec_3d[0, ((((0, 1))))].shape == torch.Size([2, 4])
-    assert spec_3d[((((0, 1)))), [0, 2]].shape == torch.Size([2, 4])
+    assert spec_3d[0, ((0, 1))].shape == torch.Size([2, 4])
+    assert spec_3d[((0, 1)), [0, 2]].shape == torch.Size([2, 4])
     assert spec_4d[2:, [[[0, 1]]], :3].shape == torch.Size([3, 1, 1, 2, 3, 6])
     assert spec_5d[2:, [[[0, 1]]], [[0, 1]], :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
     assert spec_5d[2:, [[[0, 1]]], 0, :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
@@ -3489,7 +3809,7 @@ class TestDynamicSpec:
         xunb = x
         assert spec.is_in(x)
 
-        spec = UnboundedDiscreteTensorSpec((-1, 1, 2))
+        spec = UnboundedDiscrete((-1, 1, 2))
         unbd = spec
         assert spec.shape == (-1, 1, 2)
         x = torch.randint(10, (3, 1, 2))
@@ -3563,12 +3883,13 @@ class TestDynamicSpec:
 
     def test_expand(self):
         unb = Unbounded((-1, 1, 2))
-        unbd = UnboundedDiscreteTensorSpec((-1, 1, 2))
+        unbd = UnboundedDiscrete((-1, 1, 2))
         bound = Bounded(shape=(-1, 1, 2), low=-1, high=1)
         oneh = OneHot(shape=(-1, 1, 2, 4), n=4)
         disc = Categorical(shape=(-1, 1, 2), n=4)
         moneh = MultiOneHot(shape=(-1, 1, 2, 7), nvec=[3, 4])
         mdisc = MultiCategorical(shape=(-1, 1, 2, 2), nvec=[3, 4])
+        binary = Binary(shape=(-1, 1, 2))
 
         spec = Composite(
             unb=unb,
@@ -3578,6 +3899,7 @@ class TestDynamicSpec:
             disc=disc,
             moneh=moneh,
             mdisc=mdisc,
+            binary=binary,
             shape=(-1, 1, 2),
         )
         assert spec.shape == (-1, 1, 2)
@@ -3590,12 +3912,50 @@ class TestDynamicSpec:
             spec.expand(3, 3, 1, 2)
 
 
-class TestNonTensorSpec:
+class TestNonTensor:
     def test_sample(self):
-        nts = NonTensor(shape=(3, 4))
+        nts = NonTensor(shape=(3, 4), example_data="example_data")
         assert nts.one((2,)).shape == (2, 3, 4)
         assert nts.rand((2,)).shape == (2, 3, 4)
         assert nts.zero((2,)).shape == (2, 3, 4)
+        assert nts.one((2,)).data == "example_data"
+        assert nts.rand((2,)).data == "example_data"
+        assert nts.zero((2,)).data == "example_data"
+
+    def test_feature_dims(self):
+        nts = NonTensor(shape=(3, 4), example_data="example_data")
+        assert nts.feature_dims == 2
+        nts = NonTensor(shape=(3, 4), example_data="example_data", feature_dims=1)
+        assert nts.feature_dims == 1
+        assert isinstance(nts.zeros(), NonTensorStack)
+        assert isinstance(nts.zeros(2), NonTensorStack)
+        assert isinstance(nts.zeros()[0], NonTensorData)
+        assert nts.rand((2,)).shape == (2, 3, 4)
+
+    def test_example_data_ineq(self):
+        nts0 = NonTensor(shape=(3, 4), example_data="example_data")
+        nts1 = NonTensor(shape=(3, 4), example_data="example_data 2")
+        assert nts0 != nts1
+
+    def test_device_cast(self):
+        comp = Composite(device="cpu")
+        comp["nontensor"] = NonTensor(device=None)
+        assert comp["nontensor"].device == torch.device("cpu")
+        comp["nontensor"] = NonTensor(device="cpu")
+        assert comp["nontensor"].device == torch.device("cpu")
+
+    def test_encode(self):
+        nt = NonTensor(shape=(1,))
+        r = nt.encode("a string")
+        assert isinstance(r, NonTensorData)
+        assert r.shape == nt.shape
+
+        comp = Composite(device="cpu")
+        comp["nontensor"] = nt
+        r = comp.encode({"nontensor": "a string"})
+        assert isinstance(r, TensorDict)
+        assert isinstance(r.get("nontensor"), NonTensorData)
+        assert r.get("nontensor").shape == (1,)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
@@ -3612,7 +3972,7 @@ def test_device_ordinal():
     device = torch.device("cuda")
     unb = Unbounded((-1, 1, 2), device=device)
     assert unb.device == torch.device("cuda:0")
-    unbd = UnboundedDiscreteTensorSpec((-1, 1, 2), device=device)
+    unbd = UnboundedDiscrete((-1, 1, 2), device=device)
     assert unbd.device == torch.device("cuda:0")
     bound = Bounded(shape=(-1, 1, 2), low=-1, high=1, device=device)
     assert bound.device == torch.device("cuda:0")
@@ -3641,184 +4001,58 @@ def test_device_ordinal():
     assert spec.device == torch.device("cuda:0")
 
 
-class TestLegacy:
-    def test_one_hot(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The OneHotDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use OneHot instead.",
-        ):
-            one_hot = OneHotDiscreteTensorSpec(n=4)
-        assert isinstance(one_hot, OneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, OneHot)
-        assert not isinstance(one_hot, Categorical)
-        one_hot = OneHot(n=4)
-        assert isinstance(one_hot, OneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, OneHot)
-        assert not isinstance(one_hot, Categorical)
+class TestBatchSizeBox:
+    def test_batch_size_box_same(self):
+        spec = Bounded(shape=(10, 2), low=-1, high=1, device=torch.device("cpu"))
+        spec.shape = (10, 2)
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+        c_spec = Composite(b=spec, shape=(10,))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (2,)
+        assert spec.space._high.shape == (2,)
+        c_spec = Composite(b=spec, shape=(10, 2))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == ()
+        assert spec.space._high.shape == ()
+        c_spec = Composite(b=spec, shape=())
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
 
-    def test_discrete(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The DiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use Categorical instead.",
-        ):
-            discrete = DiscreteTensorSpec(n=4)
-        assert isinstance(discrete, DiscreteTensorSpec)
-        assert isinstance(discrete, Categorical)
-        assert not isinstance(discrete, OneHot)
-        discrete = Categorical(n=4)
-        assert isinstance(discrete, DiscreteTensorSpec)
-        assert isinstance(discrete, Categorical)
-        assert not isinstance(discrete, OneHot)
-
-    def test_unbounded(self):
-
-        unbounded_continuous_impl = Unbounded(dtype=torch.float)
-        assert isinstance(unbounded_continuous_impl, Unbounded)
-        assert isinstance(unbounded_continuous_impl, UnboundedContinuous)
-        assert isinstance(unbounded_continuous_impl, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_continuous_impl, UnboundedDiscreteTensorSpec)
-
-        unbounded_discrete_impl = Unbounded(dtype=torch.int)
-        assert isinstance(unbounded_discrete_impl, Unbounded)
-        assert isinstance(unbounded_discrete_impl, UnboundedDiscrete)
-        assert isinstance(unbounded_discrete_impl, UnboundedDiscreteTensorSpec)
-        assert not isinstance(unbounded_discrete_impl, UnboundedContinuousTensorSpec)
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="The UnboundedContinuousTensorSpec has been deprecated and will be removed in v0.7. Please use Unbounded instead.",
-        ):
-            unbounded_continuous = UnboundedContinuousTensorSpec()
-        assert isinstance(unbounded_continuous, Unbounded)
-        assert isinstance(unbounded_continuous, UnboundedContinuous)
-        assert isinstance(unbounded_continuous, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_continuous, UnboundedDiscreteTensorSpec)
-
-        with warnings.catch_warnings():
-            unbounded_continuous = UnboundedContinuous()
-
-        with pytest.warns(
-            DeprecationWarning,
-            match="The UnboundedDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use Unbounded instead.",
-        ):
-            unbounded_discrete = UnboundedDiscreteTensorSpec()
-        assert isinstance(unbounded_discrete, Unbounded)
-        assert isinstance(unbounded_discrete, UnboundedDiscrete)
-        assert isinstance(unbounded_discrete, UnboundedDiscreteTensorSpec)
-        assert not isinstance(unbounded_discrete, UnboundedContinuousTensorSpec)
-
-        with warnings.catch_warnings():
-            unbounded_discrete = UnboundedDiscrete()
-
-        # What if we mess with dtypes?
-        with pytest.warns(DeprecationWarning):
-            unbounded_continuous_fake = UnboundedContinuousTensorSpec(dtype=torch.int32)
-        assert isinstance(unbounded_continuous_fake, Unbounded)
-        assert not isinstance(unbounded_continuous_fake, UnboundedContinuous)
-        assert not isinstance(unbounded_continuous_fake, UnboundedContinuousTensorSpec)
-        assert isinstance(unbounded_continuous_fake, UnboundedDiscrete)
-        assert isinstance(unbounded_continuous_fake, UnboundedDiscreteTensorSpec)
-
-        with pytest.warns(DeprecationWarning):
-            unbounded_discrete_fake = UnboundedDiscreteTensorSpec(dtype=torch.float32)
-        assert isinstance(unbounded_discrete_fake, Unbounded)
-        assert isinstance(unbounded_discrete_fake, UnboundedContinuous)
-        assert isinstance(unbounded_discrete_fake, UnboundedContinuousTensorSpec)
-        assert not isinstance(unbounded_discrete_fake, UnboundedDiscrete)
-        assert not isinstance(unbounded_discrete_fake, UnboundedDiscreteTensorSpec)
-
-    def test_multi_one_hot(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The MultiOneHotDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use MultiOneHot instead.",
-        ):
-            one_hot = MultiOneHotDiscreteTensorSpec(nvec=[4, 3])
-        assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, MultiOneHot)
-        assert not isinstance(one_hot, MultiCategorical)
-        one_hot = MultiOneHot(nvec=[4, 3])
-        assert isinstance(one_hot, MultiOneHotDiscreteTensorSpec)
-        assert isinstance(one_hot, MultiOneHot)
-        assert not isinstance(one_hot, MultiCategorical)
-
-    def test_multi_categorical(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The MultiDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use MultiCategorical instead.",
-        ):
-            categorical = MultiDiscreteTensorSpec(nvec=[4, 3])
-        assert isinstance(categorical, MultiDiscreteTensorSpec)
-        assert isinstance(categorical, MultiCategorical)
-        assert not isinstance(categorical, MultiOneHot)
-        categorical = MultiCategorical(nvec=[4, 3])
-        assert isinstance(categorical, MultiDiscreteTensorSpec)
-        assert isinstance(categorical, MultiCategorical)
-        assert not isinstance(categorical, MultiOneHot)
-
-    def test_binary(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The BinaryDiscreteTensorSpec has been deprecated and will be removed in v0.7. Please use Binary instead.",
-        ):
-            binary = BinaryDiscreteTensorSpec(5)
-        assert isinstance(binary, BinaryDiscreteTensorSpec)
-        assert isinstance(binary, Binary)
-        assert not isinstance(binary, MultiOneHot)
-        binary = Binary(5)
-        assert isinstance(binary, BinaryDiscreteTensorSpec)
-        assert isinstance(binary, Binary)
-        assert not isinstance(binary, MultiOneHot)
-
-    def test_bounded(self):
-        with pytest.warns(
-            DeprecationWarning,
-            match="The BoundedTensorSpec has been deprecated and will be removed in v0.7. Please use Bounded instead.",
-        ):
-            bounded = BoundedTensorSpec(-2, 2, shape=())
-        assert isinstance(bounded, BoundedTensorSpec)
-        assert isinstance(bounded, Bounded)
-        assert not isinstance(bounded, MultiOneHot)
-        bounded = Bounded(-2, 2, shape=())
-        assert isinstance(bounded, BoundedTensorSpec)
-        assert isinstance(bounded, Bounded)
-        assert not isinstance(bounded, MultiOneHot)
-
-    def test_composite(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The CompositeSpec has been deprecated and will be removed in v0.7. Please use Composite instead.",
-            )
-        ):
-            composite = CompositeSpec()
-        assert isinstance(composite, CompositeSpec)
-        assert isinstance(composite, Composite)
-        assert not isinstance(composite, MultiOneHot)
-        composite = Composite()
-        assert isinstance(composite, CompositeSpec)
-        assert isinstance(composite, Composite)
-        assert not isinstance(composite, MultiOneHot)
-
-    def test_non_tensor(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The NonTensorSpec has been deprecated and will be removed in v0.7. Please use NonTensor instead.",
-            )
-        ):
-            non_tensor = NonTensorSpec()
-        assert isinstance(non_tensor, NonTensorSpec)
-        assert isinstance(non_tensor, NonTensor)
-        assert not isinstance(non_tensor, MultiOneHot)
-        non_tensor = NonTensor()
-        assert isinstance(non_tensor, NonTensorSpec)
-        assert isinstance(non_tensor, NonTensor)
-        assert not isinstance(non_tensor, MultiOneHot)
+    def test_batch_size_box_diff(self):
+        spec = Bounded(
+            shape=(10, 2),
+            low=-torch.arange(20).view(10, 2),
+            high=torch.arange(20).view(10, 2),
+            device=torch.device("cpu"),
+        )
+        spec.shape = (10, 2)
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+        c_spec = Composite(b=spec, shape=(10,))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
 
 
 class TestSpecEnumerate:
     def test_discrete(self):
-        spec = DiscreteTensorSpec(n=5, shape=(3,))
+        spec = Categorical(n=5, shape=(3,))
         assert (
             spec.enumerate()
             == torch.tensor([[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]])
@@ -3826,7 +4060,7 @@ class TestSpecEnumerate:
         assert spec.is_in(spec.enumerate())
 
     def test_one_hot(self):
-        spec = OneHotDiscreteTensorSpec(n=5, shape=(2, 5))
+        spec = OneHot(n=5, shape=(2, 5))
         assert (
             spec.enumerate()
             == torch.tensor(
@@ -3843,22 +4077,22 @@ class TestSpecEnumerate:
         assert spec.is_in(spec.enumerate())
 
     def test_multi_discrete(self):
-        spec = MultiDiscreteTensorSpec([3, 4, 5], shape=(2, 3))
+        spec = MultiCategorical([3, 4, 5], shape=(2, 3))
         enum = spec.enumerate()
         assert spec.is_in(enum)
         assert enum.shape == torch.Size([60, 2, 3])
 
     def test_multi_onehot(self):
-        spec = MultiOneHotDiscreteTensorSpec([3, 4, 5], shape=(2, 12))
+        spec = MultiOneHot([3, 4, 5], shape=(2, 12))
         enum = spec.enumerate()
         assert spec.is_in(enum)
         assert enum.shape == torch.Size([60, 2, 12])
 
     def test_composite(self):
-        c = CompositeSpec(
+        c = Composite(
             {
-                "a": OneHotDiscreteTensorSpec(n=5, shape=(3, 5)),
-                ("b", "c"): DiscreteTensorSpec(n=4, shape=(3,)),
+                "a": OneHot(n=5, shape=(3, 5)),
+                ("b", "c"): Categorical(n=4, shape=(3,)),
             },
             shape=[3],
         )
@@ -3866,6 +4100,311 @@ class TestSpecEnumerate:
         assert c.is_in(c_enum)
         assert c_enum.shape == torch.Size((20, 3))
         assert c_enum["b"].shape == torch.Size((20, 3))
+
+
+class TestCompositeNames:
+    """Test the names functionality of Composite specs."""
+
+    def test_names_property_basic(self):
+        """Test basic names property functionality."""
+        # Test with names
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+        assert spec.names == ["batch", "time"]
+        assert spec._has_names() is True
+
+        # Test without names
+        spec_no_names = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+        assert spec_no_names.names == [None, None]
+        assert spec_no_names._has_names() is False
+
+    def test_names_setter(self):
+        """Test setting names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+
+        # Set names
+        spec.names = ["batch", "time"]
+        assert spec.names == ["batch", "time"]
+        assert spec._has_names() is True
+
+        # Clear names
+        spec.names = None
+        assert spec.names == [None, None]
+        assert spec._has_names() is False
+
+    def test_names_setter_validation(self):
+        """Test names setter validation."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+
+        # Test wrong number of names
+        with pytest.raises(ValueError, match="Expected 2 names, but got 3 names"):
+            spec.names = ["batch", "time", "extra"]
+
+    def test_refine_names_basic(self):
+        """Test basic refine_names functionality."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5, 3)
+        )
+
+        # Initially no names
+        assert spec.names == [None, None, None]
+        assert spec._has_names() is False
+
+        # Refine names
+        spec_refined = spec.refine_names(None, None, "feature")
+        assert spec_refined.names == [None, None, "feature"]
+        assert spec_refined._has_names() is True
+
+    def test_refine_names_ellipsis(self):
+        """Test refine_names with ellipsis."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5, 3),
+            names=["batch", None, None],
+        )
+
+        # Use ellipsis to fill remaining dimensions
+        spec_refined = spec.refine_names("batch", ...)
+        assert spec_refined.names == ["batch", None, None]
+
+    def test_refine_names_validation(self):
+        """Test refine_names validation."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        # Try to refine to different name
+        with pytest.raises(RuntimeError, match="cannot coerce Composite names"):
+            spec.refine_names("batch", "different")
+
+    def test_expand_preserves_names(self):
+        """Test that expand preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        expanded = spec.expand(5, 10)
+        assert expanded.names == [None, "batch"]
+        assert expanded.shape == torch.Size([5, 10])
+
+    def test_squeeze_preserves_names(self):
+        """Test that squeeze preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 1, 5, 3, 4))},
+            shape=(10, 1, 5),
+            names=["batch", "dummy", "time"],
+        )
+
+        squeezed = spec.squeeze(1)  # Remove the dimension with size 1
+        assert squeezed.names == ["batch", "time"]
+        assert squeezed.shape == torch.Size([10, 5])
+
+    def test_squeeze_all_ones_clears_names(self):
+        """Test that squeezing all dimensions clears names if all become None."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(1, 1, 3, 4))},
+            shape=(1, 1),
+            names=["dummy1", "dummy2"],
+        )
+
+        squeezed = spec.squeeze()
+        assert squeezed.names == []  # All dimensions removed, so no names
+        assert squeezed.shape == torch.Size([])
+
+    def test_unsqueeze_preserves_names(self):
+        """Test that unsqueeze preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        unsqueezed = spec.unsqueeze(1)
+        assert unsqueezed.names == ["batch", None, "time"]
+        assert unsqueezed.shape == torch.Size([10, 1, 5])
+
+    def test_unbind_preserves_names(self):
+        """Test that unbind preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(3, 5, 3, 4))},
+            shape=(3, 5),
+            names=["batch", "time"],
+        )
+
+        unbound = spec.unbind(0)
+        assert len(unbound) == 3
+        for spec_item in unbound:
+            assert spec_item.names == ["time"]
+            assert spec_item.shape == torch.Size([5])
+
+    def test_clone_preserves_names(self):
+        """Test that clone preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        cloned = spec.clone()
+        assert cloned.names == ["batch"]
+        assert cloned.shape == spec.shape
+        assert cloned is not spec  # Different objects
+
+    def test_to_preserves_names(self):
+        """Test that to() preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        moved = spec.to("cpu")
+        assert moved.names == ["batch"]
+        assert moved.device == torch.device("cpu")
+
+    def test_indexing_preserves_names(self):
+        """Test that indexing preserves names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        # Test single dimension indexing
+        indexed = spec[0]
+        assert indexed.names == ["time"]
+        assert indexed.shape == torch.Size([5])
+
+        # Test slice indexing
+        sliced = spec[0:5]
+        assert sliced.names == ["batch", "time"]
+        assert sliced.shape == torch.Size([5, 5])
+
+    def test_nested_composite_names_propagation(self):
+        """Test that names are propagated to nested Composite specs."""
+        nested_spec = Composite(
+            {
+                "outer": Composite(
+                    {"inner": Bounded(low=-1, high=1, shape=(10, 3, 2))}, shape=(10, 3)
+                )
+            },
+            shape=(10,),
+            names=["batch"],
+        )
+
+        assert nested_spec.names == ["batch"]
+        assert nested_spec["outer"].names == ["batch", None]
+
+    def test_erase_names(self):
+        """Test erasing names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        assert spec._has_names() is True
+        spec._erase_names()
+        assert spec._has_names() is False
+        assert spec.names == [None]
+
+    def test_names_with_different_shapes(self):
+        """Test names with different spec shapes."""
+        spec = Composite(
+            {
+                "obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4)),
+                "action": Bounded(low=0, high=1, shape=(10, 5, 2)),
+            },
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+
+        assert spec.names == ["batch", "time"]
+        assert spec["obs"].shape == torch.Size([10, 5, 3, 4])
+        assert spec["action"].shape == torch.Size([10, 5, 2])
+
+    def test_names_constructor_parameter(self):
+        """Test names parameter in constructor."""
+        # Test with names
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))},
+            shape=(10, 5),
+            names=["batch", "time"],
+        )
+        assert spec.names == ["batch", "time"]
+
+        # Test without names
+        spec_no_names = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 5, 3, 4))}, shape=(10, 5)
+        )
+        assert spec_no_names.names == [None, None]
+
+    def test_names_with_empty_composite(self):
+        """Test names with empty Composite."""
+        spec = Composite({}, shape=(10,), names=["batch"])
+        assert spec.names == ["batch"]
+        assert spec._has_names() is True
+
+    def test_names_equality(self):
+        """Test that names don't affect equality."""
+        spec1 = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        spec2 = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))}, shape=(10,)
+        )
+
+        # They should be equal despite different names
+        assert spec1 == spec2
+
+    def test_names_repr(self):
+        """Test that names don't break repr."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+
+        # Should not raise an error
+        repr_str = repr(spec)
+        assert "Composite" in repr_str
+        assert "obs" in repr_str
+
+    def test_zero_create_names(self):
+        """Test that creating tensors with 'zero' propagates names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+        td = spec.zero()
+        td.names = ["batch"]
+
+    def test_rand_create_names(self):
+        """Test that creating tensors with 'rand' propagates names."""
+        spec = Composite(
+            {"obs": Bounded(low=-1, high=1, shape=(10, 3, 4))},
+            shape=(10,),
+            names=["batch"],
+        )
+        td = spec.rand()
+        td.names = ["batch"]
 
 
 if __name__ == "__main__":

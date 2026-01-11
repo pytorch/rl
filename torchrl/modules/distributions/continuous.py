@@ -4,30 +4,27 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import warnings
 import weakref
+from collections.abc import Callable, Sequence
 from numbers import Number
-from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from packaging import version
 from torch import distributions as D, nn
-
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
 
+from torchrl._utils import safe_is_current_stream_capturing
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
-
 from torchrl.modules.distributions.utils import (
     _cast_device,
     FasterTransformedDistribution,
     safeatanh_noeps,
     safetanh_noeps,
 )
-from torchrl.modules.utils import mappings
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
@@ -38,9 +35,9 @@ except ImportError:
     from torch._dynamo import assume_constant_result
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 TORCH_VERSION = version.parse(torch.__version__).base_version
 TORCH_VERSION_PRE_2_6 = version.parse(TORCH_VERSION) < version.parse("2.6.0")
@@ -61,7 +58,11 @@ class IndependentNormal(D.Independent):
 
     Args:
         loc (torch.Tensor): normal distribution location parameter
-        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
+        scale (torch.Tensor, float, or callable): normal distribution sigma parameter (squared root of variance).
+            Can be a tensor, a float, or a callable that takes the ``loc`` tensor as input and returns the scale tensor.
+            Using a callable (e.g., ``torch.ones_like`` or ``functools.partial(torch.full_like, fill_value=0.1)``)
+            avoids explicit device transfers like ``torch.tensor(val, device=device)`` and prevents graph breaks
+            in :func:`torch.compile`.
         upscale (torch.Tensor or number, optional): 'a' scaling factor in the formula:
 
             .. math::
@@ -72,6 +73,20 @@ class IndependentNormal(D.Independent):
         tanh_loc (bool, optional): if ``False``, the above formula is used for
             the location scaling, otherwise the raw value
             is kept. Default is ``False``;
+
+    Example:
+        >>> import torch
+        >>> from functools import partial
+        >>> from torchrl.modules.distributions import IndependentNormal
+        >>> loc = torch.zeros(3, 4)
+        >>> # Using a callable scale avoids device transfers and graph breaks in torch.compile
+        >>> dist = IndependentNormal(loc, scale=torch.ones_like)
+        >>> # For a custom scale value, use partial to create a callable
+        >>> dist = IndependentNormal(loc, scale=partial(torch.full_like, fill_value=0.1))
+        >>> sample = dist.sample()
+        >>> sample.shape
+        torch.Size([3, 4])
+
     """
 
     num_params: int = 2
@@ -79,7 +94,7 @@ class IndependentNormal(D.Independent):
     def __init__(
         self,
         loc: torch.Tensor,
-        scale: torch.Tensor,
+        scale: torch.Tensor | float | Callable[[torch.Tensor], torch.Tensor],
         upscale: float = 5.0,
         tanh_loc: bool = False,
         event_dim: int = 1,
@@ -89,11 +104,25 @@ class IndependentNormal(D.Independent):
         self.upscale = upscale
         self._event_dim = event_dim
         self._kwargs = kwargs
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
         super().__init__(D.Normal(loc, scale, **kwargs), event_dim)
 
     def update(self, loc, scale):
         if self.tanh_loc:
             loc = self.upscale * (loc / self.upscale).tanh()
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
         super().__init__(D.Normal(loc, scale, **self._kwargs), self._event_dim)
 
     @property
@@ -121,65 +150,21 @@ class SafeTanhTransform(D.TanhTransform):
             inv = self._inv()
         if inv is None:
             inv = _InverseTransform(self)
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self._inv = weakref.ref(inv)
         return inv
 
 
-class NormalParamWrapper(nn.Module):
-    """A wrapper for normal distribution parameters.
-
-    Args:
-        operator (nn.Module): operator whose output will be transformed_in in location and scale parameters
-        scale_mapping (str, optional): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: "softplus", "exp", "relu", "biased_softplus_1";
-        scale_lb (Number, optional): The minimum value that the variance can take. Default is 1e-4.
-
-    Examples:
-        >>> from torch import nn
-        >>> import torch
-        >>> module = nn.Linear(3, 4)
-        >>> module_normal = NormalParamWrapper(module)
-        >>> tensor = torch.randn(3)
-        >>> loc, scale = module_normal(tensor)
-        >>> print(loc.shape, scale.shape)
-        torch.Size([2]) torch.Size([2])
-        >>> assert (scale > 0).all()
-        >>> # with modules that return more than one tensor
-        >>> module = nn.LSTM(3, 4)
-        >>> module_normal = NormalParamWrapper(module)
-        >>> tensor = torch.randn(4, 2, 3)
-        >>> loc, scale, others = module_normal(tensor)
-        >>> print(loc.shape, scale.shape)
-        torch.Size([4, 2, 2]) torch.Size([4, 2, 2])
-        >>> assert (scale > 0).all()
-
-    """
-
+class NormalParamWrapper(nn.Module):  # noqa: D101
     def __init__(
         self,
         operator: nn.Module,
         scale_mapping: str = "biased_softplus_1.0",
         scale_lb: Number = 1e-4,
     ) -> None:
-        warnings.warn(
-            "The NormalParamWrapper class will be deprecated in v0.7 in favor of :class:`~tensordict.nn.NormalParamExtractor`.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "NormalParamWrapper has been deprecated in favor of `tensordict.nn.NormalParamExtractor`. Use this class instead."
         )
-        super().__init__()
-        self.operator = operator
-        self.scale_mapping = scale_mapping
-        self.scale_lb = scale_lb
-
-    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
-        net_output = self.operator(*tensors)
-        others = ()
-        if not isinstance(net_output, torch.Tensor):
-            net_output, *others = net_output
-        loc, scale = net_output.chunk(2, -1)
-        scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
-        return (loc, scale, *others)
 
 
 class TruncatedNormal(D.Independent):
@@ -205,8 +190,8 @@ class TruncatedNormal(D.Independent):
 
             Default is 5.0
 
-        min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
+        low (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
+        high (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
         tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value is kept.
             Default is ``False``;
@@ -225,9 +210,9 @@ class TruncatedNormal(D.Independent):
         self,
         loc: torch.Tensor,
         scale: torch.Tensor,
-        upscale: Union[torch.Tensor, float] = 5.0,
-        low: Union[torch.Tensor, float] = -1.0,
-        high: Union[torch.Tensor, float] = 1.0,
+        upscale: torch.Tensor | float = 5.0,
+        low: torch.Tensor | float = -1.0,
+        high: torch.Tensor | float = 1.0,
         tanh_loc: bool = False,
     ):
 
@@ -329,7 +314,7 @@ class _PatchedComposeTransform(D.ComposeTransform):
             inv = self._inv()
         if inv is None:
             inv = _PatchedComposeTransform([p.inv for p in reversed(self.parts)])
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self._inv = weakref.ref(inv)
                 inv._inv = weakref.ref(self)
         return inv
@@ -343,7 +328,7 @@ class _PatchedAffineTransform(D.AffineTransform):
             inv = self._inv()
         if inv is None:
             inv = _InverseTransform(self)
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self._inv = weakref.ref(inv)
         return inv
 
@@ -363,7 +348,11 @@ class TanhNormal(FasterTransformedDistribution):
 
     Args:
         loc (torch.Tensor): normal distribution location parameter
-        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
+        scale (torch.Tensor, float, or callable): normal distribution sigma parameter (squared root of variance).
+            Can be a tensor, a float, or a callable that takes the ``loc`` tensor as input and returns the scale tensor.
+            Using a callable (e.g., ``torch.ones_like`` or ``functools.partial(torch.full_like, fill_value=0.1)``)
+            avoids explicit device transfers like ``torch.tensor(val, device=device)`` and prevents graph breaks
+            in :func:`torch.compile`.
         upscale (torch.Tensor or number): 'a' scaling factor in the formula:
 
             .. math::
@@ -378,6 +367,20 @@ class TanhNormal(FasterTransformedDistribution):
             value is kept. Default is ``False``;
         safe_tanh (bool, optional): if ``True``, the Tanh transform is done "safely", to avoid numerical overflows.
             This will currently break with :func:`torch.compile`.
+
+    Example:
+        >>> import torch
+        >>> from functools import partial
+        >>> from torchrl.modules.distributions import TanhNormal
+        >>> loc = torch.zeros(3, 4)
+        >>> # Using a callable scale avoids device transfers and graph breaks in torch.compile
+        >>> dist = TanhNormal(loc, scale=torch.ones_like)
+        >>> # For a custom scale value, use partial to create a callable
+        >>> dist = TanhNormal(loc, scale=partial(torch.full_like, fill_value=0.1))
+        >>> sample = dist.sample()
+        >>> sample.shape
+        torch.Size([3, 4])
+
     """
 
     arg_constraints = {
@@ -390,23 +393,29 @@ class TanhNormal(FasterTransformedDistribution):
     def __init__(
         self,
         loc: torch.Tensor,
-        scale: torch.Tensor,
-        upscale: Union[torch.Tensor, Number] = 5.0,
-        low: Union[torch.Tensor, Number] = -1.0,
-        high: Union[torch.Tensor, Number] = 1.0,
+        scale: torch.Tensor | float | Callable[[torch.Tensor], torch.Tensor],
+        upscale: torch.Tensor | Number = 5.0,
+        low: torch.Tensor | Number = -1.0,
+        high: torch.Tensor | Number = 1.0,
         event_dims: int | None = None,
         tanh_loc: bool = False,
         safe_tanh: bool = True,
     ):
         if not isinstance(loc, torch.Tensor):
             loc = torch.as_tensor(loc, dtype=torch.get_default_dtype())
-        if not isinstance(scale, torch.Tensor):
-            scale = torch.as_tensor(scale, dtype=torch.get_default_dtype())
+        _non_blocking = loc.device.type == "cuda"
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=_non_blocking)
         if event_dims is None:
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if not is_dynamo_compiling():
+        if not is_compiling() and not safe_is_current_stream_capturing():
             if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
                 if not (high > low).all():
                     raise RuntimeError(err_msg)
@@ -417,11 +426,19 @@ class TanhNormal(FasterTransformedDistribution):
                 if not all(high > low):
                     raise RuntimeError(err_msg)
 
-        high = torch.as_tensor(high, device=loc.device)
-        low = torch.as_tensor(low, device=loc.device)
-        self.non_trivial_max = (high != 1.0).any()
-
-        self.non_trivial_min = (low != -1.0).any()
+        if not isinstance(high, torch.Tensor):
+            high = torch.as_tensor(high, device=loc.device)
+        elif high.device != loc.device:
+            high = high.to(loc.device, non_blocking=_non_blocking)
+        if not isinstance(low, torch.Tensor):
+            low = torch.as_tensor(low, device=loc.device)
+        elif low.device != loc.device:
+            low = low.to(loc.device, non_blocking=_non_blocking)
+        if not is_compiling() and not safe_is_current_stream_capturing():
+            self.non_trivial_max = (high != 1.0).any()
+            self.non_trivial_min = (low != -1.0).any()
+        else:
+            self.non_trivial_max = self.non_trivial_min = True
 
         self.tanh_loc = tanh_loc
         self._event_dims = event_dims
@@ -430,24 +447,21 @@ class TanhNormal(FasterTransformedDistribution):
         self.upscale = (
             upscale
             if not isinstance(upscale, torch.Tensor)
-            else upscale.to(self.device)
+            else upscale.to(self.device, non_blocking=_non_blocking)
         )
 
-        if isinstance(high, torch.Tensor):
-            high = high.to(loc.device)
-        if isinstance(low, torch.Tensor):
-            low = low.to(loc.device)
+        low = low.to(loc.device, non_blocking=_non_blocking)
         self.low = low
         self.high = high
 
         if safe_tanh:
-            if is_dynamo_compiling() and TORCH_VERSION_PRE_2_6:
+            if is_compiling() and TORCH_VERSION_PRE_2_6:
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
             t = D.TanhTransform()
         # t = D.TanhTransform()
-        if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
+        if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
             t = _PatchedComposeTransform(
                 [
                     t,
@@ -474,8 +488,15 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
+            if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
                 loc = loc + (self.high - self.low) / 2 + self.low
+        # Support callable scale (e.g., torch.ones_like) for compile-friendliness
+        if callable(scale) and not isinstance(scale, torch.Tensor):
+            scale = scale(loc)
+        elif not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=loc.device, dtype=loc.dtype)
+        elif scale.device != loc.device:
+            scale = scale.to(loc.device, non_blocking=loc.device.type == "cuda")
         self.loc = loc
         self.scale = scale
 
@@ -554,7 +575,7 @@ class TanhNormal(FasterTransformedDistribution):
     def mean(self):
         raise NotImplementedError(
             f"{type(self).__name__} does not have a closed form formula for the average. "
-            "Am estimate of this value can be computed using dist.sample((N,)).mean(dim=0), "
+            "An estimate of this value can be computed using dist.sample((N,)).mean(dim=0), "
             "where N is a large number of samples."
         )
 
@@ -589,15 +610,15 @@ class Delta(D.Distribution):
 
     """
 
-    arg_constraints: Dict = {}
+    arg_constraints: dict = {}
 
     def __init__(
         self,
         param: torch.Tensor,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        batch_shape: Union[torch.Size, Sequence[int]] = None,
-        event_shape: Union[torch.Size, Sequence[int]] = None,
+        batch_shape: torch.Size | Sequence[int] = None,
+        event_shape: torch.Size | Sequence[int] = None,
     ):
         if batch_shape is None:
             batch_shape = torch.Size([])
@@ -610,6 +631,15 @@ class Delta(D.Distribution):
             batch_shape = param.shape[:-1]
             event_shape = param.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
+
+    def expand(self, batch_shape: torch.Size, _instance=None):
+        if self.batch_shape != tuple(batch_shape):
+            return type(self)(
+                self.param.expand((*batch_shape, *self.event_shape)),
+                atol=self.atol,
+                rtol=self.rtol,
+            )
+        return self
 
     def update(self, param):
         self.param = param
@@ -677,8 +707,8 @@ class TanhDelta(FasterTransformedDistribution):
     def __init__(
         self,
         param: torch.Tensor,
-        low: Union[torch.Tensor, float] = -1.0,
-        high: Union[torch.Tensor, float] = 1.0,
+        low: torch.Tensor | float = -1.0,
+        high: torch.Tensor | float = 1.0,
         event_dims: int = 1,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -686,26 +716,31 @@ class TanhDelta(FasterTransformedDistribution):
     ):
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if not (high > low).all():
-                raise ValueError(minmax_msg)
+            if is_compiling():
+                assert (high > low).all()
+            else:
+                if not (high > low).all():
+                    raise ValueError(minmax_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
-            if high <= low:
+            if is_compiling():
+                assert high > low
+            elif high <= low:
                 raise ValueError(minmax_msg)
         else:
             if not all(high > low):
                 raise ValueError(minmax_msg)
 
         if safe:
-            if is_dynamo_compiling():
+            if is_compiling():
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
             t = torch.distributions.TanhTransform()
-        non_trivial_min = is_dynamo_compiling or (
+        non_trivial_min = is_compiling or (
             (isinstance(low, torch.Tensor) and (low != -1.0).any())
             or (not isinstance(low, torch.Tensor) and low != -1.0)
         )
-        non_trivial_max = is_dynamo_compiling or (
+        non_trivial_max = is_compiling or (
             (isinstance(high, torch.Tensor) and (high != 1.0).any())
             or (not isinstance(high, torch.Tensor) and high != 1.0)
         )
@@ -746,7 +781,7 @@ class TanhDelta(FasterTransformedDistribution):
         self._warn_minmax()
         return self.high
 
-    def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
+    def update(self, net_output: torch.Tensor) -> torch.Tensor | None:
         loc = net_output
         if self.non_trivial:
             device = loc.device

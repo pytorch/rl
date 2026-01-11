@@ -4,10 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     CompositeDistribution,
@@ -98,10 +97,10 @@ class Actor(SafeModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         *,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         **kwargs,
     ):
         if in_keys is None:
@@ -153,14 +152,14 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
-        default_interaction_type (str, optional): keyword-only argument.
+        default_interaction_type (tensordict.nn.InteractionType, optional): keyword-only argument.
             Default method to be used to retrieve
-            the output value. Should be one of: 'InteractionType.MODE', 'InteractionType.DETERMINISTIC',
-            'InteractionType.MEDIAN', 'InteractionType.MEAN' or
-            'InteractionType.RANDOM' (in which case the value is sampled
+            the output value. Should be one of: ``InteractionType.MODE``, ``InteractionType.DETERMINISTIC``,
+            ``InteractionType.MEDIAN``, ``InteractionType.MEAN`` or
+            ``InteractionType.RANDOM`` (in which case the value is sampled
             randomly from the distribution).
             TorchRL's ``ExplorationType`` class is a proxy to ``InteractionType``.
-            Defaults to is 'InteractionType.DETERMINISTIC'.
+            Defaults to ``InteractionType.DETERMINISTIC``.
 
             .. note:: When a sample is drawn, the :class:`ProbabilisticActor` instance will
               first look for the interaction mode dictated by the
@@ -168,7 +167,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
               global function. If this returns `None` (its default value), then the
               `default_interaction_type` of the `ProbabilisticTDModule`
               instance will be used. Note that
-              :class:`~torchrl.collectors.collectors.DataCollectorBase`
+              :class:`~torchrl.collectors.BaseCollector`
               instances will use `set_interaction_type` to
               :class:`tensordict.nn.InteractionType.RANDOM` by default.
 
@@ -360,10 +359,10 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     def __init__(
         self,
         module: TensorDictModule,
-        in_keys: Union[NestedKey, Sequence[NestedKey]],
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: NestedKey | Sequence[NestedKey],
+        out_keys: Sequence[NestedKey] | None = None,
         *,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         **kwargs,
     ):
         distribution_class = kwargs.get("distribution_class")
@@ -450,8 +449,8 @@ class ValueOperator(TensorDictModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Sequence[NestedKey]] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ) -> None:
         if in_keys is None:
             in_keys = ["observation"]
@@ -532,12 +531,12 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[str] = None,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        var_nums: Optional[int] = None,
-        spec: Optional[TensorSpec] = None,
+        action_space: str | None = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        var_nums: int | None = None,
+        spec: TensorSpec | None = None,
         safe: bool = False,
     ):
         if isinstance(action_space, TensorSpec):
@@ -725,7 +724,7 @@ class DistributionalQValueModule(QValueModule):
         >>> value[0, 0] = 0
         >>> # the second bin (0) of the second action is high: there's a high chance that it has an intermediate value
         >>> value[1, 1] = 0
-        >>> # the third bin (0) of the thid action is high: there's a high chance that it has an high value
+        >>> # the third bin (0) of the this action is high: there's a high chance that it has an high value
         >>> value[2, 2] = 0
         >>> actor(my_action_value=value)
         (tensor(2), tensor([[   0, -100, -100, -100],
@@ -748,12 +747,12 @@ class DistributionalQValueModule(QValueModule):
 
     def __init__(
         self,
-        action_space: Optional[str],
+        action_space: str | None,
         support: torch.Tensor,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
-        var_nums: Optional[int] = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        var_nums: int | None = None,
         spec: TensorSpec = None,
         safe: bool = False,
     ):
@@ -911,10 +910,10 @@ class QValueHook:
     def __init__(
         self,
         action_space: str,
-        var_nums: Optional[int] = None,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        var_nums: int | None = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -938,7 +937,7 @@ class QValueHook:
 
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         kwargs = {self.action_value_key: values}
         return self.qvalue_model(**kwargs)
 
@@ -1007,10 +1006,10 @@ class DistributionalQValueHook(QValueHook):
         self,
         action_space: str,
         support: torch.Tensor,
-        var_nums: Optional[int] = None,
-        action_value_key: Optional[NestedKey] = None,
-        action_mask_key: Optional[NestedKey] = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        var_nums: int | None = None,
+        action_value_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError("Using specs in action_space is deprecated")
@@ -1125,9 +1124,9 @@ class QValueActor(SafeSequential):
         in_keys=None,
         spec=None,
         safe=False,
-        action_space: Optional[str] = None,
+        action_space: str | None = None,
         action_value_key=None,
-        action_mask_key: Optional[NestedKey] = None,
+        action_mask_key: NestedKey | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -1268,10 +1267,10 @@ class DistributionalQValueActor(QValueActor):
         in_keys=None,
         spec=None,
         safe=False,
-        var_nums: Optional[int] = None,
-        action_space: Optional[str] = None,
+        var_nums: int | None = None,
+        action_space: str | None = None,
         action_value_key: str = "action_value",
-        action_mask_key: Optional[NestedKey] = None,
+        action_mask_key: NestedKey | None = None,
         make_log_softmax: bool = True,
     ):
         if isinstance(action_space, TensorSpec):
@@ -1766,7 +1765,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
     **not** modify the tensordict in-place.
 
     .. note:: If the action, observation or reward-to-go key is not standard,
-        the method :meth:`~.set_tensor_keys` should be used, e.g.
+        the method :meth:`set_tensor_keys` should be used, e.g.
 
             >>> dt_inference_wrapper.set_tensor_keys(action="foo", observation="bar", return_to_go="baz")
 
@@ -1836,7 +1835,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         policy: TensorDictModule,
         *,
         inference_context: int = 5,
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         device: torch.device | None = None,
     ):
         super().__init__(policy)
@@ -1992,10 +1991,10 @@ class TanhModule(TensorDictModuleBase):
             If a Composite is provided, its key(s) must match the key(s)
             in out_keys. Otherwise, the key(s) of out_keys are assumed and the
             same spec is used for all outputs.
-        low (float, np.ndarray or torch.Tensor): the lower bound of the space.
+        low (:obj:`float`, np.ndarray or torch.Tensor): the lower bound of the space.
             If none is provided and no spec is provided, -1 is assumed. If a
             spec is provided, the minimum value of the spec will be retrieved.
-        high (float, np.ndarray or torch.Tensor): the higher bound of the space.
+        high (:obj:`float`, np.ndarray or torch.Tensor): the higher bound of the space.
             If none is provided and no spec is provided, 1 is assumed. If a
             spec is provided, the maximum value of the spec will be retrieved.
         clamp (bool, optional): if ``True``, the outputs will be clamped to be
@@ -2066,7 +2065,7 @@ class TanhModule(TensorDictModuleBase):
         high=None,
         clamp: bool = False,
     ):
-        super(TanhModule, self).__init__()
+        super().__init__()
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = in_keys
@@ -2149,11 +2148,12 @@ class LMHeadActorValueOperator(ActorValueOperator):
     """Builds an Actor-Value operator from an huggingface-like *LMHeadModel.
 
     This method:
-        - takes as input an huggingface-like *LMHeadModel
-        - extracts the final linear layer uses it as a base layer of the actor_head and
-            adds the sampling layer
-        - uses the common transformer as common model
-        - adds a linear critic
+
+    - takes as input an huggingface-like *LMHeadModel
+    - extracts the final linear layer uses it as a base layer of the actor_head and
+      adds the sampling layer
+    - uses the common transformer as common model
+    - adds a linear critic
 
     Args:
         base_model (nn.Module): a torch model composed by a `.transformer` model and `.lm_head` linear layer
@@ -2168,7 +2168,7 @@ class LMHeadActorValueOperator(ActorValueOperator):
             TensorDictModule(
                 base_model.transformer,
                 in_keys={"input_ids": "input_ids", "attention_mask": "attention_mask"},
-                out_keys=["x"],
+                out_keys=["x", "_"],
             ),
             TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
         )
@@ -2208,8 +2208,8 @@ class MultiStepActorWrapper(TensorDictModuleBase):
 
     Args:
         actor (TensorDictModuleBase): An actor.
-        n_steps (int): the number of actions the actor outputs at once
-            (lookahead window).
+        n_steps (int, optional): the number of actions the actor outputs at once
+            (lookahead window). Defaults to `None`.
 
     Keyword Args:
         action_keys (list of NestedKeys, optional): the action keys from
@@ -2220,6 +2220,8 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             when the environment has gone through a reset.
             Defaults to ``"is_init"`` which is the ``out_key`` from the
             :class:`~torchrl.envs.transforms.InitTracker` transform.
+        keep_dim (bool, optional): whether to keep the time dimension of
+            the macro during indexing. Defaults to ``False``.
 
     Examples:
         >>> import torch.nn
@@ -2279,19 +2281,25 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             batch_size=torch.Size([5, 100]),
             device=cpu,
             is_shared=False)
+
+    .. seealso:: :class:`torchrl.envs.MultiStepEnvWrapper` is the EnvBase alter-ego of this wrapper:
+        It wraps an environment and unbinds the action, executing it one element at a time.
+
     """
 
     def __init__(
         self,
         actor: TensorDictModuleBase,
-        n_steps: int,
+        n_steps: int | None = None,
         *,
-        action_keys: List[NestedKey] | None = None,
-        init_key: List[NestedKey] | None = None,
+        action_keys: list[NestedKey] | None = None,
+        init_key: list[NestedKey] | None = None,
+        keep_dim: bool = False,
     ):
         self.action_keys = action_keys
         self.init_key = init_key
         self.n_steps = n_steps
+        self.keep_dim = keep_dim
 
         super().__init__()
         self.actor = actor
@@ -2363,7 +2371,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                 action_entry = parent_td.get(action_key_orig[-1], None)
             if action_entry is None:
                 raise self._NO_INIT_ERR
-            if action_entry.shape[parent_td.ndim] != self.n_steps:
+            if (
+                self.n_steps is not None
+                and action_entry.shape[parent_td.ndim] != self.n_steps
+            ):
                 raise RuntimeError(
                     f"The action's time dimension (dim={parent_td.ndim}) doesn't match the n_steps argument ({self.n_steps}). "
                     f"The action shape was {action_entry.shape}."
@@ -2373,7 +2384,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                     None,
                 ),
             ) * parent_td.ndim
-            cur_action = action_entry[base_idx + (0,)]
+            if not self.keep_dim:
+                cur_action = action_entry[base_idx + (0,)]
+            else:
+                cur_action = action_entry[base_idx + (slice(1),)]
             tensordict.set(action_key, cur_action)
             tensordict.set(
                 action_key_orig,
@@ -2382,7 +2396,7 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         return tensordict
 
     @property
-    def action_keys(self) -> List[NestedKey]:
+    def action_keys(self) -> list[NestedKey]:
         action_keys = self.__dict__.get("_action_keys", None)
         if action_keys is None:
 
@@ -2406,7 +2420,7 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         self._action_keys = [unravel_key(key) for key in value]
 
     @property
-    def _actor_keys_map(self) -> Dict[NestedKey, NestedKey]:
+    def _actor_keys_map(self) -> dict[NestedKey, NestedKey]:
         val = self.__dict__.get("_actor_keys_map_values", None)
         if val is None:
 

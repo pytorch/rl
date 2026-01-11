@@ -2,5 +2,4 @@
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+# Note: This script is sourced by run_all.sh, so the environment is already active

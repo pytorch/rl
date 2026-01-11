@@ -7,11 +7,13 @@ from __future__ import annotations
 import abc
 import functools
 from abc import abstractmethod
-from typing import Any, Callable, Dict, Generic, List, TypeVar
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar
 
 import torch
 from tensordict import is_tensor_collection, NestedKey, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
+
 from torchrl.data.map.hash import RandomProjectionHash, SipHash
 from torchrl.data.map.query import QueryModule
 from torchrl.data.replay_buffers.storages import (
@@ -117,9 +119,9 @@ class TensorDictMap(
         self,
         *,
         query_module: QueryModule,
-        storage: Dict[NestedKey, TensorMap[torch.Tensor, torch.Tensor]],
+        storage: dict[NestedKey, TensorMap[torch.Tensor, torch.Tensor]],
         collate_fn: Callable[[Any], Any] | None = None,
-        out_keys: List[NestedKey] | None = None,
+        out_keys: list[NestedKey] | None = None,
         write_fn: Callable[[Any, Any], Any] | None = None,
     ):
         super().__init__()
@@ -127,7 +129,6 @@ class TensorDictMap(
         self.in_keys = query_module.in_keys
         if out_keys is not None:
             self.out_keys = out_keys
-            assert not self._has_lazy_out_keys()
 
         self.query_module = query_module
         self.index_key = query_module.index_key
@@ -139,7 +140,11 @@ class TensorDictMap(
         self.write_fn = write_fn
 
     @property
-    def out_keys(self) -> List[NestedKey]:
+    def max_size(self):
+        return self.storage.max_size
+
+    @property
+    def out_keys(self) -> list[NestedKey]:
         out_keys = self.__dict__.get("_out_keys_and_lazy")
         if out_keys is not None:
             return out_keys[0]
@@ -169,15 +174,15 @@ class TensorDictMap(
         cls,
         source,
         dest,
-        in_keys: List[NestedKey],
-        out_keys: List[NestedKey] | None = None,
+        in_keys: list[NestedKey],
+        out_keys: list[NestedKey] | None = None,
         max_size: int = 1000,
         storage_constructor: type | None = None,
         hash_module: Callable | None = None,
         collate_fn: Callable[[Any], Any] | None = None,
         write_fn: Callable[[Any, Any], Any] | None = None,
         consolidated: bool | None = None,
-    ):
+    ) -> TensorDictMap:
         """Creates a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
 
         Args:
@@ -189,7 +194,7 @@ class TensorDictMap(
                 in the storage. Defaults to ``None`` (all keys are registered).
             max_size (int, optional): the maximum number of elements in the storage. Ignored if the
                 ``storage_constructor`` is passed. Defaults to ``1000``.
-            storage_constructor (type, optional): a type of tensor storage.
+            storage_constructor (Type, optional): a type of tensor storage.
                 Defaults to :class:`~tensordict.nn.storage.LazyDynamicStorage`.
                 Other options include :class:`~tensordict.nn.storage.FixedStorage`.
             hash_module (Callable, optional): a hash function to use in the :class:`~torchrl.data.map.QueryModule`.
@@ -238,7 +243,13 @@ class TensorDictMap(
             n_feat = 0
             hash_module = []
             for in_key in in_keys:
-                n_feat = source[in_key].shape[-1]
+                entry = source[in_key]
+                if entry.ndim == source.ndim:
+                    # this is a good example of why td/tc are useful - carrying metadata
+                    # allows us to know if there's a feature dim or not
+                    n_feat = 0
+                else:
+                    n_feat = entry.shape[-1]
                 if n_feat > RandomProjectionHash._N_COMPONENTS_DEFAULT:
                     _hash_module = RandomProjectionHash()
                 else:
@@ -308,7 +319,23 @@ class TensorDictMap(
         if not self._has_lazy_out_keys():
             # TODO: make this work with pytrees and avoid calling select if keys match
             value = value.select(*self.out_keys, strict=False)
+        item, value = self._maybe_add_batch(item, value)
+        index = self._to_index(item, extend=True)
+        if index.unique().numel() < index.numel():
+            # If multiple values point to the same place in the storage, we cannot process them by batch
+            # There could be a better way to deal with this, using unique ids.
+            vals = []
+            for it, val in zip(item.split(1), value.split(1)):
+                self[it] = val
+                vals.append(val)
+            # __setitem__ may affect the content of the input data
+            value.update(TensorDictBase.lazy_stack(vals))
+            return
         if self.write_fn is not None:
+            # We use this block in the following context: the value written in the storage is already present,
+            # but it needs to be updated.
+            # We first check if the value is already there using `contains`. If so, we pass the new value and the
+            # previous one to write_fn. The values that are not present are passed alone.
             if len(self):
                 modifiable = self.contains(item)
                 if modifiable.any():
@@ -322,8 +349,6 @@ class TensorDictMap(
                     value = self.write_fn(value)
             else:
                 value = self.write_fn(value)
-        item, value = self._maybe_add_batch(item, value)
-        index = self._to_index(item, extend=True)
         self.storage.set(index, value)
 
     def __len__(self):

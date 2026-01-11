@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib
 import re
-
-from typing import Dict, Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -180,7 +180,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: "smacv2.env.StarCraft2Env" = None,  # noqa: F821
+        env: smacv2.env.StarCraft2Env = None,  # noqa: F821
         categorical_actions: bool = True,
         **kwargs,
     ):
@@ -196,7 +196,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         return smacv2
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         import smacv2
 
         if "env" not in kwargs:
@@ -207,7 +207,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: "smacv2.env.StarCraft2Env",  # noqa: F821
+        env: smacv2.env.StarCraft2Env,  # noqa: F821
     ):
         if len(self.batch_size):
             raise RuntimeError(
@@ -216,7 +216,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         return env
 
-    def _make_specs(self, env: "smacv2.env.StarCraft2Env") -> None:  # noqa: F821
+    def _make_specs(self, env: smacv2.env.StarCraft2Env) -> None:  # noqa: F821
         self.group_map = {"agents": [str(i) for i in range(self.n_agents)]}
         self.reward_spec = Unbounded(
             shape=torch.Size((1,)),
@@ -228,7 +228,7 @@ class SMACv2Wrapper(_EnvWrapper):
             dtype=torch.bool,
             device=self.device,
         )
-        self.action_spec = self._make_action_spec()
+        self.full_action_spec = self._make_action_spec()
         self.observation_spec = self._make_observation_spec()
 
     def _init_env(self) -> None:
@@ -311,7 +311,7 @@ class SMACv2Wrapper(_EnvWrapper):
         )
         return spec
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         if seed is not None:
             raise NotImplementedError(
                 "Seed cannot be changed once environment was created."
@@ -329,7 +329,7 @@ class SMACv2Wrapper(_EnvWrapper):
         return torch.tensor(value, device=self.device, dtype=torch.float32)
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
 
         obs, state = self._env.reset()
@@ -356,7 +356,7 @@ class SMACv2Wrapper(_EnvWrapper):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # perform actions
         action = tensordict.get(("agents", "action"))
-        action_np = self.action_spec.to_numpy(action)
+        action_np = self.full_action_spec[self.action_key].to_numpy(action)
 
         # Actions are validated by the environment.
         try:
@@ -407,10 +407,10 @@ class SMACv2Wrapper(_EnvWrapper):
         mask = torch.tensor(
             self.get_avail_actions(), dtype=torch.bool, device=self.device
         )
-        self.action_spec.update_mask(mask)
+        self.full_action_spec[self.action_key].update_mask(mask)
         return mask
 
-    def close(self):
+    def close(self, *, raise_if_closed: bool = True):
         # Closes StarCraft II
         self._env.close()
 
@@ -602,8 +602,8 @@ class SMACv2Env(SMACv2Wrapper):
     def __init__(
         self,
         map_name: str,
-        capability_config: Optional[Dict] = None,
-        seed: Optional[int] = None,
+        capability_config: dict | None = None,
+        seed: int | None = None,
         categorical_actions: bool = True,
         **kwargs,
     ):
@@ -619,17 +619,17 @@ class SMACv2Env(SMACv2Wrapper):
 
         super().__init__(**kwargs)
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "map_name" not in kwargs:
             raise TypeError("Expected 'map_name' to be part of kwargs")
 
     def _build_env(
         self,
         map_name: str,
-        capability_config: Optional[Dict] = None,
-        seed: Optional[int] = None,
+        capability_config: dict | None = None,
+        seed: int | None = None,
         **kwargs,
-    ) -> "smacv2.env.StarCraft2Env":  # noqa: F821
+    ) -> smacv2.env.StarCraft2Env:  # noqa: F821
         import smacv2.env
 
         if capability_config is not None:

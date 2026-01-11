@@ -23,15 +23,17 @@ Typical usage:
     # OpenGL context is available here.
 """
 
-from __future__ import print_function
+from __future__ import annotations
+
+from torchrl import torchrl_logger as logger
 
 # pylint: disable=unused-import,g-import-not-at-top,g-statement-before-imports
 
 try:
     import OpenGL  # noqa: F401
 except ImportError:
-    print("This module depends on PyOpenGL.")
-    print(
+    logger.error("This module depends on PyOpenGL.")
+    logger.error(
         'Please run "\033[1m!pip install -q pyopengl\033[0m" '
         "prior importing this module."
     )
@@ -71,9 +73,11 @@ try:
     from OpenGL.EGL.EXT.device_base import egl_get_devices
     from OpenGL.raw.EGL.EXT.platform_device import EGL_PLATFORM_DEVICE_EXT
 except ImportError:
-    print("Unable to load OpenGL libraries. " "Make sure you use GPU-enabled backend.")
-    print(
-        'Press "Runtime->Change runtime type" and set ' '"Hardware accelerator" to GPU.'
+    logger.error(
+        "Unable to load OpenGL libraries. Make sure you use GPU-enabled backend."
+    )
+    logger.error(
+        'Press "Runtime->Change runtime type" and set "Hardware accelerator" to GPU.'
     )
     raise
 finally:

@@ -13,7 +13,7 @@ Exporting TorchRL modules
 
         !pip install tensordict
         !pip install torchrl
-        !pip install "gymnasium[atari,accept-rom-license]"<1.0.0
+        !pip install "gymnasium[atari]"
 
 Introduction
 ------------
@@ -265,10 +265,6 @@ lstm = LSTMModule(
     in_keys=["observation", "hidden0", "hidden1"],
     out_keys=["intermediate", "hidden0", "hidden1"],
 )
-#####################################
-# We set the recurrent mode to ``False`` to allow the module to read inputs one-by-one and not in batch.
-#
-lstm = lstm.set_recurrent_mode(False)
 
 #####################################
 # If the LSTM module is not python based but CuDNN (:class:`~torch.nn.LSTM`), the :meth:`~torchrl.modules.LSTMModule.make_python_based`
@@ -347,8 +343,6 @@ with TemporaryDirectory() as tmpdir:
     with torch.no_grad():
         pkg_path = aoti_compile_and_package(
             exported_policy,
-            args=(),
-            kwargs={"pixels": pixels},
             # Specify the generated shared library path
             package_path=path,
         )
@@ -442,7 +436,7 @@ onnx_policy = ort_session.run(None, onnxruntime_input)
 # more lightweight, the ONNX version should be faster than the TorchRL one.
 
 
-def onnx_policy(screen_obs: np.ndarray) -> int:
+def onnx_policy(screen_obs: np.ndarray) -> int:  # noqa: F811
     onnxruntime_input = {ort_session.get_inputs()[0].name: screen_obs}
     onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
     action = int(onnxruntime_outputs[0])

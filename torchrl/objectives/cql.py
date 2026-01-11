@@ -9,8 +9,6 @@ import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 
-from typing import List, Optional, Tuple, Union
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,8 +20,7 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
-from torchrl.modules import ProbabilisticActor, QValueActor
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor, QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -35,7 +32,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
@@ -72,7 +68,7 @@ class CQLLoss(LossModule):
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
             Default is ``False``.
-        target_entropy (float or str, optional): Target entropy for the
+        target_entropy (:obj:`float` or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         delay_actor (bool, optional): Whether to separate the target actor
@@ -96,6 +92,8 @@ class CQLLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -260,7 +258,8 @@ class CQLLoss(LossModule):
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
     actor_network: TensorDictModule
@@ -273,18 +272,18 @@ class CQLLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = None,
-        max_alpha: float = None,
+        min_alpha: float | None = None,
+        max_alpha: float | None = None,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
+        target_entropy: str | float = "auto",
         delay_actor: bool = False,
         delay_qvalue: bool = True,
-        gamma: float = None,
+        gamma: float | None = None,
         temperature: float = 1.0,
         min_q_weight: float = 1.0,
         max_q_backup: bool = False,
@@ -292,7 +291,8 @@ class CQLLoss(LossModule):
         num_random: int = 10,
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
-        reduction: str = None,
+        reduction: str | None = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._out_keys = None
         if reduction is None:
@@ -306,6 +306,7 @@ class CQLLoss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        self.deactivate_vmap = deactivate_vmap
 
         # Q value
         self.delay_qvalue = delay_qvalue
@@ -323,7 +324,7 @@ class CQLLoss(LossModule):
         try:
             device = next(self.parameters()).device
         except AttributeError:
-            device = torch.device("cpu")
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         if bool(min_alpha) ^ bool(max_alpha):
             min_alpha = min_alpha if min_alpha else 0.0
@@ -379,10 +380,15 @@ class CQLLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
+            self.qvalue_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
@@ -403,7 +409,7 @@ class CQLLoss(LossModule):
                 if action_spec is None:
                     raise RuntimeError(
                         "Cannot infer the dimensionality of the action. Consider providing "
-                        "the target entropy explicitely or provide the spec of the "
+                        "the target entropy explicitly or provide the spec of the "
                         "action tensor in the actor network."
                     )
                 if not isinstance(action_spec, Composite):
@@ -541,7 +547,16 @@ class CQLLoss(LossModule):
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
-        return TensorDict(out, [])
+        td_loss = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_loss,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
+        return td_loss
 
     @property
     @_cache_values
@@ -562,9 +577,16 @@ class CQLLoss(LossModule):
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
         bc_actor_loss = _reduce(bc_actor_loss, reduction=self.reduction)
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return bc_actor_loss, metadata
 
-    def actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -595,7 +617,13 @@ class CQLLoss(LossModule):
         metadata[self.tensor_keys.log_prob] = log_prob.detach()
         actor_loss = self._alpha * log_prob - min_q_logprob
         actor_loss = _reduce(actor_loss, reduction=self.reduction)
-
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return actor_loss, metadata
 
     def _get_policy_actions(self, data, actor_params, num_actions=10):
@@ -610,16 +638,13 @@ class CQLLoss(LossModule):
         tensordict = data.named_apply(
             filter_and_repeat, batch_size=batch_size, filter_empty=True
         )
-        with torch.no_grad():
-            with set_exploration_type(ExplorationType.RANDOM), actor_params.to_module(
-                self.actor_network
-            ):
-                dist = self.actor_network.get_dist(tensordict)
-                action = dist.rsample()
-                tensordict.set(self.tensor_keys.action, action)
-                sample_log_prob = dist.log_prob(action)
-                # tensordict.del_("loc")
-                # tensordict.del_("scale")
+        with set_exploration_type(ExplorationType.RANDOM), actor_params.data.to_module(
+            self.actor_network
+        ):
+            dist = self.actor_network.get_dist(tensordict)
+            action = dist.rsample()
+            tensordict.set(self.tensor_keys.action, action)
+            sample_log_prob = dist.log_prob(action)
 
         return (
             tensordict.select(
@@ -631,61 +656,61 @@ class CQLLoss(LossModule):
     def _get_value_v(self, tensordict, _alpha, actor_params, qval_params):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
-        with torch.no_grad():
-            with set_exploration_type(ExplorationType.RANDOM), actor_params.to_module(
-                self.actor_network
-            ):
-                next_tensordict = tensordict.get("next").clone(False)
-                next_dist = self.actor_network.get_dist(next_tensordict)
-                next_action = next_dist.rsample()
-                next_tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
+        # TODO: wait for compile to handle this properly
+        actor_data = actor_params.data.to_module(self.actor_network)
+        with set_exploration_type(ExplorationType.RANDOM):
+            next_tensordict = tensordict.get("next").clone(False)
+            next_dist = self.actor_network.get_dist(next_tensordict)
+            next_action = next_dist.rsample()
+            next_tensordict.set(self.tensor_keys.action, next_action)
+            next_sample_log_prob = next_dist.log_prob(next_action)
+        actor_data.to_module(self.actor_network, return_swap=False)
 
-            # get q-values
-            if not self.max_q_backup:
-                next_tensordict_expand = self._vmap_qvalue_networkN0(
-                    next_tensordict, qval_params
-                )
-                next_state_value = next_tensordict_expand.get(
-                    self.tensor_keys.state_action_value
-                ).min(0)[0]
-                if (
-                    next_state_value.shape[-len(next_sample_log_prob.shape) :]
-                    != next_sample_log_prob.shape
-                ):
-                    next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
-                if not self.deterministic_backup:
-                    next_state_value = next_state_value - _alpha * next_sample_log_prob
-
-            if self.max_q_backup:
-                next_tensordict, _ = self._get_policy_actions(
-                    tensordict.get("next").copy(),
-                    actor_params,
-                    num_actions=self.num_random,
-                )
-                next_tensordict_expand = self._vmap_qvalue_networkN0(
-                    next_tensordict, qval_params
-                )
-
-                state_action_value = next_tensordict_expand.get(
-                    self.tensor_keys.state_action_value
-                )
-                # take max over actions
-                state_action_value = state_action_value.reshape(
-                    torch.Size(
-                        [self.num_qvalue_nets, *tensordict.shape, self.num_random, -1]
-                    )
-                ).max(-2)[0]
-                # take min over qvalue nets
-                next_state_value = state_action_value.min(0)[0]
-
-            tensordict.set(
-                ("next", self.value_estimator.tensor_keys.value), next_state_value
+        # get q-values
+        if not self.max_q_backup:
+            next_tensordict_expand = self._vmap_qvalue_networkN0(
+                next_tensordict, qval_params.data
             )
-            target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
-            return target_value
+            next_state_value = next_tensordict_expand.get(
+                self.tensor_keys.state_action_value
+            ).min(0)[0]
+            if (
+                next_state_value.shape[-len(next_sample_log_prob.shape) :]
+                != next_sample_log_prob.shape
+            ):
+                next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
+            if not self.deterministic_backup:
+                next_state_value = next_state_value - _alpha * next_sample_log_prob
 
-    def q_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+        if self.max_q_backup:
+            next_tensordict, _ = self._get_policy_actions(
+                tensordict.get("next").copy(),
+                actor_params,
+                num_actions=self.num_random,
+            )
+            next_tensordict_expand = self._vmap_qvalue_networkN0(
+                next_tensordict, qval_params.data
+            )
+
+            state_action_value = next_tensordict_expand.get(
+                self.tensor_keys.state_action_value
+            )
+            # take max over actions
+            state_action_value = state_action_value.reshape(
+                torch.Size(
+                    [self.num_qvalue_nets, *tensordict.shape, self.num_random, -1]
+                )
+            ).max(-2)[0]
+            # take min over qvalue nets
+            next_state_value = state_action_value.min(0)[0]
+
+        tensordict.set(
+            ("next", self.value_estimator.tensor_keys.value), next_state_value
+        )
+        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        return target_value
+
+    def q_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._get_value_v(
             tensordict.copy(),
@@ -714,9 +739,16 @@ class CQLLoss(LossModule):
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
         td_error = (q_pred - target_value).pow(2)
         metadata = {"td_error": td_error.detach()}
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return loss_qval, metadata
 
-    def cql_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, dict]:
+    def cql_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         pred_q1 = tensordict.get(self.tensor_keys.pred_q1)
         pred_q2 = tensordict.get(self.tensor_keys.pred_q2)
 
@@ -857,6 +889,13 @@ class CQLLoss(LossModule):
         cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
         cql_q_loss = _reduce(cql_q_loss, reduction=self.reduction)
 
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return cql_q_loss, {}
 
     def alpha_prime_loss(self, tensordict: TensorDictBase) -> Tensor:
@@ -880,6 +919,13 @@ class CQLLoss(LossModule):
 
         alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
         alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return alpha_prime_loss, {}
 
     def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
@@ -891,14 +937,20 @@ class CQLLoss(LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         alpha_loss = _reduce(alpha_loss, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return alpha_loss, {}
 
     @property
     def _alpha(self):
-        if self.min_log_alpha is not None:
+        if self.min_log_alpha is not None or self.max_log_alpha is not None:
             self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
-        with torch.no_grad():
-            alpha = self.log_alpha.exp()
+        alpha = self.log_alpha.data.exp()
         return alpha
 
 
@@ -1028,7 +1080,8 @@ class DiscreteCQLLoss(LossModule):
         terminated: NestedKey = "terminated"
         pred_val: NestedKey = "pred_val"
 
-    default_keys = _AcceptedKeys()
+    tensor_keys: _AcceptedKeys
+    default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
         "loss_qvalue",
@@ -1041,13 +1094,13 @@ class DiscreteCQLLoss(LossModule):
 
     def __init__(
         self,
-        value_network: Union[QValueActor, nn.Module],
+        value_network: QValueActor | nn.Module,
         *,
-        loss_function: Optional[str] = "l2",
+        loss_function: str | None = "l2",
         delay_value: bool = True,
-        gamma: float = None,
+        gamma: float | None = None,
         action_space=None,
-        reduction: str = None,
+        reduction: str | None = None,
     ) -> None:
         self._in_keys = None
         if reduction is None:
@@ -1170,7 +1223,7 @@ class DiscreteCQLLoss(LossModule):
     def value_loss(
         self,
         tensordict: TensorDictBase,
-    ) -> Tuple[torch.Tensor, dict]:
+    ) -> tuple[torch.Tensor, dict]:
         td_copy = tensordict.clone(False)
         with self.value_network_params.to_module(self.value_network):
             self.value_network(td_copy)
@@ -1188,14 +1241,12 @@ class DiscreteCQLLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1)
 
         # calculate target value
-        with torch.no_grad():
-            target_value = self.value_estimator.value_estimate(
-                td_copy, params=self._cached_detached_target_value_params
-            ).squeeze(-1)
+        target_value = self.value_estimator.value_estimate(
+            td_copy, params=self._cached_detached_target_value_params
+        ).squeeze(-1)
 
-        with torch.no_grad():
-            td_error = (pred_val_index - target_value).pow(2)
-            td_error = td_error.unsqueeze(-1)
+        td_error = (pred_val_index - target_value).pow(2)
+        td_error = td_error.unsqueeze(-1)
 
         tensordict.set(
             self.tensor_keys.priority,

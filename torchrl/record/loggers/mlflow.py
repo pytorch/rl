@@ -2,11 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import os
+from collections.abc import Sequence
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any
 
 from torch import Tensor
 
@@ -24,13 +27,19 @@ class MLFlowLogger(Logger):
     Args:
         exp_name (str): The name of the experiment.
         tracking_uri (str): A tracking URI to a datastore that supports MLFlow or a local directory.
+
+    Keyword Args:
+        fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
+
     """
 
     def __init__(
         self,
         exp_name: str,
         tracking_uri: str,
-        tags: Optional[Dict[str, Any]] = None,
+        tags: dict[str, Any] | None = None,
+        *,
+        video_fps: int = 30,
         **kwargs,
     ) -> None:
         import mlflow
@@ -43,8 +52,9 @@ class MLFlowLogger(Logger):
         mlflow.set_tracking_uri(tracking_uri)
         super().__init__(exp_name=exp_name, log_dir=tracking_uri)
         self.video_log_counter = 0
+        self.video_fps = video_fps
 
-    def _create_experiment(self) -> "mlflow.ActiveRun":  # noqa
+    def _create_experiment(self) -> mlflow.ActiveRun:  # noqa
         import mlflow
 
         """Creates an mlflow experiment.
@@ -63,12 +73,12 @@ class MLFlowLogger(Logger):
             self.id = experiment.experiment_id
         return mlflow.start_run(experiment_id=self.id)
 
-    def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to mlflow.
 
         Args:
             name (str): The name of the scalar.
-            value (:obj:`float`): The value of the scalar.
+            value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
         """
@@ -85,14 +95,14 @@ class MLFlowLogger(Logger):
             video (Tensor): The video to be logged, expected to be in (T, C, H, W) format
                 for consistency with other loggers.
             **kwargs: Other keyword arguments. By construction, log_video
-                supports 'step' (integer indicating the step index) and 'fps' (default: 6).
+                supports 'step' (integer indicating the step index) and 'fps' (defaults to ``self.video_fps``).
         """
         import mlflow
         import torchvision
 
         if not _has_tv:
             raise ImportError(
-                "Loggin a video with MLFlow requires torchvision to be installed."
+                "Logging a video with MLFlow requires torchvision to be installed."
             )
         mlflow.set_experiment(experiment_id=self.id)
         if video.ndim == 5:
@@ -103,7 +113,7 @@ class MLFlowLogger(Logger):
                 "The MLFlow logger only supports videos with 3 color channels."
             )
         self.video_log_counter += 1
-        fps = kwargs.pop("fps", 6)
+        fps = kwargs.pop("fps", self.video_fps)
         step = kwargs.pop("step", None)
         with TemporaryDirectory() as temp_dir:
             video_name = f"{name}_step_{step:04}.mp4" if step else f"{name}.mp4"
@@ -111,7 +121,7 @@ class MLFlowLogger(Logger):
                 torchvision.io.write_video(filename=f.name, video_array=video, fps=fps)
                 mlflow.log_artifact(f.name, "videos")
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:

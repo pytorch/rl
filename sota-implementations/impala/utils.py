@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
-from torchrl.data import Composite
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
@@ -17,6 +17,7 @@ from torchrl.envs import (
     NoopResetEnv,
     Resize,
     RewardSum,
+    set_gym_backend,
     SignTransform,
     StepCounter,
     ToTensorImage,
@@ -38,10 +39,11 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-def make_env(env_name, device, is_test=False):
-    env = GymEnv(
-        env_name, frame_skip=4, from_pixels=True, pixels_only=False, device=device
-    )
+def make_env(env_name, device, gym_backend, is_test=False):
+    with set_gym_backend(gym_backend):
+        env = GymEnv(
+            env_name, frame_skip=4, from_pixels=True, pixels_only=False, device=device
+        )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
@@ -69,7 +71,7 @@ def make_ppo_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    num_outputs = proof_environment.action_spec.space.n
+    num_outputs = proof_environment.action_spec_unbatched.space.n
     distribution_class = OneHotCategorical
     distribution_kwargs = {}
 
@@ -117,7 +119,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=Composite(action=proof_environment.action_spec),
+        spec=proof_environment.full_action_spec_unbatched,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -139,9 +141,9 @@ def make_ppo_modules_pixels(proof_environment):
     return common_module, policy_module, value_module
 
 
-def make_ppo_models(env_name):
+def make_ppo_models(env_name, gym_backend):
 
-    proof_environment = make_env(env_name, device="cpu")
+    proof_environment = make_env(env_name, device="cpu", gym_backend=gym_backend)
     common_module, policy_module, value_module = make_ppo_modules_pixels(
         proof_environment
     )

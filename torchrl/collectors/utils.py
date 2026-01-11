@@ -4,16 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable
+import contextlib
+from collections.abc import Callable, Sequence
 
 import torch
+from pyvers import implement_for
 
-from tensordict import NestedKey, pad, set_lazy_legacy, TensorDictBase
-
+from tensordict import NestedKey, pad, set_lazy_legacy, TensorDict, TensorDictBase
+from tensordict.utils import Buffer
+from torch import multiprocessing as mp, nn as nn
+from torch.nn import Parameter
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
-    "update_policy_weights_ will be a no-op."
+    "update_policy_weights_ will be a no-op. Consider passing a local/weight_updater object "
+    "to your collector to handle the weight updates."
 )
 
 
@@ -256,3 +261,169 @@ def split_trajectories(
         [pad(out_split, [0, MAX - out_split.shape[0]]) for out_split in out_splits], 0
     )
     return td
+
+
+@implement_for("torch", "2.5.0")
+def _cast(
+    p: nn.Parameter | torch.Tensor,
+    param_maybe_buffer: nn.Parameter | torch.Tensor | None = None,
+) -> nn.Parameter | torch.Tensor:
+    if param_maybe_buffer is None:
+        param_maybe_buffer = p
+        p = p.data
+    if isinstance(param_maybe_buffer, Parameter):
+        # Create parameter without gradients to avoid serialization issues
+        return Parameter(p, requires_grad=False)
+    if isinstance(param_maybe_buffer, Buffer):
+        return Buffer(p)
+    if p.requires_grad:
+        raise RuntimeError(f"Cannot cast tensor {p} with gradients")
+    return p
+
+
+def _make_meta_policy(policy: nn.Module):
+    """Create context manager that temporarily puts policy parameters on meta device.
+
+    This is used with weight sync schemes to send policy structure without weights.
+    The actual weights are distributed by the schemes.
+
+    Args:
+        policy: Policy module to temporarily modify.
+
+    Returns:
+        A context manager that temporarily replaces policy parameters with meta device versions.
+        On exit, the original parameters are restored to the policy.
+    """
+    param_and_buf = TensorDict.from_module(policy, as_module=True)
+    return param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy)
+
+
+@implement_for("torch", None, "2.8")
+def _make_meta_policy_cm(
+    policy: nn.Module, *, mp_start_method: str
+) -> contextlib.AbstractContextManager:
+    """Return the context manager used to make a policy 'stateless' for worker pickling.
+
+    On older PyTorch versions (<2.8), pickling meta-device storages when using the
+    ``spawn`` start method may fail (e.g., triggering ``_share_filename_: only available on CPU``).
+    In that case, we avoid converting parameters/buffers to meta and simply return a no-op
+    context manager.
+    """
+    if mp_start_method == "spawn":
+        return contextlib.nullcontext()
+    return _make_meta_policy(policy)
+
+
+@implement_for("torch", "2.8")
+def _make_meta_policy_cm(  # noqa: F811
+    policy: nn.Module, *, mp_start_method: str
+) -> contextlib.AbstractContextManager:
+    """Return the context manager used to make a policy 'stateless' for worker pickling.
+
+    On PyTorch >= 2.8, meta-device policy structures can be pickled reliably under ``spawn``.
+    """
+    return _make_meta_policy(policy)
+
+
+@implement_for("torch", None, "2.5.0")
+def _cast(  # noqa
+    p: nn.Parameter | torch.Tensor,
+    param_maybe_buffer: nn.Parameter | torch.Tensor | None = None,
+) -> nn.Parameter | torch.Tensor:
+    if param_maybe_buffer is None:
+        param_maybe_buffer = p
+        p = p.data
+    if isinstance(param_maybe_buffer, Parameter):
+        # Create parameter without gradients to avoid serialization issues
+        return Parameter(p, requires_grad=False)
+    if p.requires_grad:
+        raise RuntimeError(f"Cannot cast tensor {p} with gradients")
+    return p
+
+
+def _map_to_cpu_if_needed(x):
+    """Map tensors on exotic devices (MPS, NPU, etc.) to CPU.
+
+    CPU and CUDA tensors are kept as-is since they can be shared across processes.
+    Only exotic devices that don't support multiprocessing are mapped to CPU.
+    """
+    if isinstance(x, torch.Tensor):
+        # CPU and CUDA can be shared across processes
+        if x.device.type in ("cpu", "cuda"):
+            return x
+        # Exotic devices (MPS, NPU, etc.) need to be mapped to CPU
+        return x.cpu()
+    return x
+
+
+def _make_meta_params(param):
+    is_param = isinstance(param, Parameter)
+
+    pd = param.detach().to("meta")
+
+    if is_param:
+        pd = Parameter(pd, requires_grad=False)
+    return pd
+
+
+class _TrajectoryPool:
+    def __init__(self, ctx=None, lock: bool = False):
+        self.ctx = ctx
+        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int).share_memory_()
+        if ctx is None:
+            self.lock = contextlib.nullcontext() if not lock else mp.RLock()
+        else:
+            self.lock = contextlib.nullcontext() if not lock else ctx.RLock()
+
+    def get_traj_and_increment(self, n=1, device=None):
+        with self.lock:
+            v = self._traj_id.item()
+            out = torch.arange(v, v + n).to(device)
+            self._traj_id.copy_(1 + out[-1].item())
+        return out
+
+
+def _map_weight(
+    weight,
+    policy_device,
+):
+
+    is_param = isinstance(weight, Parameter)
+    is_buffer = isinstance(weight, Buffer)
+    weight = weight.data
+    if weight.device != policy_device:
+        weight = weight.to(policy_device)
+    elif weight.device.type in ("cpu",):
+        weight = weight.share_memory_()
+    if is_param:
+        weight = Parameter(weight, requires_grad=False)
+    elif is_buffer:
+        weight = Buffer(weight)
+    return weight
+
+
+def _make_policy_factory(
+    *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
+):
+    has_policy_factory = policy_factory is not None and (
+        (isinstance(policy_factory, Sequence) and any(policy_factory))
+        or not isinstance(policy_factory, Sequence)
+    )
+    if policy is not None and has_policy_factory:
+        raise ValueError("policy cannot be used with policy_factory")
+    elif has_policy_factory:
+        if isinstance(policy_factory, Sequence):
+            return policy_factory
+        else:
+            policy = policy_factory()
+
+    if weight_sync_scheme is not None:
+        # Initialize the receiver on the worker side
+        weight_sync_scheme.init_on_receiver(
+            model=policy,
+            model_id="policy",
+            worker_idx=worker_idx,
+        )
+        # Synchronize initial weights
+        weight_sync_scheme.connect(worker_idx=worker_idx)
+    return policy

@@ -5,13 +5,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
-
 import torch
-
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
 
@@ -69,7 +67,7 @@ class ParameterScheduler(ABC):
         del sd["sampler"]
         return sd
 
-    def load_state_dict(self, state_dict: Dict[str, Any]):
+    def load_state_dict(self, state_dict: dict[str, Any]):
         """Load the scheduler's state.
 
         Args:

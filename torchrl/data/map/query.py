@@ -4,8 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
+
 from copy import deepcopy
-from typing import Any, Callable, Dict, List, Mapping, TypeVar
+from typing import Any, TypeVar
 
 import torch
 import torch.nn as nn
@@ -39,7 +41,7 @@ class HashToInt(nn.Module):
                 )
         return torch.tensor(result, device=key.device, dtype=key.dtype)
 
-    def state_dict(self) -> Dict[str, torch.Tensor]:
+    def state_dict(self) -> dict[str, torch.Tensor]:
         values = torch.tensor(self._index_to_index.values())
         keys = torch.tensor(self._index_to_index.keys())
         return {"keys": keys, "values": values}
@@ -80,48 +82,49 @@ class QueryModule(TensorDictModuleBase):
             If a single ``hash_module`` is provided but no aggregator is passed, it will take
             the value of the hash_module. If no ``hash_module`` or a list of ``hash_modules`` is
             provided but no aggregator is passed, it will default to ``SipHash``.
-       clone (bool, optional): if ``True``, a shallow clone of the input TensorDict will be
+        clone (bool, optional): if ``True``, a shallow clone of the input TensorDict will be
             returned. This can be used to retrieve the integer index within the storage,
             corresponding to a given input tensordict. This can be overridden at runtime by
             providing the ``clone`` argument to the forward method.
             Defaults to ``False``.
-    d
-        Examples:
-            >>> query_module = QueryModule(
-            ...     in_keys=["key1", "key2"],
-            ...     index_key="index",
-            ...     hash_module=SipHash(),
-            ... )
-            >>> query = TensorDict(
-            ...     {
-            ...         "key1": torch.Tensor([[1], [1], [1], [2]]),
-            ...         "key2": torch.Tensor([[3], [3], [2], [3]]),
-            ...         "other": torch.randn(4),
-            ...     },
-            ...     batch_size=(4,),
-            ... )
-            >>> res = query_module(query)
-            >>> # The first two pairs of key1 and key2 match
-            >>> assert res["index"][0] == res["index"][1]
-            >>> # The last three pairs of key1 and key2 have at least one mismatching value
-            >>> assert res["index"][1] != res["index"][2]
-            >>> assert res["index"][2] != res["index"][3]
+
+    Examples:
+        >>> query_module = QueryModule(
+        ...     in_keys=["key1", "key2"],
+        ...     index_key="index",
+        ...     hash_module=SipHash(),
+        ... )
+        >>> query = TensorDict(
+        ...     {
+        ...         "key1": torch.Tensor([[1], [1], [1], [2]]),
+        ...         "key2": torch.Tensor([[3], [3], [2], [3]]),
+        ...         "other": torch.randn(4),
+        ...     },
+        ...     batch_size=(4,),
+        ... )
+        >>> res = query_module(query)
+        >>> # The first two pairs of key1 and key2 match
+        >>> assert res["index"][0] == res["index"][1]
+        >>> # The last three pairs of key1 and key2 have at least one mismatching value
+        >>> assert res["index"][1] != res["index"][2]
+        >>> assert res["index"][2] != res["index"][3]
+
     """
 
     def __init__(
         self,
-        in_keys: List[NestedKey],
+        in_keys: list[NestedKey],
         index_key: NestedKey = "_index",
         hash_key: NestedKey = "_hash",
         *,
-        hash_module: Callable[[Any], int] | List[Callable[[Any], int]] | None = None,
+        hash_module: Callable[[Any], int] | list[Callable[[Any], int]] | None = None,
         hash_to_int: Callable[[int], int] | None = None,
         aggregator: Callable[[Any], int] = None,
         clone: bool = False,
     ):
         if len(in_keys) == 0:
             raise ValueError("`in_keys` cannot be empty.")
-        in_keys = in_keys if isinstance(in_keys, List) else [in_keys]
+        in_keys = in_keys if isinstance(in_keys, list) else [in_keys]
 
         super().__init__()
         in_keys = self.in_keys = in_keys

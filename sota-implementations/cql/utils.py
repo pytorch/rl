@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 
 import torch.nn
@@ -16,7 +18,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
     CatTensors,
@@ -113,8 +115,21 @@ def make_environment(cfg, train_num_envs=1, eval_num_envs=1, logger=None):
 # ---------------------------
 
 
-def make_collector(cfg, train_env, actor_model_explore):
+def make_collector(
+    cfg,
+    train_env,
+    actor_model_explore,
+    compile=False,
+    compile_mode=None,
+    cudagraph=False,
+):
     """Make collector."""
+    device = cfg.collector.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu")
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
@@ -122,7 +137,9 @@ def make_collector(cfg, train_env, actor_model_explore):
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
-        device=cfg.collector.device,
+        device=device,
+        compile_policy={"mode": compile_mode} if compile else False,
+        cudagraph_policy=cudagraph,
     )
     collector.set_seed(cfg.env.seed)
     return collector
@@ -164,16 +181,59 @@ def make_replay_buffer(
 
 
 def make_offline_replay_buffer(rb_cfg):
-    data = D4RLExperienceReplay(
+    data = MinariExperienceReplay(
         dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
-        sampler=SamplerWithoutReplacement(drop_last=False),
+        sampler=SamplerWithoutReplacement(drop_last=True),
         prefetch=4,
-        direct_download=True,
+        download=True,
     )
 
     data.append_transform(DoubleToFloat())
+
+    return data
+
+
+def make_offline_discrete_replay_buffer(rb_cfg):
+    import gymnasium as gym
+    import minari
+    from minari import DataCollector
+
+    # Create custom minari dataset from environment
+
+    env = gym.make(rb_cfg.env)
+    env = DataCollector(env)
+
+    for _ in range(rb_cfg.episodes):
+        env.reset(seed=123)
+        while True:
+            action = env.action_space.sample()
+            obs, rew, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                break
+
+    env.create_dataset(
+        dataset_id=rb_cfg.dataset,
+        algorithm_name="Random-Policy",
+        code_permalink="https://github.com/Farama-Foundation/Minari",
+        author="Farama",
+        author_email="contact@farama.org",
+    )
+
+    data = MinariExperienceReplay(
+        dataset_id=rb_cfg.dataset,
+        split_trajs=False,
+        batch_size=rb_cfg.batch_size,
+        load_from_local_minari=True,
+        sampler=SamplerWithoutReplacement(drop_last=True),
+        prefetch=4,
+    )
+
+    data.append_transform(DoubleToFloat())
+
+    # Clean up
+    minari.delete_dataset(rb_cfg.dataset)
 
     return data
 
@@ -191,7 +251,7 @@ def make_offline_replay_buffer(rb_cfg):
 def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
-    action_spec = train_env.action_spec
+    action_spec = train_env.action_spec_unbatched
 
     actor_net, q_net = make_cql_modules_state(model_cfg, eval_env)
     in_keys = ["observation"]
@@ -207,11 +267,21 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         in_keys=["loc", "scale"],
         spec=action_spec,
         distribution_class=TanhNormal,
+        # Wrapping the kwargs in a TensorDictParams such that these items are
+        #  send to device when necessary - not compatible with compile yet
+        # distribution_kwargs=TensorDictParams(
+        #     TensorDict(
+        #         {
+        #             "low": torch.as_tensor(action_spec.space.low, device=device),
+        #             "high": torch.as_tensor(action_spec.space.high, device=device),
+        #             "tanh_loc": NonTensorData(False),
+        #         }
+        #     ),
+        #     no_convert=True,
+        # ),
         distribution_kwargs={
-            "low": action_spec.space.low[len(train_env.batch_size) :],
-            "high": action_spec.space.high[
-                len(train_env.batch_size) :
-            ],  # remove batch-size
+            "low": action_spec.space.low.to(device),
+            "high": action_spec.space.high.to(device),
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,
@@ -277,7 +347,7 @@ def make_discretecql_model(cfg, train_env, eval_env, device="cpu"):
 
 
 def make_cql_modules_state(model_cfg, proof_environment):
-    action_spec = proof_environment.action_spec
+    action_spec = proof_environment.action_spec_unbatched
 
     actor_net_kwargs = {
         "num_cells": model_cfg.hidden_sizes,
@@ -307,7 +377,7 @@ def make_cql_modules_state(model_cfg, proof_environment):
 # ---------
 
 
-def make_continuous_loss(loss_cfg, model):
+def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
     loss_module = CQLLoss(
         model[0],
         model[1],
@@ -320,19 +390,29 @@ def make_continuous_loss(loss_cfg, model):
         with_lagrange=loss_cfg.with_lagrange,
         lagrange_thresh=loss_cfg.lagrange_thresh,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater
 
 
-def make_discrete_loss(loss_cfg, model):
-    loss_module = DiscreteCQLLoss(
-        model,
-        loss_function=loss_cfg.loss_function,
-        delay_value=True,
-    )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
+
+    if "action_space" in loss_cfg:  # especify action space
+        loss_module = DiscreteCQLLoss(
+            model,
+            loss_function=loss_cfg.loss_function,
+            action_space=loss_cfg.action_space,
+            delay_value=True,
+        )
+    else:
+        loss_module = DiscreteCQLLoss(
+            model,
+            loss_function=loss_cfg.loss_function,
+            delay_value=True,
+        )
+
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
     return loss_module, target_net_updater

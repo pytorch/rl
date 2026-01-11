@@ -14,9 +14,7 @@ import os
 import re
 import warnings
 from enum import Enum
-from typing import Any, Dict, List, Union
-
-import tensordict.base
+from typing import Any, Literal
 
 import torch
 
@@ -29,7 +27,7 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _default_is_leaf, _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     interaction_type as exploration_type,
@@ -44,10 +42,12 @@ from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logg
 from torchrl.data.tensor_specs import (
     Composite,
     NO_DEFAULT_RL as NO_DEFAULT,
+    NonTensor,
     TensorSpec,
     Unbounded,
 )
 from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
+from torchrl.modules.tensordict_module.exploration import RandomPolicy  # noqa
 
 __all__ = [
     "exploration_type",
@@ -59,7 +59,6 @@ __all__ = [
     "MarlGroupMapType",
     "check_marl_grouping",
 ]
-
 
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output. "
@@ -78,7 +77,7 @@ class _classproperty(property):
 
 
 class _StepMDP:
-    """Stateful version of step_mdp.
+    """Stateful version of :func:`~torchrl.envs.step_mdp`.
 
     Precomputes the list of keys to include and exclude during a call to step_mdp
     to reduce runtime.
@@ -94,11 +93,11 @@ class _StepMDP:
         exclude_done: bool = False,
         exclude_action: bool = True,
     ):
-        action_keys = env.action_keys
-        done_keys = env.done_keys
-        reward_keys = env.reward_keys
-        observation_keys = env.full_observation_spec.keys(True, True)
-        state_keys = env.full_state_spec.keys(True, True)
+        action_keys = env._action_keys_step_mdp
+        done_keys = env._done_keys_step_mdp
+        reward_keys = env._reward_keys_step_mdp
+        observation_keys = env._observation_keys_step_mdp
+        state_keys = env._state_keys_step_mdp
         self.action_keys = [unravel_key(key) for key in action_keys]
         self.done_keys = [unravel_key(key) for key in done_keys]
         self.observation_keys = list(observation_keys)
@@ -149,13 +148,14 @@ class _StepMDP:
         self.exclude_from_root = self._repr_key_list_as_tree(self.exclude_from_root)
         self.keys_from_root = self._repr_key_list_as_tree(self.keys_from_root)
         self.keys_from_next = self._repr_key_list_as_tree(self.keys_from_next)
-        self.validated = None
+        self.validated = True
 
         # Model based envs can have missing keys
         # TODO: do we want to always allow this? check_env_specs should catch these or downstream ops
         self._allow_absent_keys = True
 
     def validate(self, tensordict):
+        # Deprecated - leaving dormant
         if self.validated:
             return True
         if self.validated is None:
@@ -181,15 +181,17 @@ class _StepMDP:
                 if not _is_reset(key)
             }
             expected = set(expected)
+            # Actual (the input td) can have more keys, like loc and scale etc
+            # But we cannot have keys missing: if there's a key in expected that is not in actual
+            # it is a problem.
             self.validated = expected.intersection(actual) == expected
             if not self.validated:
                 warnings.warn(
-                    "The expected key set and actual key set differ. "
-                    "This will work but with a slower throughput than "
-                    "when the specs match exactly the actual key set "
-                    "in the data. "
-                    f"{{Expected keys}}-{{Actual keys}}={set(expected) - actual}, \n"
-                    f"{{Actual keys}}-{{Expected keys}}={actual- set(expected)}."
+                    "The expected key set and actual key set differ (all expected keys must be present, "
+                    "extra keys can be present in the input TensorDict). "
+                    "As a result, step_mdp will need to run extra key checks at each iteration. "
+                    f"{{Expected keys}}-{{Actual keys}}={set(expected) - actual} (<= this set should be empty), \n"
+                    f"{{Actual keys}}-{{Expected keys}}={actual - set(expected)}."
                 )
         return self.validated
 
@@ -198,7 +200,7 @@ class _StepMDP:
         """Represents the keys as a tree to facilitate iteration."""
         if not key_list:
             return {}
-        key_dict = {key: torch.zeros(()) for key in key_list}
+        key_dict = {key: torch.zeros((0,)) for key in key_list}
         td = TensorDict(key_dict, batch_size=torch.Size([]))
         return tree_map(lambda x: None, td.to_dict())
 
@@ -214,12 +216,12 @@ class _StepMDP:
             val = data_in._get_str(key, NO_DEFAULT)
             if subdict is not None:
                 val_out = data_out._get_str(key, None)
-                if val_out is None:
-                    val_out = val.empty()
+                if val_out is None or val_out.batch_size != val.batch_size:
+                    val_out = val.empty(batch_size=val.batch_size)
                 if isinstance(val, LazyStackedTensorDict):
 
-                    val = LazyStackedTensorDict(
-                        *(
+                    val = LazyStackedTensorDict.lazy_stack(
+                        [
                             cls._grab_and_place(
                                 subdict,
                                 _val,
@@ -230,8 +232,8 @@ class _StepMDP:
                                 val.unbind(val.stack_dim),
                                 val_out.unbind(val_out.stack_dim),
                             )
-                        ),
-                        stack_dim=val.stack_dim,
+                        ],
+                        dim=val.stack_dim,
                     )
                 else:
                     val = cls._grab_and_place(
@@ -243,6 +245,8 @@ class _StepMDP:
             else:
                 if is_non_tensor(val):
                     val = val.clone()
+                if is_tensor_collection(val):
+                    val = val.copy()
                 data_out._set_str(
                     key, val, validated=True, inplace=False, non_blocking=False
                 )
@@ -286,50 +290,38 @@ class _StepMDP:
             )
             return out
         next_td = tensordict._get_str("next", None)
-        if self.validate(tensordict):
-            if self.keep_other:
-                out = self._exclude(self.exclude_from_root, tensordict, out=None)
-            else:
-                out = next_td.empty()
-                self._grab_and_place(
-                    self.keys_from_root,
-                    tensordict,
-                    out,
-                    _allow_absent_keys=self._allow_absent_keys,
-                )
-            if isinstance(next_td, LazyStackedTensorDict):
-                if not isinstance(out, LazyStackedTensorDict):
-                    out = LazyStackedTensorDict(
-                        *out.unbind(next_td.stack_dim), stack_dim=next_td.stack_dim
-                    )
-                for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
-                    self._grab_and_place(
-                        self.keys_from_next,
-                        _next_td,
-                        _out,
-                        _allow_absent_keys=self._allow_absent_keys,
-                    )
-            else:
-                self._grab_and_place(
-                    self.keys_from_next,
-                    next_td,
-                    out,
-                    _allow_absent_keys=self._allow_absent_keys,
-                )
-            return out
+        if self.keep_other:
+            out = self._exclude(self.exclude_from_root, tensordict, out=None)
+            if out is None:
+                out = tensordict.empty()
         else:
             out = next_td.empty()
-            total_key = ()
-            if self.keep_other:
-                for key in tensordict.keys():
-                    if key != "next":
-                        _set(tensordict, out, key, total_key, self.excluded)
-            elif not self.exclude_action:
-                for action_key in self.action_keys:
-                    _set_single_key(tensordict, out, action_key)
-            for key in next_td.keys():
-                _set(next_td, out, key, total_key, self.excluded)
-            return out
+            self._grab_and_place(
+                self.keys_from_root,
+                tensordict,
+                out,
+                _allow_absent_keys=self._allow_absent_keys,
+            )
+        if isinstance(next_td, LazyStackedTensorDict):
+            if not isinstance(out, LazyStackedTensorDict):
+                out = LazyStackedTensorDict.lazy_stack(
+                    list(out.unbind(next_td.stack_dim)), dim=next_td.stack_dim
+                )
+            for _next_td, _out in zip(next_td.tensordicts, out.tensordicts):
+                self._grab_and_place(
+                    self.keys_from_next,
+                    _next_td,
+                    _out,
+                    _allow_absent_keys=self._allow_absent_keys,
+                )
+        else:
+            self._grab_and_place(
+                self.keys_from_next,
+                next_td,
+                out,
+                _allow_absent_keys=self._allow_absent_keys,
+            )
+        return out
 
 
 def step_mdp(
@@ -339,48 +331,47 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
-    reward_keys: Union[NestedKey, List[NestedKey]] = "reward",
-    done_keys: Union[NestedKey, List[NestedKey]] = "done",
-    action_keys: Union[NestedKey, List[NestedKey]] = "action",
+    reward_keys: NestedKey | list[NestedKey] = "reward",
+    done_keys: NestedKey | list[NestedKey] = "done",
+    action_keys: NestedKey | list[NestedKey] = "action",
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
     Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
-    The arguments allow for a precise control over what should be kept and what
+    The arguments allow for precise control over what should be kept and what
     should be copied from the ``"next"`` entry. The default behavior is:
-    move the observation entries, reward and done states to the root, exclude
-    the current action and keep all extra keys (non-action, non-done, non-reward).
+    move the observation entries, reward, and done states to the root, exclude
+    the current action, and keep all extra keys (non-action, non-done, non-reward).
 
     Args:
-        tensordict (TensorDictBase): tensordict with keys to be renamed
-        next_tensordict (TensorDictBase, optional): destination tensordict
-        keep_other (bool, optional): if ``True``, all keys that do not start with :obj:`'next_'` will be kept.
+        tensordict (TensorDictBase): The tensordict with keys to be renamed.
+        next_tensordict (TensorDictBase, optional): The destination tensordict. If `None`, a new tensordict is created.
+        keep_other (bool, optional): If ``True``, all keys that do not start with :obj:`'next_'` will be kept.
             Default is ``True``.
-        exclude_reward (bool, optional): if ``True``, the :obj:`"reward"` key will be discarded
+        exclude_reward (bool, optional): If ``True``, the :obj:`"reward"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
-            from the ``"next"`` entry (if present).
-            Default is ``True``.
-        exclude_done (bool, optional): if ``True``, the :obj:`"done"` key will be discarded
+            from the ``"next"`` entry (if present). Default is ``True``.
+        exclude_done (bool, optional): If ``True``, the :obj:`"done"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
-            from the ``"next"`` entry (if present).
-            Default is ``False``.
-        exclude_action (bool, optional): if ``True``, the :obj:`"action"` key will
+            from the ``"next"`` entry (if present). Default is ``False``.
+        exclude_action (bool, optional): If ``True``, the :obj:`"action"` key will
             be discarded from the resulting tensordict. If ``False``, it will
             be kept in the root tensordict (since it should not be present in
-            the ``"next"`` entry).
-            Default is ``True``.
-        reward_keys (NestedKey or list of NestedKey, optional): the keys where the reward is written. Defaults
+            the ``"next"`` entry). Default is ``True``.
+        reward_keys (NestedKey or list of NestedKey, optional): The keys where the reward is written. Defaults
             to "reward".
-        done_keys (NestedKey or list of NestedKey, optional): the keys where the done is written. Defaults
+        done_keys (NestedKey or list of NestedKey, optional): The keys where the done is written. Defaults
             to "done".
-        action_keys (NestedKey or list of NestedKey, optional): the keys where the action is written. Defaults
+        action_keys (NestedKey or list of NestedKey, optional): The keys where the action is written. Defaults
             to "action".
 
     Returns:
-         A new tensordict (or next_tensordict) containing the tensors of the t+1 step.
+        TensorDictBase: A new tensordict (or `next_tensordict` if provided) containing the tensors of the t+1 step.
+
+    .. seealso:: :meth:`EnvBase.step_mdp` is the class-based version of this free function. It will attempt to cache the
+        key values to reduce the overhead of making a step in the MDP.
 
     Examples:
-    This funtion allows for this kind of loop to be used:
         >>> from tensordict import TensorDict
         >>> import torch
         >>> td = TensorDict({
@@ -519,6 +510,7 @@ def _set_single_key(
     if isinstance(key, str):
         key = (key,)
     for k in key:
+        # TODO: we can do better than try/except by leveraging the as_list / as_nested_tensor feature
         try:
             val = source._get_str(k, None)
             if is_tensor_collection(val):
@@ -539,7 +531,7 @@ def _set_single_key(
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
         except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+            if re.match(r"Failed to stack tensors within a tensordict", str(err)):
                 # this is a het key
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
                     _set_single_key(s_td, d_td, k, clone=clone, device=device)
@@ -552,6 +544,7 @@ def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
     if unravel_key(total_key) not in excluded:
+        # TODO: we can do better than try/except by leveraging the as_list / as_nested_tensor feature
         try:
             val = source.get(key)
             if is_tensor_collection(val) and not isinstance(
@@ -582,7 +575,7 @@ def _set(source, dest, key, total_key, excluded):
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
         except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+            if re.match(r"Failed to stack tensors within a tensordict", str(err)):
                 # this is a het key
                 non_empty_local = False
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
@@ -691,7 +684,12 @@ def _per_level_env_check(data0, data1, check_dtype):
 
 
 def check_env_specs(
-    env, return_contiguous=True, check_dtype=True, seed: int | None = None
+    env: torchrl.envs.EnvBase,  # noqa
+    return_contiguous: bool | None = None,
+    check_dtype=True,
+    seed: int | None = None,
+    tensordict: TensorDictBase | None = None,
+    break_when_any_done: bool | Literal["both"] | None = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
@@ -706,21 +704,43 @@ def check_env_specs(
         env (EnvBase): the env for which the specs have to be checked against data.
         return_contiguous (bool, optional): if ``True``, the random rollout will be called with
             return_contiguous=True. This will fail in some cases (e.g. heterogeneous shapes
-            of inputs/outputs). Defaults to True.
+            of inputs/outputs). Defaults to ``None`` (determined by the presence of dynamic specs).
         check_dtype (bool, optional): if False, dtype checks will be skipped.
-            Defaults to True.
+            Defaults to `True`.
         seed (int, optional): for reproducibility, a seed can be set.
             The seed will be set in pytorch temporarily, then the RNG state will
             be reverted to what it was before. For the env, we set the seed but since
             setting the rng state back to what is was isn't a feature of most environment,
             we leave it to the user to accomplish that.
             Defaults to ``None``.
+        tensordict (TensorDict, optional): an optional tensordict instance to use for reset.
+        break_when_any_done (bool or str, optional): value for ``break_when_any_done`` in :meth:`~torchrl.envs.EnvBase.rollout`.
+            If ``"both"``, the test is run on both `True` and `False`.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
     of an experiment and as such should be kept out of training scripts.
 
     """
+    if return_contiguous is None:
+        return_contiguous = not env._has_dynamic_specs
+    if break_when_any_done == "both":
+        check_env_specs(
+            env,
+            return_contiguous=return_contiguous,
+            check_dtype=check_dtype,
+            seed=seed,
+            tensordict=tensordict,
+            break_when_any_done=True,
+        )
+        return check_env_specs(
+            env,
+            return_contiguous=return_contiguous,
+            check_dtype=check_dtype,
+            seed=seed,
+            tensordict=tensordict,
+            break_when_any_done=False,
+        )
     if seed is not None:
         device = (
             env.device if env.device is not None and env.device.type == "cuda" else None
@@ -732,7 +752,17 @@ def check_env_specs(
             )
 
     fake_tensordict = env.fake_tensordict()
-    real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
+    if not env.batch_locked and tensordict is not None:
+        shape = torch.broadcast_shapes(fake_tensordict.shape, tensordict.shape)
+        fake_tensordict = fake_tensordict.expand(shape)
+        tensordict = tensordict.expand(shape)
+    real_tensordict = env.rollout(
+        3,
+        return_contiguous=return_contiguous,
+        tensordict=tensordict,
+        auto_reset=tensordict is None,
+        break_when_any_done=break_when_any_done,
+    )
 
     if return_contiguous:
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
@@ -743,36 +773,53 @@ def check_env_specs(
         )
     # eliminate empty containers
     fake_tensordict_select = fake_tensordict.select(
-        *fake_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+        *fake_tensordict.keys(True, True, is_leaf=_default_is_leaf)
     )
     real_tensordict_select = real_tensordict.select(
-        *real_tensordict.keys(True, True, is_leaf=tensordict.base._default_is_leaf)
+        *real_tensordict.keys(True, True, is_leaf=_default_is_leaf)
     )
     # check keys
     fake_tensordict_keys = set(
-        fake_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+        fake_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
     )
     real_tensordict_keys = set(
-        real_tensordict.keys(True, True, is_leaf=tensordict.base._is_leaf_nontensor)
+        real_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
     )
     if fake_tensordict_keys != real_tensordict_keys:
+        keys_in_real_not_in_fake = real_tensordict_keys - fake_tensordict_keys
+        keys_in_fake_not_in_real = fake_tensordict_keys - real_tensordict_keys
         raise AssertionError(
             f"""The keys of the specs and data do not match:
-    - List of keys present in real but not in fake: {real_tensordict_keys-fake_tensordict_keys},
-    - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
+- List of keys present in real but not in fake: {keys_in_real_not_in_fake=},
+- List of keys present in fake but not in real: {keys_in_fake_not_in_real=}.
 """
         )
-    zeroing_err_msg = (
-        "zeroing the two tensordicts did not make them identical. "
-        "Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
-    )
+
+    def zeroing_err_msg():
+        return (
+            "zeroing the two tensordicts did not make them identical. "
+            f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
+        )
+
     from torchrl.envs.common import _has_dynamic_specs
 
     if _has_dynamic_specs(env.specs):
-        for real, fake in zip(real_tensordict.unbind(-1), fake_tensordict.unbind(-1)):
-            fake = fake.apply(lambda x, y: x.expand_as(y), real)
+        for real, fake in zip(
+            real_tensordict_select.filter_non_tensor_data().unbind(-1),
+            fake_tensordict_select.filter_non_tensor_data().unbind(-1),
+        ):
+
+            def expand(name, x, y):
+                try:
+                    return x.expand_as(y)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to expand fake tensor {name} with shape {x.shape} to real shape {y.shape}"
+                    ) from e
+
+            fake = fake.apply(expand, real, named=True, nested_keys=True)
             if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
-                raise AssertionError(zeroing_err_msg)
+                raise AssertionError(zeroing_err_msg())
 
             # Checks shapes and eventually dtypes of keys at all nesting levels
             _per_level_env_check(fake, real, check_dtype=check_dtype)
@@ -782,7 +829,7 @@ def check_env_specs(
             torch.zeros_like(fake_tensordict_select)
             != torch.zeros_like(real_tensordict_select)
         ).any():
-            raise AssertionError(zeroing_err_msg)
+            raise AssertionError(zeroing_err_msg())
 
         # Checks shapes and eventually dtypes of keys at all nesting levels
         _per_level_env_check(
@@ -805,7 +852,7 @@ def check_env_specs(
     ):
         if not check_no_exclusive_keys(spec):
             raise AssertionError(
-                "It appears you are using some LazyStackedCompositeSpecs with exclusive keys "
+                "It appears you are using some StackedComposite specs with exclusive keys "
                 "(keys present in some but not all of the stacked specs). To use such heterogeneous specs, "
                 "you will need to first pass your stack through `torchrl.data.consolidate_spec`."
             )
@@ -856,13 +903,19 @@ def _sort_keys(element):
     return element
 
 
-def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
+def make_composite_from_td(
+    data, *, unsqueeze_null_shapes: bool = True, dynamic_shape: bool = False
+):
     """Creates a Composite instance from a tensordict, assuming all values are unbounded.
 
     Args:
         data (tensordict.TensorDict): a tensordict to be mapped onto a Composite.
+
+    Keyword Args:
         unsqueeze_null_shapes (bool, optional): if ``True``, every empty shape will be
             unsqueezed to (1,). Defaults to ``True``.
+        dynamic_shape (bool, optional): if ``True``, all tensors will be assumed to have a dynamic shape
+            along the last dimension. Defaults to ``False``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -885,22 +938,39 @@ def make_composite_from_td(data, unsqueeze_null_shapes: bool = True):
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
-    # custom funtion to convert a tensordict in a similar spec structure
+    # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
+    def make_shape(shape):
+        if shape or not unsqueeze_null_shapes:
+            if dynamic_shape and shape:
+                return shape[:-1] + (-1,)
+            else:
+                return shape
+        return torch.Size([1])
+
     composite = Composite(
         {
-            key: make_composite_from_td(tensor)
-            if isinstance(tensor, TensorDictBase)
-            else Unbounded(
-                dtype=tensor.dtype,
+            key: make_composite_from_td(
+                tensor,
+                unsqueeze_null_shapes=unsqueeze_null_shapes,
+                dynamic_shape=dynamic_shape,
+            )
+            if is_tensor_collection(tensor) and not is_non_tensor(tensor)
+            else NonTensor(
+                shape=tensor.shape,
+                # Assume all the non-tensors have the same datatype
+                example_data=tensor.view(-1)[0].data,
                 device=tensor.device,
-                shape=tensor.shape
-                if tensor.shape or not unsqueeze_null_shapes
-                else [1],
+                feature_dims=len(tensor.shape) - len(data.shape),
+            )
+            if is_non_tensor(tensor)
+            else Unbounded(
+                dtype=tensor.dtype, device=tensor.device, shape=make_shape(tensor.shape)
             )
             for key, tensor in data.items()
         },
         shape=data.shape,
+        data_cls=type(data),
     )
     return composite
 
@@ -999,14 +1069,14 @@ class MarlGroupMapType(Enum):
     ALL_IN_ONE_GROUP = 1
     ONE_GROUP_PER_AGENT = 2
 
-    def get_group_map(self, agent_names: List[str]):
+    def get_group_map(self, agent_names: list[str]):
         if self == MarlGroupMapType.ALL_IN_ONE_GROUP:
             return {"agents": agent_names}
         elif self == MarlGroupMapType.ONE_GROUP_PER_AGENT:
             return {agent_name: [agent_name] for agent_name in agent_names}
 
 
-def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]):
+def check_marl_grouping(group_map: dict[str, list[str]], agent_names: list[str]):
     """Check MARL group map.
 
     Performs checks on the group map of a marl environment to assess its validity.
@@ -1037,14 +1107,14 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
             raise ValueError(f"Group {group_name} is empty")
         for agent_name in group:
             if agent_name not in found_agents:
-                raise ValueError(f"Agent {agent_name} not present in environment")
+                raise ValueError(f"Agent {agent_name} wasn't present in environment")
             if not found_agents[agent_name]:
                 found_agents[agent_name] = True
             else:
                 raise ValueError(f"Agent {agent_name} present more than once")
     for agent_name, found in found_agents.items():
         if not found:
-            raise ValueError(f"Agent {agent_name} not found in any group")
+            raise ValueError(f"Agent {agent_name} wasn't found in any group")
 
 
 def _terminated_or_truncated(
@@ -1350,9 +1420,11 @@ def _aggregate_end_of_traj(
 def _update_during_reset(
     tensordict_reset: TensorDictBase,
     tensordict: TensorDictBase,
-    reset_keys: List[NestedKey],
+    reset_keys: list[NestedKey],
 ):
     """Updates the input tensordict with the reset data, based on the reset keys."""
+    if not reset_keys:
+        return tensordict.update(tensordict_reset)
     roots = set()
     for reset_key in reset_keys:
         # get the node of the reset key
@@ -1364,13 +1436,13 @@ def _update_during_reset(
             node = tensordict.get(node_key)
             reset_key_tuple = reset_key
         else:
-            node_reset = tensordict_reset
+            node_reset = tensordict_reset.exclude(reset_key)
             node = tensordict
             reset_key_tuple = (reset_key,)
         # get the reset signal
         reset = tensordict.pop(reset_key, None)
 
-        # check if this reset should be ignored -- this happens whenever the a
+        # check if this reset should be ignored -- this happens whenever the
         # root node has already been updated
         root = () if isinstance(reset_key, str) else reset_key[:-1]
         processed = any(reset_key_tuple[: len(x)] == x for x in roots)
@@ -1383,7 +1455,7 @@ def _update_during_reset(
             # by contract, a reset signal at one level cannot
             # be followed by other resets at nested levels, so it's safe to
             # simply update
-            node.update(node_reset)
+            node.update(node_reset, update_batch_size=True)
         else:
             # there can be two cases: (1) the key is present in both tds,
             # in which case we use the reset mask to update
@@ -1396,7 +1468,9 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
-            node.where(~reset, other=node_reset, out=node, pad=0)
+            node.where(
+                ~reset, other=node_reset, out=node, pad=0, update_batch_size=True
+            )
             # node = node.clone()
             # idx = reset.nonzero(as_tuple=True)[0]
             # node[idx].update(node_reset[idx])
@@ -1534,15 +1608,20 @@ def _make_compatible_policy(
             policy = TensorDictModule(policy, in_keys=in_keys, out_keys=out_keys)
         else:
             raise TypeError(
-                f"""Arguments to policy.forward are incompatible with entries in
-    env.observation_spec (got incongruent signatures: fun signature is {set(sig.parameters)} vs specs {set(next_observation)}).
-    If you want TorchRL to automatically wrap your policy with a TensorDictModule
-    then the arguments to policy.forward must correspond one-to-one with entries
-    in env.observation_spec.
-    For more complex behavior and more control you can consider writing your
-    own TensorDictModule.
-    Check the collector documentation to know more about accepted policies.
-    """
+                f"""This error is raised because TorchRL tried to automatically wrap your policy in
+a TensorDictModule. If you're confident the policy can directly process environment outputs, set
+the `trust_policy` argument to `True` in the constructor.
+
+Arguments to policy.forward are incompatible with entries in
+env.observation_spec (got incongruent signatures:
+the function signature is {set(sig.parameters)} but the specs have keys {set(next_observation)}).
+If you want TorchRL to automatically wrap your policy with a TensorDictModule
+then the arguments to policy.forward must correspond one-to-one with entries
+in env.observation_spec.
+For more complex behavior and more control you can consider writing your
+own TensorDictModule.
+Check the collector documentation to know more about accepted policies.
+"""
             )
     return policy
 
@@ -1593,34 +1672,6 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
     )
 
 
-class RandomPolicy:
-    """A random policy for data collectors.
-
-    This is a wrapper around the action_spec.rand method.
-
-    Args:
-        action_spec: TensorSpec object describing the action specs
-
-    Examples:
-        >>> from tensordict import TensorDict
-        >>> from torchrl.data.tensor_specs import Bounded
-        >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
-        >>> actor = RandomPolicy(action_spec=action_spec)
-        >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
-    """
-
-    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
-        super().__init__()
-        self.action_spec = action_spec.clone()
-        self.action_key = action_key
-
-    def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        if isinstance(self.action_spec, Composite):
-            return td.update(self.action_spec.rand())
-        else:
-            return td.set(self.action_key, self.action_spec.rand())
-
-
 class _PolicyMetaClass(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         # no kwargs
@@ -1659,5 +1710,5 @@ class _NonParametricPolicyWrapper(nn.Module, metaclass=_PolicyMetaClass):
             super().__getattr__(attr)
         except Exception:
             raise AttributeError(
-                f"policy not set in {self.__class__.__name__}, cannot access {attr}."
+                f"The policy wasn't set in {self.__class__.__name__}, cannot access {attr}."
             )

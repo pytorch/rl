@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import abc
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import torch
 from tensordict import TensorDictBase
@@ -72,7 +72,7 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
 
         Args and Keyword Args are forwarded to :meth:`~tensordict.TensorDictBase.map`.
 
-        The dataset can subsequently be deleted using :meth:`~.delete`.
+        The dataset can subsequently be deleted using :meth:`delete`.
 
         Keyword Args:
             dest (path or equivalent): a path to the location of the new dataset.

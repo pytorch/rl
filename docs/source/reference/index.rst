@@ -7,7 +7,10 @@ API Reference
     collectors
     data
     envs
+    llms
     modules
     objectives
+    services
     trainers
     utils
+    config

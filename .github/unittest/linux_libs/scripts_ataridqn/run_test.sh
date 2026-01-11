@@ -5,7 +5,7 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0
+apt-get update && apt-get remove swig -y && apt-get install -y git gcc patchelf libosmesa6-dev libgl1-mesa-glx libglfw3 swig3.0 cmake
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export LAZY_LEGACY_OP=False
@@ -21,5 +21,5 @@ lib_dir="${env_dir}/lib"
 conda deactivate && conda activate ./env
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestAtariDQN --error-for-skips --runslow
-coverage combine
+coverage combine -q
 coverage xml -i

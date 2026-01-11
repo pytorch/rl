@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable, List
+from collections.abc import Callable
 
 import torch
 from torch.nn import Module
@@ -75,7 +75,8 @@ class BinaryToDecimal(Module):
 class SipHash(Module):
     """A Module to Compute SipHash values for given tensors.
 
-    A hash function module based on SipHash implementation in python.
+    A hash function module based on SipHash implementation in python. Input tensors should have shape ``[batch_size, num_features]``
+    and the output shape will be ``[batch_size]``.
 
     Args:
         as_tensor (bool, optional): if ``True``, the bytes will be turned into integers
@@ -102,7 +103,7 @@ class SipHash(Module):
         super().__init__()
         self.as_tensor = as_tensor
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor | List[bytes]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | list[bytes]:
         hash_values = []
         if x.dtype in (torch.bfloat16,):
             x = x.to(torch.float16)
@@ -110,7 +111,7 @@ class SipHash(Module):
             hash_value = x_i.tobytes()
             hash_values.append(hash_value)
         if not self.as_tensor:
-            return hash_value
+            return hash_values
         result = torch.tensor([hash(x) for x in hash_values], dtype=torch.int64)
         return result
 
