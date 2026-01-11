@@ -70,6 +70,30 @@ class PUCTScore(MCTSScore):
     Output Keys:
         - `score_key` (torch.Tensor): Tensor of the same shape as `visits_key`, containing
           the calculated PUCT scores.
+
+    Example:
+        ```python
+        from tensordict import TensorDict
+        from torchrl.modules.mcts.scores import PUCTScore
+
+        # Create a PUCTScore instance
+        puct = PUCTScore(c=1.5)
+
+        # Define a TensorDict with required keys
+        node = TensorDict(
+            {
+                "win_count": torch.tensor([10.0, 20.0]),
+                "visits": torch.tensor([5.0, 10.0]),
+                "total_visits": torch.tensor(50.0),
+                "prior_prob": torch.tensor([0.6, 0.4]),
+            },
+            batch_size=[],
+        )
+
+        # Compute the PUCT scores
+        result = puct(node)
+        print(result["score"])  # Output: Tensor with PUCT scores
+        ```
     """
 
     c: float
@@ -120,17 +144,7 @@ class UCBScore(MCTSScore):
     empirical rewards and actions that have been visited less frequently.
 
     The formula used is:
-    `score = (win_count / visits) + c * sqrt(log(total_visits) / visits)`
-    However, the implementation here uses `1 + visits` in the denominator of the
-    exploration term to handle cases where `visits` might be zero for an action,
-    preventing division by zero and ensuring unvisited actions get a high exploration score.
-    The formula implemented is:
     `score = (win_count / visits) + c * sqrt(total_visits) / (1 + visits)`
-    Note: The standard UCB1 formula's exploration term is `c * sqrt(log(N) / N_i)`,
-    where N is parent visits and N_i is action visits. This implementation uses `sqrt(N)`
-    instead of `sqrt(log N)`. For the canonical UCB1 `sqrt(log N / N_i)` term,
-    total_visits would need to be `log(parent_visits)` and then use `c * sqrt(total_visits / visits_i)`.
-    The current form is simpler and common in some MCTS variants.
 
     Args:
         c (float): The exploration constant. A common value is `sqrt(2)`.
@@ -147,16 +161,35 @@ class UCBScore(MCTSScore):
 
     Input Keys:
         - `win_count_key` (torch.Tensor): Tensor of shape (..., num_actions).
-        - `visits_key` (torch.Tensor): Tensor of shape (..., num_actions). If an action
-          has zero visits, its exploitation term (win_count / visits) will result in NaN
-          if win_count is also zero, or +/-inf if win_count is non-zero. The exploration
-          term remains well-defined due to `(1 + visits)`.
-        - `total_visits_key` (torch.Tensor): Scalar or tensor broadcastable to other inputs,
-          representing the parent node's visit count (N).
+        - `visits_key` (torch.Tensor): Tensor of shape (..., num_actions).
+        - `total_visits_key` (torch.Tensor): Scalar or tensor broadcastable to other inputs.
 
     Output Keys:
         - `score_key` (torch.Tensor): Tensor of the same shape as `visits_key`, containing
           the calculated UCB scores.
+
+    Example:
+        ```python
+        from tensordict import TensorDict
+        from torchrl.modules.mcts.scores import UCBScore
+
+        # Create a UCBScore instance
+        ucb = UCBScore(c=1.414)
+
+        # Define a TensorDict with required keys
+        node = TensorDict(
+            {
+                "win_count": torch.tensor([15.0, 25.0]),
+                "visits": torch.tensor([10.0, 20.0]),
+                "total_visits": torch.tensor(100.0),
+            },
+            batch_size=[],
+        )
+
+        # Compute the UCB scores
+        result = ucb(node)
+        print(result["score"])  # Output: Tensor with UCB scores
+        ```
     """
 
     c: float
@@ -196,61 +229,48 @@ class EXP3Score(MCTSScore):
     EXP3 (Exponential-weight algorithm for Exploration and Exploitation) is a bandit
     algorithm that performs well in adversarial or non-stationary environments.
     It maintains weights for each action and adjusts them based on received rewards.
-    Actions are chosen probabilistically based on these weights, with a mechanism
-    to ensure a minimum level of exploration.
-
-    The `forward` method calculates the probability distribution over actions:
-    `p_i(t) = (1 - gamma) * (w_i(t) / sum_weights) + (gamma / K)`
-    where `w_i(t)` are the current weights, `sum_weights` is the sum of all weights,
-    `gamma` is the exploration factor, and `K` is the number of actions.
-    These probabilities are typically stored in the `score_key` and used for action selection.
-
-    The `update_weights` method updates the weights after an action is chosen and a
-    reward is observed. This method is typically called after a simulation/rollout
-    and backpropagation phase in MCTS. The update rule is:
-    `w_i(t+1) = w_i(t) * exp((gamma / K) * (reward / p_i(t)))`
-    where `reward` is the reward for the chosen action (typically normalized to [0,1])
-    and `p_i(t)` is the probability with which the action was chosen.
-
-    Reference: "Bandit based Monte-Carlo Planning" (Kocsis & Szepesvari, 2006), though
-    the specific EXP3 formulation can vary (e.g., "Regret Analysis of Stochastic and
-    Nonstochastic Multi-armed Bandit Problems", Bubeck & Cesa-Bianchi, 2012 for EXP3 details).
 
     Args:
         gamma (float, optional): Exploration factor, balancing uniform exploration
             and exploitation of current weights. Must be in [0, 1]. Defaults to 0.1.
         weights_key (NestedKey, optional): Key in the input `TensorDictBase` for
-            the tensor containing current action weights. If not found during the first
-            `forward` call, weights are initialized to ones. Defaults to "weights".
+            the tensor containing current action weights. Defaults to "weights".
         action_prob_key (NestedKey, optional): Key to store the calculated action
-            probabilities `p_i(t)`. If different from `score_key`, it allows storing
-            these probabilities separately, which might be useful if `score_key` is
-            used for a different purpose by the selection strategy. Defaults to "action_prob".
-            The `update_weights` method will look for `p_i(t)` in `score_key`.
+            probabilities. Defaults to "action_prob".
         score_key (NestedKey, optional): Key where the calculated action probabilities
-            (scores for MCTS selection) will be stored. Defaults to "score".
+            will be stored. Defaults to "score".
         num_actions_key (NestedKey, optional): Key for the number of available
-            actions (K). Used for weight initialization and in formulas. Defaults to "num_actions".
+            actions (K). Defaults to "num_actions".
 
-    Input Keys for `forward`:
-        - `weights_key` (torch.Tensor): Tensor of shape (..., num_actions) containing
-          current weights. Initialized to ones if not present on first call.
+    Input Keys:
+        - `weights_key` (torch.Tensor): Tensor of shape (..., num_actions).
         - `num_actions_key` (int or torch.Tensor): Scalar representing K, the number of actions.
 
-    Output Keys for `forward`:
+    Output Keys:
         - `score_key` (torch.Tensor): Tensor of shape (..., num_actions) containing
-          the calculated action probabilities `p_i(t)`.
-        - `action_prob_key` (torch.Tensor, optional): Same as `score_key` if this key
-          is set and different from `score_key`.
+          the calculated action probabilities.
 
-    `update_weights` Method:
-        This method is designed to be called externally after an action has been
-        selected (using probabilities from `forward`) and a reward obtained.
-        Args for `update_weights(node: TensorDictBase, action_idx: int, reward: float)`:
-            - `node`: The `TensorDictBase` for the current MCTS node, containing
-              at least `weights_key` and `score_key` (with `p_i(t)` values).
-            - `action_idx`: The index of the action that was chosen.
-            - `reward`: The reward received for the chosen action (assumed to be in [0,1]).
+    Example:
+        ```python
+        from tensordict import TensorDict
+        from torchrl.modules.mcts.scores import EXP3Score
+
+        # Create an EXP3Score instance
+        exp3 = EXP3Score(gamma=0.1)
+
+        # Define a TensorDict with required keys
+        node = TensorDict(
+            {
+                "weights": torch.tensor([1.0, 1.0]),
+                "num_actions": torch.tensor(2),
+            },
+            batch_size=[],
+        )
+
+        # Compute the action probabilities
+        result = exp3(node)
+        print(result["score"])  # Output: Tensor with action probabilities
+        ```
     """
 
     def __init__(
@@ -325,11 +345,48 @@ class EXP3Score(MCTSScore):
     ) -> None:
         """Updates the weight of the chosen action based on the reward.
 
-        w_i(t+1) = w_i(t) * exp((gamma / K) * (reward / p_i(t)))
-        Assumes reward is in [0, 1].
+        This method updates the weight of the selected action using the EXP3 algorithm.
+        The weight update formula is:
+        `w_i(t+1) = w_i(t) * exp((gamma / K) * (reward / p_i(t)))`
+
+        Args:
+            node (TensorDictBase): The node containing the current weights and probabilities.
+                Must include the keys specified by `weights_key` and `score_key`.
+            action_idx (int): The index of the action that was selected.
+            reward (float): The reward received for the selected action. Must be in the range [0, 1].
+
+        Raises:
+            ValueError: If the reward is not in the range [0, 1].
+            ValueError: If the probability of the selected action is less than or equal to 0.
+
+        Example:
+            ```python
+            from tensordict import TensorDict
+            from torchrl.modules.mcts.scores import EXP3Score
+
+            # Create an EXP3Score instance
+            exp3 = EXP3Score(gamma=0.1)
+
+            # Define a TensorDict with required keys
+            node = TensorDict(
+                {
+                    "weights": torch.tensor([1.0, 1.0]),
+                    "num_actions": torch.tensor(2),
+                },
+                batch_size=[],
+            )
+
+            # Compute the action probabilities
+            result = exp3(node)
+            print(result["score"])  # Output: Tensor with action probabilities
+
+            # Update the weights based on the reward for action 0
+            exp3.update_weights(node, action_idx=0, reward=0.8)
+            print(node["weights"])  # Updated weights
+            ```
         """
         if not (0 <= reward <= 1):
-            ValueError(
+            raise ValueError(
                 f"Reward {reward} is outside the expected [0, 1] range for EXP3."
             )
 
@@ -347,9 +404,9 @@ class EXP3Score(MCTSScore):
             raise ValueError(f"Invalid weights dimensions: {weights.ndim}")
 
         if torch.any(prob_i <= 0):
-            ValueError(
+            raise ValueError(
                 f"Probability p_i(t) for action {action_idx} is {prob_i}, which is <= 0."
-                "This might lead to issues in weight update."
+                " This might lead to issues in weight update."
             )
             prob_i = torch.clamp(prob_i, min=1e-9)
 
@@ -387,7 +444,7 @@ class UCB1TunedScore(MCTSScore):
     - `sum_squared_rewards_i`: Sum of the squares of rewards received from action `i`.
     - `exploration_constant`: A constant used in the bias correction term of `V_i`.
       Auer et al. (2002) suggest a value of 2.0 for rewards in the range [0,1].
-    - The term `min(0.25, V_i)` implies that rewards are scaled to `[0,1]`, as 0.25 is
+    - The term `min(0.25, V_i)` implies that rewards are scaled to `[0, 1]`, as 0.25 is
       the maximum variance for a distribution in this range (e.g., Bernoulli(0.5)).
 
     Reference: "Finite-time Analysis of the Multiarmed Bandit Problem"
