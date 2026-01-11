@@ -56,8 +56,15 @@ def main(cfg: DictConfig):  # noqa: F821
             logger_type=cfg.logger.backend,
             logger_name="dreamer_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "project": cfg.logger.project,
+            },
         )
+        # Log hyperparameters using wandb.config.update() with OmegaConf resolution
+        # This properly resolves interpolations like ${env.name} and uses the official wandb API
+        if hasattr(logger, "log_hparams"):
+            logger.log_hparams(cfg)
 
     # make_environments returns (train_env_factory, test_env) for async collection
     train_env_factory, test_env = make_environments(
