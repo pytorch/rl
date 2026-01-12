@@ -1334,8 +1334,12 @@ also that the state dict is synchronised across processes if needed."""
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
         self._running_free = True
-        for pipe in self.pipes:
+        torchrl_logger.debug(
+            f"MultiCollector.start(): Sending run_free to {len(self.pipes)} workers..."
+        )
+        for i, pipe in enumerate(self.pipes):
             pipe.send((None, "run_free"))
+            torchrl_logger.debug(f"MultiCollector.start(): Sent run_free to worker {i}")
 
     @contextlib.contextmanager
     def pause(self):

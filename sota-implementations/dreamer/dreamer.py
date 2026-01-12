@@ -9,6 +9,7 @@ import functools
 import time
 
 import hydra
+import importlib.util
 import torch
 import torch.cuda
 import tqdm
@@ -47,6 +48,19 @@ def main(cfg: DictConfig):  # noqa: F821
 
     device = _default_device(cfg.networks.device)
     assert device.type == "cuda", "Dreamer only supports CUDA devices"
+
+    # Early check for video dependencies before starting training
+    if cfg.logger.video:
+        missing_deps = []
+        if importlib.util.find_spec("moviepy") is None:
+            missing_deps.append("moviepy (pip install moviepy)")
+        if importlib.util.find_spec("torchvision") is None:
+            missing_deps.append("torchvision (pip install torchvision)")
+        if missing_deps:
+            raise ImportError(
+                f"Video logging requires: {', '.join(missing_deps)}\n"
+                "Alternatively, disable video logging with: logger.video=False"
+            )
 
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
@@ -249,7 +263,10 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Start async collection - collector fills the buffer in background
     torchrl_logger.info("Starting async collection...")
+    torchrl_logger.debug(f"Collector type: {type(collector).__name__}")
+    torchrl_logger.debug(f"Number of collector workers: {cfg.collector.num_collectors}")
     collector.start()
+    torchrl_logger.debug("collector.start() completed")
 
     # Wait for enough samples to start training
     # The collector handles init_random_frames internally, but we also wait here
@@ -277,6 +294,17 @@ def main(cfg: DictConfig):  # noqa: F821
     for optim_step in range(total_optim_steps):
         # Update progress bar every step
         pbar.update(1)
+
+        # Debug logging every 100 steps
+        if optim_step % 100 == 0:
+            cuda_mem_allocated = torch.cuda.memory_allocated(device) / (1024**3)
+            cuda_mem_reserved = torch.cuda.memory_reserved(device) / (1024**3)
+            torchrl_logger.debug(
+                f"optim_step={optim_step}: "
+                f"buffer_count={replay_buffer.write_count}, "
+                f"cuda_allocated={cuda_mem_allocated:.2f}GB, "
+                f"cuda_reserved={cuda_mem_reserved:.2f}GB"
+            )
 
         # sample from replay buffer
         with timeit("train/sample"), record_function("## train/sample ##"):
@@ -460,10 +488,17 @@ def main(cfg: DictConfig):  # noqa: F821
             frames_at_log_start = collected_frames
 
             # Update policy weights in collector (for async collection)
-            policy[1].step(frames_collected_this_interval)
-            collector.update_policy_weights_()
-            # Increment policy version after weight update
-            collector.increment_version()
+            with timeit("train/weight_update") as weight_update_timer:
+                torchrl_logger.debug(f"optim_step={optim_step}: Starting weight update...")
+                policy[1].step(frames_collected_this_interval)
+                collector.update_policy_weights_()
+                # Increment policy version after weight update
+                collector.increment_version()
+                torchrl_logger.debug(
+                    f"optim_step={optim_step}: Weight update completed in "
+                    f"{weight_update_timer.elapsed():.3f}s, "
+                    f"policy_version={policy_version.version}"
+                )
 
         # Evaluation (every eval_every optimization steps)
         if (optim_step + 1) % eval_every == 0:

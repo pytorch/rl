@@ -11,7 +11,7 @@ import torch
 
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import _check_for_faulty_process, accept_remote_rref_udf_invocation
+from torchrl._utils import _check_for_faulty_process, accept_remote_rref_udf_invocation, logger as torchrl_logger
 from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
 from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
@@ -229,6 +229,7 @@ class MultiAsyncCollector(MultiCollector):
         self.running = True
 
         workers_frames = [0 for _ in range(self.num_workers)]
+        _iter_start_time = time.time()
         while self._frames < self.total_frames:
             self._iter += 1
             counter = 0
@@ -239,7 +240,19 @@ class MultiAsyncCollector(MultiCollector):
                 except (TimeoutError, Empty):
                     counter += _TIMEOUT
                     _check_for_faulty_process(self.procs)
+                    # Debug logging for queue timeout
+                    if counter % (10 * _TIMEOUT) == 0:  # Log every 10 timeouts
+                        _elapsed = time.time() - _iter_start_time
+                        torchrl_logger.debug(
+                            f"MultiAsyncCollector.iterator: Queue timeout, counter={counter:.1f}s, "
+                            f"iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s"
+                        )
                 if counter > (_TIMEOUT * _MAX_IDLE_COUNT):
+                    _elapsed = time.time() - _iter_start_time
+                    torchrl_logger.debug(
+                        f"MultiAsyncCollector.iterator: CRITICAL - Max idle exceeded, "
+                        f"counter={counter:.1f}s, iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s"
+                    )
                     raise RuntimeError(
                         f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
                         f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."

@@ -220,6 +220,21 @@ class timeit:
         >>> with timeit("my_other_function"):
         ...     my_other_function()
         >>> timeit.print()  # prints the state of the timer for each function
+
+        The timer can also be queried mid-execution using the :meth:`elapsed` method:
+
+        >>> with timeit("my_function") as timer:
+        ...     # do some work
+        ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
+        ...     # do more work
+
+        For long-running processes where a context manager isn't practical,
+        use the :meth:`start` method:
+
+        >>> timer = timeit("long_process").start()
+        >>> for i in range(100):
+        ...     # do work
+        ...     print(f"Elapsed: {timer.elapsed():.3f}s")
     """
 
     _REG = {}
@@ -236,11 +251,47 @@ class timeit:
 
         return decorated_fn
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> timeit:
         self.t0 = time.time()
+        return self
+
+    def start(self) -> timeit:
+        """Starts the timer without using a context manager.
+
+        This is useful when you need to track elapsed time over a long-running
+        loop or process where a context manager isn't practical.
+
+        Returns:
+            timeit: Returns self for method chaining.
+
+        Examples:
+            >>> timer = timeit("my_long_process").start()
+            >>> for i in range(100):
+            ...     # do work
+            ...     if i % 10 == 0:
+            ...         print(f"Elapsed: {timer.elapsed():.3f}s")
+        """
+        self.t0 = time.time()
+        return self
+
+    def elapsed(self) -> float:
+        """Returns the elapsed time in seconds since the timer was started.
+
+        This can be called during execution to query the current elapsed time.
+
+        Returns:
+            float: Elapsed time in seconds.
+
+        Examples:
+            >>> with timeit("my_function") as timer:
+            ...     # do some work
+            ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
+            ...     # do more work
+        """
+        return time.time() - self.t0
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        t = time.time() - self.t0
+        t = self.elapsed()
         val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
         count = val[2]

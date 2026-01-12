@@ -11,7 +11,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl import logger as torchrl_logger
-from torchrl._utils import VERBOSE
+from torchrl._utils import timeit, VERBOSE
 from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     _MAX_IDLE_COUNT,
@@ -234,8 +234,12 @@ def _main_async_collector(
 
         if msg == "update":
             # Legacy - weight updater
-            torchrl_logger.debug(f"mp worker {idx} updating the params...")
-            inner_collector.update_policy_weights_(policy_weights=data_in)
+            with timeit(f"worker/{idx}/update") as update_timer:
+                torchrl_logger.debug(f"mp worker {idx}: Received weight update request...")
+                inner_collector.update_policy_weights_(policy_weights=data_in)
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Weight update completed in {update_timer.elapsed():.3f}s"
+                )
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
@@ -255,7 +259,14 @@ def _main_async_collector(
                 else:
                     inner_collector.init_random_frames = -1
 
-            next_data = next(dc_iter)
+            # Debug logging for rollout timing
+            with timeit(f"worker/{idx}/rollout") as rollout_timer:
+                torchrl_logger.debug(f"mp worker {idx}: Starting rollout (j={j})...")
+                next_data = next(dc_iter)
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
+                    f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
+                )
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
