@@ -306,7 +306,7 @@ def main(cfg: DictConfig):  # noqa: F821
         time.sleep(0.1)
 
     torchrl_logger.info(
-        f"Collected {replay_buffer.write_count} frames (random frames phase complete: {cfg.collector.init_random_frames} frames). "
+        f"Collected {replay_buffer.write_count} frames (random frames phase complete: {min_frames_to_start} frames). "
         f"Starting training..."
     )
     torchrl_logger.info(

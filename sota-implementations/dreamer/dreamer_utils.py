@@ -32,7 +32,6 @@ from torchrl.data import (
 
 from torchrl.envs import (
     Compose,
-    DeviceCastTransform,
     DMControlEnv,
     DoubleToFloat,
     DreamerDecoder,
@@ -646,6 +645,11 @@ def make_collector(
         - If training on CPU: collectors use CPU
     """
     num_collectors = cfg.collector.num_collectors
+    init_random_frames = (
+        cfg.collector.init_random_frames
+        if not cfg.profiler.enable
+        else cfg.profiler.collector.init_random_frames
+    )
 
     # Allocate devices for collectors (reserves cuda:0 for training if multi-GPU)
     collector_devices = allocate_collector_devices(num_collectors, training_device)
@@ -655,7 +659,7 @@ def make_collector(
         policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=-1,  # Run indefinitely until async_shutdown() is called
-        init_random_frames=cfg.collector.init_random_frames,
+        init_random_frames=init_random_frames,
         policy_device=collector_devices,
         env_device=collector_devices,  # Match env output device to policy device for CUDA transforms
         storing_device="cpu",
@@ -700,8 +704,10 @@ def make_storage_transform(
     )
     return storage_transforms
 
+
 def _to_device(td, device):
     return td.to(device=device, non_blocking=True)
+
 
 def make_replay_buffer(
     *,

@@ -11,7 +11,11 @@ import torch
 
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import _check_for_faulty_process, accept_remote_rref_udf_invocation, logger as torchrl_logger
+from torchrl._utils import (
+    _check_for_faulty_process,
+    accept_remote_rref_udf_invocation,
+    logger as torchrl_logger,
+)
 from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
 from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector

@@ -19,7 +19,6 @@ import warnings
 from collections.abc import Callable
 from contextlib import nullcontext
 from functools import wraps
-from torch.autograd.profiler import record_function
 from textwrap import indent
 from typing import Any, cast, TypeVar
 
@@ -30,6 +29,7 @@ from pyvers import implement_for  # noqa: F401
 from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
+from torch.autograd.profiler import record_function
 
 try:
     from torch.compiler import is_compiling
