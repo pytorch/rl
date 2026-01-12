@@ -38,6 +38,7 @@ from torchrl._utils import (
     _make_ordinal_device,
     logger as torchrl_logger,
     rl_warnings,
+    timeit,
     VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
@@ -2534,17 +2535,39 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
     next_shared_tensordict, root_shared_tensordict = (None,) * 2
+    _cmd_count = 0
+    _last_cmd = "N/A"
+    # Create a timeit instance to track elapsed time since worker start
+    _worker_timer = timeit(f"batched_env_worker/{pid}/lifetime").start()
     while True:
         try:
             if child_pipe.poll(_timeout):
                 cmd, data = child_pipe.recv()
+                _cmd_count += 1
+                _last_cmd = cmd
+                # Log every 1000 commands
+                if _cmd_count % 1000 == 0:
+                    torchrl_logger.debug(
+                        f"batched_env worker {pid}: cmd_count={_cmd_count}, "
+                        f"elapsed={_worker_timer.elapsed():.1f}s, last_cmd={cmd}"
+                    )
             else:
+                torchrl_logger.debug(
+                    f"batched_env worker {pid}: TIMEOUT after {_timeout}s waiting for cmd, "
+                    f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+                    f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+                )
                 raise TimeoutError(
                     f"Worker timed out after {_timeout}s, "
                     f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
                 )
         except EOFError as err:
-            raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
+            torchrl_logger.debug(
+                f"batched_env worker {pid}: EOFError - pipe closed, "
+                f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+                f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+            )
+            raise EOFError(f"proc {pid} failed, last command: {_last_cmd}.") from err
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
