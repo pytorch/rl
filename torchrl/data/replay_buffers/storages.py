@@ -5,13 +5,17 @@
 from __future__ import annotations
 
 import abc
+import atexit
 import logging
 import multiprocessing as mp
 import os
+import shutil
+import signal
 import sys
 import tempfile
 import textwrap
 import warnings
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import copy
@@ -52,6 +56,109 @@ try:
     from torch.compiler import disable as compile_disable, is_compiling
 except ImportError:
     from torch._dynamo import disable as compile_disable, is_compiling
+
+
+# =============================================================================
+# Memmap Storage Cleanup Infrastructure
+# =============================================================================
+# This module-level infrastructure ensures that memmap files created by
+# LazyMemmapStorage are cleaned up even when scripts are interrupted with
+# Ctrl+C (SIGINT) or killed with SIGTERM.
+
+# Registry of storages to clean up (weak references to avoid preventing GC)
+_MEMMAP_STORAGE_REGISTRY: weakref.WeakSet = weakref.WeakSet()
+
+# Track if cleanup has already run (to avoid double cleanup)
+_CLEANUP_DONE = False
+
+# Store original signal handlers to restore after cleanup
+_ORIGINAL_SIGINT_HANDLER = None
+_ORIGINAL_SIGTERM_HANDLER = None
+
+
+def _cleanup_all_memmap_storages():
+    """Clean up all registered memmap storages.
+
+    This function is called on exit (via atexit) and on signal interrupts.
+    It removes all temporary memmap directories that were created with
+    auto_cleanup=True.
+    """
+    global _CLEANUP_DONE
+    if _CLEANUP_DONE:
+        return
+    _CLEANUP_DONE = True
+
+    for storage in list(_MEMMAP_STORAGE_REGISTRY):
+        try:
+            storage.cleanup()
+        except Exception:
+            # Ignore errors during cleanup - the storage might already be gone
+            pass
+
+
+def _signal_cleanup_handler(signum, frame):
+    """Signal handler that cleans up memmap storages before exiting.
+
+    This handler is robust to cleanup failures - it will always re-raise the
+    signal to ensure proper process termination.
+    """
+    # Always ensure we re-raise the signal, even if cleanup fails
+    try:
+        _cleanup_all_memmap_storages()
+    except Exception:
+        # Ignore any cleanup errors - we must re-raise the signal
+        pass
+
+    # Re-raise the signal with the original handler (or default behavior)
+    if signum == signal.SIGINT:
+        original = _ORIGINAL_SIGINT_HANDLER
+    elif signum == signal.SIGTERM:
+        original = _ORIGINAL_SIGTERM_HANDLER
+    else:
+        original = signal.SIG_DFL
+
+    # Restore original handler and re-raise
+    signal.signal(signum, original if original else signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+def _register_cleanup_handlers():
+    """Register atexit and signal handlers for memmap cleanup.
+
+    This is called once when the first storage with auto_cleanup=True is created.
+    """
+    global _ORIGINAL_SIGINT_HANDLER, _ORIGINAL_SIGTERM_HANDLER
+
+    # Register atexit handler (for normal exits)
+    atexit.register(_cleanup_all_memmap_storages)
+
+    # Register signal handlers (for Ctrl+C and kill)
+    # Only register if we're in the main thread (signals can only be handled in main thread)
+    try:
+        import threading
+
+        if threading.current_thread() is threading.main_thread():
+            _ORIGINAL_SIGINT_HANDLER = signal.signal(
+                signal.SIGINT, _signal_cleanup_handler
+            )
+            _ORIGINAL_SIGTERM_HANDLER = signal.signal(
+                signal.SIGTERM, _signal_cleanup_handler
+            )
+    except (ValueError, RuntimeError):
+        # Signal handling not available (e.g., not main thread)
+        pass
+
+
+# Flag to track if handlers have been registered
+_CLEANUP_HANDLERS_REGISTERED = False
+
+
+def _ensure_cleanup_handlers():
+    """Ensure cleanup handlers are registered (called once per process)."""
+    global _CLEANUP_HANDLERS_REGISTERED
+    if not _CLEANUP_HANDLERS_REGISTERED:
+        _register_cleanup_handlers()
+        _CLEANUP_HANDLERS_REGISTERED = True
 
 
 class Storage:
@@ -612,6 +719,29 @@ class TensorStorage(Storage):
         )
         self._storage = storage
         self._last_cursor = None
+        self.__dict__["_storage_keys"] = None
+
+    @property
+    def _storage_keys(self) -> list | None:
+        """Cached list of storage keys for filtering incoming data.
+
+        Returns None if storage is not a tensor collection or not initialized.
+        """
+        keys = self.__dict__.get("_storage_keys")
+        if keys is None and self.initialized and is_tensor_collection(self._storage):
+            keys = list(
+                self._storage.keys(
+                    include_nested=True,
+                    leaves_only=True,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                )
+            )
+            self.__dict__["_storage_keys"] = keys
+        return keys
+
+    @_storage_keys.setter
+    def _storage_keys(self, value):
+        self.__dict__["_storage_keys"] = value
 
     @property
     def _len(self):
@@ -901,7 +1031,19 @@ class TensorStorage(Storage):
                 self._init(data)
 
         if is_tensor_collection(data):
-            self._storage[cursor] = data
+            # Filter data to only include keys present in storage
+            # This handles cases where policy outputs extra keys during some steps
+            # but not others (e.g., init_random_frames vs policy-guided collection)
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
+            try:
+                self._storage[cursor] = data
+            except RuntimeError as e:
+                if "locked" in str(e).lower():
+                    # Provide informative error about key differences
+                    self._raise_informative_lock_error(data, e)
+                raise
         else:
             self._set_tree_map(cursor, data, self._storage)
 
@@ -958,10 +1100,80 @@ class TensorStorage(Storage):
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
-        self._storage[cursor] = data
+        # Filter data to only include keys present in storage (for tensor collections)
+        # This handles cases where policy outputs extra keys during some steps
+        # but not others (e.g., init_random_frames vs policy-guided collection)
+        if is_tensor_collection(data):
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
+        try:
+            self._storage[cursor] = data
+        except RuntimeError as e:
+            if "locked" in str(e).lower():
+                # Provide informative error about key differences
+                self._raise_informative_lock_error(data, e)
+            raise
 
     def _wait_for_init(self):
         pass
+
+    def _raise_informative_lock_error(
+        self, data: TensorDictBase | torch.Tensor, original_error: RuntimeError
+    ) -> None:
+        """Raise an informative error when storage is locked and data has different keys.
+
+        This method is called when an assignment to the storage fails due to a lock error.
+        It provides detailed information about which keys are new in the data vs what the
+        storage expects.
+        """
+        if not is_tensor_collection(data) or not is_tensor_collection(self._storage):
+            # Can only provide detailed info for tensor collections
+            raise original_error
+
+        # Get all keys from both storage and data
+        storage_keys = set(
+            self._storage.keys(
+                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
+        )
+        data_keys = set(
+            data.keys(
+                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
+        )
+
+        new_keys = data_keys - storage_keys
+        missing_keys = storage_keys - data_keys
+
+        error_parts = [
+            "Cannot write to locked storage due to key mismatch.",
+            f"\nOriginal error: {original_error}",
+        ]
+
+        if new_keys:
+            error_parts.append(
+                f"\n\nNew keys in data (not in storage): {sorted(str(k) for k in new_keys)}"
+            )
+        if missing_keys:
+            error_parts.append(
+                f"\n\nMissing keys in data (present in storage): {sorted(str(k) for k in missing_keys)}"
+            )
+
+        if new_keys or missing_keys:
+            error_parts.append(
+                "\n\nThis typically happens when:"
+                "\n  1. The policy is called on some steps but not others (e.g., during init_random_frames)"
+                "\n  2. A transform conditionally adds keys based on data content"
+                "\n  3. Different collectors/workers produce data with different keys"
+                "\n\nTo fix this, ensure all data written to the buffer has consistent keys."
+            )
+        else:
+            error_parts.append(
+                "\n\nNo key differences detected. The lock error may be due to shape or dtype mismatches."
+            )
+
+        raise RuntimeError("".join(error_parts)) from original_error
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
         _storage = self._storage
@@ -1303,6 +1515,11 @@ class LazyMemmapStorage(LazyTensorStorage):
         shared_init (bool, optional): if ``True``, enables multiprocess coordination
             during storage initialization. First process initializes the memmap,
             others wait and load from the shared directory. Defaults to ``False``.
+        auto_cleanup (bool, optional): if ``True``, automatically registers this
+            storage for cleanup when the process exits (normally or via Ctrl+C/SIGTERM).
+            This removes the memmap files from disk when no longer needed.
+            Defaults to ``True`` when ``scratch_dir`` is ``None`` (using temp directory),
+            and ``False`` when a custom ``scratch_dir`` is provided (preserving user data).
 
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
@@ -1382,9 +1599,11 @@ class LazyMemmapStorage(LazyTensorStorage):
         existsok: bool = False,
         compilable: bool = False,
         shared_init: bool = False,
+        auto_cleanup: bool | None = None,
     ):
         self.initialized = False
         self.scratch_dir = None
+        self._scratch_dir_is_temp = scratch_dir is None
         self.existsok = existsok
         if scratch_dir is not None:
             self.scratch_dir = str(scratch_dir)
@@ -1408,6 +1627,16 @@ class LazyMemmapStorage(LazyTensorStorage):
                 "use `buffer.append_transform(lambda x: x.to(device))` or a similar transform."
             )
         self._len = 0
+
+        # Auto cleanup: default to True for temp dirs, False for user-specified dirs
+        if auto_cleanup is None:
+            auto_cleanup = self._scratch_dir_is_temp
+        self._auto_cleanup = auto_cleanup
+        self._cleaned_up = False
+
+        if self._auto_cleanup:
+            _ensure_cleanup_handlers()
+            _MEMMAP_STORAGE_REGISTRY.add(self)
 
     def state_dict(self) -> dict[str, Any]:
         _storage = self._storage
@@ -1542,6 +1771,79 @@ class LazyMemmapStorage(LazyTensorStorage):
             self._wait_for_init()
         result = super().get(index)
         return result
+
+    def cleanup(self) -> bool:
+        """Clean up memmap files from disk.
+
+        This method removes the memmap directory and all its contents from disk.
+        It is automatically called on process exit if ``auto_cleanup=True``.
+
+        Returns:
+            bool: ``True`` if cleanup was performed, ``False`` if already cleaned up
+                or no cleanup needed.
+
+        Note:
+            After cleanup, the storage is no longer usable. Any attempt to access
+            the storage will result in undefined behavior.
+
+        Example:
+            >>> storage = LazyMemmapStorage(1000, auto_cleanup=True)
+            >>> # ... use storage ...
+            >>> storage.cleanup()  # Manually clean up when done
+        """
+        if getattr(self, "_cleaned_up", False):
+            return False
+
+        self._cleaned_up = True
+
+        # Get the directory to clean up
+        scratch_dir = getattr(self, "scratch_dir", None)
+        if scratch_dir is None:
+            # No scratch dir - check if storage has memmap tensors with temp paths
+            storage = getattr(self, "_storage", None)
+            if storage is not None and is_tensor_collection(storage):
+                # Get all memmap file paths and find their common directory
+                paths = set()
+                try:
+                    for tensor in storage.values(include_nested=True, leaves_only=True):
+                        if hasattr(tensor, "filename") and tensor.filename:
+                            paths.add(os.path.dirname(tensor.filename))
+                except Exception:
+                    # Storage might be in an invalid state during cleanup
+                    pass
+                for path in paths:
+                    if (
+                        path
+                        and os.path.isdir(path)
+                        and path.startswith(tempfile.gettempdir())
+                    ):
+                        try:
+                            shutil.rmtree(path)
+                            torchrl_logger.debug(f"Cleaned up memmap directory: {path}")
+                        except Exception:
+                            # Ignore errors - file might be in use or already deleted
+                            pass
+                return bool(paths)
+            return False
+
+        # Clean up the scratch directory
+        scratch_dir = scratch_dir.rstrip("/")
+        if os.path.isdir(scratch_dir):
+            try:
+                shutil.rmtree(scratch_dir)
+                torchrl_logger.debug(f"Cleaned up memmap directory: {scratch_dir}")
+                return True
+            except Exception as e:
+                torchrl_logger.warning(f"Failed to clean up memmap directory: {e}")
+                return False
+        return False
+
+    def __del__(self):
+        """Ensure cleanup on garbage collection if auto_cleanup is enabled."""
+        if getattr(self, "_auto_cleanup", False) and not getattr(
+            self, "_cleaned_up", True
+        ):
+            self.cleanup()
 
 
 class CompressedListStorage(ListStorage):

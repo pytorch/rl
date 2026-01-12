@@ -8,6 +8,8 @@ import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from copy import deepcopy
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, overload
 
 import torch
@@ -21,6 +23,118 @@ from torchrl.collectors.utils import _map_weight
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.weight_update.utils import _resolve_attr
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
+
+
+@dataclass
+class ProfileConfig:
+    """Configuration for profiling collector workers.
+
+    This class holds all the settings for profiling collector rollouts
+    using PyTorch's profiler. It's designed to work across all collector types.
+
+    Attributes:
+        workers: List of worker indices to profile. For single-process collectors
+            (like Collector), this is ignored. For multi-process collectors
+            (like MultiSyncCollector, MultiAsyncCollector), only the specified
+            workers will be profiled. Defaults to [0].
+        num_rollouts: Total number of rollouts to profile (including warmup).
+            After this many rollouts, profiling stops. Defaults to 3.
+        warmup_rollouts: Number of rollouts to skip before starting actual
+            profiling. This allows JIT/compile warmup. Defaults to 1.
+        save_path: Path to save the profiling trace. If None, traces are saved
+            to "./collector_profile_{worker_idx}.json". Supports {worker_idx}
+            placeholder for worker-specific files.
+        activities: List of profiler activities. Defaults to CPU and CUDA.
+        record_shapes: Whether to record tensor shapes. Defaults to True.
+        profile_memory: Whether to profile memory usage. Defaults to False.
+        with_stack: Whether to record stack traces. Defaults to True.
+        with_flops: Whether to compute FLOPS. Defaults to False.
+        on_trace_ready: Optional callback when trace is ready. If None,
+            traces are exported to Chrome trace format at save_path.
+
+    Example:
+        >>> from torchrl.collectors import MultiSyncCollector, ProfileConfig
+        >>> collector = MultiSyncCollector(...)
+        >>> collector.enable_profile(
+        ...     workers=[0],
+        ...     num_rollouts=5,
+        ...     warmup_rollouts=2,
+        ...     save_path="./traces/worker_{worker_idx}.json",
+        ... )
+        >>> for data in collector:
+        ...     # First worker will be profiled for rollouts 2-4
+        ...     process(data)
+    """
+
+    workers: list[int] = field(default_factory=lambda: [0])
+    num_rollouts: int = 3
+    warmup_rollouts: int = 1
+    save_path: str | Path | None = None
+    activities: list[str] = field(default_factory=lambda: ["cpu", "cuda"])
+    record_shapes: bool = True
+    profile_memory: bool = False
+    with_stack: bool = True
+    with_flops: bool = False
+    on_trace_ready: Callable | None = None
+
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if self.num_rollouts <= self.warmup_rollouts:
+            raise ValueError(
+                f"num_rollouts ({self.num_rollouts}) must be greater than "
+                f"warmup_rollouts ({self.warmup_rollouts})"
+            )
+        if self.warmup_rollouts < 0:
+            raise ValueError(
+                f"warmup_rollouts must be >= 0, got {self.warmup_rollouts}"
+            )
+
+    def get_save_path(self, worker_idx: int) -> Path:
+        """Get the save path for a specific worker.
+
+        Args:
+            worker_idx: The worker index.
+
+        Returns:
+            Path object for the trace file.
+        """
+        if self.save_path is None:
+            return Path(f"./collector_profile_{worker_idx}.json")
+        path_str = str(self.save_path).format(worker_idx=worker_idx)
+        return Path(path_str)
+
+    def get_activities(self) -> list:
+        """Get PyTorch profiler activity list.
+
+        Returns:
+            List of torch.profiler.ProfilerActivity values.
+        """
+        import torch.profiler
+
+        activity_map = {
+            "cpu": torch.profiler.ProfilerActivity.CPU,
+            "cuda": torch.profiler.ProfilerActivity.CUDA,
+        }
+        result = []
+        for activity in self.activities:
+            activity_lower = activity.lower()
+            if activity_lower in activity_map:
+                # Only add CUDA if CUDA is available
+                if activity_lower == "cuda" and not torch.cuda.is_available():
+                    continue
+                result.append(activity_map[activity_lower])
+        return result
+
+    def should_profile_worker(self, worker_idx: int) -> bool:
+        """Check if a specific worker should be profiled.
+
+        Args:
+            worker_idx: The worker index to check.
+
+        Returns:
+            True if this worker should be profiled.
+        """
+        return worker_idx in self.workers
 
 
 class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
@@ -37,6 +151,112 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     _weight_updater: WeightUpdaterBase | None = None
     _weight_sync_schemes: dict[str, WeightSyncScheme] | None = None
     verbose: bool = False
+    _profile_config: ProfileConfig | None = None
+
+    def enable_profile(
+        self,
+        *,
+        workers: list[int] | None = None,
+        num_rollouts: int = 3,
+        warmup_rollouts: int = 1,
+        save_path: str | Path | None = None,
+        activities: list[str] | None = None,
+        record_shapes: bool = True,
+        profile_memory: bool = False,
+        with_stack: bool = True,
+        with_flops: bool = False,
+        on_trace_ready: Callable | None = None,
+    ) -> None:
+        """Enable profiling for collector worker rollouts.
+
+        This method configures the collector to profile rollouts using PyTorch's
+        profiler. For multi-process collectors, profiling happens in the worker
+        processes. For single-process collectors (Collector), profiling happens
+        in the main process.
+
+        Args:
+            workers: List of worker indices to profile. Defaults to [0].
+                For single-process collectors, this is ignored.
+            num_rollouts: Total number of rollouts to run the profiler for
+                (including warmup). Profiling stops after this many rollouts.
+                Defaults to 3.
+            warmup_rollouts: Number of rollouts to skip before starting actual
+                profiling. Useful for JIT/compile warmup. The profiler runs
+                but discards data during warmup. Defaults to 1.
+            save_path: Path to save the profiling trace. Supports {worker_idx}
+                placeholder for worker-specific files. If None, traces are
+                saved to "./collector_profile_{worker_idx}.json".
+            activities: List of profiler activities ("cpu", "cuda").
+                Defaults to ["cpu", "cuda"].
+            record_shapes: Whether to record tensor shapes. Defaults to True.
+            profile_memory: Whether to profile memory usage. Defaults to False.
+            with_stack: Whether to record Python stack traces. Defaults to True.
+            with_flops: Whether to compute FLOPS. Defaults to False.
+            on_trace_ready: Optional callback when trace is ready. If None,
+                traces are exported to Chrome trace format at save_path.
+
+        Raises:
+            RuntimeError: If called after iteration has started.
+            ValueError: If num_rollouts <= warmup_rollouts.
+
+        Example:
+            >>> from torchrl.collectors import MultiSyncCollector
+            >>> collector = MultiSyncCollector(
+            ...     create_env_fn=[make_env] * 4,
+            ...     policy=policy,
+            ...     frames_per_batch=1000,
+            ...     total_frames=100000,
+            ... )
+            >>> collector.enable_profile(
+            ...     workers=[0],
+            ...     num_rollouts=5,
+            ...     warmup_rollouts=2,
+            ...     save_path="./traces/worker_{worker_idx}.json",
+            ... )
+            >>> # Worker 0 will be profiled for rollouts 2, 3, 4
+            >>> for data in collector:
+            ...     train(data)
+            >>> collector.shutdown()
+
+        Note:
+            - Profiling adds overhead, so only profile specific workers
+            - The trace file can be viewed in Chrome's trace viewer
+              (chrome://tracing) or with PyTorch's TensorBoard plugin
+            - For multi-process collectors, this must be called BEFORE
+              iteration starts as it needs to configure workers
+        """
+        if self._iterator is not None:
+            raise RuntimeError(
+                "Cannot enable profiling after iteration has started. "
+                "Call enable_profile() before iterating over the collector."
+            )
+
+        if workers is None:
+            workers = [0]
+        if activities is None:
+            activities = ["cpu", "cuda"]
+
+        self._profile_config = ProfileConfig(
+            workers=workers,
+            num_rollouts=num_rollouts,
+            warmup_rollouts=warmup_rollouts,
+            save_path=save_path,
+            activities=activities,
+            record_shapes=record_shapes,
+            profile_memory=profile_memory,
+            with_stack=with_stack,
+            with_flops=with_flops,
+            on_trace_ready=on_trace_ready,
+        )
+
+    @property
+    def profile_config(self) -> ProfileConfig | None:
+        """Get the profiling configuration.
+
+        Returns:
+            ProfileConfig if profiling is enabled, None otherwise.
+        """
+        return self._profile_config
 
     @property
     def weight_updater(self) -> WeightUpdaterBase:
