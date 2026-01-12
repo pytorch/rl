@@ -647,8 +647,8 @@ def make_collector(
     num_collectors = cfg.collector.num_collectors
     init_random_frames = (
         cfg.collector.init_random_frames
-        if not cfg.profiler.enable
-        else cfg.profiler.collector.init_random_frames
+        if not cfg.profiling.enabled
+        else cfg.profiling.collector.init_random_frames_override
     )
 
     # Allocate devices for collectors (reserves cuda:0 for training if multi-GPU)
