@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a99aaf) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a98e17) &#x25BC</span></a>
     </div>
     
 
@@ -427,6 +427,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -443,12 +444,16 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">exploration_type</span><span class="p">,</span> <span class="n">ExplorationType</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_forward_hook_safe_action</span>
 
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;EGreedyWrapper&quot;</span><span class="p">,</span>
     <span class="s2">&quot;EGreedyModule&quot;</span><span class="p">,</span>
     <span class="s2">&quot;AdditiveGaussianModule&quot;</span><span class="p">,</span>
     <span class="s2">&quot;OrnsteinUhlenbeckProcessModule&quot;</span><span class="p">,</span>
     <span class="s2">&quot;OrnsteinUhlenbeckProcessWrapper&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;set_exploration_modules_spec_from_env&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -670,8 +675,13 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Additive Gaussian PO module.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        spec (TensorSpec): the spec used for sampling actions. The sampled</span>
+<span class="sd">        spec (TensorSpec, optional): the spec used for sampling actions. The sampled</span>
 <span class="sd">            action will be projected onto the valid action space once explored.</span>
+<span class="sd">            Can be ``None`` for delayed initialization, in which case the spec</span>
+<span class="sd">            must be set via the :attr:`spec` property setter before calling</span>
+<span class="sd">            :meth:`forward`. This is useful for config-based workflows where the</span>
+<span class="sd">            spec depends on the environment.</span>
+<span class="sd">            default: None</span>
 <span class="sd">        sigma_init (scalar, optional): initial epsilon value.</span>
 <span class="sd">            default: 1.0</span>
 <span class="sd">        sigma_end (scalar, optional): final epsilon value.</span>
@@ -679,9 +689,9 @@
 <span class="sd">        annealing_num_steps (int, optional): number of steps it will take for</span>
 <span class="sd">            sigma to reach the :obj:`sigma_end` value.</span>
 <span class="sd">            default: 1000</span>
-<span class="sd">        mean (:obj:`float`, optional): mean of each output element’s normal distribution.</span>
+<span class="sd">        mean (:obj:`float`, optional): mean of each output element&#39;s normal distribution.</span>
 <span class="sd">            default: 0.0</span>
-<span class="sd">        std (:obj:`float`, optional): standard deviation of each output element’s normal distribution.</span>
+<span class="sd">        std (:obj:`float`, optional): standard deviation of each output element&#39;s normal distribution.</span>
 <span class="sd">            default: 1.0</span>
 
 <span class="sd">    Keyword Args:</span>
@@ -706,7 +716,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span>
+        <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">sigma_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
         <span class="n">sigma_end</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
         <span class="n">annealing_num_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
@@ -737,11 +747,11 @@
             <span class="s2">&quot;sigma&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">sigma_init</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="p">)</span>
 
+        <span class="c1"># spec can be None for delayed initialization</span>
+        <span class="c1"># In this case, spec must be set before forward() is called</span>
         <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="n">action_key</span><span class="p">:</span> <span class="n">spec</span><span class="p">},</span> <span class="n">shape</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;spec cannot be None.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_spec</span> <span class="o">=</span> <span class="n">spec</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">safe</span> <span class="o">=</span> <span class="n">safe</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe</span><span class="p">:</span>
@@ -750,6 +760,23 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spec</span>
+
+    <span class="nd">@spec</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the action spec.</span>
+
+<span class="sd">        This setter allows delayed initialization of the spec, which is useful</span>
+<span class="sd">        when the spec depends on environment information that is not available</span>
+<span class="sd">        at module construction time.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            value (TensorSpec): The action spec to set. Cannot be None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;spec cannot be set to None.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Composite</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">:</span> <span class="n">value</span><span class="p">},</span> <span class="n">shape</span><span class="o">=</span><span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spec</span> <span class="o">=</span> <span class="n">value</span>
 
 <div class="viewcode-block" id="AdditiveGaussianModule.step"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.AdditiveGaussianModule.html#torchrl.modules.AdditiveGaussianModule.step">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;A step of sigma decay.</span>
@@ -772,6 +799,11 @@
             <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_add_noise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;spec has not been set. The spec must be provided either at construction &quot;</span>
+                <span class="s2">&quot;time or set via the `spec` property before calling forward(). &quot;</span>
+            <span class="p">)</span>
         <span class="n">sigma</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span>
         <span class="n">mean</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mean</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="n">std</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">std</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
@@ -1193,6 +1225,68 @@
             <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">rand</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="set_exploration_modules_spec_from_env"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.set_exploration_modules_spec_from_env.html#torchrl.modules.set_exploration_modules_spec_from_env">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">set_exploration_modules_spec_from_env</span><span class="p">(</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set spec on exploration modules in a policy with action_spec from environment.</span>
+
+<span class="sd">    This helper function automatically sets the action_spec on exploration modules</span>
+<span class="sd">    (like AdditiveGaussianModule) that were instantiated without a spec. This</span>
+<span class="sd">    enables delayed initialization when using config systems where the spec</span>
+<span class="sd">    depends on the environment and should be set inside the collector.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        policy: The policy module (may contain exploration modules). Can be None.</span>
+<span class="sd">        env: The environment to extract action_spec from.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictSequential</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import AdditiveGaussianModule, Actor, set_exploration_modules_spec_from_env</span>
+<span class="sd">        &gt;&gt;&gt; # Create environment</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; # Create policy with exploration module without spec</span>
+<span class="sd">        &gt;&gt;&gt; actor = Actor(</span>
+<span class="sd">        ...     module=torch.nn.Linear(3, 1),</span>
+<span class="sd">        ...     in_keys=[&quot;observation&quot;],</span>
+<span class="sd">        ...     out_keys=[&quot;action&quot;],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; exploration = AdditiveGaussianModule(spec=None)  # spec will be set later</span>
+<span class="sd">        &gt;&gt;&gt; policy = TensorDictSequential(actor, exploration)</span>
+<span class="sd">        &gt;&gt;&gt; # Set spec from environment</span>
+<span class="sd">        &gt;&gt;&gt; set_exploration_modules_spec_from_env(policy, env)</span>
+<span class="sd">        &gt;&gt;&gt; assert exploration._spec is not None  # spec is now set</span>
+<span class="sd">        &gt;&gt;&gt; env.close()</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Only process nn.Module policies that have .modules() method</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;action_spec_unbatched&quot;</span><span class="p">):</span>
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec_unbatched</span>
+    <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;action_spec&quot;</span><span class="p">):</span>
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="k">if</span> <span class="n">action_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Types of exploration modules that support delayed spec initialization.</span>
+    <span class="c1"># More exploration modules can be added when they support delayed spec setting.</span>
+    <span class="n">exploration_module_types</span> <span class="o">=</span> <span class="p">(</span><span class="n">AdditiveGaussianModule</span><span class="p">,)</span>
+
+    <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">policy</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="n">exploration_module_types</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="s2">&quot;_spec&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">submodule</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="n">action_spec</span></div>
 </pre></div>
 
              </article>

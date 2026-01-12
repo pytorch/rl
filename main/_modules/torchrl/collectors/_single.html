@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a99aaf) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a98e17) &#x25BC</span></a>
     </div>
     
 
@@ -464,6 +464,9 @@
     <span class="n">set_exploration_type</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.exploration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">set_exploration_modules_spec_from_env</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_model</span>
 
@@ -826,6 +829,9 @@
 
         <span class="c1"># Set up policy and weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_policy_and_weights</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+
+        <span class="c1"># Configure exploration modules with action_spec from environment</span>
+        <span class="n">set_exploration_modules_spec_from_env</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">)</span>
 
         <span class="c1"># Apply environment device</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_apply_env_device</span><span class="p">()</span>
