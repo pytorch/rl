@@ -952,6 +952,65 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _queue_len(self) -> int:
         raise NotImplementedError
 
+    def _recv_and_check(
+        self,
+        pipe,
+        *,
+        timeout: float | None = None,
+        check_interval: float = 1.0,
+        worker_idx: int | None = None,
+    ):
+        """Receive from a pipe while periodically checking worker health.
+
+        This method prevents the main process from hanging indefinitely if a worker
+        dies while we're waiting for a response. It polls the pipe with a timeout
+        and checks if all worker processes are still alive between polls.
+
+        The overhead is minimal: if data is already available, `poll()` returns
+        immediately and no health check is performed. Health checks only run
+        when actually waiting for a slow response.
+
+        Args:
+            pipe: The pipe to receive from.
+            timeout: Maximum total time to wait for a message (seconds).
+                If None (default), wait indefinitely but still check worker health
+                periodically.
+            check_interval: How often to check worker health (seconds). Default 1.0.
+            worker_idx: Optional worker index for error messages.
+
+        Returns:
+            The received message.
+
+        Raises:
+            RuntimeError: If a worker process dies while waiting.
+            TimeoutError: If no message is received within the timeout (only if
+                timeout is not None).
+        """
+        # Fast path: check if data is already available (no overhead)
+        if pipe.poll(0):
+            return pipe.recv()
+
+        # Slow path: wait with periodic health checks
+        elapsed = 0.0
+        while timeout is None or elapsed < timeout:
+            if pipe.poll(check_interval):
+                return pipe.recv()
+            elapsed += check_interval
+            # Check if any worker has died
+            _check_for_faulty_process(self.procs)
+            torchrl_logger.debug(
+                f"MultiCollector._recv_and_check: Still waiting after {elapsed:.1f}s"
+                + (f" for worker {worker_idx}" if worker_idx is not None else "")
+            )
+
+        # Final check before timeout
+        _check_for_faulty_process(self.procs)
+        worker_info = f" from worker {worker_idx}" if worker_idx is not None else ""
+        raise TimeoutError(
+            f"Timed out after {timeout}s waiting for message{worker_info}. "
+            f"All workers are still alive - this may indicate a deadlock or very slow operation."
+        )
+
     def _run_processes(self) -> None:
         if self.num_threads is None:
             total_workers = self._total_workers_from_env(self.create_env_fn)
@@ -1348,8 +1407,23 @@ also that the state dict is synchronised across processes if needed."""
             for pipe in self.pipes:
                 pipe.send((None, "pause"))
             # Make sure all workers are paused
-            for _ in self.pipes:
-                idx, msg = self.queue_out.get()
+            for i in range(len(self.pipes)):
+                # Use timeout with health check to avoid hanging if a worker dies
+                timeout = 30.0
+                check_interval = 1.0
+                elapsed = 0.0
+                while elapsed < timeout:
+                    try:
+                        idx, msg = self.queue_out.get(timeout=check_interval)
+                        break
+                    except Exception:
+                        elapsed += check_interval
+                        _check_for_faulty_process(self.procs)
+                else:
+                    _check_for_faulty_process(self.procs)
+                    raise TimeoutError(
+                        f"Timed out waiting for worker {i} to pause after {timeout}s"
+                    )
                 if msg != "paused":
                     raise ValueError(f"Expected paused, but got {msg=}.")
                 torchrl_logger.debug(f"Worker {idx} is paused.")
@@ -1484,7 +1558,7 @@ also that the state dict is synchronised across processes if needed."""
         _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
             self.pipes[idx].send(((seed, static_seed), "seed"))
-            new_seed, msg = self.pipes[idx].recv()
+            new_seed, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
             seed = new_seed
@@ -1508,7 +1582,7 @@ also that the state dict is synchronised across processes if needed."""
                 self.pipes[idx].send((None, "reset"))
         for idx in range(self.num_workers):
             if reset_idx[idx]:
-                j, msg = self.pipes[idx].recv()
+                j, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
                 if msg != "reset":
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
@@ -1522,7 +1596,7 @@ also that the state dict is synchronised across processes if needed."""
             self.pipes[idx].send((None, "state_dict"))
         state_dict = OrderedDict()
         for idx in range(self.num_workers):
-            _state_dict, msg = self.pipes[idx].recv()
+            _state_dict, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
             if msg != "state_dict":
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
             state_dict[f"worker{idx}"] = _state_dict
@@ -1541,7 +1615,7 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
-            _, msg = self.pipes[idx].recv()
+            _, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
             if msg != "loaded":
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
@@ -1590,7 +1664,7 @@ also that the state dict is synchronised across processes if needed."""
 
         # Send command to first worker (index 0)
         self.pipes[0].send((attr, "getattr_policy"))
-        result, msg = self.pipes[0].recv()
+        result, msg = self._recv_and_check(self.pipes[0], worker_idx=0)
         if msg != "getattr_policy":
             raise RuntimeError(f"Expected msg='getattr_policy', got {msg}")
 
@@ -1616,7 +1690,7 @@ also that the state dict is synchronised across processes if needed."""
 
         # Send command to first worker (index 0)
         self.pipes[0].send((attr, "getattr_env"))
-        result, msg = self.pipes[0].recv()
+        result, msg = self._recv_and_check(self.pipes[0], worker_idx=0)
         if msg != "getattr_env":
             raise RuntimeError(f"Expected msg='getattr_env', got {msg}")
 
