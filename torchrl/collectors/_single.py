@@ -42,9 +42,6 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy
-from torchrl.modules.tensordict_module.exploration import (
-    set_exploration_modules_spec_from_env,
-)
 from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 
@@ -517,9 +514,6 @@ class Collector(BaseCollector):
 
         # Set up policy and weights
         self._setup_policy_and_weights(policy)
-
-        # Configure exploration modules with action_spec from environment
-        set_exploration_modules_spec_from_env(self.policy, self.env)
 
         # Apply environment device
         self._apply_env_device()
