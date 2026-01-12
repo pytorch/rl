@@ -271,6 +271,9 @@ def _make_env(cfg, device, from_pixels=False):
                 from_pixels=cfg.env.from_pixels or from_pixels,
                 pixels_only=cfg.env.from_pixels,
             )
+        # Gym doesn't support native frame_skip, apply transform inside worker
+        if cfg.env.frame_skip > 1:
+            env = TransformedEnv(env, FrameSkipTransform(cfg.env.frame_skip))
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name,
@@ -278,6 +281,7 @@ def _make_env(cfg, device, from_pixels=False):
             from_pixels=cfg.env.from_pixels or from_pixels,
             pixels_only=cfg.env.from_pixels,
             device=device,
+            frame_skip=cfg.env.frame_skip,  # Native frame skip inside worker
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -310,7 +314,8 @@ def transform_env(cfg, env):
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
-    env.append_transform(FrameSkipTransform(cfg.env.frame_skip))
+    # Note: FrameSkipTransform is now applied inside workers (in _make_env) to avoid
+    # extra IPC round-trips. DMControl uses native frame_skip, Gym uses the transform.
     env.append_transform(StepCounter(cfg.env.horizon))
 
     return env
@@ -652,6 +657,7 @@ def make_collector(
         total_frames=-1,  # Run indefinitely until async_shutdown() is called
         init_random_frames=cfg.collector.init_random_frames,
         policy_device=collector_devices,
+        env_device=collector_devices,  # Match env output device to policy device for CUDA transforms
         storing_device="cpu",
         sync=False,  # Async mode for overlapping collection with training
         update_at_each_batch=False,  # We manually call update_policy_weights_() in training loop

@@ -174,7 +174,8 @@ def main(cfg: DictConfig):  # noqa: F821
         torchrl_logger.info(
             f"Enabling collector profiling: workers={cfg.profiling.collector.workers}, "
             f"num_rollouts={cfg.profiling.collector.num_rollouts}, "
-            f"warmup_rollouts={cfg.profiling.collector.warmup_rollouts}"
+            f"warmup_rollouts={cfg.profiling.collector.warmup_rollouts}, "
+            f"init_random_frames_override={cfg.profiling.collector.init_random_frames_override}"
         )
         collector.enable_profile(
             workers=list(cfg.profiling.collector.workers),
@@ -290,7 +291,14 @@ def main(cfg: DictConfig):  # noqa: F821
     # Wait for enough samples to start training
     # The collector handles init_random_frames internally, but we also wait here
     # to ensure the buffer has enough data before we start sampling.
-    min_frames_to_start = cfg.collector.init_random_frames
+    # Use init_random_frames_override when collector profiling is enabled
+    if profiling_enabled and cfg.profiling.collector.enabled:
+        min_frames_to_start = cfg.profiling.collector.init_random_frames_override
+        torchrl_logger.info(
+            f"Collector profiling: overriding init_random_frames to {min_frames_to_start}"
+        )
+    else:
+        min_frames_to_start = cfg.collector.init_random_frames
     torchrl_logger.info(
         f"Waiting for {min_frames_to_start} initial frames before training..."
     )
