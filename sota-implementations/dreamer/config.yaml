@@ -101,3 +101,16 @@ profiling:
   with_stack: True
   # Compute FLOPs
   with_flops: True
+
+  # Collector worker profiling
+  collector:
+    # Enable profiling of collector worker rollouts
+    enabled: False
+    # Which workers to profile (list of indices)
+    workers: [0]
+    # Number of rollouts to profile (including warmup)
+    num_rollouts: 5
+    # Number of warmup rollouts to skip
+    warmup_rollouts: 2
+    # Path to save collector trace (supports {worker_idx} placeholder)
+    trace_file: collector_trace_{worker_idx}.json

@@ -23,7 +23,7 @@ from torchrl._utils import (
     prod,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
@@ -47,6 +47,116 @@ from torchrl.modules.tensordict_module.exploration import (
 )
 from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
+
+
+class _CollectorProfiler:
+    """Helper class for profiling collector rollouts in single-process mode.
+
+    Manages the PyTorch profiler lifecycle for the Collector class.
+    """
+
+    def __init__(self, profile_config: ProfileConfig):
+        self.config = profile_config
+        self.rollout_count = 0
+        self._profiler = None
+        self._stopped = False
+        self._active = False
+
+        # Set up profiler schedule
+        active_rollouts = self.config.num_rollouts - self.config.warmup_rollouts
+        profiler_schedule = torch.profiler.schedule(
+            skip_first=self.config.warmup_rollouts,
+            wait=0,
+            warmup=0,
+            active=active_rollouts,
+            repeat=1,
+        )
+
+        # Get activities
+        activities = self.config.get_activities()
+        if not activities:
+            return
+
+        # Determine trace handler
+        if self.config.on_trace_ready is not None:
+            on_trace_ready = self.config.on_trace_ready
+        else:
+            save_path = self.config.get_save_path(
+                0
+            )  # Use worker_idx 0 for single-process
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+
+            from torchrl import logger as torchrl_logger
+
+            def on_trace_ready(prof, save_path=save_path):
+                prof.export_chrome_trace(str(save_path))
+                torchrl_logger.info(f"Collector: Profiling trace saved to {save_path}")
+
+        self._profiler = torch.profiler.profile(
+            activities=activities,
+            schedule=profiler_schedule,
+            on_trace_ready=on_trace_ready,
+            record_shapes=self.config.record_shapes,
+            profile_memory=self.config.profile_memory,
+            with_stack=self.config.with_stack,
+            with_flops=self.config.with_flops,
+        )
+        self._active = True
+
+    def start(self) -> None:
+        """Start the profiler."""
+        from torchrl import logger as torchrl_logger
+
+        if self._profiler is not None and not self._stopped:
+            self._profiler.start()
+            torchrl_logger.info(
+                f"Collector: Profiling started. "
+                f"Will profile rollouts {self.config.warmup_rollouts} to {self.config.num_rollouts - 1}."
+            )
+
+    def step(self) -> bool:
+        """Step the profiler after a rollout.
+
+        Returns:
+            True if profiling is complete.
+        """
+        if self._profiler is None or self._stopped:
+            return False
+
+        self.rollout_count += 1
+        self._profiler.step()
+
+        # Check if profiling is complete
+        if self.rollout_count >= self.config.num_rollouts:
+            self.stop()
+            return True
+
+        return False
+
+    def stop(self) -> None:
+        """Stop the profiler and export trace."""
+        from torchrl import logger as torchrl_logger
+
+        if self._profiler is not None and not self._stopped:
+            self._profiler.stop()
+            self._stopped = True
+            torchrl_logger.info(
+                f"Collector: Profiling complete after {self.rollout_count} rollouts."
+            )
+
+    @property
+    def is_active(self) -> bool:
+        """Check if profiling is active."""
+        return self._active and not self._stopped
+
+    @contextlib.contextmanager
+    def profile_rollout(self):
+        """Context manager for profiling a single rollout."""
+        if self._profiler is not None and not self._stopped:
+            with torch.profiler.record_function("collector_rollout"):
+                yield
+        else:
+            yield
 
 
 def _cuda_sync_if_initialized():
@@ -1268,13 +1378,35 @@ class Collector(BaseCollector):
         else:
             streams = []
             events = []
+
+        # Set up profiler if configured
+        profiler = None
+        if self._profile_config is not None:
+            profiler = _CollectorProfiler(self._profile_config)
+            if profiler.is_active:
+                profiler.start()
+
         with contextlib.ExitStack() as stack:
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
 
             while self._frames < self.total_frames:
                 self._iter += 1
-                tensordict_out = self.rollout()
+
+                # Use profiler context if profiling is active
+                profile_ctx = (
+                    profiler.profile_rollout()
+                    if profiler is not None and profiler.is_active
+                    else contextlib.nullcontext()
+                )
+
+                with profile_ctx:
+                    tensordict_out = self.rollout()
+
+                # Step the profiler after each rollout
+                if profiler is not None and profiler.is_active:
+                    profiler.step()
+
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
@@ -1305,6 +1437,10 @@ class Collector(BaseCollector):
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
+
+        # Stop profiler if it hasn't been stopped yet
+        if profiler is not None and profiler.is_active:
+            profiler.stop()
 
     def start(self):
         """Starts the collector in a separate thread for asynchronous data collection.

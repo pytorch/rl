@@ -1159,6 +1159,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
+                    "profile_config": self._profile_config,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
@@ -1434,6 +1435,37 @@ also that the state dict is synchronised across processes if needed."""
             self._running_free = True
         else:
             raise RuntimeError("Collector cannot be paused.")
+
+    def enable_profile(self, **kwargs) -> None:
+        """Enable profiling for collector worker rollouts.
+
+        For multi-process collectors, this sends the profile configuration
+        to the specified workers. Must be called before iteration starts.
+
+        See :meth:`BaseCollector.enable_profile` for full documentation.
+        """
+        # First, call parent to validate and set _profile_config
+        super().enable_profile(**kwargs)
+
+        # Send profile config to workers that should be profiled
+        if self._profile_config is not None:
+            for idx in self._profile_config.workers:
+                if idx < self.num_workers:
+                    self.pipes[idx].send((self._profile_config, "enable_profile"))
+
+            # Wait for confirmation from workers
+            for idx in self._profile_config.workers:
+                if idx < self.num_workers:
+                    if self.pipes[idx].poll(INSTANTIATE_TIMEOUT):
+                        _, msg = self.pipes[idx].recv()
+                        if msg != "profile_enabled":
+                            raise RuntimeError(
+                                f"Worker {idx}: Expected 'profile_enabled' message, got {msg}"
+                            )
+                    else:
+                        raise TimeoutError(
+                            f"Worker {idx}: Timed out waiting for profile confirmation."
+                        )
 
     def __del__(self):
         try:

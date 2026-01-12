@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import importlib.util
 import time
 
 import hydra
-import importlib.util
 import torch
 import torch.cuda
 import tqdm
@@ -168,6 +168,25 @@ def main(cfg: DictConfig):  # noqa: F821
         storage_transform=storage_transform,
         track_policy_version=policy_version,
     )
+
+    # Enable collector worker profiling if configured
+    if profiling_enabled and cfg.profiling.collector.enabled:
+        torchrl_logger.info(
+            f"Enabling collector profiling: workers={cfg.profiling.collector.workers}, "
+            f"num_rollouts={cfg.profiling.collector.num_rollouts}, "
+            f"warmup_rollouts={cfg.profiling.collector.warmup_rollouts}"
+        )
+        collector.enable_profile(
+            workers=list(cfg.profiling.collector.workers),
+            num_rollouts=cfg.profiling.collector.num_rollouts,
+            warmup_rollouts=cfg.profiling.collector.warmup_rollouts,
+            save_path=cfg.profiling.collector.trace_file,
+            activities=["cpu", "cuda"] if cfg.profiling.profile_cuda else ["cpu"],
+            record_shapes=cfg.profiling.record_shapes,
+            profile_memory=cfg.profiling.profile_memory,
+            with_stack=cfg.profiling.with_stack,
+            with_flops=cfg.profiling.with_flops,
+        )
 
     # Training config
     total_optim_steps = cfg.optimization.total_optim_steps
@@ -489,7 +508,9 @@ def main(cfg: DictConfig):  # noqa: F821
 
             # Update policy weights in collector (for async collection)
             with timeit("train/weight_update") as weight_update_timer:
-                torchrl_logger.debug(f"optim_step={optim_step}: Starting weight update...")
+                torchrl_logger.debug(
+                    f"optim_step={optim_step}: Starting weight update..."
+                )
                 policy[1].step(frames_collected_this_interval)
                 collector.update_policy_weights_()
                 # Increment policy version after weight update
