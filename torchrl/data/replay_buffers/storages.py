@@ -719,6 +719,29 @@ class TensorStorage(Storage):
         )
         self._storage = storage
         self._last_cursor = None
+        self.__dict__["_storage_keys"] = None
+
+    @property
+    def _storage_keys(self) -> list | None:
+        """Cached list of storage keys for filtering incoming data.
+
+        Returns None if storage is not a tensor collection or not initialized.
+        """
+        keys = self.__dict__.get("_storage_keys")
+        if keys is None and self.initialized and is_tensor_collection(self._storage):
+            keys = list(
+                self._storage.keys(
+                    include_nested=True,
+                    leaves_only=True,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                )
+            )
+            self.__dict__["_storage_keys"] = keys
+        return keys
+
+    @_storage_keys.setter
+    def _storage_keys(self, value):
+        self.__dict__["_storage_keys"] = value
 
     @property
     def _len(self):
@@ -1008,7 +1031,19 @@ class TensorStorage(Storage):
                 self._init(data)
 
         if is_tensor_collection(data):
-            self._storage[cursor] = data
+            # Filter data to only include keys present in storage
+            # This handles cases where policy outputs extra keys during some steps
+            # but not others (e.g., init_random_frames vs policy-guided collection)
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
+            try:
+                self._storage[cursor] = data
+            except RuntimeError as e:
+                if "locked" in str(e).lower():
+                    # Provide informative error about key differences
+                    self._raise_informative_lock_error(data, e)
+                raise
         else:
             self._set_tree_map(cursor, data, self._storage)
 
@@ -1065,10 +1100,80 @@ class TensorStorage(Storage):
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
-        self._storage[cursor] = data
+        # Filter data to only include keys present in storage (for tensor collections)
+        # This handles cases where policy outputs extra keys during some steps
+        # but not others (e.g., init_random_frames vs policy-guided collection)
+        if is_tensor_collection(data):
+            storage_keys = self._storage_keys
+            if storage_keys is not None:
+                data = data.select(*storage_keys, strict=False)
+        try:
+            self._storage[cursor] = data
+        except RuntimeError as e:
+            if "locked" in str(e).lower():
+                # Provide informative error about key differences
+                self._raise_informative_lock_error(data, e)
+            raise
 
     def _wait_for_init(self):
         pass
+
+    def _raise_informative_lock_error(
+        self, data: TensorDictBase | torch.Tensor, original_error: RuntimeError
+    ) -> None:
+        """Raise an informative error when storage is locked and data has different keys.
+
+        This method is called when an assignment to the storage fails due to a lock error.
+        It provides detailed information about which keys are new in the data vs what the
+        storage expects.
+        """
+        if not is_tensor_collection(data) or not is_tensor_collection(self._storage):
+            # Can only provide detailed info for tensor collections
+            raise original_error
+
+        # Get all keys from both storage and data
+        storage_keys = set(
+            self._storage.keys(
+                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
+        )
+        data_keys = set(
+            data.keys(
+                include_nested=True, leaves_only=True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
+        )
+
+        new_keys = data_keys - storage_keys
+        missing_keys = storage_keys - data_keys
+
+        error_parts = [
+            "Cannot write to locked storage due to key mismatch.",
+            f"\nOriginal error: {original_error}",
+        ]
+
+        if new_keys:
+            error_parts.append(
+                f"\n\nNew keys in data (not in storage): {sorted(str(k) for k in new_keys)}"
+            )
+        if missing_keys:
+            error_parts.append(
+                f"\n\nMissing keys in data (present in storage): {sorted(str(k) for k in missing_keys)}"
+            )
+
+        if new_keys or missing_keys:
+            error_parts.append(
+                "\n\nThis typically happens when:"
+                "\n  1. The policy is called on some steps but not others (e.g., during init_random_frames)"
+                "\n  2. A transform conditionally adds keys based on data content"
+                "\n  3. Different collectors/workers produce data with different keys"
+                "\n\nTo fix this, ensure all data written to the buffer has consistent keys."
+            )
+        else:
+            error_parts.append(
+                "\n\nNo key differences detected. The lock error may be due to shape or dtype mismatches."
+            )
+
+        raise RuntimeError("".join(error_parts)) from original_error
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
         _storage = self._storage
