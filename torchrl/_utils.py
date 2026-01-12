@@ -35,6 +35,10 @@ try:
 except ImportError:
     from torch._dynamo import is_compiling
 
+# Timeout for weight synchronization during collector init.
+# Increase this when using many collectors across different CUDA devices.
+WEIGHT_SYNC_TIMEOUT = float(os.environ.get("TORCHRL_WEIGHT_SYNC_TIMEOUT", 120.0))
+
 
 def _get_default_mp_start_method() -> str:
     """Returns TorchRL's preferred multiprocessing start method for this torch version.
