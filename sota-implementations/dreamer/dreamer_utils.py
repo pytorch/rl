@@ -9,7 +9,6 @@ import tempfile
 from contextlib import nullcontext
 
 import torch
-
 import torch.nn as nn
 from tensordict import NestedKey
 from tensordict.nn import (
@@ -396,7 +395,7 @@ def _compute_encoder_output_size(image_size, channels=32, num_layers=4):
     size = image_size
     for _ in range(num_layers):
         size = (size - 4) // 2 + 1
-    # Final channels = channels * (2 ** (num_layers - 1))
+    # Final channels = channels * 2^(num_layers-1)
     final_channels = channels * (2 ** (num_layers - 1))
     return final_channels * size * size
 
