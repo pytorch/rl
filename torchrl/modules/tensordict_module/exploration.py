@@ -253,8 +253,13 @@ class AdditiveGaussianModule(TensorDictModuleBase):
     """Additive Gaussian PO module.
 
     Args:
-        spec (TensorSpec): the spec used for sampling actions. The sampled
+        spec (TensorSpec, optional): the spec used for sampling actions. The sampled
             action will be projected onto the valid action space once explored.
+            Can be ``None`` for delayed initialization, in which case the spec
+            must be set via the :attr:`spec` property setter before calling
+            :meth:`forward`. This is useful for config-based workflows where the
+            spec depends on the environment.
+            default: None
         sigma_init (scalar, optional): initial epsilon value.
             default: 1.0
         sigma_end (scalar, optional): final epsilon value.
@@ -262,9 +267,9 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         annealing_num_steps (int, optional): number of steps it will take for
             sigma to reach the :obj:`sigma_end` value.
             default: 1000
-        mean (:obj:`float`, optional): mean of each output element’s normal distribution.
+        mean (:obj:`float`, optional): mean of each output element's normal distribution.
             default: 0.0
-        std (:obj:`float`, optional): standard deviation of each output element’s normal distribution.
+        std (:obj:`float`, optional): standard deviation of each output element's normal distribution.
             default: 1.0
 
     Keyword Args:
@@ -813,6 +818,26 @@ def set_exploration_modules_spec_from_env(
     Args:
         policy: The policy module (may contain exploration modules). Can be None.
         env: The environment to extract action_spec from.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn import TensorDictSequential
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.modules import AdditiveGaussianModule, Actor, set_exploration_modules_spec_from_env
+        >>> # Create environment
+        >>> env = GymEnv("Pendulum-v1")
+        >>> # Create policy with exploration module without spec
+        >>> actor = Actor(
+        ...     module=torch.nn.Linear(3, 1),
+        ...     in_keys=["observation"],
+        ...     out_keys=["action"],
+        ... )
+        >>> exploration = AdditiveGaussianModule(spec=None)  # spec will be set later
+        >>> policy = TensorDictSequential(actor, exploration)
+        >>> # Set spec from environment
+        >>> set_exploration_modules_spec_from_env(policy, env)
+        >>> assert exploration._spec is not None  # spec is now set
+        >>> env.close()
 
     """
     if policy is None:

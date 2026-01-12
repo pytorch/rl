@@ -1129,9 +1129,7 @@ class TestCollectorsConfig:
                 # Just check that we can iterate
                 break
         finally:
-            # Only call shutdown if the collector has that method
-            if hasattr(collector_instance, "shutdown"):
-                collector_instance.shutdown(timeout=10)
+            collector_instance.shutdown(timeout=10)
 
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
@@ -1224,8 +1222,7 @@ class TestCollectorsConfig:
                 break
 
         finally:
-            if hasattr(collector_instance, "shutdown"):
-                collector_instance.shutdown(timeout=10)
+            collector_instance.shutdown(timeout=10)
 
 
 @pytest.mark.skipif(
