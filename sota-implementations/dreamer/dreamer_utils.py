@@ -165,14 +165,14 @@ class DreamerProfiler:
         if not self.enabled:
             return
 
-        # Override total_frames for profiling runs
+        # Override total_optim_steps for profiling runs
         torchrl_logger.info(
-            f"Profiling enabled: running {cfg.profiling.total_frames} frames "
+            f"Profiling enabled: running {cfg.profiling.total_optim_steps} optim steps "
             f"(skip_first={cfg.profiling.skip_first}, warmup={cfg.profiling.warmup_steps}, "
             f"active={cfg.profiling.active_steps})"
         )
         if pbar is not None:
-            pbar.total = cfg.profiling.total_frames
+            pbar.total = cfg.profiling.total_optim_steps
 
         # Setup profiler schedule
         # - skip_first: steps to skip entirely (no profiling)
