@@ -11,7 +11,11 @@ import torch
 
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import _check_for_faulty_process, accept_remote_rref_udf_invocation
+from torchrl._utils import (
+    _check_for_faulty_process,
+    accept_remote_rref_udf_invocation,
+    logger as torchrl_logger,
+)
 from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
 from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
@@ -222,13 +226,14 @@ class MultiAsyncCollector(MultiCollector):
             self.update_policy_weights_()
 
         for i in range(self.num_workers):
-            if self.init_random_frames is not None and self.init_random_frames > 0:
+            if self._should_use_random_frames():
                 self.pipes[i].send((None, "continue_random"))
             else:
                 self.pipes[i].send((None, "continue"))
         self.running = True
 
         workers_frames = [0 for _ in range(self.num_workers)]
+        _iter_start_time = time.time()
         while self._frames < self.total_frames:
             self._iter += 1
             counter = 0
@@ -239,7 +244,19 @@ class MultiAsyncCollector(MultiCollector):
                 except (TimeoutError, Empty):
                     counter += _TIMEOUT
                     _check_for_faulty_process(self.procs)
+                    # Debug logging for queue timeout
+                    if counter % (10 * _TIMEOUT) == 0:  # Log every 10 timeouts
+                        _elapsed = time.time() - _iter_start_time
+                        torchrl_logger.debug(
+                            f"MultiAsyncCollector.iterator: Queue timeout, counter={counter:.1f}s, "
+                            f"iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s"
+                        )
                 if counter > (_TIMEOUT * _MAX_IDLE_COUNT):
+                    _elapsed = time.time() - _iter_start_time
+                    torchrl_logger.debug(
+                        f"MultiAsyncCollector.iterator: CRITICAL - Max idle exceeded, "
+                        f"counter={counter:.1f}s, iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s"
+                    )
                     raise RuntimeError(
                         f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
                         f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
@@ -257,10 +274,7 @@ class MultiAsyncCollector(MultiCollector):
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
-            if (
-                self.init_random_frames is not None
-                and self._frames < self.init_random_frames
-            ):
+            if self._should_use_random_frames():
                 msg = "continue_random"
             else:
                 msg = "continue"
@@ -287,10 +301,7 @@ class MultiAsyncCollector(MultiCollector):
             raise Exception("self.queue_out is full")
         if self.running:
             for idx in range(self.num_workers):
-                if (
-                    self.init_random_frames is not None
-                    and self._frames < self.init_random_frames
-                ):
+                if self._should_use_random_frames():
                     self.pipes[idx].send((idx, "continue_random"))
                 else:
                     self.pipes[idx].send((idx, "continue"))

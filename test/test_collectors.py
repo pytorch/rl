@@ -4438,6 +4438,75 @@ class TestAsyncCollection:
             del collector
 
 
+class TestInitRandomFramesWithStart:
+    """Tests for init_random_frames with .start() method for collectors."""
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("cls", [MultiSyncCollector, MultiAsyncCollector])
+    # @pytest.mark.flaky(reruns=3, reruns_delay=0.5)
+    def test_init_random_frames_with_start(self, cls):
+        """Test that init_random_frames works with .start() for multi-process collectors.
+
+        This test verifies that:
+        1. Collection starts without error when init_random_frames is provided
+        2. Data collection proceeds beyond init_random_frames
+        3. The replay buffer is properly populated
+        """
+        init_random_frames = 64
+        frames_per_batch = 16
+        total_to_collect = 256
+
+        # Create env to get action spec for policy
+        env = GymEnv(CARTPOLE_VERSIONED())
+        policy = RandomPolicy(env.action_spec)
+        env.close()
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(total_to_collect), batch_size=5)
+
+        env_fns = [
+            lambda: GymEnv(CARTPOLE_VERSIONED()),
+            lambda: GymEnv(CARTPOLE_VERSIONED()),
+        ]
+        collector = cls(
+            env_fns,
+            policy,
+            replay_buffer=rb,
+            total_frames=-1,
+            frames_per_batch=frames_per_batch,
+            init_random_frames=init_random_frames,
+        )
+
+        try:
+            # Start the collector - this should NOT raise an error even with init_random_frames
+            collector.start()
+
+            # Wait for enough data to be collected - should go beyond init_random_frames
+            for _ in range(100):
+                time.sleep(0.1)
+                if rb.write_count >= total_to_collect:
+                    break
+            else:
+                raise RuntimeError(
+                    f"Not enough data collected: {rb.write_count} < {total_to_collect}. "
+                    f"init_random_frames was {init_random_frames}."
+                )
+
+            # Verify that collection proceeded beyond init_random_frames
+            assert (
+                rb.write_count >= total_to_collect
+            ), f"Expected at least {total_to_collect} frames, got {rb.write_count}"
+
+            # Verify that data has expected structure
+            sample = rb[:16]
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
+
+
 class TestCollectorProfiling:
     """Tests for the collector profiling feature."""
 
