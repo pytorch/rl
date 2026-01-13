@@ -5,13 +5,17 @@
 from __future__ import annotations
 
 import abc
+import atexit
 import logging
 import multiprocessing as mp
 import os
+import shutil
+import signal
 import sys
 import tempfile
 import textwrap
 import warnings
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import copy
@@ -52,6 +56,109 @@ try:
     from torch.compiler import disable as compile_disable, is_compiling
 except ImportError:
     from torch._dynamo import disable as compile_disable, is_compiling
+
+
+# =============================================================================
+# Memmap Storage Cleanup Infrastructure
+# =============================================================================
+# This module-level infrastructure ensures that memmap files created by
+# LazyMemmapStorage are cleaned up even when scripts are interrupted with
+# Ctrl+C (SIGINT) or killed with SIGTERM.
+
+# Registry of storages to clean up (weak references to avoid preventing GC)
+_MEMMAP_STORAGE_REGISTRY: weakref.WeakSet = weakref.WeakSet()
+
+# Track if cleanup has already run (to avoid double cleanup)
+_CLEANUP_DONE = False
+
+# Store original signal handlers to restore after cleanup
+_ORIGINAL_SIGINT_HANDLER = None
+_ORIGINAL_SIGTERM_HANDLER = None
+
+
+def _cleanup_all_memmap_storages():
+    """Clean up all registered memmap storages.
+
+    This function is called on exit (via atexit) and on signal interrupts.
+    It removes all temporary memmap directories that were created with
+    auto_cleanup=True.
+    """
+    global _CLEANUP_DONE
+    if _CLEANUP_DONE:
+        return
+    _CLEANUP_DONE = True
+
+    for storage in list(_MEMMAP_STORAGE_REGISTRY):
+        try:
+            storage.cleanup()
+        except Exception:
+            # Ignore errors during cleanup - the storage might already be gone
+            pass
+
+
+def _signal_cleanup_handler(signum, frame):
+    """Signal handler that cleans up memmap storages before exiting.
+
+    This handler is robust to cleanup failures - it will always re-raise the
+    signal to ensure proper process termination.
+    """
+    # Always ensure we re-raise the signal, even if cleanup fails
+    try:
+        _cleanup_all_memmap_storages()
+    except Exception:
+        # Ignore any cleanup errors - we must re-raise the signal
+        pass
+
+    # Re-raise the signal with the original handler (or default behavior)
+    if signum == signal.SIGINT:
+        original = _ORIGINAL_SIGINT_HANDLER
+    elif signum == signal.SIGTERM:
+        original = _ORIGINAL_SIGTERM_HANDLER
+    else:
+        original = signal.SIG_DFL
+
+    # Restore original handler and re-raise
+    signal.signal(signum, original if original else signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+def _register_cleanup_handlers():
+    """Register atexit and signal handlers for memmap cleanup.
+
+    This is called once when the first storage with auto_cleanup=True is created.
+    """
+    global _ORIGINAL_SIGINT_HANDLER, _ORIGINAL_SIGTERM_HANDLER
+
+    # Register atexit handler (for normal exits)
+    atexit.register(_cleanup_all_memmap_storages)
+
+    # Register signal handlers (for Ctrl+C and kill)
+    # Only register if we're in the main thread (signals can only be handled in main thread)
+    try:
+        import threading
+
+        if threading.current_thread() is threading.main_thread():
+            _ORIGINAL_SIGINT_HANDLER = signal.signal(
+                signal.SIGINT, _signal_cleanup_handler
+            )
+            _ORIGINAL_SIGTERM_HANDLER = signal.signal(
+                signal.SIGTERM, _signal_cleanup_handler
+            )
+    except (ValueError, RuntimeError):
+        # Signal handling not available (e.g., not main thread)
+        pass
+
+
+# Flag to track if handlers have been registered
+_CLEANUP_HANDLERS_REGISTERED = False
+
+
+def _ensure_cleanup_handlers():
+    """Ensure cleanup handlers are registered (called once per process)."""
+    global _CLEANUP_HANDLERS_REGISTERED
+    if not _CLEANUP_HANDLERS_REGISTERED:
+        _register_cleanup_handlers()
+        _CLEANUP_HANDLERS_REGISTERED = True
 
 
 class Storage:
@@ -1303,6 +1410,11 @@ class LazyMemmapStorage(LazyTensorStorage):
         shared_init (bool, optional): if ``True``, enables multiprocess coordination
             during storage initialization. First process initializes the memmap,
             others wait and load from the shared directory. Defaults to ``False``.
+        auto_cleanup (bool, optional): if ``True``, automatically registers this
+            storage for cleanup when the process exits (normally or via Ctrl+C/SIGTERM).
+            This removes the memmap files from disk when no longer needed.
+            Defaults to ``True`` when ``scratch_dir`` is ``None`` (using temp directory),
+            and ``False`` when a custom ``scratch_dir`` is provided (preserving user data).
 
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
@@ -1382,9 +1494,11 @@ class LazyMemmapStorage(LazyTensorStorage):
         existsok: bool = False,
         compilable: bool = False,
         shared_init: bool = False,
+        auto_cleanup: bool | None = None,
     ):
         self.initialized = False
         self.scratch_dir = None
+        self._scratch_dir_is_temp = scratch_dir is None
         self.existsok = existsok
         if scratch_dir is not None:
             self.scratch_dir = str(scratch_dir)
@@ -1408,6 +1522,16 @@ class LazyMemmapStorage(LazyTensorStorage):
                 "use `buffer.append_transform(lambda x: x.to(device))` or a similar transform."
             )
         self._len = 0
+
+        # Auto cleanup: default to True for temp dirs, False for user-specified dirs
+        if auto_cleanup is None:
+            auto_cleanup = self._scratch_dir_is_temp
+        self._auto_cleanup = auto_cleanup
+        self._cleaned_up = False
+
+        if self._auto_cleanup:
+            _ensure_cleanup_handlers()
+            _MEMMAP_STORAGE_REGISTRY.add(self)
 
     def state_dict(self) -> dict[str, Any]:
         _storage = self._storage
@@ -1542,6 +1666,79 @@ class LazyMemmapStorage(LazyTensorStorage):
             self._wait_for_init()
         result = super().get(index)
         return result
+
+    def cleanup(self) -> bool:
+        """Clean up memmap files from disk.
+
+        This method removes the memmap directory and all its contents from disk.
+        It is automatically called on process exit if ``auto_cleanup=True``.
+
+        Returns:
+            bool: ``True`` if cleanup was performed, ``False`` if already cleaned up
+                or no cleanup needed.
+
+        Note:
+            After cleanup, the storage is no longer usable. Any attempt to access
+            the storage will result in undefined behavior.
+
+        Example:
+            >>> storage = LazyMemmapStorage(1000, auto_cleanup=True)
+            >>> # ... use storage ...
+            >>> storage.cleanup()  # Manually clean up when done
+        """
+        if getattr(self, "_cleaned_up", False):
+            return False
+
+        self._cleaned_up = True
+
+        # Get the directory to clean up
+        scratch_dir = getattr(self, "scratch_dir", None)
+        if scratch_dir is None:
+            # No scratch dir - check if storage has memmap tensors with temp paths
+            storage = getattr(self, "_storage", None)
+            if storage is not None and is_tensor_collection(storage):
+                # Get all memmap file paths and find their common directory
+                paths = set()
+                try:
+                    for tensor in storage.values(include_nested=True, leaves_only=True):
+                        if hasattr(tensor, "filename") and tensor.filename:
+                            paths.add(os.path.dirname(tensor.filename))
+                except Exception:
+                    # Storage might be in an invalid state during cleanup
+                    pass
+                for path in paths:
+                    if (
+                        path
+                        and os.path.isdir(path)
+                        and path.startswith(tempfile.gettempdir())
+                    ):
+                        try:
+                            shutil.rmtree(path)
+                            torchrl_logger.debug(f"Cleaned up memmap directory: {path}")
+                        except Exception:
+                            # Ignore errors - file might be in use or already deleted
+                            pass
+                return bool(paths)
+            return False
+
+        # Clean up the scratch directory
+        scratch_dir = scratch_dir.rstrip("/")
+        if os.path.isdir(scratch_dir):
+            try:
+                shutil.rmtree(scratch_dir)
+                torchrl_logger.debug(f"Cleaned up memmap directory: {scratch_dir}")
+                return True
+            except Exception as e:
+                torchrl_logger.warning(f"Failed to clean up memmap directory: {e}")
+                return False
+        return False
+
+    def __del__(self):
+        """Ensure cleanup on garbage collection if auto_cleanup is enabled."""
+        if getattr(self, "_auto_cleanup", False) and not getattr(
+            self, "_cleaned_up", True
+        ):
+            self.cleanup()
 
 
 class CompressedListStorage(ListStorage):
