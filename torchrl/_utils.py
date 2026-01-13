@@ -167,6 +167,7 @@ if RL_WARNINGS:
     warnings.filterwarnings("once", category=DeprecationWarning, module="torchrl")
 
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
+WEIGHT_SYNC_TIMEOUT = float(os.environ.get("WEIGHT_SYNC_TIMEOUT", "60.0"))
 
 _TORCH_DTYPES = (
     torch.bfloat16,
