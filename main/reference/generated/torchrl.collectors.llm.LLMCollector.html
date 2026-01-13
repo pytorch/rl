@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
     </div>
     
 
@@ -620,6 +620,77 @@ useful for calling methods on weight sync schemes from the sender side.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.enable_profile">
+<span class="sig-name descname"><span class="pre">enable_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rollouts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warmup_rollouts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activities</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">record_shapes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">profile_memory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_stack</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_flops</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_trace_ready</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Callable</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.enable_profile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable profiling for collector worker rollouts.</p>
+<p>This method configures the collector to profile rollouts using PyTorch’s
+profiler. For multi-process collectors, profiling happens in the worker
+processes. For single-process collectors (Collector), profiling happens
+in the main process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>workers</strong> – List of worker indices to profile. Defaults to [0].
+For single-process collectors, this is ignored.</p></li>
+<li><p><strong>num_rollouts</strong> – Total number of rollouts to run the profiler for
+(including warmup). Profiling stops after this many rollouts.
+Defaults to 3.</p></li>
+<li><p><strong>warmup_rollouts</strong> – Number of rollouts to skip before starting actual
+profiling. Useful for JIT/compile warmup. The profiler runs
+but discards data during warmup. Defaults to 1.</p></li>
+<li><p><strong>save_path</strong> – Path to save the profiling trace. Supports {worker_idx}
+placeholder for worker-specific files. If None, traces are
+saved to “./collector_profile_{worker_idx}.json”.</p></li>
+<li><p><strong>activities</strong> – List of profiler activities (“cpu”, “cuda”).
+Defaults to [“cpu”, “cuda”].</p></li>
+<li><p><strong>record_shapes</strong> – Whether to record tensor shapes. Defaults to True.</p></li>
+<li><p><strong>profile_memory</strong> – Whether to profile memory usage. Defaults to False.</p></li>
+<li><p><strong>with_stack</strong> – Whether to record Python stack traces. Defaults to True.</p></li>
+<li><p><strong>with_flops</strong> – Whether to compute FLOPS. Defaults to False.</p></li>
+<li><p><strong>on_trace_ready</strong> – Optional callback when trace is ready. If None,
+traces are exported to Chrome trace format at save_path.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>RuntimeError</strong> – If called after iteration has started.</p></li>
+<li><p><strong>ValueError</strong> – If num_rollouts &lt;= warmup_rollouts.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiSyncCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">MultiSyncCollector</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">total_frames</span><span class="o">=</span><span class="mi">100000</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">enable_profile</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">workers</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">num_rollouts</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">warmup_rollouts</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">save_path</span><span class="o">=</span><span class="s2">&quot;./traces/worker_</span><span class="si">{worker_idx}</span><span class="s2">.json&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Worker 0 will be profiled for rollouts 2, 3, 4</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">train</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>Profiling adds overhead, so only profile specific workers</p></li>
+<li><p>The trace file can be viewed in Chrome’s trace viewer
+(chrome://tracing) or with PyTorch’s TensorBoard plugin</p></li>
+<li><p>For multi-process collectors, this must be called BEFORE
+iteration starts as it needs to configure workers</p></li>
+</ul>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.get_model">
 <span class="sig-name descname"><span class="pre">get_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.get_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get model instance by ID (for weight sync schemes).</p>
@@ -745,6 +816,17 @@ If no weight updater is set, this is a no-op.</p>
 <dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.policy_version">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">policy_version</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.policy_version" title="Permalink to this definition">¶</a></dt>
 <dd><p>The current policy version.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.LLMCollector.profile_config">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">profile_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torchrl.collectors._base.ProfileConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.collectors.llm.LLMCollector.profile_config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the profiling configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ProfileConfig if profiling is enabled, None otherwise.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
     </div>
     
 
@@ -1237,6 +1237,23 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">preemptive_threshold</span> <span class="o">=</span> <span class="mf">1.0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_should_use_random_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determine if random frames should be used instead of the policy.</span>
+
+<span class="sd">        When a replay buffer is provided, uses `replay_buffer.write_count` as the</span>
+<span class="sd">        global step counter to support `.start()` mode where `_frames` isn&#39;t updated</span>
+<span class="sd">        until after collection. Otherwise, uses the internal `_frames` counter.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if random frames should be used, False otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># Use replay_buffer.write_count when available for accurate counting in .start() mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">write_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_validate_cat_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cat_results</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate cat_results parameter.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">cat_results</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
@@ -1356,6 +1373,65 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_queue_len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_recv_and_check</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pipe</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">check_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Receive from a pipe while periodically checking worker health.</span>
+
+<span class="sd">        This method prevents the main process from hanging indefinitely if a worker</span>
+<span class="sd">        dies while we&#39;re waiting for a response. It polls the pipe with a timeout</span>
+<span class="sd">        and checks if all worker processes are still alive between polls.</span>
+
+<span class="sd">        The overhead is minimal: if data is already available, `poll()` returns</span>
+<span class="sd">        immediately and no health check is performed. Health checks only run</span>
+<span class="sd">        when actually waiting for a slow response.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            pipe: The pipe to receive from.</span>
+<span class="sd">            timeout: Maximum total time to wait for a message (seconds).</span>
+<span class="sd">                If None (default), wait indefinitely but still check worker health</span>
+<span class="sd">                periodically.</span>
+<span class="sd">            check_interval: How often to check worker health (seconds). Default 1.0.</span>
+<span class="sd">            worker_idx: Optional worker index for error messages.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The received message.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If a worker process dies while waiting.</span>
+<span class="sd">            TimeoutError: If no message is received within the timeout (only if</span>
+<span class="sd">                timeout is not None).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Fast path: check if data is already available (no overhead)</span>
+        <span class="k">if</span> <span class="n">pipe</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">pipe</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+
+        <span class="c1"># Slow path: wait with periodic health checks</span>
+        <span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">while</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">elapsed</span> <span class="o">&lt;</span> <span class="n">timeout</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">pipe</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">check_interval</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">pipe</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="n">elapsed</span> <span class="o">+=</span> <span class="n">check_interval</span>
+            <span class="c1"># Check if any worker has died</span>
+            <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;MultiCollector._recv_and_check: Still waiting after </span><span class="si">{</span><span class="n">elapsed</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s&quot;</span>
+                <span class="o">+</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot; for worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Final check before timeout</span>
+        <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
+        <span class="n">worker_info</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; from worker </span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Timed out after </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">s waiting for message</span><span class="si">{</span><span class="n">worker_info</span><span class="si">}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;All workers are still alive - this may indicate a deadlock or very slow operation.&quot;</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_run_processes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1504,6 +1580,8 @@
                     <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
                     <span class="s2">&quot;weight_sync_schemes&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
                     <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>  <span class="c1"># Worker index for queue-based weight distribution</span>
+                    <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>
+                    <span class="s2">&quot;profile_config&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">,</span>
                 <span class="p">}</span>
                 <span class="n">proc</span> <span class="o">=</span> <span class="n">_ProcessNoWarnCtx</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_main_async_collector</span><span class="p">,</span>
@@ -1737,13 +1815,13 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Replay buffer must be defined for execution.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="s2">&quot;Cannot currently start() a collector that requires random frames. Please submit a feature request on github.&quot;</span>
-            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_running_free</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">:</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;run_free&quot;</span><span class="p">))</span></div>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;MultiCollector.start(): Sending run_free to </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">)</span><span class="si">}</span><span class="s2"> workers...&quot;</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">):</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;run_free&quot;</span><span class="p">))</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MultiCollector.start(): Sent run_free to worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="MultiCollector.pause"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector.pause">[docs]</a>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">pause</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1752,8 +1830,23 @@
             <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">:</span>
                 <span class="n">pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;pause&quot;</span><span class="p">))</span>
             <span class="c1"># Make sure all workers are paused</span>
-            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">:</span>
-                <span class="n">idx</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">)):</span>
+                <span class="c1"># Use timeout with health check to avoid hanging if a worker dies</span>
+                <span class="n">timeout</span> <span class="o">=</span> <span class="mf">30.0</span>
+                <span class="n">check_interval</span> <span class="o">=</span> <span class="mf">1.0</span>
+                <span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="k">while</span> <span class="n">elapsed</span> <span class="o">&lt;</span> <span class="n">timeout</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">idx</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">check_interval</span><span class="p">)</span>
+                        <span class="k">break</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="n">elapsed</span> <span class="o">+=</span> <span class="n">check_interval</span>
+                        <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Timed out waiting for worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> to pause after </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">s&quot;</span>
+                    <span class="p">)</span>
                 <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;paused&quot;</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected paused, but got </span><span class="si">{</span><span class="n">msg</span><span class="si">=}</span><span class="s2">.&quot;</span><span class="p">)</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> is paused.&quot;</span><span class="p">)</span>
@@ -1764,6 +1857,37 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_running_free</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Collector cannot be paused.&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MultiCollector.enable_profile"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector.enable_profile">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">enable_profile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable profiling for collector worker rollouts.</span>
+
+<span class="sd">        For multi-process collectors, this sends the profile configuration</span>
+<span class="sd">        to the specified workers. Must be called before iteration starts.</span>
+
+<span class="sd">        See :meth:`BaseCollector.enable_profile` for full documentation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># First, call parent to validate and set _profile_config</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">enable_profile</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Send profile config to workers that should be profiled</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">,</span> <span class="s2">&quot;enable_profile&quot;</span><span class="p">))</span>
+
+            <span class="c1"># Wait for confirmation from workers</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">INSTANTIATE_TIMEOUT</span><span class="p">):</span>
+                        <span class="n">_</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                        <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;profile_enabled&quot;</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">: Expected &#39;profile_enabled&#39; message, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">: Timed out waiting for profile confirmation.&quot;</span>
+                        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
@@ -1888,7 +2012,7 @@
         <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">(((</span><span class="n">seed</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">),</span> <span class="s2">&quot;seed&quot;</span><span class="p">))</span>
-            <span class="n">new_seed</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="n">new_seed</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;seeded&quot;</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected msg=&#39;seeded&#39;, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">seed</span> <span class="o">=</span> <span class="n">new_seed</span>
@@ -1912,7 +2036,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;reset&quot;</span><span class="p">))</span>
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">reset_idx</span><span class="p">[</span><span class="n">idx</span><span class="p">]:</span>
-                <span class="n">j</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="n">j</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;reset&quot;</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected msg=&#39;reset&#39;, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
@@ -1926,7 +2050,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">))</span>
         <span class="n">state_dict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-            <span class="n">_state_dict</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="n">_state_dict</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected msg=&#39;state_dict&#39;, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">state_dict</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;worker</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_state_dict</span>
@@ -1945,7 +2069,7 @@
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">state_dict</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;worker</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span> <span class="s2">&quot;load_state_dict&quot;</span><span class="p">))</span>
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-            <span class="n">_</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;loaded&quot;</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected msg=&#39;loaded&#39;, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span>
@@ -1994,7 +2118,7 @@
 
         <span class="c1"># Send command to first worker (index 0)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">attr</span><span class="p">,</span> <span class="s2">&quot;getattr_policy&quot;</span><span class="p">))</span>
-        <span class="n">result</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+        <span class="n">result</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;getattr_policy&quot;</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected msg=&#39;getattr_policy&#39;, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -2020,7 +2144,7 @@
 
         <span class="c1"># Send command to first worker (index 0)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">attr</span><span class="p">,</span> <span class="s2">&quot;getattr_env&quot;</span><span class="p">))</span>
-        <span class="n">result</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+        <span class="n">result</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;getattr_env&quot;</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected msg=&#39;getattr_env&#39;, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 

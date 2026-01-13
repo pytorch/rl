@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
     </div>
     
 
@@ -1141,6 +1141,33 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">storage</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_cursor</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_storage_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_storage_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cached list of storage keys for filtering incoming data.</span>
+
+<span class="sd">        Returns None if storage is not locked, not a tensor collection, or not initialized.</span>
+<span class="sd">        Only locked storage (shared memory) needs key filtering to prevent adding</span>
+<span class="sd">        keys that won&#39;t propagate in multiprocessing pipelines.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_storage_keys&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="ow">and</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">):</span>
+            <span class="c1"># Only cache keys if storage is locked - unlocked storage can accept new keys</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">is_locked</span><span class="p">:</span>
+                <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span>
+                        <span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">is_leaf</span><span class="o">=</span><span class="n">_NESTED_TENSORS_AS_LISTS</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_storage_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">keys</span>
+        <span class="k">return</span> <span class="n">keys</span>
+
+    <span class="nd">@_storage_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_storage_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_storage_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1430,7 +1457,20 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="c1"># Filter data to only include keys present in storage.</span>
+            <span class="c1"># _storage_keys is only set when storage is locked (shared memory),</span>
+            <span class="c1"># so this handles cases where policy outputs extra keys that can&#39;t</span>
+            <span class="c1"># be added to locked shared memory.</span>
+            <span class="n">storage_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage_keys</span>
+            <span class="k">if</span> <span class="n">storage_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">storage_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s2">&quot;locked&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+                    <span class="c1"># Provide informative error about key differences</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_raise_informative_lock_error</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                <span class="k">raise</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_set_tree_map</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
 
@@ -1487,10 +1527,81 @@
                     <span class="s2">&quot;Make sure that the storage capacity is big enough to support the &quot;</span>
                     <span class="s2">&quot;batch size provided.&quot;</span>
                 <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="c1"># Filter data to only include keys present in storage.</span>
+        <span class="c1"># _storage_keys is only set when storage is locked (shared memory),</span>
+        <span class="c1"># so this handles cases where policy outputs extra keys that can&#39;t</span>
+        <span class="c1"># be added to locked shared memory.</span>
+        <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="n">storage_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage_keys</span>
+            <span class="k">if</span> <span class="n">storage_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">storage_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;locked&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+                <span class="c1"># Provide informative error about key differences</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_raise_informative_lock_error</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_raise_informative_lock_error</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">original_error</span><span class="p">:</span> <span class="ne">RuntimeError</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise an informative error when storage is locked and data has different keys.</span>
+
+<span class="sd">        This method is called when an assignment to the storage fails due to a lock error.</span>
+<span class="sd">        It provides detailed information about which keys are new in the data vs what the</span>
+<span class="sd">        storage expects.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">):</span>
+            <span class="c1"># Can only provide detailed info for tensor collections</span>
+            <span class="k">raise</span> <span class="n">original_error</span>
+
+        <span class="c1"># Get all keys from both storage and data</span>
+        <span class="n">storage_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span>
+                <span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_NESTED_TENSORS_AS_LISTS</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">data_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span>
+                <span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_NESTED_TENSORS_AS_LISTS</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">new_keys</span> <span class="o">=</span> <span class="n">data_keys</span> <span class="o">-</span> <span class="n">storage_keys</span>
+        <span class="n">missing_keys</span> <span class="o">=</span> <span class="n">storage_keys</span> <span class="o">-</span> <span class="n">data_keys</span>
+
+        <span class="n">error_parts</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;Cannot write to locked storage due to key mismatch.&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Original error: </span><span class="si">{</span><span class="n">original_error</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">new_keys</span><span class="p">:</span>
+            <span class="n">error_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">New keys in data (not in storage): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">new_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">missing_keys</span><span class="p">:</span>
+            <span class="n">error_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Missing keys in data (present in storage): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">missing_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">new_keys</span> <span class="ow">or</span> <span class="n">missing_keys</span><span class="p">:</span>
+            <span class="n">error_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">This typically happens when:&quot;</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">  1. The policy is called on some steps but not others (e.g., during init_random_frames)&quot;</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">  2. A transform conditionally adds keys based on data content&quot;</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">  3. Different collectors/workers produce data with different keys&quot;</span>
+                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">To fix this, ensure all data written to the buffer has consistent keys.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">error_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">No key differences detected. The lock error may be due to shape or dtype mismatches.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">error_parts</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">original_error</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">_storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span>

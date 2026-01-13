@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
     </div>
     
 
@@ -430,6 +430,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">overload</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -443,6 +445,118 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_attr</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.weight_sync_schemes</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ProfileConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for profiling collector workers.</span>
+
+<span class="sd">    This class holds all the settings for profiling collector rollouts</span>
+<span class="sd">    using PyTorch&#39;s profiler. It&#39;s designed to work across all collector types.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        workers: List of worker indices to profile. For single-process collectors</span>
+<span class="sd">            (like Collector), this is ignored. For multi-process collectors</span>
+<span class="sd">            (like MultiSyncCollector, MultiAsyncCollector), only the specified</span>
+<span class="sd">            workers will be profiled. Defaults to [0].</span>
+<span class="sd">        num_rollouts: Total number of rollouts to profile (including warmup).</span>
+<span class="sd">            After this many rollouts, profiling stops. Defaults to 3.</span>
+<span class="sd">        warmup_rollouts: Number of rollouts to skip before starting actual</span>
+<span class="sd">            profiling. This allows JIT/compile warmup. Defaults to 1.</span>
+<span class="sd">        save_path: Path to save the profiling trace. If None, traces are saved</span>
+<span class="sd">            to &quot;./collector_profile_{worker_idx}.json&quot;. Supports {worker_idx}</span>
+<span class="sd">            placeholder for worker-specific files.</span>
+<span class="sd">        activities: List of profiler activities. Defaults to CPU and CUDA.</span>
+<span class="sd">        record_shapes: Whether to record tensor shapes. Defaults to True.</span>
+<span class="sd">        profile_memory: Whether to profile memory usage. Defaults to False.</span>
+<span class="sd">        with_stack: Whether to record stack traces. Defaults to True.</span>
+<span class="sd">        with_flops: Whether to compute FLOPS. Defaults to False.</span>
+<span class="sd">        on_trace_ready: Optional callback when trace is ready. If None,</span>
+<span class="sd">            traces are exported to Chrome trace format at save_path.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import MultiSyncCollector, ProfileConfig</span>
+<span class="sd">        &gt;&gt;&gt; collector = MultiSyncCollector(...)</span>
+<span class="sd">        &gt;&gt;&gt; collector.enable_profile(</span>
+<span class="sd">        ...     workers=[0],</span>
+<span class="sd">        ...     num_rollouts=5,</span>
+<span class="sd">        ...     warmup_rollouts=2,</span>
+<span class="sd">        ...     save_path=&quot;./traces/worker_{worker_idx}.json&quot;,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; for data in collector:</span>
+<span class="sd">        ...     # First worker will be profiled for rollouts 2-4</span>
+<span class="sd">        ...     process(data)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">workers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">num_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">warmup_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">activities</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">])</span>
+    <span class="n">record_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">profile_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">with_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">with_flops</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">on_trace_ready</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate configuration after initialization.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_rollouts</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;num_rollouts (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_rollouts</span><span class="si">}</span><span class="s2">) must be greater than &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;warmup_rollouts (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;warmup_rollouts must be &gt;= 0, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_save_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the save path for a specific worker.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Path object for the trace file.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;./collector_profile_</span><span class="si">{</span><span class="n">worker_idx</span><span class="si">}</span><span class="s2">.json&quot;</span><span class="p">)</span>
+        <span class="n">path_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_path</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">path_str</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_activities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get PyTorch profiler activity list.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of torch.profiler.ProfilerActivity values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch.profiler</span>
+
+        <span class="n">activity_map</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;cpu&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">ProfilerActivity</span><span class="o">.</span><span class="n">CPU</span><span class="p">,</span>
+            <span class="s2">&quot;cuda&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">ProfilerActivity</span><span class="o">.</span><span class="n">CUDA</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">activity</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">activities</span><span class="p">:</span>
+            <span class="n">activity_lower</span> <span class="o">=</span> <span class="n">activity</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">activity_lower</span> <span class="ow">in</span> <span class="n">activity_map</span><span class="p">:</span>
+                <span class="c1"># Only add CUDA if CUDA is available</span>
+                <span class="k">if</span> <span class="n">activity_lower</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+                    <span class="k">continue</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">activity_map</span><span class="p">[</span><span class="n">activity_lower</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">should_profile_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a specific worker should be profiled.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_idx: The worker index to check.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            True if this worker should be profiled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span>
 
 
 <div class="viewcode-block" id="BaseCollector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">BaseCollector</span><span class="p">(</span><span class="n">IterableDataset</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
@@ -459,6 +573,112 @@
     <span class="n">_weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">_profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="BaseCollector.enable_profile"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.enable_profile">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">enable_profile</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">workers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="n">warmup_rollouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">activities</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">record_shapes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">profile_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">with_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">with_flops</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">on_trace_ready</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable profiling for collector worker rollouts.</span>
+
+<span class="sd">        This method configures the collector to profile rollouts using PyTorch&#39;s</span>
+<span class="sd">        profiler. For multi-process collectors, profiling happens in the worker</span>
+<span class="sd">        processes. For single-process collectors (Collector), profiling happens</span>
+<span class="sd">        in the main process.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            workers: List of worker indices to profile. Defaults to [0].</span>
+<span class="sd">                For single-process collectors, this is ignored.</span>
+<span class="sd">            num_rollouts: Total number of rollouts to run the profiler for</span>
+<span class="sd">                (including warmup). Profiling stops after this many rollouts.</span>
+<span class="sd">                Defaults to 3.</span>
+<span class="sd">            warmup_rollouts: Number of rollouts to skip before starting actual</span>
+<span class="sd">                profiling. Useful for JIT/compile warmup. The profiler runs</span>
+<span class="sd">                but discards data during warmup. Defaults to 1.</span>
+<span class="sd">            save_path: Path to save the profiling trace. Supports {worker_idx}</span>
+<span class="sd">                placeholder for worker-specific files. If None, traces are</span>
+<span class="sd">                saved to &quot;./collector_profile_{worker_idx}.json&quot;.</span>
+<span class="sd">            activities: List of profiler activities (&quot;cpu&quot;, &quot;cuda&quot;).</span>
+<span class="sd">                Defaults to [&quot;cpu&quot;, &quot;cuda&quot;].</span>
+<span class="sd">            record_shapes: Whether to record tensor shapes. Defaults to True.</span>
+<span class="sd">            profile_memory: Whether to profile memory usage. Defaults to False.</span>
+<span class="sd">            with_stack: Whether to record Python stack traces. Defaults to True.</span>
+<span class="sd">            with_flops: Whether to compute FLOPS. Defaults to False.</span>
+<span class="sd">            on_trace_ready: Optional callback when trace is ready. If None,</span>
+<span class="sd">                traces are exported to Chrome trace format at save_path.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If called after iteration has started.</span>
+<span class="sd">            ValueError: If num_rollouts &lt;= warmup_rollouts.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import MultiSyncCollector</span>
+<span class="sd">            &gt;&gt;&gt; collector = MultiSyncCollector(</span>
+<span class="sd">            ...     create_env_fn=[make_env] * 4,</span>
+<span class="sd">            ...     policy=policy,</span>
+<span class="sd">            ...     frames_per_batch=1000,</span>
+<span class="sd">            ...     total_frames=100000,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; collector.enable_profile(</span>
+<span class="sd">            ...     workers=[0],</span>
+<span class="sd">            ...     num_rollouts=5,</span>
+<span class="sd">            ...     warmup_rollouts=2,</span>
+<span class="sd">            ...     save_path=&quot;./traces/worker_{worker_idx}.json&quot;,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; # Worker 0 will be profiled for rollouts 2, 3, 4</span>
+<span class="sd">            &gt;&gt;&gt; for data in collector:</span>
+<span class="sd">            ...     train(data)</span>
+<span class="sd">            &gt;&gt;&gt; collector.shutdown()</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            - Profiling adds overhead, so only profile specific workers</span>
+<span class="sd">            - The trace file can be viewed in Chrome&#39;s trace viewer</span>
+<span class="sd">              (chrome://tracing) or with PyTorch&#39;s TensorBoard plugin</span>
+<span class="sd">            - For multi-process collectors, this must be called BEFORE</span>
+<span class="sd">              iteration starts as it needs to configure workers</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot enable profiling after iteration has started. &quot;</span>
+                <span class="s2">&quot;Call enable_profile() before iterating over the collector.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">activities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">activities</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="o">=</span> <span class="n">ProfileConfig</span><span class="p">(</span>
+            <span class="n">workers</span><span class="o">=</span><span class="n">workers</span><span class="p">,</span>
+            <span class="n">num_rollouts</span><span class="o">=</span><span class="n">num_rollouts</span><span class="p">,</span>
+            <span class="n">warmup_rollouts</span><span class="o">=</span><span class="n">warmup_rollouts</span><span class="p">,</span>
+            <span class="n">save_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">,</span>
+            <span class="n">activities</span><span class="o">=</span><span class="n">activities</span><span class="p">,</span>
+            <span class="n">record_shapes</span><span class="o">=</span><span class="n">record_shapes</span><span class="p">,</span>
+            <span class="n">profile_memory</span><span class="o">=</span><span class="n">profile_memory</span><span class="p">,</span>
+            <span class="n">with_stack</span><span class="o">=</span><span class="n">with_stack</span><span class="p">,</span>
+            <span class="n">with_flops</span><span class="o">=</span><span class="n">with_flops</span><span class="p">,</span>
+            <span class="n">on_trace_ready</span><span class="o">=</span><span class="n">on_trace_ready</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">profile_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the profiling configuration.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ProfileConfig if profiling is enabled, None otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WeightUpdaterBase</span><span class="p">:</span>
@@ -1137,6 +1357,8 @@
                     <span class="n">scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
+        <span class="c1"># Mark that iteration has started (used by enable_profile check)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterator</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>

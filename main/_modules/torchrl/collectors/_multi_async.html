@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
     </div>
     
 
@@ -433,7 +433,11 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_check_for_faulty_process</span><span class="p">,</span> <span class="n">accept_remote_rref_udf_invocation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_check_for_faulty_process</span><span class="p">,</span>
+    <span class="n">accept_remote_rref_udf_invocation</span><span class="p">,</span>
+    <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_make_legacy_metaclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">_MAX_IDLE_COUNT</span><span class="p">,</span> <span class="n">_TIMEOUT</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._multi_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_MultiCollectorMeta</span><span class="p">,</span> <span class="n">MultiCollector</span>
@@ -644,13 +648,14 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">))</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;continue&quot;</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="n">workers_frames</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
+        <span class="n">_iter_start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
         <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
@@ -661,7 +666,19 @@
                 <span class="k">except</span> <span class="p">(</span><span class="ne">TimeoutError</span><span class="p">,</span> <span class="n">Empty</span><span class="p">):</span>
                     <span class="n">counter</span> <span class="o">+=</span> <span class="n">_TIMEOUT</span>
                     <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
+                    <span class="c1"># Debug logging for queue timeout</span>
+                    <span class="k">if</span> <span class="n">counter</span> <span class="o">%</span> <span class="p">(</span><span class="mi">10</span> <span class="o">*</span> <span class="n">_TIMEOUT</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Log every 10 timeouts</span>
+                        <span class="n">_elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">_iter_start_time</span>
+                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;MultiAsyncCollector.iterator: Queue timeout, counter=</span><span class="si">{</span><span class="n">counter</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;iter=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_iter</span><span class="si">}</span><span class="s2">, frames=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames</span><span class="si">}</span><span class="s2">, elapsed=</span><span class="si">{</span><span class="n">_elapsed</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s&quot;</span>
+                        <span class="p">)</span>
                 <span class="k">if</span> <span class="n">counter</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">_TIMEOUT</span> <span class="o">*</span> <span class="n">_MAX_IDLE_COUNT</span><span class="p">):</span>
+                    <span class="n">_elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">_iter_start_time</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;MultiAsyncCollector.iterator: CRITICAL - Max idle exceeded, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;counter=</span><span class="si">{</span><span class="n">counter</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, iter=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_iter</span><span class="si">}</span><span class="s2">, frames=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames</span><span class="si">}</span><span class="s2">, elapsed=</span><span class="si">{</span><span class="n">_elapsed</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s&quot;</span>
+                    <span class="p">)</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Failed to gather all collector output within </span><span class="si">{</span><span class="n">_TIMEOUT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">_MAX_IDLE_COUNT</span><span class="si">}</span><span class="s2"> seconds. &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;Increase the MAX_IDLE_COUNT environment variable to bypass this error.&quot;</span>
@@ -679,10 +696,7 @@
 
             <span class="c1"># the function blocks here until the next item is asked, hence we send the message to the</span>
             <span class="c1"># worker to keep on working in the meantime before the yield statement</span>
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
-            <span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
                 <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue_random&quot;</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
@@ -709,10 +723,7 @@
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;self.queue_out is full&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                    <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
-                <span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">))</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="s2">&quot;continue&quot;</span><span class="p">))</span></div>

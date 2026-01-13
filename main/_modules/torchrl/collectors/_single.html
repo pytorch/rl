@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
     </div>
     
 
@@ -445,7 +445,7 @@
     <span class="n">prod</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">ProfileConfig</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._constants</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">cudagraph_mark_step_begin</span><span class="p">,</span>
     <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
@@ -469,6 +469,116 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_model</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_CollectorProfiler</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper class for profiling collector rollouts in single-process mode.</span>
+
+<span class="sd">    Manages the PyTorch profiler lifecycle for the Collector class.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">profile_config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Set up profiler schedule</span>
+        <span class="n">active_rollouts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span>
+        <span class="n">profiler_schedule</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">schedule</span><span class="p">(</span>
+            <span class="n">skip_first</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="p">,</span>
+            <span class="n">wait</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">warmup</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">active</span><span class="o">=</span><span class="n">active_rollouts</span><span class="p">,</span>
+            <span class="n">repeat</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Get activities</span>
+        <span class="n">activities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get_activities</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">activities</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Determine trace handler</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">on_trace_ready</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">on_trace_ready</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">on_trace_ready</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">save_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get_save_path</span><span class="p">(</span>
+                <span class="mi">0</span>
+            <span class="p">)</span>  <span class="c1"># Use worker_idx 0 for single-process</span>
+            <span class="n">save_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">on_trace_ready</span><span class="p">(</span><span class="n">prof</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">):</span>
+                <span class="n">prof</span><span class="o">.</span><span class="n">export_chrome_trace</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">save_path</span><span class="p">))</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Collector: Profiling trace saved to </span><span class="si">{</span><span class="n">save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">profile</span><span class="p">(</span>
+            <span class="n">activities</span><span class="o">=</span><span class="n">activities</span><span class="p">,</span>
+            <span class="n">schedule</span><span class="o">=</span><span class="n">profiler_schedule</span><span class="p">,</span>
+            <span class="n">on_trace_ready</span><span class="o">=</span><span class="n">on_trace_ready</span><span class="p">,</span>
+            <span class="n">record_shapes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">record_shapes</span><span class="p">,</span>
+            <span class="n">profile_memory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">profile_memory</span><span class="p">,</span>
+            <span class="n">with_stack</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">with_stack</span><span class="p">,</span>
+            <span class="n">with_flops</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">with_flops</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start the profiler.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Collector: Profiling started. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Will profile rollouts </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Step the profiler after a rollout.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            True if profiling is complete.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+        <span class="c1"># Check if profiling is complete</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the profiler and export trace.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Collector: Profiling complete after </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span><span class="si">}</span><span class="s2"> rollouts.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if profiling is active.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span>
+
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">profile_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager for profiling a single rollout.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span><span class="s2">&quot;collector_rollout&quot;</span><span class="p">):</span>
+                <span class="k">yield</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">yield</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_cuda_sync_if_initialized</span><span class="p">():</span>
@@ -1690,13 +1800,35 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">streams</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">events</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Set up profiler if configured</span>
+        <span class="n">profiler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">profiler</span> <span class="o">=</span> <span class="n">_CollectorProfiler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
+                <span class="n">profiler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
         <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">stream</span> <span class="ow">in</span> <span class="n">streams</span><span class="p">:</span>
                 <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">stream</span><span class="p">))</span>
 
             <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">()</span>
+
+                <span class="c1"># Use profiler context if profiling is active</span>
+                <span class="n">profile_ctx</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">profiler</span><span class="o">.</span><span class="n">profile_rollout</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span>
+                    <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+                <span class="p">)</span>
+
+                <span class="k">with</span> <span class="n">profile_ctx</span><span class="p">:</span>
+                    <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">()</span>
+
+                <span class="c1"># Step the profiler after each rollout</span>
+                <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
+                    <span class="n">profiler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
                 <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="c1"># if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out</span>
                     <span class="c1">#  frames are updated within the rollout function</span>
@@ -1726,7 +1858,11 @@
                     <span class="c1"># &gt;&gt;&gt;      else:</span>
                     <span class="c1"># &gt;&gt;&gt;          break</span>
                     <span class="c1"># &gt;&gt;&gt; assert data0[&quot;done&quot;] is not data1[&quot;done&quot;]</span>
-                    <span class="k">yield</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span></div>
+                    <span class="k">yield</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="c1"># Stop profiler if it hasn&#39;t been stopped yet</span>
+        <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
+            <span class="n">profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Collector.start"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.start">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector in a separate thread for asynchronous data collection.</span>
@@ -1813,6 +1949,23 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">is_running</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_should_use_random_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determine if random frames should be used instead of the policy.</span>
+
+<span class="sd">        When a replay buffer is provided, uses `replay_buffer.write_count` as the</span>
+<span class="sd">        global step counter to support `.start()` mode where `_frames` isn&#39;t updated</span>
+<span class="sd">        until after collection. Otherwise, uses the internal `_frames` counter.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if random frames should be used, False otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># Use replay_buffer.write_count when available for accurate counting in .start() mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">write_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
+
 <div class="viewcode-block" id="Collector.async_shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.async_shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1883,10 +2036,7 @@
         <span class="n">tensordicts</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">exploration_type</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">):</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                    <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
-                <span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">rand_action</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">)</span>
                     <span class="k">if</span> <span class="p">(</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
