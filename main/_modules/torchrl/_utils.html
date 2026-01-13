@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a98e17) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
     </div>
     
 
@@ -451,15 +451,12 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">unravel_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span><span class="p">,</span> <span class="n">Tensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.autograd.profiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">record_function</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch.compiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span>
-
-<span class="c1"># Timeout for weight synchronization during collector init.</span>
-<span class="c1"># Increase this when using many collectors across different CUDA devices.</span>
-<span class="n">WEIGHT_SYNC_TIMEOUT</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;TORCHRL_WEIGHT_SYNC_TIMEOUT&quot;</span><span class="p">,</span> <span class="mf">120.0</span><span class="p">))</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_default_mp_start_method</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -592,6 +589,7 @@
     <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;once&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span> <span class="n">module</span><span class="o">=</span><span class="s2">&quot;torchrl&quot;</span><span class="p">)</span>
 
 <span class="n">BATCHED_PIPE_TIMEOUT</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;BATCHED_PIPE_TIMEOUT&quot;</span><span class="p">,</span> <span class="s2">&quot;10000.0&quot;</span><span class="p">))</span>
+<span class="n">WEIGHT_SYNC_TIMEOUT</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;WEIGHT_SYNC_TIMEOUT&quot;</span><span class="p">,</span> <span class="s2">&quot;60.0&quot;</span><span class="p">))</span>
 
 <span class="n">_TORCH_DTYPES</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span>
@@ -641,6 +639,21 @@
 <span class="sd">        &gt;&gt;&gt; with timeit(&quot;my_other_function&quot;):</span>
 <span class="sd">        ...     my_other_function()</span>
 <span class="sd">        &gt;&gt;&gt; timeit.print()  # prints the state of the timer for each function</span>
+
+<span class="sd">        The timer can also be queried mid-execution using the :meth:`elapsed` method:</span>
+
+<span class="sd">        &gt;&gt;&gt; with timeit(&quot;my_function&quot;) as timer:</span>
+<span class="sd">        ...     # do some work</span>
+<span class="sd">        ...     print(f&quot;Elapsed so far: {timer.elapsed():.3f}s&quot;)</span>
+<span class="sd">        ...     # do more work</span>
+
+<span class="sd">        For long-running processes where a context manager isn&#39;t practical,</span>
+<span class="sd">        use the :meth:`start` method:</span>
+
+<span class="sd">        &gt;&gt;&gt; timer = timeit(&quot;long_process&quot;).start()</span>
+<span class="sd">        &gt;&gt;&gt; for i in range(100):</span>
+<span class="sd">        ...     # do work</span>
+<span class="sd">        ...     print(f&quot;Elapsed: {timer.elapsed():.3f}s&quot;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_REG</span> <span class="o">=</span> <span class="p">{}</span>
@@ -657,11 +670,47 @@
 
         <span class="k">return</span> <span class="n">decorated_fn</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">timeit</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">timeit</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the timer without using a context manager.</span>
+
+<span class="sd">        This is useful when you need to track elapsed time over a long-running</span>
+<span class="sd">        loop or process where a context manager isn&#39;t practical.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            timeit: Returns self for method chaining.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; timer = timeit(&quot;my_long_process&quot;).start()</span>
+<span class="sd">            &gt;&gt;&gt; for i in range(100):</span>
+<span class="sd">            ...     # do work</span>
+<span class="sd">            ...     if i % 10 == 0:</span>
+<span class="sd">            ...         print(f&quot;Elapsed: {timer.elapsed():.3f}s&quot;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">elapsed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the elapsed time in seconds since the timer was started.</span>
+
+<span class="sd">        This can be called during execution to query the current elapsed time.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            float: Elapsed time in seconds.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; with timeit(&quot;my_function&quot;) as timer:</span>
+<span class="sd">            ...     # do some work</span>
+<span class="sd">            ...     print(f&quot;Elapsed so far: {timer.elapsed():.3f}s&quot;)</span>
+<span class="sd">            ...     # do more work</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">t0</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">t0</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span><span class="p">()</span>
         <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_REG</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
 
         <span class="n">count</span> <span class="o">=</span> <span class="n">val</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
@@ -759,6 +808,29 @@
         <span class="bp">cls</span><span class="o">.</span><span class="n">erase</span><span class="p">()</span>
 
 
+<span class="c1"># Global flag to enable detailed profiling instrumentation.</span>
+<span class="c1"># When False (default), _maybe_record_function returns nullcontext() immediately</span>
+<span class="c1"># to avoid overhead in hot code paths.</span>
+<span class="n">_PROFILING_ENABLED</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># Singleton nullcontext to avoid repeated object creation</span>
+<span class="n">_NULL_CONTEXT</span> <span class="o">=</span> <span class="n">nullcontext</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">set_profiling_enabled</span><span class="p">(</span><span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enable or disable detailed profiling instrumentation.</span>
+
+<span class="sd">    When disabled (default), `_maybe_record_function` and `_maybe_timeit`</span>
+<span class="sd">    return immediately with minimal overhead. Enable only when actively</span>
+<span class="sd">    profiling to avoid performance regression.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        enabled: If True, enable profiling instrumentation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_PROFILING_ENABLED</span>
+    <span class="n">_PROFILING_ENABLED</span> <span class="o">=</span> <span class="n">enabled</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_timeit</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return timeit context if not compiling, nullcontext otherwise.</span>
 
@@ -766,19 +838,21 @@
 <span class="sd">    and timeit uses time.time() which dynamo cannot trace.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">_NULL_CONTEXT</span>
     <span class="k">return</span> <span class="n">timeit</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_record_function</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return record_function context if not compiling, nullcontext otherwise.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return record_function context if profiling enabled and not compiling.</span>
 
-<span class="sd">    torch.autograd.profiler.record_function cannot be used inside compiled regions.</span>
+<span class="sd">    When _PROFILING_ENABLED is False (default), returns immediately with</span>
+<span class="sd">    minimal overhead to avoid performance regression in hot code paths.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">torch.autograd.profiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">record_function</span>
-
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_PROFILING_ENABLED</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_NULL_CONTEXT</span>
     <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">_NULL_CONTEXT</span>
+
     <span class="k">return</span> <span class="n">record_function</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 
 
@@ -787,11 +861,15 @@
 
 <span class="sd">    This is preferred over sprinkling many context managers in hot code paths,</span>
 <span class="sd">    as it reduces Python overhead while keeping a useful profiler structure.</span>
+
+<span class="sd">    When _PROFILING_ENABLED is False (default), the decorator is a no-op.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
         <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_PROFILING_ENABLED</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="k">with</span> <span class="n">_maybe_record_function</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 

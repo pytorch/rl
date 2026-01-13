@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a98e17) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
     </div>
     
 
@@ -1580,6 +1580,13 @@
             <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_replay_lock_placeholder&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">_futures_lock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_futures_lock_placeholder&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Remove non-picklable prefetch objects - they will be recreated on unpickle</span>
+        <span class="n">_prefetch_queue</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_prefetch_queue&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">_prefetch_executor</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_prefetch_executor&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_prefetch_queue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prefetch_queue_placeholder&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">_prefetch_executor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prefetch_executor_placeholder&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="n">state</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
@@ -1598,6 +1605,15 @@
             <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_futures_lock_placeholder&quot;</span><span class="p">)</span>
             <span class="n">_futures_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
             <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_futures_lock&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_futures_lock</span>
+        <span class="c1"># Recreate prefetch objects after unpickling if they were present</span>
+        <span class="k">if</span> <span class="s2">&quot;_prefetch_queue_placeholder&quot;</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_prefetch_queue_placeholder&quot;</span><span class="p">)</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prefetch_queue&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s2">&quot;_prefetch_executor_placeholder&quot;</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_prefetch_executor_placeholder&quot;</span><span class="p">)</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prefetch_executor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prefetch_cap&quot;</span><span class="p">]</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">rngstate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>

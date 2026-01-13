@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g0a98e17) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g9d34dbe) &#x25BC</span></a>
     </div>
     
 
@@ -427,13 +427,17 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">atexit</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">signal</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
@@ -474,6 +478,109 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch.compiler</span><span class="w"> </span><span class="kn">import</span> <span class="n">disable</span> <span class="k">as</span> <span class="n">compile_disable</span><span class="p">,</span> <span class="n">is_compiling</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">disable</span> <span class="k">as</span> <span class="n">compile_disable</span><span class="p">,</span> <span class="n">is_compiling</span>
+
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># Memmap Storage Cleanup Infrastructure</span>
+<span class="c1"># =============================================================================</span>
+<span class="c1"># This module-level infrastructure ensures that memmap files created by</span>
+<span class="c1"># LazyMemmapStorage are cleaned up even when scripts are interrupted with</span>
+<span class="c1"># Ctrl+C (SIGINT) or killed with SIGTERM.</span>
+
+<span class="c1"># Registry of storages to clean up (weak references to avoid preventing GC)</span>
+<span class="n">_MEMMAP_STORAGE_REGISTRY</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakSet</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakSet</span><span class="p">()</span>
+
+<span class="c1"># Track if cleanup has already run (to avoid double cleanup)</span>
+<span class="n">_CLEANUP_DONE</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># Store original signal handlers to restore after cleanup</span>
+<span class="n">_ORIGINAL_SIGINT_HANDLER</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_ORIGINAL_SIGTERM_HANDLER</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cleanup_all_memmap_storages</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Clean up all registered memmap storages.</span>
+
+<span class="sd">    This function is called on exit (via atexit) and on signal interrupts.</span>
+<span class="sd">    It removes all temporary memmap directories that were created with</span>
+<span class="sd">    auto_cleanup=True.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_CLEANUP_DONE</span>
+    <span class="k">if</span> <span class="n">_CLEANUP_DONE</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="n">_CLEANUP_DONE</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">_MEMMAP_STORAGE_REGISTRY</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">storage</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="c1"># Ignore errors during cleanup - the storage might already be gone</span>
+            <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_signal_cleanup_handler</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Signal handler that cleans up memmap storages before exiting.</span>
+
+<span class="sd">    This handler is robust to cleanup failures - it will always re-raise the</span>
+<span class="sd">    signal to ensure proper process termination.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Always ensure we re-raise the signal, even if cleanup fails</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_cleanup_all_memmap_storages</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="c1"># Ignore any cleanup errors - we must re-raise the signal</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># Re-raise the signal with the original handler (or default behavior)</span>
+    <span class="k">if</span> <span class="n">signum</span> <span class="o">==</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGINT</span><span class="p">:</span>
+        <span class="n">original</span> <span class="o">=</span> <span class="n">_ORIGINAL_SIGINT_HANDLER</span>
+    <span class="k">elif</span> <span class="n">signum</span> <span class="o">==</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">:</span>
+        <span class="n">original</span> <span class="o">=</span> <span class="n">_ORIGINAL_SIGTERM_HANDLER</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">original</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIG_DFL</span>
+
+    <span class="c1"># Restore original handler and re-raise</span>
+    <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">original</span> <span class="k">if</span> <span class="n">original</span> <span class="k">else</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIG_DFL</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">(),</span> <span class="n">signum</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_register_cleanup_handlers</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register atexit and signal handlers for memmap cleanup.</span>
+
+<span class="sd">    This is called once when the first storage with auto_cleanup=True is created.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_ORIGINAL_SIGINT_HANDLER</span><span class="p">,</span> <span class="n">_ORIGINAL_SIGTERM_HANDLER</span>
+
+    <span class="c1"># Register atexit handler (for normal exits)</span>
+    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_cleanup_all_memmap_storages</span><span class="p">)</span>
+
+    <span class="c1"># Register signal handlers (for Ctrl+C and kill)</span>
+    <span class="c1"># Only register if we&#39;re in the main thread (signals can only be handled in main thread)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+
+        <span class="k">if</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span> <span class="ow">is</span> <span class="n">threading</span><span class="o">.</span><span class="n">main_thread</span><span class="p">():</span>
+            <span class="n">_ORIGINAL_SIGINT_HANDLER</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span>
+                <span class="n">signal</span><span class="o">.</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">_signal_cleanup_handler</span>
+            <span class="p">)</span>
+            <span class="n">_ORIGINAL_SIGTERM_HANDLER</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span>
+                <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">_signal_cleanup_handler</span>
+            <span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+        <span class="c1"># Signal handling not available (e.g., not main thread)</span>
+        <span class="k">pass</span>
+
+
+<span class="c1"># Flag to track if handlers have been registered</span>
+<span class="n">_CLEANUP_HANDLERS_REGISTERED</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ensure_cleanup_handlers</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Ensure cleanup handlers are registered (called once per process).&quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_CLEANUP_HANDLERS_REGISTERED</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_CLEANUP_HANDLERS_REGISTERED</span><span class="p">:</span>
+        <span class="n">_register_cleanup_handlers</span><span class="p">()</span>
+        <span class="n">_CLEANUP_HANDLERS_REGISTERED</span> <span class="o">=</span> <span class="kc">True</span>
 
 
 <div class="viewcode-block" id="Storage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Storage</span><span class="p">:</span>
@@ -1725,6 +1832,11 @@
 <span class="sd">        shared_init (bool, optional): if ``True``, enables multiprocess coordination</span>
 <span class="sd">            during storage initialization. First process initializes the memmap,</span>
 <span class="sd">            others wait and load from the shared directory. Defaults to ``False``.</span>
+<span class="sd">        auto_cleanup (bool, optional): if ``True``, automatically registers this</span>
+<span class="sd">            storage for cleanup when the process exits (normally or via Ctrl+C/SIGTERM).</span>
+<span class="sd">            This removes the memmap files from disk when no longer needed.</span>
+<span class="sd">            Defaults to ``True`` when ``scratch_dir`` is ``None`` (using temp directory),</span>
+<span class="sd">            and ``False`` when a custom ``scratch_dir`` is provided (preserving user data).</span>
 
 <span class="sd">    .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is</span>
 <span class="sd">        already stored to avoid executing long copies of data that is already stored on disk.</span>
@@ -1804,9 +1916,11 @@
         <span class="n">existsok</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">shared_init</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">auto_cleanup</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scratch_dir_is_temp</span> <span class="o">=</span> <span class="n">scratch_dir</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">existsok</span> <span class="o">=</span> <span class="n">existsok</span>
         <span class="k">if</span> <span class="n">scratch_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">scratch_dir</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">)</span>
@@ -1830,6 +1944,16 @@
                 <span class="s2">&quot;use `buffer.append_transform(lambda x: x.to(device))` or a similar transform.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># Auto cleanup: default to True for temp dirs, False for user-specified dirs</span>
+        <span class="k">if</span> <span class="n">auto_cleanup</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">auto_cleanup</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scratch_dir_is_temp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_auto_cleanup</span> <span class="o">=</span> <span class="n">auto_cleanup</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cleaned_up</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_auto_cleanup</span><span class="p">:</span>
+            <span class="n">_ensure_cleanup_handlers</span><span class="p">()</span>
+            <span class="n">_MEMMAP_STORAGE_REGISTRY</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="n">_storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span>
@@ -1963,7 +2087,80 @@
             <span class="c1"># Trigger initialization with dummy data</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_init</span><span class="p">()</span>
         <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span></div>
+        <span class="k">return</span> <span class="n">result</span>
+
+<div class="viewcode-block" id="LazyMemmapStorage.cleanup"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage.cleanup">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clean up memmap files from disk.</span>
+
+<span class="sd">        This method removes the memmap directory and all its contents from disk.</span>
+<span class="sd">        It is automatically called on process exit if ``auto_cleanup=True``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: ``True`` if cleanup was performed, ``False`` if already cleaned up</span>
+<span class="sd">                or no cleanup needed.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            After cleanup, the storage is no longer usable. Any attempt to access</span>
+<span class="sd">            the storage will result in undefined behavior.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; storage = LazyMemmapStorage(1000, auto_cleanup=True)</span>
+<span class="sd">            &gt;&gt;&gt; # ... use storage ...</span>
+<span class="sd">            &gt;&gt;&gt; storage.cleanup()  # Manually clean up when done</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_cleaned_up&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cleaned_up</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Get the directory to clean up</span>
+        <span class="n">scratch_dir</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;scratch_dir&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">scratch_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># No scratch dir - check if storage has memmap tensors with temp paths</span>
+            <span class="n">storage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+                <span class="c1"># Get all memmap file paths and find their common directory</span>
+                <span class="n">paths</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">storage</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="s2">&quot;filename&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">tensor</span><span class="o">.</span><span class="n">filename</span><span class="p">:</span>
+                            <span class="n">paths</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="c1"># Storage might be in an invalid state during cleanup</span>
+                    <span class="k">pass</span>
+                <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">path</span>
+                        <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="n">path</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">())</span>
+                    <span class="p">):</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cleaned up memmap directory: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                            <span class="c1"># Ignore errors - file might be in use or already deleted</span>
+                            <span class="k">pass</span>
+                <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">paths</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="c1"># Clean up the scratch directory</span>
+        <span class="n">scratch_dir</span> <span class="o">=</span> <span class="n">scratch_dir</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">scratch_dir</span><span class="p">)</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cleaned up memmap directory: </span><span class="si">{</span><span class="n">scratch_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to clean up memmap directory: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure cleanup on garbage collection if auto_cleanup is enabled.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_auto_cleanup&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_cleaned_up&quot;</span><span class="p">,</span> <span class="kc">True</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="CompressedListStorage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">CompressedListStorage</span><span class="p">(</span><span class="n">ListStorage</span><span class="p">):</span>
