@@ -81,6 +81,7 @@ from torchrl.trainers.algorithms.configs.logging import (
     WandbLoggerConfig,
 )
 from torchrl.trainers.algorithms.configs.modules import (
+    AdditiveGaussianModuleConfig,
     ConvNetConfig,
     MLPConfig,
     ModelConfig,
@@ -270,6 +271,7 @@ __all__ = [
     "TensorDictModuleConfig",
     "TensorDictSequentialConfig",
     "ValueModelConfig",
+    "AdditiveGaussianModuleConfig",
     # Transforms - Core
     "ActionDiscretizerConfig",
     "ActionMaskConfig",
@@ -446,6 +448,13 @@ def _register_configs():
     cs.store(group="model", name="tanh_module", node=TanhModuleConfig)
     cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
     cs.store(group="model", name="value", node=ValueModelConfig)
+
+    # Exploration configs
+    cs.store(
+        group="exploration",
+        name="additive_gaussian",
+        node=AdditiveGaussianModuleConfig,
+    )
 
     # =============================================================================
     # Transform Configurations
