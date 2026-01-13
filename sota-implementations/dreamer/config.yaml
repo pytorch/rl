@@ -114,5 +114,6 @@ profiling:
     warmup_rollouts: 2
     # Path to save collector trace (supports {worker_idx} placeholder)
     trace_file: collector_trace_{worker_idx}.json
-    # Override init_random_frames when collector profiling is enabled (0 = skip random frames phase)
+    # Override init_random_frames when collector profiling is enabled.
+    # 0 = use policy from the start (skip random actions), but code still waits for batch_size frames.
     init_random_frames_override: 0

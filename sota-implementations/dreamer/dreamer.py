@@ -299,6 +299,9 @@ def main(cfg: DictConfig):  # noqa: F821
         )
     else:
         min_frames_to_start = cfg.collector.init_random_frames
+
+    # Always need at least batch_size frames to sample a batch (bug fix: init_random_frames_override=0 would hang)
+    min_frames_to_start = max(min_frames_to_start, batch_size)
     torchrl_logger.info(
         f"Waiting for {min_frames_to_start} initial frames before training..."
     )
