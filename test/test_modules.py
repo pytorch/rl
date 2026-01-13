@@ -565,10 +565,10 @@ class TestDreamerComponents:
         tensordict = TensorDict(
             {
                 "state": state.clone(),
-                "belief": belief.clone(),  # Root-level belief needed for prior input
                 "action": action.clone(),
                 "next": {
                     "encoded_latents": obs_emb.clone(),
+                    "belief": belief.clone(),
                 },
             },
             device=device,
