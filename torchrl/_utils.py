@@ -29,15 +29,12 @@ from pyvers import implement_for  # noqa: F401
 from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
+from torch.autograd.profiler import record_function
 
 try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
-
-# Timeout for weight synchronization during collector init.
-# Increase this when using many collectors across different CUDA devices.
-WEIGHT_SYNC_TIMEOUT = float(os.environ.get("TORCHRL_WEIGHT_SYNC_TIMEOUT", 120.0))
 
 
 def _get_default_mp_start_method() -> str:
@@ -170,6 +167,7 @@ if RL_WARNINGS:
     warnings.filterwarnings("once", category=DeprecationWarning, module="torchrl")
 
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
+WEIGHT_SYNC_TIMEOUT = float(os.environ.get("WEIGHT_SYNC_TIMEOUT", "60.0"))
 
 _TORCH_DTYPES = (
     torch.bfloat16,
@@ -219,6 +217,21 @@ class timeit:
         >>> with timeit("my_other_function"):
         ...     my_other_function()
         >>> timeit.print()  # prints the state of the timer for each function
+
+        The timer can also be queried mid-execution using the :meth:`elapsed` method:
+
+        >>> with timeit("my_function") as timer:
+        ...     # do some work
+        ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
+        ...     # do more work
+
+        For long-running processes where a context manager isn't practical,
+        use the :meth:`start` method:
+
+        >>> timer = timeit("long_process").start()
+        >>> for i in range(100):
+        ...     # do work
+        ...     print(f"Elapsed: {timer.elapsed():.3f}s")
     """
 
     _REG = {}
@@ -235,11 +248,47 @@ class timeit:
 
         return decorated_fn
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> timeit:
         self.t0 = time.time()
+        return self
+
+    def start(self) -> timeit:
+        """Starts the timer without using a context manager.
+
+        This is useful when you need to track elapsed time over a long-running
+        loop or process where a context manager isn't practical.
+
+        Returns:
+            timeit: Returns self for method chaining.
+
+        Examples:
+            >>> timer = timeit("my_long_process").start()
+            >>> for i in range(100):
+            ...     # do work
+            ...     if i % 10 == 0:
+            ...         print(f"Elapsed: {timer.elapsed():.3f}s")
+        """
+        self.t0 = time.time()
+        return self
+
+    def elapsed(self) -> float:
+        """Returns the elapsed time in seconds since the timer was started.
+
+        This can be called during execution to query the current elapsed time.
+
+        Returns:
+            float: Elapsed time in seconds.
+
+        Examples:
+            >>> with timeit("my_function") as timer:
+            ...     # do some work
+            ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
+            ...     # do more work
+        """
+        return time.time() - self.t0
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        t = time.time() - self.t0
+        t = self.elapsed()
         val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
         count = val[2]
@@ -337,6 +386,29 @@ class timeit:
         cls.erase()
 
 
+# Global flag to enable detailed profiling instrumentation.
+# When False (default), _maybe_record_function returns nullcontext() immediately
+# to avoid overhead in hot code paths.
+_PROFILING_ENABLED = False
+
+# Singleton nullcontext to avoid repeated object creation
+_NULL_CONTEXT = nullcontext()
+
+
+def set_profiling_enabled(enabled: bool) -> None:
+    """Enable or disable detailed profiling instrumentation.
+
+    When disabled (default), `_maybe_record_function` and `_maybe_timeit`
+    return immediately with minimal overhead. Enable only when actively
+    profiling to avoid performance regression.
+
+    Args:
+        enabled: If True, enable profiling instrumentation.
+    """
+    global _PROFILING_ENABLED
+    _PROFILING_ENABLED = enabled
+
+
 def _maybe_timeit(name):
     """Return timeit context if not compiling, nullcontext otherwise.
 
@@ -344,19 +416,21 @@ def _maybe_timeit(name):
     and timeit uses time.time() which dynamo cannot trace.
     """
     if is_compiling():
-        return nullcontext()
+        return _NULL_CONTEXT
     return timeit(name)
 
 
 def _maybe_record_function(name):
-    """Return record_function context if not compiling, nullcontext otherwise.
+    """Return record_function context if profiling enabled and not compiling.
 
-    torch.autograd.profiler.record_function cannot be used inside compiled regions.
+    When _PROFILING_ENABLED is False (default), returns immediately with
+    minimal overhead to avoid performance regression in hot code paths.
     """
-    from torch.autograd.profiler import record_function
-
+    if not _PROFILING_ENABLED:
+        return _NULL_CONTEXT
     if is_compiling():
-        return nullcontext()
+        return _NULL_CONTEXT
+
     return record_function(name)
 
 
@@ -365,11 +439,15 @@ def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable
 
     This is preferred over sprinkling many context managers in hot code paths,
     as it reduces Python overhead while keeping a useful profiler structure.
+
+    When _PROFILING_ENABLED is False (default), the decorator is a no-op.
     """
 
     def decorator(fn: Callable) -> Callable:
         @wraps(fn)
         def wrapped(*args, **kwargs):
+            if not _PROFILING_ENABLED:
+                return fn(*args, **kwargs)
             with _maybe_record_function(name):
                 return fn(*args, **kwargs)
 
