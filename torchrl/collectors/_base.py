@@ -935,6 +935,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     scheme.connect(worker_idx=self.worker_idx)
 
     def __iter__(self) -> Iterator[TensorDictBase]:
+        # Mark that iteration has started (used by enable_profile check)
+        self._iterator = True
         try:
             yield from self.iterator()
         except Exception:
