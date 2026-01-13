@@ -1031,11 +1031,12 @@ class TensorStorage(Storage):
                 self._init(data)
 
         if is_tensor_collection(data):
-            # Filter data to only include keys present in storage
-            # This handles cases where policy outputs extra keys during some steps
-            # but not others (e.g., init_random_frames vs policy-guided collection)
+            # Filter data to only include keys present in storage, but ONLY when
+            # storage is locked (shared memory). This handles cases where policy
+            # outputs extra keys that can't be added to locked shared memory.
+            # When unlocked, allow users to add new keys freely.
             storage_keys = self._storage_keys
-            if storage_keys is not None:
+            if storage_keys is not None and self._storage.is_locked:
                 data = data.select(*storage_keys, strict=False)
             try:
                 self._storage[cursor] = data
@@ -1100,12 +1101,13 @@ class TensorStorage(Storage):
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
-        # Filter data to only include keys present in storage (for tensor collections)
-        # This handles cases where policy outputs extra keys during some steps
-        # but not others (e.g., init_random_frames vs policy-guided collection)
+        # Filter data to only include keys present in storage, but ONLY when
+        # storage is locked (shared memory). This handles cases where policy
+        # outputs extra keys that can't be added to locked shared memory.
+        # When unlocked, allow users to add new keys freely.
         if is_tensor_collection(data):
             storage_keys = self._storage_keys
-            if storage_keys is not None:
+            if storage_keys is not None and self._storage.is_locked:
                 data = data.select(*storage_keys, strict=False)
         try:
             self._storage[cursor] = data
