@@ -10394,6 +10394,21 @@ class ActionDiscretizer(Transform):
         >>> assert (r["action"] < base_env.action_spec.high).all()
         >>> assert (r["action"] > base_env.action_spec.low).all()
 
+    .. note:: Custom Sampling Strategies
+
+        To implement a custom sampling strategy beyond the built-in options
+        (``MEDIAN``, ``LOW``, ``HIGH``, ``RANDOM``), subclass ``ActionDiscretizer``
+        and override the :meth:`~ActionDiscretizer.custom_arange` method. This
+        method computes the normalized interval positions (values in ``[0, 1)``)
+        that determine where each discrete action maps within the continuous
+        action interval.
+
+        Example:
+            >>> class LogSpacedActionDiscretizer(ActionDiscretizer):
+            ...     def custom_arange(self, nint, device):
+            ...         # Use logarithmic spacing instead of linear
+            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
+
     """
 
     class SamplingStrategy(IntEnum):
