@@ -725,18 +725,22 @@ class TensorStorage(Storage):
     def _storage_keys(self) -> list | None:
         """Cached list of storage keys for filtering incoming data.
 
-        Returns None if storage is not a tensor collection or not initialized.
+        Returns None if storage is not locked, not a tensor collection, or not initialized.
+        Only locked storage (shared memory) needs key filtering to prevent adding
+        keys that won't propagate in multiprocessing pipelines.
         """
         keys = self.__dict__.get("_storage_keys")
         if keys is None and self.initialized and is_tensor_collection(self._storage):
-            keys = list(
-                self._storage.keys(
-                    include_nested=True,
-                    leaves_only=True,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+            # Only cache keys if storage is locked - unlocked storage can accept new keys
+            if self._storage.is_locked:
+                keys = list(
+                    self._storage.keys(
+                        include_nested=True,
+                        leaves_only=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    )
                 )
-            )
-            self.__dict__["_storage_keys"] = keys
+                self.__dict__["_storage_keys"] = keys
         return keys
 
     @_storage_keys.setter
@@ -1031,12 +1035,12 @@ class TensorStorage(Storage):
                 self._init(data)
 
         if is_tensor_collection(data):
-            # Filter data to only include keys present in storage, but ONLY when
-            # storage is locked (shared memory). This handles cases where policy
-            # outputs extra keys that can't be added to locked shared memory.
-            # When unlocked, allow users to add new keys freely.
+            # Filter data to only include keys present in storage.
+            # _storage_keys is only set when storage is locked (shared memory),
+            # so this handles cases where policy outputs extra keys that can't
+            # be added to locked shared memory.
             storage_keys = self._storage_keys
-            if storage_keys is not None and self._storage.is_locked:
+            if storage_keys is not None:
                 data = data.select(*storage_keys, strict=False)
             try:
                 self._storage[cursor] = data
@@ -1101,13 +1105,13 @@ class TensorStorage(Storage):
                     "Make sure that the storage capacity is big enough to support the "
                     "batch size provided."
                 )
-        # Filter data to only include keys present in storage, but ONLY when
-        # storage is locked (shared memory). This handles cases where policy
-        # outputs extra keys that can't be added to locked shared memory.
-        # When unlocked, allow users to add new keys freely.
+        # Filter data to only include keys present in storage.
+        # _storage_keys is only set when storage is locked (shared memory),
+        # so this handles cases where policy outputs extra keys that can't
+        # be added to locked shared memory.
         if is_tensor_collection(data):
             storage_keys = self._storage_keys
-            if storage_keys is not None and self._storage.is_locked:
+            if storage_keys is not None:
                 data = data.select(*storage_keys, strict=False)
         try:
             self._storage[cursor] = data
