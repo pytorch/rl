@@ -281,18 +281,19 @@ commands = {
     "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
 """,
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=600 \
-  collector.init_random_frames=10 \
+  optimization.total_optim_steps=2 \
+  optimization.log_every=1 \
+  optimization.compile.enabled=False \
+  collector.init_random_frames=32 \
   collector.frames_per_batch=200 \
   collector.num_collectors=1 \
   env.n_parallel_envs=1 \
-  optimization.optim_steps_per_batch=1 \
-  optimization.compile=False \
+  logger.eval_every=1000000 \
   logger.video=False \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
-  replay_buffer.batch_size=24 \
-  replay_buffer.batch_length=12 \
+  replay_buffer.batch_size=8 \
+  replay_buffer.batch_length=8 \
   replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
 """,
