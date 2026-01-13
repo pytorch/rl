@@ -345,15 +345,13 @@ class RSSMRollout(TensorDictModuleBase):
                 # Propagate state/belief from ("next", ...) to root level for next iteration
                 # The posterior outputs ("next", "state") which should become "state" for t+1
                 # The prior outputs ("next", "belief") which should become "belief" for t+1
-                next_state = _tensordict.get(("next", "state"))
-                next_belief = _tensordict.get(("next", "belief"))
-
-                # Get next timestep's input data (action, encoded_latents, etc.)
-                _tensordict = update_values[t + 1]
-
-                # Set the propagated state/belief (overwriting original data's initial values)
-                _tensordict.set("state", next_state)
-                _tensordict.set("belief", next_belief)
+                carry_forward = _tensordict.select(
+                    ("next", "state"), ("next", "belief")
+                ).copy()
+                carry_forward.rename_key_(("next", "state"), "state")
+                carry_forward.rename_key_(("next", "belief"), "belief")
+                # Merge propagated state/belief with next timestep's input data
+                _tensordict = update_values[t + 1].update(carry_forward)
 
         out = torch.stack(tensordict_out, tensordict.ndim - 1)
         return out
@@ -374,27 +372,24 @@ class RSSMRollout(TensorDictModuleBase):
         stacked_updates = torch.stack(list(update_values), dim=0)
 
         def scan_fn(carry, x):
-            # carry is the current tensordict with propagated state/belief
+            # carry is the previous output tensordict (with "next" keys from prior/posterior)
             # x is the next timestep's input data (action, encoded_latents, etc.)
 
-            # Get propagated state/belief from previous step's output
-            next_state = carry.get(("next", "state"), None)
-            next_belief = carry.get(("next", "belief"), None)
-
-            # Start with next timestep's data
-            _td = x
-
-            # Propagate state/belief if available (not first step)
-            if next_state is not None:
-                _td.set("state", next_state)
-            if next_belief is not None:
-                _td.set("belief", next_belief)
+            # Propagate state/belief from previous output to current input
+            # The posterior outputs ("next", "state") which should become "state"
+            # The prior outputs ("next", "belief") which should become "belief"
+            carry_forward = carry.select(
+                ("next", "state"), ("next", "belief")
+            ).copy()
+            carry_forward.rename_key_(("next", "state"), "state")
+            carry_forward.rename_key_(("next", "belief"), "belief")
+            _td = x.update(carry_forward)
 
             # Run prior and posterior
             self.rssm_prior(_td)
             self.rssm_posterior(_td)
 
-            # Return output and new carry (with ("next", state/belief) for propagation)
+            # Return output and new carry (output becomes next carry)
             return _td, _td
 
         # Run scan
