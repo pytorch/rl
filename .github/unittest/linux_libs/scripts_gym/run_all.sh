@@ -66,7 +66,8 @@ uv pip install "pybind11[global]"
 # 7. Install tensordict
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
-    uv pip install pyvers
+    # Install tensordict dependencies (since we use --no-deps)
+    uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
     uv pip install git+https://github.com/pytorch/tensordict.git --no-deps
 else
     uv pip install tensordict
