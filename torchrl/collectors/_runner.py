@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import queue
 from collections.abc import Callable
 from functools import partial
@@ -11,8 +12,8 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl import logger as torchrl_logger
-from torchrl._utils import VERBOSE
-from torchrl.collectors._base import BaseCollector
+from torchrl._utils import timeit, VERBOSE
+from torchrl.collectors._base import BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
     _MAX_IDLE_COUNT,
     _MIN_TIMEOUT,
@@ -31,6 +32,128 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
+
+
+class _WorkerProfiler:
+    """Helper class for profiling worker rollouts.
+
+    Manages the PyTorch profiler lifecycle for a worker process,
+    handling warmup, active profiling, and trace export.
+    """
+
+    def __init__(
+        self,
+        profile_config: ProfileConfig,
+        worker_idx: int,
+    ):
+        self.config = profile_config
+        self.worker_idx = worker_idx
+        self.rollout_count = 0
+        self._profiler = None
+        self._stopped = False
+        self._active = False
+
+        # Check if this worker should be profiled
+        if not self.config.should_profile_worker(worker_idx):
+            return
+
+        # Set up profiler schedule
+        # - skip_first: warmup rollouts (profiler runs but data discarded)
+        # - wait: 0 (no wait between cycles)
+        # - warmup: 0 (we handle warmup via skip_first)
+        # - active: num_rollouts - warmup_rollouts
+        # - repeat: 1 (single profiling cycle)
+        active_rollouts = self.config.num_rollouts - self.config.warmup_rollouts
+        profiler_schedule = torch.profiler.schedule(
+            skip_first=self.config.warmup_rollouts,
+            wait=0,
+            warmup=0,
+            active=active_rollouts,
+            repeat=1,
+        )
+
+        # Get activities
+        activities = self.config.get_activities()
+        if not activities:
+            torchrl_logger.warning(
+                f"Worker {worker_idx}: No profiler activities available. Profiling disabled."
+            )
+            return
+
+        # Determine trace handler
+        if self.config.on_trace_ready is not None:
+            on_trace_ready = self.config.on_trace_ready
+        else:
+            save_path = self.config.get_save_path(worker_idx)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+
+            def on_trace_ready(prof, save_path=save_path):
+                prof.export_chrome_trace(str(save_path))
+                torchrl_logger.info(
+                    f"Worker {worker_idx}: Profiling trace saved to {save_path}"
+                )
+
+        self._profiler = torch.profiler.profile(
+            activities=activities,
+            schedule=profiler_schedule,
+            on_trace_ready=on_trace_ready,
+            record_shapes=self.config.record_shapes,
+            profile_memory=self.config.profile_memory,
+            with_stack=self.config.with_stack,
+            with_flops=self.config.with_flops,
+        )
+        self._active = True
+
+    def start(self) -> None:
+        """Start the profiler."""
+        if self._profiler is not None and not self._stopped:
+            self._profiler.start()
+            torchrl_logger.info(
+                f"Worker {self.worker_idx}: Profiling started. "
+                f"Will profile rollouts {self.config.warmup_rollouts} to {self.config.num_rollouts - 1}."
+            )
+
+    def step(self) -> bool:
+        """Step the profiler after a rollout.
+
+        Returns:
+            True if profiling is complete.
+        """
+        if self._profiler is None or self._stopped:
+            return False
+
+        self.rollout_count += 1
+        self._profiler.step()
+
+        # Check if profiling is complete
+        if self.rollout_count >= self.config.num_rollouts:
+            self.stop()
+            return True
+
+        return False
+
+    def stop(self) -> None:
+        """Stop the profiler and export trace."""
+        if self._profiler is not None and not self._stopped:
+            self._profiler.stop()
+            self._stopped = True
+            torchrl_logger.info(
+                f"Worker {self.worker_idx}: Profiling complete after {self.rollout_count} rollouts."
+            )
+
+    @property
+    def is_active(self) -> bool:
+        """Check if profiling is active."""
+        return self._active and not self._stopped
+
+    @contextlib.contextmanager
+    def profile_rollout(self):
+        """Context manager for profiling a single rollout."""
+        if self._profiler is not None and not self._stopped:
+            with torch.profiler.record_function(f"worker_{self.worker_idx}_rollout"):
+                yield
+        else:
+            yield
 
 
 def _main_async_collector(
@@ -64,6 +187,8 @@ def _main_async_collector(
     postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
     weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     worker_idx: int | None = None,
+    init_random_frames: int | None = None,
+    profile_config: ProfileConfig | None = None,
 ) -> None:
     if collector_class is None:
         collector_class = Collector
@@ -114,6 +239,7 @@ def _main_async_collector(
             # We don't pass the weight sync scheme as only the sender has the weight sync scheme within.
             # weight_sync_schemes=weight_sync_schemes,
             worker_idx=worker_idx,
+            init_random_frames=init_random_frames,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
@@ -123,6 +249,14 @@ def _main_async_collector(
         use_buffers = inner_collector._use_buffers
         if verbose:
             torchrl_logger.debug("Sync data collector created")
+
+        # Set up profiler for this worker if configured
+        worker_profiler = None
+        if profile_config is not None:
+            worker_profiler = _WorkerProfiler(profile_config, worker_idx)
+            if worker_profiler.is_active:
+                worker_profiler.start()
+
         dc_iter = iter(inner_collector)
         j = 0
         pipe_child.send("instantiated")
@@ -219,10 +353,26 @@ def _main_async_collector(
         # Note: Weight updates are handled by background threads in weight sync schemes.
         # The scheme's background receiver thread listens for "receive" instructions.
 
+        if msg == "enable_profile":
+            # Handle profile configuration sent after worker startup
+            if worker_profiler is None or not worker_profiler.is_active:
+                worker_profiler = _WorkerProfiler(data_in, worker_idx)
+                if worker_profiler.is_active:
+                    worker_profiler.start()
+            pipe_child.send((j, "profile_enabled"))
+            has_timed_out = False
+            continue
+
         if msg == "update":
             # Legacy - weight updater
-            torchrl_logger.debug(f"mp worker {idx} updating the params...")
-            inner_collector.update_policy_weights_(policy_weights=data_in)
+            with timeit(f"worker/{idx}/update") as update_timer:
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Received weight update request..."
+                )
+                inner_collector.update_policy_weights_(policy_weights=data_in)
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Weight update completed in {update_timer.elapsed():.3f}s"
+                )
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
@@ -232,12 +382,37 @@ def _main_async_collector(
         # applies weights automatically. No explicit message handling needed here.
 
         if msg in ("continue", "continue_random"):
-            if msg == "continue_random":
-                inner_collector.init_random_frames = float("inf")
-            else:
-                inner_collector.init_random_frames = -1
+            # When in run_free mode with a replay_buffer, the inner collector uses
+            # _should_use_random_frames() which checks replay_buffer.write_count.
+            # So we don't override init_random_frames. Otherwise, we use the message
+            # to control whether random frames are used.
+            if not run_free or replay_buffer is None:
+                if msg == "continue_random":
+                    inner_collector.init_random_frames = float("inf")
+                else:
+                    inner_collector.init_random_frames = -1
 
-            next_data = next(dc_iter)
+            # Debug logging for rollout timing
+            # Use profiler context if profiling is active
+            profile_ctx = (
+                worker_profiler.profile_rollout()
+                if worker_profiler is not None and worker_profiler.is_active
+                else contextlib.nullcontext()
+            )
+            with profile_ctx:
+                with timeit(f"worker/{idx}/rollout") as rollout_timer:
+                    torchrl_logger.debug(
+                        f"mp worker {idx}: Starting rollout (j={j})..."
+                    )
+                    next_data = next(dc_iter)
+                    torchrl_logger.debug(
+                        f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
+                        f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
+                    )
+
+            # Step the profiler after each rollout
+            if worker_profiler is not None and worker_profiler.is_active:
+                worker_profiler.step()
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
@@ -378,6 +553,9 @@ def _main_async_collector(
             continue
 
         elif msg == "close":
+            # Stop profiler if active
+            if worker_profiler is not None and worker_profiler.is_active:
+                worker_profiler.stop()
             del collected_tensordict, data, next_data, data_in
             inner_collector.shutdown()
             del inner_collector, dc_iter

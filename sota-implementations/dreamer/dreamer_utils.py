@@ -19,7 +19,9 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from torchrl.collectors import SyncDataCollector
+from torchrl import logger as torchrl_logger
+from torchrl._utils import set_profiling_enabled
+from torchrl.collectors import MultiCollector
 
 from torchrl.data import (
     Composite,
@@ -31,7 +33,6 @@ from torchrl.data import (
 
 from torchrl.envs import (
     Compose,
-    DeviceCastTransform,
     DMControlEnv,
     DoubleToFloat,
     DreamerDecoder,
@@ -73,6 +74,193 @@ from torchrl.modules import (
 from torchrl.record import VideoRecorder
 
 
+def allocate_collector_devices(
+    num_collectors: int, training_device: torch.device
+) -> list[torch.device]:
+    """Allocate CUDA devices for collectors, reserving cuda:0 for training.
+
+    Device allocation strategy:
+    - Training always uses cuda:0
+    - Collectors use cuda:1, cuda:2, ..., cuda:N-1 if available
+    - If only 1 CUDA device, colocate training and inference on cuda:0
+    - If num_collectors >= num_cuda_devices, raise an exception
+
+    Args:
+        num_collectors: Number of collector workers requested
+        training_device: The device used for training (determines if CUDA is used)
+
+    Returns:
+        List of devices for each collector worker
+
+    Raises:
+        ValueError: If num_collectors >= num_cuda_devices (no device left for training)
+    """
+    if training_device.type != "cuda":
+        # CPU training: all collectors on CPU
+        return [torch.device("cpu")] * num_collectors
+
+    num_cuda_devices = torch.cuda.device_count()
+
+    if num_cuda_devices == 0:
+        # No CUDA devices available, fall back to CPU
+        return [torch.device("cpu")] * num_collectors
+
+    if num_cuda_devices == 1:
+        # Single GPU: colocate training and inference
+        torchrl_logger.info(
+            f"Single CUDA device available. Colocating {num_collectors} collectors "
+            "with training on cuda:0"
+        )
+        return [torch.device("cuda:0")] * num_collectors
+
+    # Multiple GPUs available
+    # Reserve cuda:0 for training, use cuda:1..cuda:N-1 for inference
+    inference_devices = num_cuda_devices - 1  # Devices available for collectors
+
+    if num_collectors > inference_devices:
+        raise ValueError(
+            f"Requested {num_collectors} collectors but only {inference_devices} "
+            f"CUDA devices available for inference (cuda:1 to cuda:{num_cuda_devices - 1}). "
+            f"cuda:0 is reserved for training. Either reduce num_collectors to "
+            f"{inference_devices} or add more GPUs."
+        )
+
+    # Distribute collectors across available inference devices (round-robin)
+    collector_devices = []
+    for i in range(num_collectors):
+        device_idx = (i % inference_devices) + 1  # +1 to skip cuda:0
+        collector_devices.append(torch.device(f"cuda:{device_idx}"))
+
+    device_str = ", ".join(str(d) for d in collector_devices)
+    torchrl_logger.info(
+        f"Allocated {num_collectors} collectors to devices: [{device_str}]. "
+        f"Training on cuda:0."
+    )
+
+    return collector_devices
+
+
+class DreamerProfiler:
+    """Helper class for PyTorch profiling in Dreamer training.
+
+    Encapsulates profiler setup, stepping, and trace export logic.
+
+    Args:
+        cfg: Hydra config with profiling section.
+        device: Training device (used to determine CUDA profiling).
+        pbar: Progress bar to update total when profiling.
+    """
+
+    def __init__(self, cfg, device, pbar=None, *, compile_warmup: int = 0):
+        self.enabled = cfg.profiling.enabled
+        self.cfg = cfg
+        self.total_optim_steps = 0
+        self._profiler = None
+        self._stopped = False
+        self._compile_warmup = compile_warmup
+
+        # Enable detailed profiling instrumentation in torchrl when profiling
+        set_profiling_enabled(self.enabled)
+
+        if not self.enabled:
+            return
+
+        # Override total_optim_steps for profiling runs
+        torchrl_logger.info(
+            f"Profiling enabled: running {cfg.profiling.total_optim_steps} optim steps "
+            f"(skip_first={cfg.profiling.skip_first}, warmup={cfg.profiling.warmup_steps}, "
+            f"active={cfg.profiling.active_steps})"
+        )
+        if pbar is not None:
+            pbar.total = cfg.profiling.total_optim_steps
+
+        # Setup profiler schedule
+        # - skip_first: steps to skip entirely (no profiling)
+        # - warmup: steps to warm up profiler (data discarded)
+        # - active: steps to actually profile (data kept)
+        #
+        # When torch.compile is enabled via compile_with_warmup, the first `compile_warmup`
+        # calls run eagerly and the *next* call typically triggers compilation. Profiling
+        # these steps is usually undesirable because it captures compilation overhead and
+        # non-representative eager execution.
+        #
+        # Therefore we automatically extend skip_first by (compile_warmup + 1) optim steps.
+        extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
+        skip_first = cfg.profiling.skip_first + extra_skip
+        profiler_schedule = torch.profiler.schedule(
+            skip_first=skip_first,
+            wait=0,
+            warmup=cfg.profiling.warmup_steps,
+            active=cfg.profiling.active_steps,
+            repeat=1,
+        )
+
+        # Determine profiler activities
+        activities = [torch.profiler.ProfilerActivity.CPU]
+        if cfg.profiling.profile_cuda and device.type == "cuda":
+            activities.append(torch.profiler.ProfilerActivity.CUDA)
+
+        self._profiler = torch.profiler.profile(
+            activities=activities,
+            schedule=profiler_schedule,
+            on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler_logs")
+            if not cfg.profiling.trace_file
+            else None,
+            record_shapes=cfg.profiling.record_shapes,
+            profile_memory=cfg.profiling.profile_memory,
+            with_stack=cfg.profiling.with_stack,
+            with_flops=cfg.profiling.with_flops,
+        )
+        self._profiler.start()
+
+    def step(self) -> bool:
+        """Step the profiler and check if profiling is complete.
+
+        Returns:
+            True if profiling is complete and training should exit.
+        """
+        if not self.enabled or self._stopped:
+            return False
+
+        self.total_optim_steps += 1
+        self._profiler.step()
+
+        # Check if we should stop profiling
+        extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
+        target_steps = (
+            self.cfg.profiling.skip_first
+            + extra_skip
+            + self.cfg.profiling.warmup_steps
+            + self.cfg.profiling.active_steps
+        )
+        if self.total_optim_steps >= target_steps:
+            torchrl_logger.info(
+                f"Profiling complete after {self.total_optim_steps} optim steps. "
+                f"Exporting trace to {self.cfg.profiling.trace_file}"
+            )
+            self._profiler.stop()
+            self._stopped = True
+            # Export trace if trace_file is set
+            if self.cfg.profiling.trace_file:
+                self._profiler.export_chrome_trace(self.cfg.profiling.trace_file)
+            return True
+
+        return False
+
+    def should_exit(self) -> bool:
+        """Check if training loop should exit due to profiling completion."""
+        if not self.enabled:
+            return False
+        extra_skip = self._compile_warmup + 1 if self._compile_warmup else 0
+        target_steps = (
+            self.cfg.profiling.skip_first
+            + extra_skip
+            + self.cfg.profiling.warmup_steps
+            + self.cfg.profiling.active_steps
+        )
+        return self.total_optim_steps >= target_steps
+
+
 def _make_env(cfg, device, from_pixels=False):
     lib = cfg.env.backend
     if lib in ("gym", "gymnasium"):
@@ -83,6 +271,9 @@ def _make_env(cfg, device, from_pixels=False):
                 from_pixels=cfg.env.from_pixels or from_pixels,
                 pixels_only=cfg.env.from_pixels,
             )
+        # Gym doesn't support native frame_skip, apply transform inside worker
+        if cfg.env.frame_skip > 1:
+            env = TransformedEnv(env, FrameSkipTransform(cfg.env.frame_skip))
     elif lib == "dm_control":
         env = DMControlEnv(
             cfg.env.name,
@@ -90,6 +281,7 @@ def _make_env(cfg, device, from_pixels=False):
             from_pixels=cfg.env.from_pixels or from_pixels,
             pixels_only=cfg.env.from_pixels,
             device=device,
+            frame_skip=cfg.env.frame_skip,  # Native frame skip inside worker
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -122,22 +314,36 @@ def transform_env(cfg, env):
 
     env.append_transform(DoubleToFloat())
     env.append_transform(RewardSum())
-    env.append_transform(FrameSkipTransform(cfg.env.frame_skip))
+    # Note: FrameSkipTransform is now applied inside workers (in _make_env) to avoid
+    # extra IPC round-trips. DMControl uses native frame_skip, Gym uses the transform.
     env.append_transform(StepCounter(cfg.env.horizon))
 
     return env
 
 
 def make_environments(cfg, parallel_envs=1, logger=None):
-    """Make environments for training and evaluation."""
-    func = functools.partial(_make_env, cfg=cfg, device=_default_device(cfg.env.device))
-    train_env = ParallelEnv(
-        parallel_envs,
-        EnvCreator(func),
-        serial_for_single=True,
-    )
-    train_env = transform_env(cfg, train_env)
-    train_env.set_seed(cfg.env.seed)
+    """Make environments for training and evaluation.
+
+    Returns:
+        train_env_factory: A callable that creates a training environment (for MultiCollector)
+        eval_env: The evaluation environment instance
+    """
+
+    def train_env_factory():
+        """Factory function for creating training environments."""
+        func = functools.partial(
+            _make_env, cfg=cfg, device=_default_device(cfg.env.device)
+        )
+        train_env = ParallelEnv(
+            parallel_envs,
+            EnvCreator(func),
+            serial_for_single=True,
+        )
+        train_env = transform_env(cfg, train_env)
+        train_env.set_seed(cfg.env.seed)
+        return train_env
+
+    # Create eval env directly (not a factory)
     func = functools.partial(
         _make_env,
         cfg=cfg,
@@ -152,15 +358,47 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     eval_env = transform_env(cfg, eval_env)
     eval_env.set_seed(cfg.env.seed + 1)
     if cfg.logger.video:
-        eval_env.insert_transform(0, VideoRecorder(logger, tag="eval/video"))
-    check_env_specs(train_env)
+        eval_env.insert_transform(
+            0,
+            VideoRecorder(
+                logger,
+                tag="eval/video",
+                in_keys=["pixels"],
+                skip=cfg.logger.video_skip,
+            ),
+        )
+
+    # Check specs on a temporary train env
+    temp_train_env = train_env_factory()
+    check_env_specs(temp_train_env)
+    temp_train_env.close()
+    del temp_train_env
+
     check_env_specs(eval_env)
-    return train_env, eval_env
+    return train_env_factory, eval_env
 
 
-def dump_video(module):
+def dump_video(module, step: int | None = None):
+    """Dump video from VideoRecorder transforms.
+
+    Args:
+        module: The transform module to check.
+        step: Optional step to log the video at. If not provided,
+            the VideoRecorder uses its internal counter.
+    """
     if isinstance(module, VideoRecorder):
-        module.dump()
+        module.dump(step=step)
+
+
+def _compute_encoder_output_size(image_size, channels=32, num_layers=4):
+    """Compute the flattened output size of ObsEncoder."""
+    # Compute spatial size after each conv layer (kernel=4, stride=2)
+    size = image_size
+    for _ in range(num_layers):
+        size = (size - 4) // 2 + 1
+    # Final channels = channels * (2 ** (num_layers - 1))
+    final_channels = channels * (2 ** (num_layers - 1))
+    return final_channels * size * size
 
 
 def make_dreamer(
@@ -174,47 +412,89 @@ def make_dreamer(
 ):
     test_env = _make_env(cfg, device="cpu")
     test_env = transform_env(cfg, test_env)
+
+    # Get dimensions for explicit module instantiation (avoids lazy modules)
+    state_dim = cfg.networks.state_dim
+    rssm_hidden_dim = cfg.networks.rssm_hidden_dim
+    action_dim = test_env.action_spec.shape[-1]
+
     # Make encoder and decoder
     if cfg.env.from_pixels:
-        encoder = ObsEncoder()
-        decoder = ObsDecoder()
+        # Determine input channels (1 for grayscale, 3 for RGB)
+        in_channels = 1 if cfg.env.grayscale else 3
+        image_size = cfg.env.image_size
+
+        # Compute encoder output size for explicit posterior input
+        obs_embed_dim = _compute_encoder_output_size(
+            image_size, channels=32, num_layers=4
+        )
+
+        encoder = ObsEncoder(in_channels=in_channels, device=device)
+        decoder = ObsDecoder(latent_dim=state_dim + rssm_hidden_dim, device=device)
+
         observation_in_key = "pixels"
         observation_out_key = "reco_pixels"
     else:
+        obs_embed_dim = 1024  # MLP output size
         encoder = MLP(
-            out_features=1024,
+            out_features=obs_embed_dim,
             depth=2,
             num_cells=cfg.networks.hidden_dim,
             activation_class=get_activation(cfg.networks.activation),
+            device=device,
         )
         decoder = MLP(
             out_features=test_env.observation_spec["observation"].shape[-1],
             depth=2,
             num_cells=cfg.networks.hidden_dim,
             activation_class=get_activation(cfg.networks.activation),
+            device=device,
         )
+
         observation_in_key = "observation"
         observation_out_key = "reco_observation"
 
-    # Make RSSM
+    # Make RSSM with explicit input sizes (no lazy modules)
     rssm_prior = RSSMPrior(
-        hidden_dim=cfg.networks.rssm_hidden_dim,
-        rnn_hidden_dim=cfg.networks.rssm_hidden_dim,
-        state_dim=cfg.networks.state_dim,
+        hidden_dim=rssm_hidden_dim,
+        rnn_hidden_dim=rssm_hidden_dim,
+        state_dim=state_dim,
         action_spec=test_env.action_spec,
+        action_dim=action_dim,
+        device=device,
     )
     rssm_posterior = RSSMPosterior(
-        hidden_dim=cfg.networks.rssm_hidden_dim, state_dim=cfg.networks.state_dim
+        hidden_dim=rssm_hidden_dim,
+        state_dim=state_dim,
+        rnn_hidden_dim=rssm_hidden_dim,
+        obs_embed_dim=obs_embed_dim,
+        device=device,
     )
+
+    # When use_scan=True or rssm_rollout.compile=True, replace C++ GRU with Python-based GRU
+    # for torch.compile compatibility. The C++ GRU (cuBLAS) cannot be traced by torch.compile.
+    if cfg.networks.use_scan or cfg.networks.rssm_rollout.compile:
+        from torchrl.modules.tensordict_module.rnn import GRUCell as PythonGRUCell
+
+        old_rnn = rssm_prior.rnn
+        python_rnn = PythonGRUCell(
+            old_rnn.input_size, old_rnn.hidden_size, device=device
+        )
+        python_rnn.load_state_dict(old_rnn.state_dict())
+        rssm_prior.rnn = python_rnn
+        torchrl_logger.info(
+            "Switched RSSMPrior to Python-based GRU for torch.compile compatibility"
+        )
     # Make reward module
     reward_module = MLP(
         out_features=1,
         depth=2,
         num_cells=cfg.networks.hidden_dim,
         activation_class=get_activation(cfg.networks.activation),
+        device=device,
     )
 
-    # Make combined world model
+    # Make combined world model (modules already on device)
     world_model = _dreamer_make_world_model(
         encoder,
         decoder,
@@ -223,15 +503,16 @@ def make_dreamer(
         reward_module,
         observation_in_key=observation_in_key,
         observation_out_key=observation_out_key,
+        use_scan=cfg.networks.use_scan,
+        rssm_rollout_compile=cfg.networks.rssm_rollout.compile,
+        rssm_rollout_compile_backend=cfg.networks.rssm_rollout.compile_backend,
+        rssm_rollout_compile_mode=cfg.networks.rssm_rollout.compile_mode,
     )
-    world_model.to(device)
 
-    # Initialize world model
+    # Initialize world model (already on device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = (
-            test_env.rollout(5, auto_cast_to_device=True)
-            .unsqueeze(-1)
-            .to(world_model.device)
+            test_env.rollout(5, auto_cast_to_device=True).unsqueeze(-1).to(device)
         )
         tensordict = tensordict.to_tensordict()
         world_model(tensordict)
@@ -256,7 +537,7 @@ def make_dreamer(
     # model_based_env = model_based_env.append_transform(detach_state_and_belief)
     check_env_specs(model_based_env)
 
-    # Make actor
+    # Make actor (modules already on device)
     actor_simulator, actor_realworld = _dreamer_make_actors(
         encoder=encoder,
         observation_in_key=observation_in_key,
@@ -266,6 +547,7 @@ def make_dreamer(
         activation=get_activation(cfg.networks.activation),
         action_key=action_key,
         test_env=test_env,
+        device=device,
     )
     # Exploration noise to be added to the actor_realworld
     actor_realworld = TensorDictSequential(
@@ -281,16 +563,15 @@ def make_dreamer(
         ),
     )
 
-    # Make Critic
+    # Make Critic (on device)
     value_model = _dreamer_make_value_model(
         hidden_dim=cfg.networks.hidden_dim,
         activation=cfg.networks.activation,
         value_key=value_key,
+        device=device,
     )
 
-    actor_simulator.to(device)
-    value_model.to(device)
-    actor_realworld.to(device)
+    # Move model_based_env to device (it contains references to modules already on device)
     model_based_env.to(device)
 
     # Initialize model-based environment, actor and critic
@@ -316,7 +597,10 @@ def make_dreamer(
         model_based_env_eval.append_transform(float_to_int)
         model_based_env_eval.append_transform(
             VideoRecorder(
-                logger=logger, tag="eval/simulated_rendering", in_keys=["reco_pixels"]
+                logger=logger,
+                tag="eval/simulated_video",
+                in_keys=["reco_pixels"],
+                skip=cfg.logger.video_skip,
             )
         )
 
@@ -332,21 +616,98 @@ def make_dreamer(
     )
 
 
-def make_collector(cfg, train_env, actor_model_explore):
-    """Make collector."""
-    collector = SyncDataCollector(
-        train_env,
-        actor_model_explore,
-        init_random_frames=cfg.collector.init_random_frames,
+def make_collector(
+    cfg,
+    train_env_factory,
+    actor_model_explore,
+    training_device: torch.device,
+    replay_buffer=None,
+    storage_transform=None,
+    track_policy_version=False,
+):
+    """Make async multi-collector for parallel data collection.
+
+    Args:
+        cfg: Configuration object
+        train_env_factory: A callable that creates a training environment
+        actor_model_explore: The exploration policy
+        training_device: Device used for training (used to allocate collector devices)
+        replay_buffer: Optional replay buffer for true async collection with start()
+        storage_transform: Optional transform to apply before storing in buffer
+        track_policy_version: If True, track policy version using integer versioning.
+            Can also be a PolicyVersion instance for custom versioning.
+
+    Returns:
+        MultiCollector in async mode with multiple worker processes
+
+    Device allocation:
+        - If training on CUDA with multiple GPUs: collectors use cuda:1, cuda:2, etc.
+        - If training on CUDA with single GPU: collectors colocate on cuda:0
+        - If training on CPU: collectors use CPU
+    """
+    num_collectors = cfg.collector.num_collectors
+    init_random_frames = (
+        cfg.collector.init_random_frames
+        if not cfg.profiling.enabled
+        else cfg.profiling.collector.init_random_frames_override
+    )
+
+    # Allocate devices for collectors (reserves cuda:0 for training if multi-GPU)
+    collector_devices = allocate_collector_devices(num_collectors, training_device)
+
+    collector = MultiCollector(
+        create_env_fn=[train_env_factory] * num_collectors,
+        policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
-        total_frames=cfg.collector.total_frames,
-        policy_device=_default_device(cfg.collector.device),
-        env_device=train_env.device,
+        total_frames=-1,  # Run indefinitely until async_shutdown() is called
+        init_random_frames=init_random_frames,
+        policy_device=collector_devices,
+        env_device=collector_devices,  # Match env output device to policy device for CUDA transforms
         storing_device="cpu",
+        sync=False,  # Async mode for overlapping collection with training
+        update_at_each_batch=False,  # We manually call update_policy_weights_() in training loop
+        replay_buffer=replay_buffer,
+        postproc=storage_transform,
+        track_policy_version=track_policy_version,
+        # Skip fake data initialization - storage handles coordination
+        local_init_rb=True,
     )
     collector.set_seed(cfg.env.seed)
 
     return collector
+
+
+def make_storage_transform(
+    *,
+    pixel_obs=True,
+    grayscale=True,
+    image_size,
+):
+    """Create transforms to be applied at extend-time (once per frame).
+
+    These heavy transforms (ToTensorImage, GrayScale, Resize) are applied once
+    when data is added to the buffer, rather than on every sample.
+    """
+    if not pixel_obs:
+        return None
+
+    storage_transforms = Compose(
+        ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
+        ToTensorImage(
+            in_keys=["pixels_int", ("next", "pixels_int")],
+            out_keys=["pixels", ("next", "pixels")],
+        ),
+    )
+    if grayscale:
+        storage_transforms.append(GrayScale(in_keys=["pixels", ("next", "pixels")]))
+    storage_transforms.append(
+        Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
+    )
+    return storage_transforms
+
+
+def _to_device(td, device):
+    return td.to(device=device, non_blocking=True)
 
 
 def make_replay_buffer(
@@ -356,39 +717,29 @@ def make_replay_buffer(
     buffer_size=1000000,
     buffer_scratch_dir=None,
     device=None,
-    prefetch=3,
+    prefetch=8,
     pixel_obs=True,
     grayscale=True,
     image_size,
-    use_autocast,
-    compile: bool | dict = False,
 ):
+    """Create replay buffer with minimal sample-time transforms.
+
+    Heavy image transforms are expected to be applied at extend-time using
+    make_storage_transform(). Only DeviceCastTransform is applied at sample-time.
+
+    Note: We don't compile the SliceSampler because:
+    1. Sampler operations (index computation) happen on CPU and are already fast
+    2. torch.compile with inductor has bugs with the sampler's vectorized int64 operations
+    """
     with (
         tempfile.TemporaryDirectory()
         if buffer_scratch_dir is None
         else nullcontext(buffer_scratch_dir)
     ) as scratch_dir:
-        transforms = Compose()
-        if pixel_obs:
-
-            def check_no_pixels(data):
-                assert "pixels" not in data.keys()
-                return data
-
-            transforms = Compose(
-                ExcludeTransform("pixels", ("next", "pixels"), inverse=True),
-                check_no_pixels,  # will be called only during forward
-                ToTensorImage(
-                    in_keys=["pixels_int", ("next", "pixels_int")],
-                    out_keys=["pixels", ("next", "pixels")],
-                ),
-            )
-            if grayscale:
-                transforms.append(GrayScale(in_keys=["pixels", ("next", "pixels")]))
-            transforms.append(
-                Resize(image_size, image_size, in_keys=["pixels", ("next", "pixels")])
-            )
-        transforms.append(DeviceCastTransform(device=device))
+        # Sample-time transforms: only device transfer (fast)
+        sample_transforms = Compose(
+            functools.partial(_to_device, device=device),
+        )
 
         replay_buffer = TensorDictReplayBuffer(
             pin_memory=False,
@@ -398,28 +749,33 @@ def make_replay_buffer(
                 scratch_dir=scratch_dir,
                 device="cpu",
                 ndim=2,
+                shared_init=True,  # Allow remote processes to initialize storage
             ),
             sampler=SliceSampler(
                 slice_len=batch_seq_len,
                 strict_length=False,
                 traj_key=("collector", "traj_ids"),
-                cache_values=True,
-                compile=compile,
+                cache_values=False,  # Disabled for async collection (cache not synced across processes)
+                # Don't compile the sampler - inductor has C++ codegen bugs for int64 ops
             ),
-            transform=transforms,
+            transform=sample_transforms,
             batch_size=batch_size,
         )
         return replay_buffer
 
 
 def _dreamer_make_value_model(
-    hidden_dim: int = 400, activation: str = "elu", value_key: str = "state_value"
+    hidden_dim: int = 400,
+    activation: str = "elu",
+    value_key: str = "state_value",
+    device=None,
 ):
     value_model = MLP(
         out_features=1,
         depth=3,
         num_cells=hidden_dim,
         activation_class=get_activation(activation),
+        device=device,
     )
     value_model = ProbabilisticTensorDictSequential(
         TensorDictModule(
@@ -447,12 +803,14 @@ def _dreamer_make_actors(
     activation,
     action_key,
     test_env,
+    device=None,
 ):
     actor_module = DreamerActor(
         out_features=test_env.action_spec.shape[-1],
         depth=3,
         num_cells=mlp_num_units,
         activation_class=activation,
+        device=device,
     )
     actor_simulator = _dreamer_make_actor_sim(action_key, test_env, actor_module)
     actor_realworld = _dreamer_make_actor_real(
@@ -633,28 +991,50 @@ def _dreamer_make_world_model(
     reward_module,
     observation_in_key: NestedKey = "pixels",
     observation_out_key: NestedKey = "reco_pixels",
+    use_scan: bool = False,
+    rssm_rollout_compile: bool = False,
+    rssm_rollout_compile_backend: str = "inductor",
+    rssm_rollout_compile_mode: str | None = "reduce-overhead",
 ):
     # World Model and reward model
+    # Note: in_keys uses dict form with out_to_in_map=True to map function args to tensordict keys.
+    # {"noise": "prior_noise"} means: read "prior_noise" from tensordict, pass as `noise` kwarg.
+    # With strict=False (default), missing noise keys pass None to the module.
     rssm_rollout = RSSMRollout(
         TensorDictModule(
             rssm_prior,
-            in_keys=["state", "belief", "action"],
+            in_keys={
+                "state": "state",
+                "belief": "belief",
+                "action": "action",
+                "noise": "prior_noise",
+            },
             out_keys=[
                 ("next", "prior_mean"),
                 ("next", "prior_std"),
                 "_",
                 ("next", "belief"),
             ],
+            out_to_in_map=True,
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=[("next", "belief"), ("next", "encoded_latents")],
+            in_keys={
+                "belief": ("next", "belief"),
+                "obs_embedding": ("next", "encoded_latents"),
+                "noise": "posterior_noise",
+            },
             out_keys=[
                 ("next", "posterior_mean"),
                 ("next", "posterior_std"),
                 ("next", "state"),
             ],
+            out_to_in_map=True,
         ),
+        use_scan=use_scan,
+        compile_step=rssm_rollout_compile,
+        compile_backend=rssm_rollout_compile_backend,
+        compile_mode=rssm_rollout_compile_mode,
     )
     event_dim = 3 if observation_out_key == "reco_pixels" else 1  # 3 for RGB
     decoder = ProbabilisticTensorDictSequential(

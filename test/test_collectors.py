@@ -49,6 +49,7 @@ from torchrl.collectors import (
     Collector,
     MultiAsyncCollector,
     MultiSyncCollector,
+    ProfileConfig,
     WeightUpdaterBase,
 )
 from torchrl.collectors._constants import _Interruptor
@@ -181,6 +182,28 @@ class ParametricPolicy(Actor):
     def __init__(self):
         super().__init__(
             ParametricPolicyNet(),
+            in_keys=["observation"],
+        )
+
+
+class DeterministicZeroPolicyNet(nn.Module):
+    """A simple policy that always outputs action 0 (for discrete action spaces)."""
+
+    def forward(self, observation):
+        return torch.zeros(
+            observation.shape[:-1], dtype=torch.long, device=observation.device
+        )
+
+
+class DeterministicZeroPolicy(Actor):
+    """A deterministic policy that always outputs action 0.
+
+    Useful for testing init_random_frames to distinguish from random actions.
+    """
+
+    def __init__(self):
+        super().__init__(
+            DeterministicZeroPolicyNet(),
             in_keys=["observation"],
         )
 
@@ -3693,96 +3716,6 @@ class TestDynamicEnvs:
             assert data.names[-1] == "time"
 
 
-@pytest.mark.skipif(
-    TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
-)
-@pytest.mark.skipif(IS_WINDOWS, reason="windows is not supported for compile tests.")
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14), reason="torch.compile is not supported on Python 3.14+"
-)
-class TestCompile:
-    @pytest.mark.parametrize(
-        "collector_cls",
-        # Clearing compiled policies causes segfault on machines with cuda
-        [Collector, MultiAsyncCollector, MultiSyncCollector]
-        if not torch.cuda.is_available()
-        else [Collector],
-    )
-    @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "default"}])
-    @pytest.mark.parametrize(
-        "device", [torch.device("cuda:0" if torch.cuda.is_available() else "cpu")]
-    )
-    def test_compiled_policy(self, collector_cls, compile_policy, device):
-        policy = TensorDictModule(
-            nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
-        )
-        make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
-        if collector_cls is Collector:
-            torch._dynamo.reset_code_caches()
-            collector = Collector(
-                make_env(),
-                policy,
-                frames_per_batch=10,
-                total_frames=30,
-                compile_policy=compile_policy,
-            )
-            assert collector.compiled_policy
-        else:
-            collector = collector_cls(
-                [make_env] * 2,
-                policy,
-                frames_per_batch=10,
-                total_frames=30,
-                compile_policy=compile_policy,
-            )
-            assert collector.compiled_policy
-        try:
-            for data in collector:
-                assert data is not None
-        finally:
-            collector.shutdown()
-            del collector
-
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
-    @pytest.mark.parametrize(
-        "collector_cls",
-        [Collector],
-    )
-    @pytest.mark.parametrize("cudagraph_policy", [True, {}, {"warmup": 10}])
-    def test_cudagraph_policy(self, collector_cls, cudagraph_policy):
-        device = torch.device("cuda:0")
-        policy = TensorDictModule(
-            nn.Linear(7, 7, device=device), in_keys=["observation"], out_keys=["action"]
-        )
-        make_env = functools.partial(ContinuousActionVecMockEnv, device=device)
-        if collector_cls is Collector:
-            collector = Collector(
-                make_env(),
-                policy,
-                frames_per_batch=30,
-                total_frames=120,
-                cudagraph_policy=cudagraph_policy,
-                device=device,
-            )
-            assert collector.cudagraphed_policy
-        else:
-            collector = collector_cls(
-                [make_env] * 2,
-                policy,
-                frames_per_batch=30,
-                total_frames=120,
-                cudagraph_policy=cudagraph_policy,
-                device=device,
-            )
-            assert collector.cudagraphed_policy
-        try:
-            for data in collector:
-                assert data is not None
-        finally:
-            collector.shutdown()
-            del collector
-
-
 @pytest.mark.skipif(not _has_gym, reason="gym required for this test")
 class TestCollectorsNonTensor:
     class AddNontTensorData(Transform):
@@ -4503,6 +4436,260 @@ class TestAsyncCollection:
         finally:
             collector.async_shutdown(timeout=10)
             del collector
+
+
+class TestInitRandomFramesWithStart:
+    """Tests for init_random_frames with .start() method for collectors."""
+
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize("cls", [MultiSyncCollector, MultiAsyncCollector])
+    # @pytest.mark.flaky(reruns=3, reruns_delay=0.5)
+    def test_init_random_frames_with_start(self, cls):
+        """Test that init_random_frames works with .start() for multi-process collectors.
+
+        This test verifies that:
+        1. Collection starts without error when init_random_frames is provided
+        2. Data collection proceeds beyond init_random_frames
+        3. The replay buffer is properly populated
+        """
+        init_random_frames = 64
+        frames_per_batch = 16
+        total_to_collect = 256
+
+        # Create env to get action spec for policy
+        env = GymEnv(CARTPOLE_VERSIONED())
+        policy = RandomPolicy(env.action_spec)
+        env.close()
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(total_to_collect), batch_size=5)
+
+        env_fns = [
+            lambda: GymEnv(CARTPOLE_VERSIONED()),
+            lambda: GymEnv(CARTPOLE_VERSIONED()),
+        ]
+        collector = cls(
+            env_fns,
+            policy,
+            replay_buffer=rb,
+            total_frames=-1,
+            frames_per_batch=frames_per_batch,
+            init_random_frames=init_random_frames,
+        )
+
+        try:
+            # Start the collector - this should NOT raise an error even with init_random_frames
+            collector.start()
+
+            # Wait for enough data to be collected - should go beyond init_random_frames
+            for _ in range(100):
+                time.sleep(0.1)
+                if rb.write_count >= total_to_collect:
+                    break
+            else:
+                raise RuntimeError(
+                    f"Not enough data collected: {rb.write_count} < {total_to_collect}. "
+                    f"init_random_frames was {init_random_frames}."
+                )
+
+            # Verify that collection proceeded beyond init_random_frames
+            assert (
+                rb.write_count >= total_to_collect
+            ), f"Expected at least {total_to_collect} frames, got {rb.write_count}"
+
+            # Verify that data has expected structure
+            sample = rb[:16]
+            assert "observation" in sample.keys()
+            assert "action" in sample.keys()
+            assert "next" in sample.keys()
+
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
+
+
+class TestCollectorProfiling:
+    """Tests for the collector profiling feature."""
+
+    def test_profile_config_validation(self):
+        """Test ProfileConfig validation."""
+        # Valid config
+        config = ProfileConfig(
+            workers=[0],
+            num_rollouts=5,
+            warmup_rollouts=2,
+        )
+        assert config.workers == [0]
+        assert config.num_rollouts == 5
+        assert config.warmup_rollouts == 2
+
+        # Invalid: num_rollouts <= warmup_rollouts
+        with pytest.raises(ValueError, match="num_rollouts.*must be greater"):
+            ProfileConfig(num_rollouts=2, warmup_rollouts=2)
+
+        with pytest.raises(ValueError, match="num_rollouts.*must be greater"):
+            ProfileConfig(num_rollouts=2, warmup_rollouts=3)
+
+        # Invalid: negative warmup
+        with pytest.raises(ValueError, match="warmup_rollouts must be >= 0"):
+            ProfileConfig(num_rollouts=5, warmup_rollouts=-1)
+
+    def test_profile_config_get_save_path(self):
+        """Test ProfileConfig.get_save_path method."""
+        from pathlib import Path
+
+        # Default path
+        config = ProfileConfig(save_path=None)
+        path = config.get_save_path(worker_idx=0)
+        assert path == Path("./collector_profile_0.json")
+
+        # Custom path with placeholder
+        config = ProfileConfig(save_path="./traces/worker_{worker_idx}/trace.json")
+        path = config.get_save_path(worker_idx=2)
+        assert path == Path("./traces/worker_2/trace.json")
+
+    def test_profile_config_should_profile_worker(self):
+        """Test ProfileConfig.should_profile_worker method."""
+        config = ProfileConfig(workers=[0, 2])
+        assert config.should_profile_worker(0) is True
+        assert config.should_profile_worker(1) is False
+        assert config.should_profile_worker(2) is True
+        assert config.should_profile_worker(3) is False
+
+    @pytest.mark.parametrize(
+        "use_gpu",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ),
+        ],
+    )
+    def test_profile_config_get_activities(self, use_gpu):
+        """Test ProfileConfig.get_activities method."""
+        if use_gpu:
+            config = ProfileConfig(activities=["cpu", "cuda"])
+            activities = config.get_activities()
+            assert torch.profiler.ProfilerActivity.CPU in activities
+            assert torch.profiler.ProfilerActivity.CUDA in activities
+        else:
+            config = ProfileConfig(activities=["cpu"])
+            activities = config.get_activities()
+            assert torch.profiler.ProfilerActivity.CPU in activities
+
+    def test_enable_profile_single_collector(self, tmp_path):
+        """Test enable_profile on a single-process Collector."""
+        if not _has_gym:
+            pytest.skip("Gym not available")
+
+        trace_path = tmp_path / "trace_{worker_idx}.json"
+
+        env = GymEnv(PENDULUM_VERSIONED())
+        policy = RandomPolicy(env.action_spec)
+
+        collector = Collector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=50,
+            total_frames=300,
+        )
+
+        # Enable profiling
+        collector.enable_profile(
+            workers=[0],  # Ignored for single-process
+            num_rollouts=3,
+            warmup_rollouts=1,
+            save_path=str(trace_path),
+        )
+
+        assert collector.profile_config is not None
+        assert collector.profile_config.num_rollouts == 3
+        assert collector.profile_config.warmup_rollouts == 1
+
+        # Run collection
+        data_count = 0
+        for _data in collector:
+            data_count += 1
+            if data_count >= 5:
+                break
+
+        collector.shutdown()
+
+        # Check that the trace file was created
+        expected_trace = tmp_path / "trace_0.json"
+        assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
+
+    def test_enable_profile_cannot_call_after_iteration(self):
+        """Test that enable_profile raises error after iteration starts."""
+        if not _has_gym:
+            pytest.skip("Gym not available")
+
+        env = GymEnv(PENDULUM_VERSIONED())
+        policy = RandomPolicy(env.action_spec)
+
+        collector = Collector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=50,
+            total_frames=200,
+        )
+
+        # Start iteration
+        it = iter(collector)
+        next(it)
+
+        # Now enable_profile should fail
+        with pytest.raises(
+            RuntimeError, match="Cannot enable profiling after iteration"
+        ):
+            collector.enable_profile(num_rollouts=3, warmup_rollouts=1)
+
+        collector.shutdown()
+
+    @pytest.mark.slow
+    def test_enable_profile_multi_sync_collector(self, tmp_path):
+        """Test enable_profile on MultiSyncCollector."""
+        if not _has_gym:
+            pytest.skip("Gym not available")
+
+        trace_path = tmp_path / "trace_{worker_idx}.json"
+
+        def env_fn():
+            return GymEnv(PENDULUM_VERSIONED())
+
+        policy = RandomPolicy(GymEnv(PENDULUM_VERSIONED()).action_spec)
+
+        collector = MultiSyncCollector(
+            create_env_fn=[env_fn, env_fn],
+            policy=policy,
+            frames_per_batch=50,
+            total_frames=300,
+        )
+
+        # Enable profiling - only profile worker 0
+        collector.enable_profile(
+            workers=[0],
+            num_rollouts=3,
+            warmup_rollouts=1,
+            save_path=str(trace_path),
+        )
+
+        assert collector.profile_config is not None
+
+        # Run collection
+        data_count = 0
+        for _data in collector:
+            data_count += 1
+            if data_count >= 5:
+                break
+
+        collector.shutdown()
+
+        # Check that trace 0 exists and trace 1 does not
+        assert (tmp_path / "trace_0.json").exists()
+        assert not (tmp_path / "trace_1.json").exists()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import os
 import warnings
 import weakref
 from warnings import warn
@@ -28,10 +27,6 @@ from torch.distributions.transforms import (  # noqa: E402
 torch._C._log_api_usage_once("torchrl")
 
 set_lazy_legacy(False).set()
-
-if torch.cuda.device_count() > 1:
-    n = torch.cuda.device_count() - 1
-    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
 
 from ._extension import _init_extension  # noqa: E402
 
@@ -68,6 +63,7 @@ from torchrl._utils import (  # noqa: E402
     logger,
     merge_ray_runtime_env,
     set_auto_unwrap_transformed_env,
+    set_profiling_enabled,
     timeit,
 )
 

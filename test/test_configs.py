@@ -1008,6 +1008,39 @@ class TestModuleConfigs:
         assert value_model.module.in_features == 10
         assert value_model.module.out_features == 1
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_additive_gaussian_module_config(self):
+        """Test AdditiveGaussianModuleConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            AdditiveGaussianModuleConfig,
+        )
+
+        cfg = AdditiveGaussianModuleConfig(
+            spec=None,
+            sigma_init=1.0,
+            sigma_end=0.1,
+            annealing_num_steps=1000,
+            mean=0.0,
+            std=0.1,
+            action_key="action",
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_additive_gaussian_module"
+        )
+        assert cfg.spec is None
+        assert cfg.sigma_init == 1.0
+        assert cfg.sigma_end == 0.1
+        assert cfg.action_key == "action"
+
+        module = instantiate(cfg)
+        from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+
+        assert isinstance(module, AdditiveGaussianModule)
+        assert module._spec is None
+        assert module.action_key == "action"
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
@@ -1096,9 +1129,100 @@ class TestCollectorsConfig:
                 # Just check that we can iterate
                 break
         finally:
-            # Only call shutdown if the collector has that method
-            if hasattr(collector_instance, "shutdown"):
-                collector_instance.shutdown(timeout=10)
+            collector_instance.shutdown(timeout=10)
+
+    @pytest.mark.parametrize("factory", [True, False])
+    @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_collector_auto_configures_exploration_modules(self, factory, collector):
+        """Test that collector instantiation auto-configures exploration modules.
+
+        This tests that when an exploration module (e.g. AdditiveGaussianModule) is configured
+        without a spec (spec=None), the collector's __init__ automatically sets the spec
+        from the environment's action_spec.
+        """
+        from hydra.utils import instantiate
+        from torchrl.collectors import (
+            AsyncCollector,
+            MultiAsyncCollector,
+            MultiSyncCollector,
+        )
+        from torchrl.trainers.algorithms.configs.collectors import (
+            AsyncDataCollectorConfig,
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.modules import (
+            AdditiveGaussianModuleConfig,
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictSequentialConfig,
+        )
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            RemoteModuleWeightUpdaterConfig,
+        )
+
+        env_cfg = GymEnvConfig(env_name="Pendulum-v1")
+
+        policy_cfg = TanhNormalModelConfig(
+            network=MLPConfig(in_features=3, out_features=2, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        exploration_cfg = AdditiveGaussianModuleConfig(
+            spec=None,  # Will be auto-set by collector from environment
+            sigma_init=0.5,
+            sigma_end=0.1,
+            annealing_num_steps=100,
+            action_key="action",
+        )
+
+        exploratory_policy_cfg = TensorDictSequentialConfig(
+            modules=[policy_cfg, exploration_cfg],
+        )
+
+        if collector == "async":
+            cfg_cls = AsyncDataCollectorConfig
+            expected_cls = AsyncCollector
+            kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
+        elif collector == "multi_sync":
+            cfg_cls = MultiSyncCollectorConfig
+            expected_cls = MultiSyncCollector
+            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
+        elif collector == "multi_async":
+            cfg_cls = MultiAsyncCollectorConfig
+            expected_cls = MultiAsyncCollector
+            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
+        else:
+            raise ValueError(f"Unknown collector type: {collector}")
+
+        if factory:
+            cfg = cfg_cls(
+                policy_factory=exploratory_policy_cfg,
+                weight_updater=RemoteModuleWeightUpdaterConfig(),
+                **kwargs,
+            )
+        else:
+            cfg = cfg_cls(policy=exploratory_policy_cfg, **kwargs)
+
+        collector_instance = instantiate(cfg)
+
+        try:
+            assert isinstance(collector_instance, expected_cls)
+            # This would raise RuntimeError if spec was not set on workers' exploration module
+            for batch in collector_instance:
+                assert "action" in batch.keys()
+                assert batch["action"].shape[-1] == 1
+                assert (batch["action"] >= -2.0).all() and (
+                    batch["action"] <= 2.0
+                ).all(), "Actions should be clipped to environment spec bounds [-2, 2]"
+                break
+
+        finally:
+            collector_instance.shutdown(timeout=10)
 
 
 @pytest.mark.skipif(

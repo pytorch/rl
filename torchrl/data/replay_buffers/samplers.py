@@ -1154,10 +1154,10 @@ class SliceSampler(Sampler):
     def __getstate__(self):
         if get_spawning_popen() is not None and self.cache_values:
             logger.warning(
-                f"It seems you are sharing a {type(self).__name__} across processes with"
+                f"It seems you are sharing a {type(self).__name__} across processes with "
                 f"cache_values=True. "
                 f"While this isn't forbidden and could perfectly work if your dataset "
-                f"is unaltered on both processes, remember that calling extend/add on"
+                f"is unaltered on both processes, remember that calling extend/add on "
                 f"one process will NOT erase the cache on another process's sampler, "
                 f"which will cause synchronization issues."
             )

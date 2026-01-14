@@ -132,18 +132,32 @@ class MultiAgentNetBase(nn.Module):
         else:
             inputs = inputs[0]
 
+        # Convert agent_dim to positive index for consistent output placement.
+        # This ensures the agent dimension stays at the same position relative
+        # to batch dimensions, even if the network changes the number of dimensions
+        # (e.g., ConvNet collapses spatial dims).
+        # NOTE: Must compute this BEFORE _pre_forward_check, which may modify input shape
+        # (e.g., centralized mode flattens the agent dimension).
+        agent_dim_positive = self.agent_dim
+        if agent_dim_positive < 0:
+            agent_dim_positive = inputs.ndim + agent_dim_positive
+
         inputs = self._pre_forward_check(inputs)
+
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
             if self.centralized:
                 output = self.vmap_func_module(
-                    self._empty_net, (0, None), (-2,), randomness=self.vmap_randomness
+                    self._empty_net,
+                    (0, None),
+                    (agent_dim_positive,),
+                    randomness=self.vmap_randomness,
                 )(self.params, inputs)
             else:
                 output = self.vmap_func_module(
                     self._empty_net,
-                    (0, self.agent_dim),
-                    (-2,),
+                    (0, agent_dim_positive),
+                    (agent_dim_positive,),
                     randomness=self.vmap_randomness,
                 )(self.params, inputs)
 
@@ -157,14 +171,16 @@ class MultiAgentNetBase(nn.Module):
                 # We expand it to maintain the agent dimension, but values will be the same for all agents
                 n_agent_outputs = output.shape[-1]
                 output = output.view(*output.shape[:-1], n_agent_outputs)
-                output = output.unsqueeze(-2)
-                output = output.expand(
-                    *output.shape[:-2], self.n_agents, n_agent_outputs
-                )
+                # Insert agent dimension at the correct position
+                output = output.unsqueeze(agent_dim_positive)
+                # Build the expanded shape
+                expand_shape = list(output.shape)
+                expand_shape[agent_dim_positive] = self.n_agents
+                output = output.expand(*expand_shape)
 
-        if output.shape[-2] != (self.n_agents):
+        if output.shape[agent_dim_positive] != (self.n_agents):
             raise ValueError(
-                f"Multi-agent network expected output with shape[-2]={self.n_agents}"
+                f"Multi-agent network expected output with shape[{agent_dim_positive}]={self.n_agents}"
                 f" but got {output.shape}"
             )
 

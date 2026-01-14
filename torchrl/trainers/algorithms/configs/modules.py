@@ -347,6 +347,43 @@ class TanhModuleConfig(ModelConfig):
         super().__post_init__()
 
 
+@dataclass
+class AdditiveGaussianModuleConfig(ModelConfig):
+    """A class to configure an AdditiveGaussianModule.
+
+    Example:
+        >>> cfg = AdditiveGaussianModuleConfig(
+        ...     spec=None,
+        ...     sigma_init=1.0,
+        ...     sigma_end=0.1,
+        ...     mean=0.0,
+        ...     std=1.0,
+        ...     action_key="action",
+        ... )
+        >>> module = instantiate(cfg)
+        >>> assert isinstance(module, AdditiveGaussianModule)
+
+    .. seealso:: :class:`torchrl.modules.AdditiveGaussianModule`
+    """
+
+    spec: Any = None
+    sigma_init: float = 1.0
+    sigma_end: float = 0.1
+    annealing_num_steps: int = 1000
+    mean: float = 0.0
+    std: float = 1.0
+    action_key: Any = "action"
+    safe: bool = False
+    device: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_additive_gaussian_module"
+    )
+    _partial_: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
 def _make_tensordict_module(*args, **kwargs):
     """Helper function to create a TensorDictModule."""
     from hydra.utils import instantiate
@@ -511,3 +548,23 @@ def _make_tanh_module(*args, **kwargs):
         kwargs["out_keys"] = list(kwargs["out_keys"])
 
     return TanhModule(**kwargs)
+
+
+def _make_additive_gaussian_module(*args, **kwargs):
+    """Helper function to create an AdditiveGaussianModule."""
+    from omegaconf import ListConfig
+
+    from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+
+    kwargs.pop("shared", False)
+    kwargs.pop("in_keys", None)
+    kwargs.pop("out_keys", None)
+
+    if "action_key" in kwargs and isinstance(kwargs["action_key"], ListConfig):
+        action_key_list = list(kwargs["action_key"])
+        if len(action_key_list) == 1:
+            kwargs["action_key"] = action_key_list[0]
+        else:
+            kwargs["action_key"] = tuple(action_key_list)
+
+    return AdditiveGaussianModule(**kwargs)

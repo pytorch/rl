@@ -6,7 +6,7 @@
 
 from torchrl.modules.tensordict_module.exploration import RandomPolicy
 
-from ._base import BaseCollector, DataCollectorBase
+from ._base import BaseCollector, DataCollectorBase, ProfileConfig
 
 from ._multi_async import MultiAsyncCollector, MultiaSyncDataCollector
 from ._multi_base import MultiCollector, MultiCollector as _MultiDataCollector
@@ -30,6 +30,7 @@ __all__ = [
     "MultiCollector",
     "MultiSyncCollector",
     "MultiAsyncCollector",
+    "ProfileConfig",
     # Legacy names (backward-compatible aliases)
     "DataCollectorBase",
     "SyncDataCollector",
