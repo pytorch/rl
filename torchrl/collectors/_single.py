@@ -41,10 +41,7 @@ from torchrl.envs.utils import (
     _make_compatible_policy,
     set_exploration_type,
 )
-from torchrl.modules import RandomPolicy
-from torchrl.modules.tensordict_module.exploration import (
-    set_exploration_modules_spec_from_env,
-)
+from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
 from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 
@@ -518,9 +515,6 @@ class Collector(BaseCollector):
         # Set up policy and weights
         self._setup_policy_and_weights(policy)
 
-        # Configure exploration modules with action_spec from environment
-        set_exploration_modules_spec_from_env(self.policy, self.env)
-
         # Apply environment device
         self._apply_env_device()
 
@@ -773,6 +767,10 @@ class Collector(BaseCollector):
             else:
                 self.policy = self._wrapped_policy = policy
 
+            # Auto-configure exploration modules if needed (e.g. spec=None)
+            if isinstance(self.policy, nn.Module):
+                set_exploration_modules_spec_from_env(self.policy, self.env)
+
             # For meta-parameter policies, keep the internal (worker-side) policy
             # as the reference for collector state_dict / load_state_dict.
             if isinstance(self.policy, nn.Module):
@@ -801,6 +799,10 @@ class Collector(BaseCollector):
                 self._wrapped_policy = wrapped_policy
             else:
                 self.policy = self._wrapped_policy = policy
+
+            # Auto-configure exploration modules if needed (e.g. spec=None)
+            if isinstance(self.policy, nn.Module):
+                set_exploration_modules_spec_from_env(self.policy, self.env)
 
             # Use the internal, unwrapped policy (cast to the correct device) as the
             # reference for state_dict / load_state_dict and legacy weight extractors.
