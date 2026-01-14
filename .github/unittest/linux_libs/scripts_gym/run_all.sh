@@ -60,15 +60,9 @@ else
 fi
 
 # 6. Install tensordict
+# Note: tensordict dropped Python 3.9 support after 0.6.x, so we pin to 0.6.2 for py39 compatibility
 printf "* Installing tensordict\n"
-if [[ "$RELEASE" == 0 ]]; then
-    uv pip install "pybind11[global]"
-    # Use pip for --ignore-requires-python (not supported by uv)
-    pip install git+https://github.com/pytorch/tensordict.git --no-deps --ignore-requires-python
-else
-    # Use pip for --ignore-requires-python (not supported by uv)
-    pip install tensordict --no-deps --ignore-requires-python
-fi
+uv pip install "tensordict==0.6.2" --no-deps
 
 # Smoke test tensordict
 python -c "import tensordict"
