@@ -59,11 +59,14 @@ else
     uv pip install numpy==1.26
 fi
 
-# 6. Install tensordict
+# 6. Install pybind11 (needed for building tensordict and torchrl C++ extensions)
+printf "* Installing pybind11\n"
+uv pip install "pybind11[global]"
+
+# 7. Install tensordict
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
-    uv pip install "pybind11[global]"
-    uv pip install git+https://github.com/pytorch/tensordict.git
+    uv pip install git+https://github.com/pytorch/tensordict.git --no-deps
 else
     uv pip install tensordict
 fi
@@ -71,7 +74,7 @@ fi
 # Smoke test tensordict
 python -c "import tensordict"
 
-# 7. Install torchrl
+# 8. Install torchrl
 printf "* Installing torchrl\n"
 git submodule sync && git submodule update --init --recursive
 uv pip install -e . --no-build-isolation
@@ -79,7 +82,7 @@ uv pip install -e . --no-build-isolation
 # Smoke test torchrl
 python -c "import torchrl"
 
-# 8. Setup mujoco
+# 9. Setup mujoco
 printf "* Setting up mujoco\n"
 if [ ! -d "mujoco-py" ]; then
     git clone https://github.com/vmoens/mujoco-py.git
@@ -100,7 +103,7 @@ cd mujoco-py
 uv pip install -e .
 cd "${root_dir}"
 
-# 9. Install base test dependencies (including gym[atari]==0.13 for Atari ROMs)
+# 10. Install base test dependencies (including gym[atari]==0.13 for Atari ROMs)
 printf "* Installing test dependencies\n"
 uv pip install \
     protobuf \
@@ -126,7 +129,7 @@ uv pip install \
     pyopengl==3.1.0 \
     coverage
 
-# 10. Setup Atari ROMs
+# 11. Setup Atari ROMs
 printf "* Setting up Atari ROMs\n"
 if [ ! -d "Roms" ]; then
     wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz --no-check-certificate
@@ -137,7 +140,7 @@ if [ ! -d "Roms" ]; then
 fi
 python -m atari_py.import_roms Roms
 
-# 11. Set environment variables
+# 12. Set environment variables
 export MUJOCO_GL=egl
 export MAX_IDLE_COUNT=1000
 export SDL_VIDEODRIVER=dummy
@@ -151,12 +154,12 @@ export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
 export MKL_THREADING_LAYER=GNU
 
-# 12. Start Xvfb for display
+# 13. Start Xvfb for display
 printf "* Starting Xvfb\n"
 unset LD_PRELOAD
 Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
 
-# 13. Function to run tests
+# 14. Function to run tests
 run_tests() {
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${env_dir}/lib
     
@@ -169,7 +172,7 @@ run_tests() {
     coverage xml -i
 }
 
-# 14. Run tests for different gym versions
+# 15. Run tests for different gym versions
 printf "* Running tests for different gym versions\n"
 
 # Test gym 0.13 (already installed)
