@@ -35,6 +35,8 @@ if ! command -v uv &> /dev/null; then
 fi
 # Ensure uv is in PATH
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+# Allow installing packages that may not match the current Python version
+export UV_PYTHON_PREFERENCE=system
 
 # 3. Create virtual environment with uv
 printf "* Creating virtual environment with Python ${PYTHON_VERSION:-3.9}\n"
@@ -65,9 +67,9 @@ fi
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     uv pip install "pybind11[global]"
-    uv pip install git+https://github.com/pytorch/tensordict.git --no-deps --ignore-requires-python
+    uv pip install git+https://github.com/pytorch/tensordict.git --no-deps
 else
-    uv pip install tensordict --no-deps --ignore-requires-python
+    uv pip install tensordict --no-deps
 fi
 
 # Smoke test tensordict
@@ -76,7 +78,7 @@ python -c "import tensordict"
 # 7. Install torchrl
 printf "* Installing torchrl\n"
 git submodule sync && git submodule update --init --recursive
-uv pip install -e . --no-build-isolation --no-deps --ignore-requires-python
+uv pip install -e . --no-build-isolation --no-deps
 
 # Smoke test torchrl
 python -c "import torchrl"
@@ -182,48 +184,48 @@ uv pip uninstall -y gym atari-py
 # Test gym 0.19 (broken, install without dependencies)
 printf "* Testing gym 0.19\n"
 uv pip install wheel==0.38.4
-uv pip install gym==0.19 --ignore-requires-python
+uv pip install gym==0.19
 run_tests
 uv pip uninstall -y gym wheel
 
 # Test gym 0.20
 printf "* Testing gym 0.20\n"
 uv pip install wheel==0.38.4
-uv pip install 'gym[atari]==0.20' --ignore-requires-python
-uv pip install ale-py==0.7 --ignore-requires-python
+uv pip install 'gym[atari]==0.20'
+uv pip install ale-py==0.7
 run_tests
 uv pip uninstall -y gym ale-py wheel
 
 # Test gym 0.25
 printf "* Testing gym 0.25\n"
-uv pip install 'gym[atari]==0.25' --ignore-requires-python
+uv pip install 'gym[atari]==0.25'
 run_tests
 uv pip uninstall -y gym
 
 # Test gym 0.26
 printf "* Testing gym 0.26\n"
-uv pip install 'gym[atari,accept-rom-license]==0.26' --ignore-requires-python
-uv pip install gym-super-mario-bros --ignore-requires-python
+uv pip install 'gym[atari,accept-rom-license]==0.26'
+uv pip install gym-super-mario-bros
 run_tests
 uv pip uninstall -y gym gym-super-mario-bros
 
 # Test gymnasium 0.27 and 0.28
 for GYM_VERSION in '0.27' '0.28'; do
     printf "* Testing gymnasium ${GYM_VERSION}\n"
-    uv pip install "gymnasium[atari,ale-py]==${GYM_VERSION}" --ignore-requires-python
+    uv pip install "gymnasium[atari,ale-py]==${GYM_VERSION}"
     run_tests
     uv pip uninstall -y gymnasium ale-py
 done
 
 # Test gymnasium >=1.1.0
 printf "* Testing gymnasium >=1.1.0\n"
-uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics --ignore-requires-python
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
 run_tests
 uv pip uninstall -y gymnasium mo-gymnasium gymnasium-robotics ale-py
 
 # Test latest gymnasium
 printf "* Testing latest gymnasium\n"
-uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics --ignore-requires-python
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
 run_tests
 
 printf "* All tests completed\n"
