@@ -8,7 +8,8 @@ import math
 import pytest
 import torch
 from tensordict import TensorDict
-from torchrl.modules.mcts.scores import EXP3Score, PUCTScore, UCBScore
+from torchrl.modules.mcts.scores import EXP3Score, PUCTScore, UCB1TunedScore, UCBScore
+
 
 # Sample TensorDict for testing
 def create_node(
@@ -22,14 +23,15 @@ def create_node(
         }
 
     if batch_size:
+        # num_actions needs batch dimension to match TensorDict batch_size
         data = {
-            custom_keys["num_actions_key"]: torch.tensor(
-                [num_actions] * batch_size, device=device
+            custom_keys["num_actions_key"]: torch.full(
+                (batch_size,), num_actions, device=device, dtype=torch.long
             )
         }
         if weights is not None:
             if weights.ndim == 1:
-                weights = weights.unsqueeze(0).repeat(batch_size, 1)
+                weights = weights.unsqueeze(0).expand(batch_size, -1)
             data[custom_keys["weights_key"]] = weights.to(device)
         td = TensorDict(data, batch_size=[batch_size], device=device)
     else:
@@ -81,7 +83,7 @@ def create_ucb_node(
         }
         td = TensorDict(
             data,
-            batch_size=[batch_s for batch_s in batch_size]
+            batch_size=list(batch_size)
             if isinstance(batch_size, (list, tuple))
             else [batch_size],
             device=device,
@@ -352,7 +354,7 @@ class TestEXP3Score:
             action_idx = action_indices[i].item()
             reward = rewards[i].item()
 
-            single_node_td = node[i]
+            node[i]
 
             current_weight_item = initial_weights_batch[i, action_idx]
             prob_i_item = probs_batch[i, action_idx]
@@ -845,3 +847,236 @@ class TestPUCTScore:
         assert "visits" not in node.keys()
         assert "total_visits" not in node.keys()
         assert "prior_prob" not in node.keys()
+
+
+# Helper function to create a sample TensorDict node for UCB1TunedScore
+def create_ucb1_tuned_node(
+    win_count,
+    visits,
+    total_visits,
+    sum_squared_rewards,
+    batch_size=None,
+    device="cpu",
+    custom_keys=None,
+):
+    if custom_keys is None:
+        custom_keys = {
+            "win_count_key": "win_count",
+            "visits_key": "visits",
+            "total_visits_key": "total_visits",
+            "sum_squared_rewards_key": "sum_squared_rewards",
+            "score_key": "score",
+        }
+
+    win_count = torch.as_tensor(win_count, device=device, dtype=torch.float32)
+    visits = torch.as_tensor(visits, device=device, dtype=torch.float32)
+    total_visits = torch.as_tensor(total_visits, device=device, dtype=torch.float32)
+    sum_squared_rewards = torch.as_tensor(
+        sum_squared_rewards, device=device, dtype=torch.float32
+    )
+
+    if batch_size:
+        if win_count.ndim == 0:
+            win_count = win_count.unsqueeze(0).repeat(batch_size)
+        elif win_count.shape[0] != batch_size:
+            raise ValueError("Batch size mismatch for win_count")
+        if visits.ndim == 0:
+            visits = visits.unsqueeze(0).repeat(batch_size)
+        elif visits.shape[0] != batch_size:
+            raise ValueError("Batch size mismatch for visits")
+        if sum_squared_rewards.ndim == 0:
+            sum_squared_rewards = sum_squared_rewards.unsqueeze(0).repeat(batch_size)
+        elif sum_squared_rewards.shape[0] != batch_size:
+            raise ValueError("Batch size mismatch for sum_squared_rewards")
+        if total_visits.numel() == 1 and batch_size > 1:
+            total_visits = total_visits.repeat(batch_size)
+        elif total_visits.ndim == 0:
+            total_visits = total_visits.unsqueeze(0).repeat(batch_size)
+        elif total_visits.shape[0] != batch_size:
+            raise ValueError("Batch size mismatch for total_visits")
+
+        data = {
+            custom_keys["win_count_key"]: win_count,
+            custom_keys["visits_key"]: visits,
+            custom_keys["total_visits_key"]: total_visits,
+            custom_keys["sum_squared_rewards_key"]: sum_squared_rewards,
+        }
+        if isinstance(batch_size, (list, tuple)):
+            td_batch_size = batch_size
+        else:
+            td_batch_size = [batch_size]
+        td = TensorDict(data, batch_size=td_batch_size, device=device)
+    else:
+        data = {
+            custom_keys["win_count_key"]: win_count,
+            custom_keys["visits_key"]: visits,
+            custom_keys["total_visits_key"]: total_visits,
+            custom_keys["sum_squared_rewards_key"]: sum_squared_rewards,
+        }
+        td_batch_size = win_count.shape[:-1] if win_count.ndim > 1 else []
+        td = TensorDict(data, batch_size=td_batch_size, device=device)
+
+    return td
+
+
+class TestUCB1TunedScore:
+    @pytest.fixture
+    def default_ucb1_tuned_scorer(self):
+        return UCB1TunedScore(exploration_constant=2.0)
+
+    @pytest.fixture
+    def ucb1_tuned_custom_key_names(self):
+        return {
+            "win_count_key": "custom_wins",
+            "visits_key": "custom_visits",
+            "total_visits_key": "custom_total_visits",
+            "sum_squared_rewards_key": "custom_sum_sq_rewards",
+            "score_key": "custom_ucb1_tuned_score",
+        }
+
+    @pytest.mark.parametrize("exploration_constant", [1.0, 2.0, 3.0])
+    def test_initialization(self, exploration_constant):
+        scorer = UCB1TunedScore(exploration_constant=exploration_constant)
+        assert scorer.exploration_constant == exploration_constant
+
+    def test_forward_basic(self, default_ucb1_tuned_scorer):
+        # Rewards in [0, 1] range for UCB1-Tuned
+        win_count = torch.tensor([0.8, 0.6, 0.9])  # sum of rewards
+        visits = torch.tensor([10.0, 5.0, 15.0])
+        total_visits = torch.tensor(30.0)
+        # sum_squared_rewards for rewards in [0,1]
+        sum_squared_rewards = torch.tensor([0.7, 0.4, 0.85])
+
+        node = create_ucb1_tuned_node(
+            win_count=win_count,
+            visits=visits,
+            total_visits=total_visits,
+            sum_squared_rewards=sum_squared_rewards,
+        )
+        default_ucb1_tuned_scorer.forward(node)
+
+        scores = node.get(default_ucb1_tuned_scorer.score_key)
+        assert scores.shape == win_count.shape
+        # All visited actions should have finite scores
+        assert torch.all(torch.isfinite(scores))
+
+    def test_forward_unvisited_actions(self, default_ucb1_tuned_scorer):
+        win_count = torch.tensor([0.5, 0.0, 0.3])
+        visits = torch.tensor([5.0, 0.0, 3.0])  # Second action unvisited
+        total_visits = torch.tensor(8.0)
+        sum_squared_rewards = torch.tensor([0.3, 0.0, 0.15])
+
+        node = create_ucb1_tuned_node(
+            win_count=win_count,
+            visits=visits,
+            total_visits=total_visits,
+            sum_squared_rewards=sum_squared_rewards,
+        )
+        default_ucb1_tuned_scorer.forward(node)
+
+        scores = node.get(default_ucb1_tuned_scorer.score_key)
+        # Unvisited action should have a very large score
+        assert scores[1] > scores[0]
+        assert scores[1] > scores[2]
+        # Should be close to max float / 10
+        assert scores[1] > 1e30
+
+    @pytest.mark.parametrize("batch_s", [2, 3])
+    def test_forward_batch(self, default_ucb1_tuned_scorer, batch_s):
+        num_actions = 3
+        win_count = torch.rand(batch_s, num_actions)
+        visits = torch.rand(batch_s, num_actions) * 5 + 1  # Ensure visits > 0
+        total_visits = torch.rand(batch_s) * 20 + float(batch_s)
+        sum_squared_rewards = torch.rand(batch_s, num_actions)
+
+        node = create_ucb1_tuned_node(
+            win_count=win_count,
+            visits=visits,
+            total_visits=total_visits,
+            sum_squared_rewards=sum_squared_rewards,
+            batch_size=batch_s,
+        )
+        default_ucb1_tuned_scorer.forward(node)
+
+        scores = node.get(default_ucb1_tuned_scorer.score_key)
+        assert scores.shape == (batch_s, num_actions)
+        # All should be finite since all visits > 0
+        assert torch.all(torch.isfinite(scores))
+
+    def test_forward_variance_clamping(self, default_ucb1_tuned_scorer):
+        # Test that min(0.25, V_i) is applied correctly
+        # High variance case
+        win_count = torch.tensor([5.0])
+        visits = torch.tensor([10.0])
+        total_visits = torch.tensor(100.0)
+        # Very high sum of squared rewards to create high variance
+        sum_squared_rewards = torch.tensor([10.0])
+
+        node = create_ucb1_tuned_node(
+            win_count=win_count,
+            visits=visits,
+            total_visits=total_visits,
+            sum_squared_rewards=sum_squared_rewards,
+        )
+        default_ucb1_tuned_scorer.forward(node)
+
+        scores = node.get(default_ucb1_tuned_scorer.score_key)
+        assert torch.all(torch.isfinite(scores))
+
+    def test_custom_keys(self, ucb1_tuned_custom_key_names):
+        scorer = UCB1TunedScore(
+            exploration_constant=2.0,
+            win_count_key=ucb1_tuned_custom_key_names["win_count_key"],
+            visits_key=ucb1_tuned_custom_key_names["visits_key"],
+            total_visits_key=ucb1_tuned_custom_key_names["total_visits_key"],
+            sum_squared_rewards_key=ucb1_tuned_custom_key_names[
+                "sum_squared_rewards_key"
+            ],
+            score_key=ucb1_tuned_custom_key_names["score_key"],
+        )
+
+        win_count = torch.tensor([0.5, 0.3])
+        visits = torch.tensor([5.0, 3.0])
+        total_visits = torch.tensor(10.0)
+        sum_squared_rewards = torch.tensor([0.3, 0.15])
+
+        node = create_ucb1_tuned_node(
+            win_count=win_count,
+            visits=visits,
+            total_visits=total_visits,
+            sum_squared_rewards=sum_squared_rewards,
+            custom_keys=ucb1_tuned_custom_key_names,
+        )
+        scorer.forward(node)
+
+        assert ucb1_tuned_custom_key_names["score_key"] in node.keys()
+        scores = node.get(ucb1_tuned_custom_key_names["score_key"])
+        assert scores.shape == win_count.shape
+        assert torch.all(torch.isfinite(scores))
+
+        # Check that default keys are not present
+        assert "score" not in node.keys()
+        assert "win_count" not in node.keys()
+        assert "visits" not in node.keys()
+        assert "total_visits" not in node.keys()
+        assert "sum_squared_rewards" not in node.keys()
+
+    def test_exploration_vs_exploitation(self, default_ucb1_tuned_scorer):
+        # Action 0: high average reward, many visits (exploitation)
+        # Action 1: low average reward, few visits (exploration)
+        win_count = torch.tensor([9.0, 1.0])
+        visits = torch.tensor([10.0, 2.0])
+        total_visits = torch.tensor(12.0)
+        sum_squared_rewards = torch.tensor([8.5, 0.6])
+
+        node = create_ucb1_tuned_node(
+            win_count=win_count,
+            visits=visits,
+            total_visits=total_visits,
+            sum_squared_rewards=sum_squared_rewards,
+        )
+        default_ucb1_tuned_scorer.forward(node)
+
+        scores = node.get(default_ucb1_tuned_scorer.score_key)
+        # Both should be finite
+        assert torch.all(torch.isfinite(scores))
