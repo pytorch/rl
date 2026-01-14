@@ -12,6 +12,7 @@ from multiprocessing.managers import SyncManager
 import torch
 from torch import multiprocessing as mp
 
+from torchrl._utils import WEIGHT_SYNC_TIMEOUT
 from torchrl.envs.utils import ExplorationType
 
 try:
@@ -28,6 +29,7 @@ __all__ = [
     "INSTANTIATE_TIMEOUT",
     "_MIN_TIMEOUT",
     "_MAX_IDLE_COUNT",
+    "WEIGHT_SYNC_TIMEOUT",
     "DEFAULT_EXPLORATION_TYPE",
     "_is_osx",
     "_Interruptor",

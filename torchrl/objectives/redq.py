@@ -68,7 +68,8 @@ class REDQLoss(LossModule):
         fixed_alpha (bool, optional): whether alpha should be trained to match
             a target entropy. Default is ``False``.
         target_entropy (Union[str, Number], optional): Target entropy for the
-            stochastic policy. Default is "auto".
+            stochastic policy. Default is "auto", where target entropy is
+            computed as :obj:`-prod(n_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
             for data collection. Default is ``False``.
