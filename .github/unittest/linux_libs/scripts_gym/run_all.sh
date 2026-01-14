@@ -59,18 +59,22 @@ else
     uv pip install numpy==1.26
 fi
 
-# 6. Install pybind11 (needed for building tensordict and torchrl C++ extensions)
-printf "* Installing pybind11\n"
-uv pip install "pybind11[global]"
+# 6. Install pybind11 and ninja (needed for building tensordict and torchrl C++ extensions)
+printf "* Installing pybind11 and ninja\n"
+uv pip install "pybind11[global]>=2.13" ninja
+
+# Help CMake find pybind11 when building from source
+pybind11_DIR="$(python -m pybind11 --cmakedir)"
+export pybind11_DIR
 
 # 7. Install tensordict
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     # Install tensordict dependencies (since we use --no-deps)
     uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
-    uv pip install git+https://github.com/pytorch/tensordict.git --no-deps
+    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
-    uv pip install tensordict
+    uv pip install --no-deps tensordict
 fi
 
 # Smoke test tensordict
@@ -79,7 +83,7 @@ python -c "import tensordict"
 # 8. Install torchrl
 printf "* Installing torchrl\n"
 git submodule sync && git submodule update --init --recursive
-uv pip install -e . --no-build-isolation
+uv pip install -e . --no-build-isolation --no-deps
 
 # Smoke test torchrl
 python -c "import torchrl"
