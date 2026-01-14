@@ -13,10 +13,10 @@ apt-get install -y --no-install-recommends libglfw3 libgl1-mesa-glx libosmesa6 l
 apt-get install -y --no-install-recommends libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 apt-get install -y --no-install-recommends librhash0 x11proto-dev cmake
 
-# Add deadsnakes PPA for Python 3.9
+# Add deadsnakes PPA for Python 3.10
 add-apt-repository ppa:deadsnakes/ppa -y
 apt-get update
-apt-get install -y --no-install-recommends python3.9 python3.9-dev python3.9-venv python3.9-distutils
+apt-get install -y --no-install-recommends python3.10 python3.10-dev python3.10-venv python3.10-distutils
 
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -35,8 +35,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 # 3. Create virtual environment with uv
-printf "* Creating virtual environment with Python ${PYTHON_VERSION:-3.9}\n"
-uv venv "${env_dir}" --python "${PYTHON_VERSION:-3.9}"
+printf "* Creating virtual environment with Python ${PYTHON_VERSION:-3.10}\n"
+uv venv "${env_dir}" --python "${PYTHON_VERSION:-3.10}"
 source "${env_dir}/bin/activate"
 
 # 4. Install base dependencies
@@ -60,9 +60,13 @@ else
 fi
 
 # 6. Install tensordict
-# Note: tensordict dropped Python 3.9 support after 0.6.x, so we pin to 0.6.2 for py39 compatibility
 printf "* Installing tensordict\n"
-uv pip install "tensordict==0.6.2" --no-deps
+if [[ "$RELEASE" == 0 ]]; then
+    uv pip install "pybind11[global]"
+    uv pip install git+https://github.com/pytorch/tensordict.git
+else
+    uv pip install tensordict
+fi
 
 # Smoke test tensordict
 python -c "import tensordict"
@@ -70,8 +74,7 @@ python -c "import tensordict"
 # 7. Install torchrl
 printf "* Installing torchrl\n"
 git submodule sync && git submodule update --init --recursive
-# Use pip for --ignore-requires-python (not supported by uv)
-pip install -e . --no-build-isolation --no-deps --ignore-requires-python
+uv pip install -e . --no-build-isolation
 
 # Smoke test torchrl
 python -c "import torchrl"
@@ -177,48 +180,48 @@ uv pip uninstall -y gym atari-py
 # Test gym 0.19 (broken, install without dependencies)
 printf "* Testing gym 0.19\n"
 uv pip install wheel==0.38.4
-pip install gym==0.19 --ignore-requires-python
+uv pip install gym==0.19
 run_tests
 uv pip uninstall -y gym wheel
 
 # Test gym 0.20
 printf "* Testing gym 0.20\n"
 uv pip install wheel==0.38.4
-pip install 'gym[atari]==0.20' --ignore-requires-python
-pip install ale-py==0.7 --ignore-requires-python
+uv pip install 'gym[atari]==0.20'
+uv pip install ale-py==0.7
 run_tests
 uv pip uninstall -y gym ale-py wheel
 
 # Test gym 0.25
 printf "* Testing gym 0.25\n"
-pip install 'gym[atari]==0.25' --ignore-requires-python
+uv pip install 'gym[atari]==0.25'
 run_tests
 uv pip uninstall -y gym
 
 # Test gym 0.26
 printf "* Testing gym 0.26\n"
-pip install 'gym[atari,accept-rom-license]==0.26' --ignore-requires-python
-pip install gym-super-mario-bros --ignore-requires-python
+uv pip install 'gym[atari,accept-rom-license]==0.26'
+uv pip install gym-super-mario-bros
 run_tests
 uv pip uninstall -y gym gym-super-mario-bros
 
 # Test gymnasium 0.27 and 0.28
 for GYM_VERSION in '0.27' '0.28'; do
     printf "* Testing gymnasium ${GYM_VERSION}\n"
-    pip install "gymnasium[atari,ale-py]==${GYM_VERSION}" --ignore-requires-python
+    uv pip install "gymnasium[atari,ale-py]==${GYM_VERSION}"
     run_tests
     uv pip uninstall -y gymnasium ale-py
 done
 
 # Test gymnasium >=1.1.0
 printf "* Testing gymnasium >=1.1.0\n"
-pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics --ignore-requires-python
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
 run_tests
 uv pip uninstall -y gymnasium mo-gymnasium gymnasium-robotics ale-py
 
 # Test latest gymnasium
 printf "* Testing latest gymnasium\n"
-pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics --ignore-requires-python
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
 run_tests
 
 printf "* All tests completed\n"
