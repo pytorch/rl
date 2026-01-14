@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3ab4b30) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3d1d8ac) &#x25BC</span></a>
     </div>
     
 
@@ -432,13 +432,12 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">TensorDictParams</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticActor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_cache_values</span><span class="p">,</span>
@@ -471,7 +470,7 @@
 <span class="sd">    be called by the user that order.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        actor_network (ProbabilisticActor): stochastic actor</span>
+<span class="sd">        actor_network (ProbabilisticTensorDictSequential): stochastic actor</span>
 <span class="sd">        qvalue_network (TensorDictModule): Q(s, a) parametric model.</span>
 <span class="sd">            This module typically outputs a ``&quot;state_action_value&quot;`` entry.</span>
 <span class="sd">            If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``</span>
@@ -668,7 +667,7 @@
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_value_estimator</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span>
 
-    <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticActor</span>
+    <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span>
     <span class="n">actor_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span>
     <span class="n">qvalue_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
     <span class="n">qvalue_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span>
@@ -677,7 +676,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticActor</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
         <span class="n">qvalue_network</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictModule</span><span class="p">],</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">num_qvalue_nets</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>

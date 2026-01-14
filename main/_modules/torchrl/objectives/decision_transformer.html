@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3ab4b30) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3d1d8ac) &#x25BC</span></a>
     </div>
     
 
@@ -431,11 +431,10 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">TensorDictParams</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticActor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_reduce</span><span class="p">,</span> <span class="n">distance_loss</span>
 
@@ -446,7 +445,7 @@
 <span class="sd">    Presented in `&quot;Online Decision Transformer&quot; &lt;https://arxiv.org/abs/2202.05607&gt;`</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        actor_network (ProbabilisticActor): stochastic actor</span>
+<span class="sd">        actor_network (ProbabilisticTensorDictSequential): stochastic actor</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        alpha_init (:obj:`float`, optional): initial entropy multiplier.</span>
@@ -499,7 +498,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticActor</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">alpha_init</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
         <span class="n">min_alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -677,7 +676,7 @@
 <span class="sd">    Presented in `&quot;Decision Transformer: Reinforcement Learning via Sequence Modeling&quot; &lt;https://arxiv.org/abs/2106.01345&gt;`</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        actor_network (ProbabilisticActor): stochastic actor</span>
+<span class="sd">        actor_network (ProbabilisticTensorDictSequential): stochastic actor</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        loss_function (str): loss function to use. Defaults to ``&quot;l2&quot;``.</span>
@@ -715,7 +714,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticActor</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">loss_function</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;l2&quot;</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>

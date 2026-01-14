@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3ab4b30) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3d1d8ac) &#x25BC</span></a>
     </div>
     
 
@@ -439,6 +439,7 @@
     <span class="n">composite_lp_aggregate</span><span class="p">,</span>
     <span class="n">CompositeDistribution</span><span class="p">,</span>
     <span class="n">dispatch</span><span class="p">,</span>
+    <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
     <span class="n">set_composite_lp_aggregate</span><span class="p">,</span>
     <span class="n">TensorDictModule</span><span class="p">,</span>
 <span class="p">)</span>
@@ -448,7 +449,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_find_action_space</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticActor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.actors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActorCriticWrapper</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -489,7 +489,7 @@
 <span class="sd">    and &quot;Soft Actor-Critic Algorithms and Applications&quot; https://arxiv.org/abs/1812.05905</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        actor_network (ProbabilisticActor): stochastic actor</span>
+<span class="sd">        actor_network (ProbabilisticTensorDictSequential): stochastic actor</span>
 <span class="sd">        qvalue_network (TensorDictModule): Q(s, a) parametric model.</span>
 <span class="sd">            This module typically outputs a ``&quot;state_action_value&quot;`` entry.</span>
 <span class="sd">            If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``</span>
@@ -739,7 +739,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticActor</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
         <span class="n">qvalue_network</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictModule</span><span class="p">],</span>
         <span class="n">value_network</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -1374,7 +1374,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Discrete SAC Loss module.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        actor_network (ProbabilisticActor): the actor to be trained</span>
+<span class="sd">        actor_network (ProbabilisticTensorDictSequential): the actor to be trained</span>
 <span class="sd">        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.</span>
 <span class="sd">        action_space (str or TensorSpec): Action space. Must be one of</span>
 <span class="sd">            ``&quot;one-hot&quot;``, ``&quot;mult_one_hot&quot;``, ``&quot;binary&quot;`` or ``&quot;categorical&quot;``,</span>
@@ -1575,7 +1575,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticActor</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
         <span class="n">qvalue_network</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">action_space</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">TensorSpec</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
