@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3ab4b30) &#x25BC</span></a>
     </div>
     
 
@@ -460,6 +460,7 @@
     <span class="n">_make_ordinal_device</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
     <span class="n">rl_warnings</span><span class="p">,</span>
+    <span class="n">timeit</span><span class="p">,</span>
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
@@ -2956,17 +2957,39 @@
 
     <span class="n">child_pipe</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;started&quot;</span><span class="p">)</span>
     <span class="n">next_shared_tensordict</span><span class="p">,</span> <span class="n">root_shared_tensordict</span> <span class="o">=</span> <span class="p">(</span><span class="kc">None</span><span class="p">,)</span> <span class="o">*</span> <span class="mi">2</span>
+    <span class="n">_cmd_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">_last_cmd</span> <span class="o">=</span> <span class="s2">&quot;N/A&quot;</span>
+    <span class="c1"># Create a timeit instance to track elapsed time since worker start</span>
+    <span class="n">_worker_timer</span> <span class="o">=</span> <span class="n">timeit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batched_env_worker/</span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2">/lifetime&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">child_pipe</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">_timeout</span><span class="p">):</span>
                 <span class="n">cmd</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">child_pipe</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="n">_cmd_count</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">_last_cmd</span> <span class="o">=</span> <span class="n">cmd</span>
+                <span class="c1"># Log every 1000 commands</span>
+                <span class="k">if</span> <span class="n">_cmd_count</span> <span class="o">%</span> <span class="mi">1000</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;batched_env worker </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2">: cmd_count=</span><span class="si">{</span><span class="n">_cmd_count</span><span class="si">}</span><span class="s2">, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;elapsed=</span><span class="si">{</span><span class="n">_worker_timer</span><span class="o">.</span><span class="n">elapsed</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, last_cmd=</span><span class="si">{</span><span class="n">cmd</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;batched_env worker </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2">: TIMEOUT after </span><span class="si">{</span><span class="n">_timeout</span><span class="si">}</span><span class="s2">s waiting for cmd, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;elapsed_since_start=</span><span class="si">{</span><span class="n">_worker_timer</span><span class="o">.</span><span class="n">elapsed</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;last_cmd=</span><span class="si">{</span><span class="n">_last_cmd</span><span class="si">}</span><span class="s2">, cmd_count=</span><span class="si">{</span><span class="n">_cmd_count</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
                 <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Worker timed out after </span><span class="si">{</span><span class="n">_timeout</span><span class="si">}</span><span class="s2">s, &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.&quot;</span>
                 <span class="p">)</span>
         <span class="k">except</span> <span class="ne">EOFError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">EOFError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;proc </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> failed, last command: </span><span class="si">{</span><span class="n">cmd</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;batched_env worker </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2">: EOFError - pipe closed, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;elapsed_since_start=</span><span class="si">{</span><span class="n">_worker_timer</span><span class="o">.</span><span class="n">elapsed</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;last_cmd=</span><span class="si">{</span><span class="n">_last_cmd</span><span class="si">}</span><span class="s2">, cmd_count=</span><span class="si">{</span><span class="n">_cmd_count</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">EOFError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;proc </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> failed, last command: </span><span class="si">{</span><span class="n">_last_cmd</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
         <span class="k">if</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;seed&quot;</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">initialized</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;call &#39;init&#39; before closing&quot;</span><span class="p">)</span>

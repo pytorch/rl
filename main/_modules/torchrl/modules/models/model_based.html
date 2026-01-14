@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+gcadf23b) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+g3ab4b30) &#x25BC</span></a>
     </div>
     
 
@@ -759,14 +759,32 @@
         <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">step_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_step_fn</span><span class="p">()</span>
 
+        <span class="c1"># Determine output keys from first timestep to ensure consistent stacking.</span>
+        <span class="c1"># Root state/belief may be added by carry_forward for t&gt;0 but won&#39;t exist</span>
+        <span class="c1"># for t=0, so we use the original input structure as reference.</span>
+        <span class="n">output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
+
         <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">time_steps</span><span class="p">):</span>
             <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">step_fn</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
 
-            <span class="n">tensordict_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
+            <span class="c1"># Select consistent keys for stacking (excludes root state/belief</span>
+            <span class="c1"># that may have been added by carry_forward for t&gt;0)</span>
+            <span class="n">tensordict_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">output_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="n">time_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="c1"># Translate (&quot;next&quot;, *) to the non-next key required for the current step input</span>
-                <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
+                <span class="c1"># Propagate state/belief from (&quot;next&quot;, ...) to root level for next iteration</span>
+                <span class="c1"># The posterior outputs (&quot;next&quot;, &quot;state&quot;) which should become &quot;state&quot; for t+1</span>
+                <span class="c1"># The prior outputs (&quot;next&quot;, &quot;belief&quot;) which should become &quot;belief&quot; for t+1</span>
+                <span class="n">next_state</span> <span class="o">=</span> <span class="n">_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">))</span>
+                <span class="n">next_belief</span> <span class="o">=</span> <span class="n">_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;belief&quot;</span><span class="p">))</span>
+
+                <span class="c1"># Get next timestep&#39;s input data (action, encoded_latents, etc.)</span>
+                <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+
+                <span class="c1"># Set the propagated state/belief (overwriting original data&#39;s initial values)</span>
+                <span class="n">_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+                <span class="n">_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;belief&quot;</span><span class="p">,</span> <span class="n">next_belief</span><span class="p">)</span>
 
         <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span>
@@ -783,16 +801,40 @@
         <span class="n">update_values</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">init_td</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
+        <span class="c1"># Determine output keys from first timestep to ensure consistent stacking.</span>
+        <span class="n">output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
+
         <span class="c1"># Stack the update values for scan input</span>
         <span class="n">stacked_updates</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">update_values</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">scan_fn</span><span class="p">(</span><span class="n">carry</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-            <span class="c1"># carry is the current tensordict, x is the update for this step</span>
-            <span class="n">_td</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">carry</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+            <span class="c1"># carry is the current tensordict with propagated state/belief</span>
+            <span class="c1"># x is the next timestep&#39;s input data (action, encoded_latents, etc.)</span>
+
+            <span class="c1"># Get propagated state/belief from previous step&#39;s output</span>
+            <span class="n">next_state</span> <span class="o">=</span> <span class="n">carry</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">next_belief</span> <span class="o">=</span> <span class="n">carry</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;belief&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="c1"># Start with next timestep&#39;s data</span>
+            <span class="n">_td</span> <span class="o">=</span> <span class="n">x</span>
+
+            <span class="c1"># Propagate state/belief if available (not first step)</span>
+            <span class="k">if</span> <span class="n">next_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">next_belief</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;belief&quot;</span><span class="p">,</span> <span class="n">next_belief</span><span class="p">)</span>
+
+            <span class="c1"># Run prior and posterior</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">rssm_prior</span><span class="p">(</span><span class="n">_td</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">rssm_posterior</span><span class="p">(</span><span class="n">_td</span><span class="p">)</span>
-            <span class="c1"># Return output and new carry</span>
-            <span class="k">return</span> <span class="n">_td</span><span class="p">,</span> <span class="n">_td</span>
+
+            <span class="c1"># Select consistent keys for stacking</span>
+            <span class="n">output_td</span> <span class="o">=</span> <span class="n">_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">output_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="c1"># Return output for stacking and full _td as carry for propagation</span>
+            <span class="k">return</span> <span class="n">_td</span><span class="p">,</span> <span class="n">output_td</span>
 
         <span class="c1"># Run scan</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="n">scan_fn</span><span class="p">,</span> <span class="p">[</span><span class="n">init_td</span><span class="p">],</span> <span class="p">[</span><span class="n">stacked_updates</span><span class="p">])</span>
