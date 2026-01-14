@@ -14,15 +14,14 @@ docutils
 sphinx_design
 
 torchvision
-dm_control
-mujoco<3.3.6
+dm_control>=1.0.0
+mujoco>=3.0.0,<3.3.6
 gymnasium[classic_control,atari]
 pygame
 tqdm
 ipython
 imageio[ffmpeg,pyav]
 memory_profiler
-pyrender
 pytest
 vmas
 onnxscript
@@ -32,3 +31,6 @@ psutil
 hydra-core>=1.1
 omegaconf
 hydra-submitit-launcher
+transformers
+accelerate
+sentencepiece

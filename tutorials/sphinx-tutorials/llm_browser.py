@@ -66,9 +66,10 @@ import warnings
 
 import torch
 
-from tensordict import set_list_to_stack, TensorDict
-from torchrl import torchrl_logger
-from torchrl.data import Composite, Unbounded
+from tensordict import lazy_stack, set_list_to_stack, TensorDict
+from torchrl import logger as torchrl_logger
+from torchrl.data import Unbounded
+from torchrl.data.llm import History
 from torchrl.envs import Transform
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.browser import BrowserTransform
@@ -95,7 +96,6 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
 env = ChatEnv(
     batch_size=(1,),
     tokenizer=tokenizer,
-    apply_template=True,
     system_prompt=(
         "You are a helpful assistant that can use tools to accomplish tasks. "
         "Tools will be executed and their responses will be added to our conversation."
@@ -108,7 +108,7 @@ env = ChatEnv(
 
 browser_transform = BrowserTransform(
     allowed_domains=["google.com", "github.com"],
-    headless=False,  # Set to False to see the browser actions
+    headless=True,  # Set to False to see the browser actions
 )
 env = env.append_transform(browser_transform)
 
@@ -132,11 +132,14 @@ class RewardTransform(Transform):
 
     """
 
-    def _call(self, tensordict: TensorDict) -> TensorDict:
+    def _step(
+        self, tensordict: TensorDict, next_tensordict: TensorDict
+    ) -> TensorDict:
         """Process the tensordict and assign rewards based on the LLM's response.
 
         Args:
-            tensordict (TensorDict): The tensordict containing the environment state.
+            tensordict (TensorDict): The input tensordict.
+            next_tensordict (TensorDict): The next tensordict containing the environment state.
                 Must have a "history" key containing the conversation history.
 
         Returns:
@@ -146,35 +149,32 @@ class RewardTransform(Transform):
         # ChatEnv has created a history item. We just pick up the last item,
         # and check if `"Paris"` is in the response.
         # We use index 0 because we are in a single-instance environment.
-        history = tensordict[0]["history"]
+        history = next_tensordict[0]["history"].prompt
         last_item = history[-1]
         if "Paris" in last_item.content:
             torchrl_logger.info("Found the answer to the question: Paris")
             # Recall that rewards have a trailing singleton dimension.
-            tensordict["reward"] = torch.full((1, 1), 2.0)
+            next_tensordict["reward"] = torch.full((1, 1), 2.0)
         # Check if we successfully reached the website
-        elif (
-            "google.com" in last_item.content
-            and "executed successfully" in last_item.content
-        ):
+        elif "google.com" in last_item.content and "success" in last_item.content.lower():
             torchrl_logger.info("Reached the website google.com")
-            tensordict["reward"] = torch.full((1, 1), 1.0)
+            next_tensordict["reward"] = torch.full((1, 1), 1.0)
         else:
-            tensordict["reward"] = torch.full((1, 1), 0.0)
-        return tensordict
+            next_tensordict["reward"] = torch.full((1, 1), 0.0)
+        return next_tensordict
 
-    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
+    def transform_reward_spec(self, reward_spec):
         """Transform the reward spec to include our custom reward.
 
         This method is required to override the reward spec since the environment
         is initially reward-agnostic.
 
         Args:
-            reward_spec (Composite): The original reward spec from the environment.
+            reward_spec: The original reward spec from the environment.
 
         Returns:
-            Composite: The transformed reward spec with our custom reward definition.
-                The reward will have shape (B, 1) where B is the batch size.
+            The transformed reward spec with our custom reward definition.
+            The reward will have shape (B, 1) where B is the batch size.
         """
         reward_spec["reward"] = Unbounded(
             shape=reward_spec.shape + (1,), dtype=torch.float32
@@ -190,18 +190,58 @@ env = env.append_transform(RewardTransform())
 # -----------------------------
 #
 # To make our interaction with tools more organized, we'll create a helper function
-# that executes tool actions and displays the results.
+# that simulates LLM responses and executes tool actions.
+#
+# In a real scenario, this would be handled by an LLM policy (like
+# :class:`~torchrl.modules.llm.policies.TransformersWrapper` or
+# :class:`~torchrl.modules.llm.policies.vLLMWrapper`). Here we simulate the
+# LLM's output manually to demonstrate the environment flow.
+#
+# The key insight is that the ChatEnv works with a :class:`~torchrl.data.llm.History`
+# object that tracks the conversation. The LLM policy:
+#
+# 1. Receives `history.prompt` (the conversation so far)
+# 2. Generates a response
+# 3. Sets `history.full` to the complete conversation (prompt + response)
+# 4. Sets `history.response` to just the new response
 
 
-def execute_tool_action(
+def simulate_llm_response(
     env: ChatEnv,
     current_state: TensorDict,
     action: str,
     verbose: bool = True,
 ) -> tuple[TensorDict, TensorDict]:
-    """Execute a tool action and show the formatted interaction."""
-    s = current_state.set("text_response", [action])
-    s, s_ = env.step_and_maybe_reset(s)
+    """Simulate an LLM response and step the environment.
+
+    This function mimics what an LLM policy would do: take the current
+    conversation state, generate a response, and return the updated state.
+
+    Args:
+        env: The chat environment.
+        current_state: Current tensordict with the conversation history.
+        action: The simulated LLM response text.
+        verbose: Whether to print the interaction.
+
+    Returns:
+        tuple: (s, s_) where s contains the full step result and s_ is the
+            next state (used as input to the next step).
+    """
+    # Create an assistant response as a History object
+    assistant_response = History(role="assistant", content=action)
+    # Add batch dimensions to match the environment's batch size
+    assistant_response = lazy_stack([assistant_response]).unsqueeze(-1)
+
+    # Get the current prompt and extend it with the response
+    prompt = current_state["history"].prompt
+    full = prompt.extend(assistant_response, dim=-1)
+
+    # Set the full history and response on the ChatHistory object
+    current_state["history"].full = full
+    current_state["history"].response = assistant_response
+
+    # Step the environment
+    s, s_ = env.step_and_maybe_reset(current_state)
 
     if verbose:
         print("\nLLM Action:")
@@ -209,7 +249,9 @@ def execute_tool_action(
         print(action)
         print("\nEnvironment Response:")
         print("--------------------")
-        torchrl_logger.info(s_["history"].apply_chat_template(tokenizer=env.tokenizer))
+        # Print the formatted history with the tool response
+        torchrl_logger.info(s_["history"].prompt.apply_chat_template(tokenizer=env.tokenizer))
+        print(f"Reward: {s['next', 'reward'].item()}")
 
     return s, s_
 
@@ -225,29 +267,23 @@ def execute_tool_action(
 
 reset = env.reset(
     TensorDict(
-        text=["What is the capital of France?"],
+        query=["What is the capital of France?"],
         batch_size=(1,),
     )
 )
 
 #####################################################################
 # Now we'll navigate to Google using the browser transform. The transform
-# expects actions in a specific JSON format wrapped in tool tags.
-# In practice, this action should be the output of our LLM which
-# will write the response string in the `"text_response"` key.
+# expects actions in a specific format: ``<tool>tool_name\n{json_args}\n</tool>``.
+# In practice, this action would be the output of our LLM policy.
 
-s, s_ = execute_tool_action(
+s, s_ = simulate_llm_response(
     env,
     reset,
-    """
-    Let me search for that:
-    <tool>browser
-    {
-        "action": "navigate",
-        "url": "https://google.com"
-    }
-    </tool><|im_end|>
-    """,
+    """Let me search for that:
+<tool>browser
+{"action": "navigate", "url": "https://google.com"}
+</tool>""",
 )
 
 #####################################################################
@@ -257,59 +293,40 @@ s, s_ = execute_tool_action(
 # With the browser open, we can now type our query and execute the search.
 # First, we'll type the search query into Google's search box.
 
-s, s_ = execute_tool_action(
+s, s_ = simulate_llm_response(
     env,
     s_,
-    """
-    Let me type the search query:
-    <tool>browser
-    {
-        "action": "type",
-        "selector": "[name='q']",
-        "text": "What is the capital of France?"
-    }
-    </tool><|im_end|>
-    """,
+    """Let me type the search query:
+<tool>browser
+{"action": "type", "selector": "[name='q']", "text": "What is the capital of France?"}
+</tool>""",
 )
 
 #####################################################################
 # Next, we'll click the search button to execute the search. Note how we
 # use CSS selectors to identify elements on the page.
 
-s, s_ = execute_tool_action(
+s, s_ = simulate_llm_response(
     env,
     s_,
-    """
-    Now let me click the search button:
-    <tool>browser
-    {
-        "action": "click",
-        "selector": "[name='btnK']"
-    }
-    </tool><|im_end|>
-    """,
+    """Now let me click the search button:
+<tool>browser
+{"action": "click", "selector": "[name='btnK']"}
+</tool>""",
 )
 
 #####################################################################
-# Step 5: Extracting Results
-# --------------------------
+# Step 5: Providing the Answer
+# ----------------------------
 #
-# Finally, we'll extract the search results from the page. The browser transform
-# can extract both text content and HTML from specified elements.
+# Finally, the LLM provides the answer based on the search results.
+# This triggers the reward transform to assign a reward of 2.0 since
+# the answer contains "Paris".
 
-s, s_ = execute_tool_action(
+s, s_ = simulate_llm_response(
     env,
     s_,
-    """
-    Let me extract the results:
-    <tool>browser
-    {
-        "action": "extract",
-        "selector": "#search",
-        "extract_type": "text"
-    }
-    </tool><|im_end|>
-    """,
+    """Based on the search results, the capital of France is Paris.""",
 )
 
 #####################################################################
@@ -326,11 +343,16 @@ env.close()
 #
 # The key concepts are:
 #
-# 1. Understanding TorchRL's LLM environment composition
-# 2. Creating and appending tool transforms
-# 3. Formatting tool responses and LLM interactions
-# 4. Handling tool execution and state management
-# 5. Integrating with LLM wrappers (vLLM, Transformers)
+# 1. **ChatEnv**: The base environment that manages conversation state using
+#    :class:`~torchrl.data.llm.History` objects
+# 2. **Tool Transforms**: Like :class:`~torchrl.envs.llm.BrowserTransform` that
+#    execute tools and inject results back into the conversation
+# 3. **Reward Transforms**: Custom transforms that assign rewards based on
+#    conversation content
+# 4. **History Management**: Understanding how `history.prompt`, `history.full`,
+#    and `history.response` work together in the step cycle
 #
-# See the :ref:`ref_llms` tutorial for more information on how to build tool-enabled
-# environments with TorchRL.
+# In a real application, you would replace the `simulate_llm_response` helper
+# with an actual LLM policy. See the :ref:`ref_llms` documentation for examples
+# of using :class:`~torchrl.modules.llm.policies.TransformersWrapper` and
+# :class:`~torchrl.modules.llm.policies.vLLMWrapper` with these environments.

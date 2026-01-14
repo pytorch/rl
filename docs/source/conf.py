@@ -78,7 +78,7 @@ extensions = [
 
 intersphinx_mapping = {
     "torch": ("https://pytorch.org/docs/stable/", None),
-    "tensordict": ("https://pytorch.github.io/tensordict/", None),
+    "tensordict": ("https://docs.pytorch.org/tensordict/stable/", None),
     # "torchrl": ("https://pytorch.org/rl/", None),
     "torchaudio": ("https://pytorch.org/audio/stable/", None),
     "torchtext": ("https://pytorch.org/text/stable/", None),
@@ -110,7 +110,7 @@ sphinx_gallery_conf = {
     "download_all_examples": True,
     "abort_on_example_error": True,
     # "show_memory": True,
-    "plot_gallery": True,
+    "plot_gallery": "False",
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
     "write_computation_times": True,
     # "compress_images": ("images", "thumbnails"),

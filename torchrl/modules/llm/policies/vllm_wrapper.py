@@ -194,13 +194,16 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
-        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.
-        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See `Batching`_ below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
+        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
 
-    .. _ref_batching:
-        Batching is a feature that allows the module to process multiple inputs in a single call.
+    .. _Batching:
+
+    **Batching**
+
+    Batching is a feature that allows the module to process multiple inputs in a single call.
         It is designed to work in a multi-threaded environment.
         To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
         If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
@@ -282,8 +285,8 @@ class vLLMWrapper(LLMWrapperBase):
         collector: The collector associated with the module, if it exists.
 
     .. seealso::
-        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
-        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`
+        - :class:`~torchrl.modules.llm.policies.TransformersWrapper`
     """
 
     def __init__(
