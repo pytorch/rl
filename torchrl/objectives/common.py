@@ -606,6 +606,21 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         """
         if value_type is None:
             value_type = self.default_value_estimator
+        
+        if isinstance(value_type, ValueEstimatorBase):
+            self._value_estimator = value_type
+            self.value_type = type(value_type)
+            return self
+        
+        if isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase):
+            if "device" not in hyperparams:
+                device = self._default_device
+                if device is not None:
+                    hyperparams["device"] = device
+            self._value_estimator = value_type(**hyperparams)
+            self.value_type = value_type
+            return self
+
         self.value_type = value_type
         if value_type == ValueEstimators.TD1:
             raise NotImplementedError(
