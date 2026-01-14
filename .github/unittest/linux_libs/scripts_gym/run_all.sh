@@ -66,6 +66,7 @@ uv pip install "pybind11[global]"
 # 7. Install tensordict
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
+    uv pip install pyvers
     uv pip install git+https://github.com/pytorch/tensordict.git --no-deps
 else
     uv pip install tensordict
