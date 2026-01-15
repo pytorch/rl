@@ -135,7 +135,7 @@ from torchrl.modules import (
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_ale = importlib.util.find_spec("ale_py") is not None
-_has_mujoco = importlib.util.find_spec("mujoco") is not None
+_has_mujoco = importlib.util.find_spec("mujoco") is not None or importlib.util.find_spec("mujoco_py") is not None
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
     CLIFFWALKING_VERSIONED,

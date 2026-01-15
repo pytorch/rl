@@ -133,7 +133,8 @@ uv pip install \
     hydra-core \
     patchelf \
     pyopengl==3.1.0 \
-    coverage
+    coverage \
+    ale_py
 
 # 11. Setup Atari ROMs
 printf "* Setting up Atari ROMs\n"
