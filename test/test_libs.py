@@ -5344,8 +5344,8 @@ class TestIsaacLab:
         # Check that done obs are None
         assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
 
+@pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
 class TestProcgen:
-    @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
     @pytest.mark.parametrize("envname", ["coinrun", "starpilot"])
     def test_procgen_envs_available(self, envname):
         from torchrl.envs.libs.procgen import ProcgenEnv
