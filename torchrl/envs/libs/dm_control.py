@@ -352,6 +352,7 @@ class DMControlEnv(DMControlWrapper):
     Args:
         env_name (str): name of the environment.
         task_name (str): name of the task.
+        num_envs (int, optional): number of parallel environments. Defaults to 1.
 
     Keyword Args:
         from_pixels (bool, optional): if ``True``, an attempt to return the pixel
@@ -407,16 +408,44 @@ class DMControlEnv(DMControlWrapper):
             is_shared=False)
         >>> print(env.available_envs)
         [('acrobot', ['swingup', 'swingup_sparse']), ('ball_in_cup', ['catch']), ('cartpole', ['balance', 'balance_sparse', 'swingup', 'swingup_sparse', 'three_poles', 'two_poles']), ('cheetah', ['run']), ('finger', ['spin', 'turn_easy', 'turn_hard']), ('fish', ['upright', 'swim']), ('hopper', ['stand', 'hop']), ('humanoid', ['stand', 'walk', 'run', 'run_pure_state']), ('manipulator', ['bring_ball', 'bring_peg', 'insert_ball', 'insert_peg']), ('pendulum', ['swingup']), ('point_mass', ['easy', 'hard']), ('reacher', ['easy', 'hard']), ('swimmer', ['swimmer6', 'swimmer15']), ('walker', ['stand', 'walk', 'run']), ('dog', ['fetch', 'run', 'stand', 'trot', 'walk']), ('humanoid_CMU', ['run', 'stand', 'walk']), ('lqr', ['lqr_2_1', 'lqr_6_2']), ('quadruped', ['escape', 'fetch', 'run', 'walk']), ('stacker', ['stack_2', 'stack_4'])]
-
+        >>> # For parallel environments
+        >>> def main():
+        >>>     env_parallel = DMControlEnv(env_name="cheetah", task_name="run", num_envs=4)
+        >>>     td = env_parallel.reset()
+        >>>     print(td)
+        >>>     td = env_parallel.rand_step()
+        >>>     print(td["next", "reward"])
+        >>> if __name__ == "__main__":
+        >>>     main()
     """
 
-    def __init__(self, env_name, task_name, **kwargs):
+    def __new__(cls, env_name, task_name, num_envs=1, **kwargs):
+        if num_envs > 1:
+            from torchrl.envs import ParallelEnv, EnvCreator
+
+            def make_env():
+                return cls(
+                    env_name=env_name,
+                    task_name=task_name,
+                    num_envs=1,   # force base env
+                    **kwargs,
+                )
+            
+            return ParallelEnv(num_envs, EnvCreator(make_env))
+        else:
+            return super().__new__(cls)
+
+    def __init__(self, env_name, task_name, num_envs=1, **kwargs):
         if not _has_dmc:
             raise ImportError(
                 "dm_control python package was not found. Please install this dependency."
             )
+
+        self.num_envs = num_envs
+
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
+
         super().__init__(**kwargs)
 
     def _build_env(
