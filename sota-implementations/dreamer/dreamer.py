@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import contextlib
+import functools
+import importlib.util
 import time
 
 import hydra
@@ -30,6 +32,7 @@ from torch.amp import GradScaler
 from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
+from torchrl.envs.llm.transforms import PolicyVersion
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
@@ -46,6 +49,19 @@ def main(cfg: DictConfig):  # noqa: F821
     device = _default_device(cfg.networks.device)
     assert device.type == "cuda", "Dreamer only supports CUDA devices"
 
+    # Early check for video dependencies before starting training
+    if cfg.logger.video:
+        missing_deps = []
+        if importlib.util.find_spec("moviepy") is None:
+            missing_deps.append("moviepy (pip install moviepy)")
+        if importlib.util.find_spec("torchvision") is None:
+            missing_deps.append("torchvision (pip install torchvision)")
+        if missing_deps:
+            raise ImportError(
+                f"Video logging requires: {', '.join(missing_deps)}\n"
+                "Alternatively, disable video logging with: logger.video=False"
+            )
+
     # Create logger
     exp_name = generate_exp_name("Dreamer", cfg.logger.exp_name)
     logger = None
@@ -54,8 +70,15 @@ def main(cfg: DictConfig):  # noqa: F821
             logger_type=cfg.logger.backend,
             logger_name="dreamer_logging",
             experiment_name=exp_name,
-            wandb_kwargs={"mode": cfg.logger.mode},  # "config": cfg},
+            wandb_kwargs={
+                "mode": cfg.logger.mode,
+                "project": cfg.logger.project,
+            },
         )
+        # Log hyperparameters using wandb.config.update() with OmegaConf resolution
+        # This properly resolves interpolations like ${env.name} and uses the official wandb API
+        if hasattr(logger, "log_hparams"):
+            logger.log_hparams(cfg)
 
     # make_environments returns (train_env_factory, test_env) for async collection
     train_env_factory, test_env = make_environments(
@@ -103,23 +126,21 @@ def main(cfg: DictConfig):  # noqa: F821
         value_model, discount_loss=True, gamma=cfg.optimization.gamma
     )
 
-    # Make async multi-collector (uses env factory for worker processes)
-    # Device allocation: cuda:0 for training, cuda:1+ for collectors (if multi-GPU)
-    collector = make_collector(cfg, train_env_factory, policy, training_device=device)
-
     # Make replay buffer with minimal sample-time transforms
+    # Note: Buffer must be created BEFORE collector for true async collection
     batch_size = cfg.replay_buffer.batch_size
     batch_length = cfg.replay_buffer.batch_length
     buffer_size = cfg.replay_buffer.buffer_size
     scratch_dir = cfg.replay_buffer.scratch_dir
     prefetch = cfg.replay_buffer.prefetch
+    profiling_enabled = cfg.profiling.enabled
     replay_buffer = make_replay_buffer(
         batch_size=batch_size,
         batch_seq_len=batch_length,
         buffer_size=buffer_size,
         buffer_scratch_dir=scratch_dir,
         device=device,
-        prefetch=prefetch if not (profiling_enabled := cfg.profiling.enabled) else None,
+        prefetch=prefetch if not profiling_enabled else None,
         pixel_obs=cfg.env.from_pixels,
         grayscale=cfg.env.grayscale,
         image_size=cfg.env.image_size,
@@ -132,9 +153,55 @@ def main(cfg: DictConfig):  # noqa: F821
         image_size=cfg.env.image_size,
     )
 
-    # Training loop
-    collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    # Create policy version tracker for async collection
+    # This tracks policy versions so we can correlate collected data with policy updates
+    policy_version = PolicyVersion(version_type="int")
+
+    # Make async multi-collector with replay buffer for true async collection
+    # Device allocation: cuda:0 for training, cuda:1+ for collectors (if multi-GPU)
+    collector = make_collector(
+        cfg,
+        train_env_factory,
+        policy,
+        training_device=device,
+        replay_buffer=replay_buffer,
+        storage_transform=storage_transform,
+        track_policy_version=policy_version,
+    )
+
+    # Enable collector worker profiling if configured
+    if profiling_enabled and cfg.profiling.collector.enabled:
+        torchrl_logger.info(
+            f"Enabling collector profiling: workers={cfg.profiling.collector.workers}, "
+            f"num_rollouts={cfg.profiling.collector.num_rollouts}, "
+            f"warmup_rollouts={cfg.profiling.collector.warmup_rollouts}, "
+            f"init_random_frames_override={cfg.profiling.collector.init_random_frames_override}"
+        )
+        collector.enable_profile(
+            workers=list(cfg.profiling.collector.workers),
+            num_rollouts=cfg.profiling.collector.num_rollouts,
+            warmup_rollouts=cfg.profiling.collector.warmup_rollouts,
+            save_path=cfg.profiling.collector.trace_file,
+            activities=["cpu", "cuda"] if cfg.profiling.profile_cuda else ["cpu"],
+            record_shapes=cfg.profiling.record_shapes,
+            profile_memory=cfg.profiling.profile_memory,
+            with_stack=cfg.profiling.with_stack,
+            with_flops=cfg.profiling.with_flops,
+        )
+
+    # Training config
+    total_optim_steps = cfg.optimization.total_optim_steps
+    log_every = cfg.optimization.log_every
+    grad_clip = cfg.optimization.grad_clip
+    eval_every = cfg.logger.eval_every
+    eval_rollout_steps = cfg.logger.eval_rollout_steps
+
+    # Override total_optim_steps if profiling is enabled
+    if profiling_enabled:
+        total_optim_steps = cfg.profiling.total_optim_steps
+
+    # Training loop - progress bar tracks optimization steps
+    pbar = tqdm.tqdm(total=total_optim_steps, desc="Optim steps")
 
     # Make optimizer (fused=True for faster GPU execution)
     use_fused = device.type == "cuda"
@@ -166,12 +233,6 @@ def main(cfg: DictConfig):  # noqa: F821
         scaler1 = GradScaler()
         scaler2 = GradScaler()
         scaler3 = GradScaler()
-
-    init_random_frames = cfg.collector.init_random_frames
-    optim_steps_per_batch = cfg.optimization.optim_steps_per_batch
-    grad_clip = cfg.optimization.grad_clip
-    eval_iter = cfg.logger.eval_iter
-    eval_rollout_steps = cfg.logger.eval_rollout_steps
 
     # Enable TensorFloat32 for better performance on Ampere+ GPUs
     if device.type == "cuda":
@@ -215,170 +276,211 @@ def main(cfg: DictConfig):  # noqa: F821
         compile_warmup = 0
 
     # Throughput tracking
-    t_iter_start = time.time()
+    t_log_start = time.time()
 
     # Profiling setup (encapsulated in helper class)
     profiler = DreamerProfiler(cfg, device, pbar, compile_warmup=compile_warmup)
 
-    for i, tensordict in enumerate(collector):
-        # Note: Collection time is implicitly measured by the collector's iteration
-        # The time between loop iterations that isn't training is effectively collection time
-        with timeit("collect/preproc"):
-            pbar.update(tensordict.numel())
-            current_frames = tensordict.numel()
-            collected_frames += current_frames
+    # Start async collection - collector fills the buffer in background
+    torchrl_logger.info("Starting async collection...")
+    torchrl_logger.debug(f"Collector type: {type(collector).__name__}")
+    torchrl_logger.debug(f"Number of collector workers: {cfg.collector.num_collectors}")
+    collector.start()
+    torchrl_logger.debug("collector.start() completed")
 
-            ep_reward = tensordict.get("episode_reward")[..., -1, 0]
-            # Apply storage transforms (ToTensorImage, Resize, GrayScale) once at extend-time
-            tensordict_cpu = tensordict.cpu()
-            if storage_transform is not None:
-                tensordict_cpu = storage_transform(tensordict_cpu)
-            replay_buffer.extend(tensordict_cpu)
+    # Wait for enough samples to start training
+    # The collector handles init_random_frames internally, but we also wait here
+    # to ensure the buffer has enough data before we start sampling.
+    # Use init_random_frames_override when collector profiling is enabled
+    if profiling_enabled and cfg.profiling.collector.enabled:
+        min_frames_to_start = cfg.profiling.collector.init_random_frames_override
+        torchrl_logger.info(
+            f"Collector profiling: overriding init_random_frames to {min_frames_to_start}"
+        )
+    else:
+        min_frames_to_start = cfg.collector.init_random_frames
+    torchrl_logger.info(
+        f"Waiting for {min_frames_to_start} initial frames before training..."
+    )
+    while replay_buffer.write_count < min_frames_to_start:
+        time.sleep(0.1)
 
-        if collected_frames >= init_random_frames:
-            for _ in range(optim_steps_per_batch):
-                # sample from replay buffer
-                with timeit("train/sample"), record_function("## train/sample ##"):
-                    sampled_tensordict = replay_buffer.sample().reshape(
-                        -1, batch_length
-                    )
-                    if profiling_enabled:
-                        torch.cuda.synchronize()
+    torchrl_logger.info(
+        f"Collected {replay_buffer.write_count} frames (random frames phase complete: {min_frames_to_start} frames). "
+        f"Starting training..."
+    )
+    torchrl_logger.info(
+        "NOTE: From now on, collectors will use the policy instead of random actions. "
+        "Policy outputs keys like 'encoded_latents', 'loc', 'scale' that weren't present during random collection."
+    )
 
-                # update world model
-                with timeit("train/world_model-forward"), record_function(
-                    "## world_model/forward ##"
-                ):
-                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
-                    torch.compiler.cudagraph_mark_step_begin()
-                    with torch.autocast(
-                        device_type=device.type,
-                        dtype=autocast_dtype,
-                    ) if autocast_dtype else contextlib.nullcontext():
-                        assert (
-                            sampled_tensordict.device.type == "cuda"
-                        ), "sampled_tensordict should be on CUDA"
-                        model_loss_td, sampled_tensordict = world_model_loss(
-                            sampled_tensordict
-                        )
-                        loss_world_model = (
-                            model_loss_td["loss_model_kl"]
-                            + model_loss_td["loss_model_reco"]
-                            + model_loss_td["loss_model_reward"]
-                        )
+    # Track frames for FPS calculation over logging interval
+    frames_at_log_start = replay_buffer.write_count
 
-                with timeit("train/world_model-backward"), record_function(
-                    "## world_model/backward ##"
-                ):
-                    world_model_opt.zero_grad()
-                    if autocast_dtype:
-                        scaler1.scale(loss_world_model).backward()
-                        scaler1.unscale_(world_model_opt)
-                    else:
-                        loss_world_model.backward()
-                    torchrl_logger.debug("world_model_loss backward OK")
-                    world_model_grad = clip_grad_norm_(
-                        world_model.parameters(), grad_clip
-                    )
-                    if autocast_dtype:
-                        scaler1.step(world_model_opt)
-                        scaler1.update()
-                    else:
-                        world_model_opt.step()
+    # Main training loop - iterate over optimization steps
+    for optim_step in range(total_optim_steps):
+        # Update progress bar every step
+        pbar.update(1)
 
-                # update actor network
-                with timeit("train/actor-forward"), record_function(
-                    "## actor/forward ##"
-                ):
-                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
-                    torch.compiler.cudagraph_mark_step_begin()
-                    with torch.autocast(
-                        device_type=device.type, dtype=autocast_dtype
-                    ) if autocast_dtype else contextlib.nullcontext():
-                        actor_loss_td, sampled_tensordict = actor_loss(
-                            sampled_tensordict.reshape(-1)
-                        )
+        # Debug logging every 100 steps
+        if optim_step % 100 == 0:
+            cuda_mem_allocated = torch.cuda.memory_allocated(device) / (1024**3)
+            cuda_mem_reserved = torch.cuda.memory_reserved(device) / (1024**3)
+            torchrl_logger.debug(
+                f"optim_step={optim_step}: "
+                f"buffer_count={replay_buffer.write_count}, "
+                f"cuda_allocated={cuda_mem_allocated:.2f}GB, "
+                f"cuda_reserved={cuda_mem_reserved:.2f}GB"
+            )
 
-                with timeit("train/actor-backward"), record_function(
-                    "## actor/backward ##"
-                ):
-                    actor_opt.zero_grad()
-                    if autocast_dtype:
-                        scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                        scaler2.unscale_(actor_opt)
-                    else:
-                        actor_loss_td["loss_actor"].backward()
-                    torchrl_logger.debug("actor_loss backward OK")
-                    actor_model_grad = clip_grad_norm_(
-                        actor_model.parameters(), grad_clip
-                    )
-                    if autocast_dtype:
-                        scaler2.step(actor_opt)
-                        scaler2.update()
-                    else:
-                        actor_opt.step()
+        # sample from replay buffer
+        with timeit("train/sample"), record_function("## train/sample ##"):
+            sampled_tensordict = replay_buffer.sample().reshape(-1, batch_length)
+            if profiling_enabled:
+                torch.cuda.synchronize()
 
-                # update value network
-                with timeit("train/value-forward"), record_function(
-                    "## value/forward ##"
-                ):
-                    # Mark step begin for CUDAGraph to prevent tensor overwrite issues
-                    torch.compiler.cudagraph_mark_step_begin()
-                    with torch.autocast(
-                        device_type=device.type, dtype=autocast_dtype
-                    ) if autocast_dtype else contextlib.nullcontext():
-                        value_loss_td, sampled_tensordict = value_loss(
-                            sampled_tensordict
-                        )
+        # update world model
+        with timeit("train/world_model-forward"), record_function(
+            "## world_model/forward ##"
+        ):
+            # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+            torch.compiler.cudagraph_mark_step_begin()
+            with torch.autocast(
+                device_type=device.type,
+                dtype=autocast_dtype,
+            ) if autocast_dtype else contextlib.nullcontext():
+                assert (
+                    sampled_tensordict.device.type == "cuda"
+                ), "sampled_tensordict should be on CUDA"
+                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
+                loss_world_model = (
+                    model_loss_td["loss_model_kl"]
+                    + model_loss_td["loss_model_reco"]
+                    + model_loss_td["loss_model_reward"]
+                )
 
-                with timeit("train/value-backward"), record_function(
-                    "## value/backward ##"
-                ):
-                    value_opt.zero_grad()
-                    if autocast_dtype:
-                        scaler3.scale(value_loss_td["loss_value"]).backward()
-                        scaler3.unscale_(value_opt)
-                    else:
-                        value_loss_td["loss_value"].backward()
-                    torchrl_logger.debug("value_loss backward OK")
-                    critic_model_grad = clip_grad_norm_(
-                        value_model.parameters(), grad_clip
-                    )
-                    if autocast_dtype:
-                        scaler3.step(value_opt)
-                        scaler3.update()
-                    else:
-                        value_opt.step()
+        with timeit("train/world_model-backward"), record_function(
+            "## world_model/backward ##"
+        ):
+            world_model_opt.zero_grad()
+            if autocast_dtype:
+                scaler1.scale(loss_world_model).backward()
+                scaler1.unscale_(world_model_opt)
+            else:
+                loss_world_model.backward()
+            torchrl_logger.debug("world_model_loss backward OK")
+            world_model_grad = clip_grad_norm_(world_model.parameters(), grad_clip)
+            if autocast_dtype:
+                scaler1.step(world_model_opt)
+                scaler1.update()
+            else:
+                world_model_opt.step()
 
-                # Step profiler (returns True if profiling complete)
-                if profiler.step():
-                    break
+        # update actor network
+        with timeit("train/actor-forward"), record_function("## actor/forward ##"):
+            # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+            torch.compiler.cudagraph_mark_step_begin()
+            with torch.autocast(
+                device_type=device.type, dtype=autocast_dtype
+            ) if autocast_dtype else contextlib.nullcontext():
+                actor_loss_td, sampled_tensordict = actor_loss(
+                    sampled_tensordict.reshape(-1)
+                )
 
-            # Check if profiling is complete and we should exit
-            if profiler.should_exit():
-                torchrl_logger.info("Profiling complete. Exiting training loop.")
-                break
+        with timeit("train/actor-backward"), record_function("## actor/backward ##"):
+            actor_opt.zero_grad()
+            if autocast_dtype:
+                scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                scaler2.unscale_(actor_opt)
+            else:
+                actor_loss_td["loss_actor"].backward()
+            torchrl_logger.debug("actor_loss backward OK")
+            actor_model_grad = clip_grad_norm_(actor_model.parameters(), grad_clip)
+            if autocast_dtype:
+                scaler2.step(actor_opt)
+                scaler2.update()
+            else:
+                actor_opt.step()
 
-        # Compute throughput metrics
-        t_iter_end = time.time()
-        iter_time = t_iter_end - t_iter_start
+        # update value network
+        with timeit("train/value-forward"), record_function("## value/forward ##"):
+            # Mark step begin for CUDAGraph to prevent tensor overwrite issues
+            torch.compiler.cudagraph_mark_step_begin()
+            with torch.autocast(
+                device_type=device.type, dtype=autocast_dtype
+            ) if autocast_dtype else contextlib.nullcontext():
+                value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
-        # FPS: Frames (env steps) collected per second
-        fps = current_frames / iter_time if iter_time > 0 else 0
+        with timeit("train/value-backward"), record_function("## value/backward ##"):
+            value_opt.zero_grad()
+            if autocast_dtype:
+                scaler3.scale(value_loss_td["loss_value"]).backward()
+                scaler3.unscale_(value_opt)
+            else:
+                value_loss_td["loss_value"].backward()
+            torchrl_logger.debug("value_loss backward OK")
+            critic_model_grad = clip_grad_norm_(value_model.parameters(), grad_clip)
+            if autocast_dtype:
+                scaler3.step(value_opt)
+                scaler3.update()
+            else:
+                value_opt.step()
 
-        metrics_to_log = {"reward": ep_reward.mean().item()}
-        if collected_frames >= init_random_frames:
+        # Step profiler (returns True if profiling complete)
+        if profiler.step():
+            break
+
+        # Check if profiling is complete and we should exit
+        if profiler.should_exit():
+            torchrl_logger.info("Profiling complete. Exiting training loop.")
+            break
+
+        # Log metrics periodically (every log_every optim steps)
+        if (optim_step + 1) % log_every == 0:
+            # Track collected frames from buffer write count
+            collected_frames = replay_buffer.write_count
+            frames_collected_this_interval = collected_frames - frames_at_log_start
+
+            # Compute throughput metrics
+            t_log_end = time.time()
+            log_interval_time = t_log_end - t_log_start
+
             # SPS: Samples (batch elements) processed per second
-            # Each optim step processes batch_size samples
-            total_samples = optim_steps_per_batch * batch_size
-            sps = total_samples / iter_time if iter_time > 0 else 0
+            total_samples = log_every * batch_size
+            sps = total_samples / log_interval_time if log_interval_time > 0 else 0
 
             # UPS: Updates (gradient steps) per second
             # 3 updates per optim step (world_model, actor, value)
-            total_updates = optim_steps_per_batch * 3
-            ups = total_updates / iter_time if iter_time > 0 else 0
+            total_updates = log_every * 3
+            ups = total_updates / log_interval_time if log_interval_time > 0 else 0
 
-            loss_metrics = {
+            # FPS: Frames collected per second (measured from buffer over logging interval)
+            fps = (
+                frames_collected_this_interval / log_interval_time
+                if log_interval_time > 0
+                else 0
+            )
+
+            # OPS: Optim steps per second
+            ops = log_every / log_interval_time if log_interval_time > 0 else 0
+
+            # OPF: Optim steps per frame (ratio of training to collection)
+            opf = (optim_step + 1) / collected_frames if collected_frames > 0 else 0
+
+            # Update progress bar with throughput metrics
+            pbar.set_postfix(
+                fps=f"{fps:.1f}",
+                ops=f"{ops:.1f}",
+                opf=f"{opf:.2f}",
+                frames=collected_frames,
+            )
+
+            # Get reward stats from sampled data (since we don't iterate over collector directly)
+            sampled_reward = sampled_tensordict.get(("next", "reward"))
+            reward_mean = sampled_reward.mean().item()
+            reward_std = sampled_reward.std().item()
+
+            metrics = {
                 "loss_model_kl": model_loss_td["loss_model_kl"].item(),
                 "loss_model_reco": model_loss_td["loss_model_reco"].item(),
                 "loss_model_reward": model_loss_td["loss_model_reward"].item(),
@@ -387,30 +489,48 @@ def main(cfg: DictConfig):  # noqa: F821
                 "world_model_grad": world_model_grad,
                 "actor_model_grad": actor_model_grad,
                 "critic_model_grad": critic_model_grad,
+                # Reward stats from sampled batch
+                "train/reward_mean": reward_mean,
+                "train/reward_std": reward_std,
                 # Throughput metrics
                 "throughput/fps": fps,  # Frames per second (collection)
+                "throughput/ops": ops,  # Optim steps per second
+                "throughput/opf": opf,  # Optim steps per frame
                 "throughput/sps": sps,  # Samples per second (training)
                 "throughput/ups": ups,  # Updates per second (gradient steps)
-                "throughput/iter_time": iter_time,  # Total iteration time
+                "throughput/log_interval_time": log_interval_time,
+                # Collection tracking (not a target, just for monitoring)
+                "collected_frames": collected_frames,
+                # Policy version tracking
+                "policy_version": policy_version.version,
                 # Detailed timing from timeit (some metrics may be empty when compiling)
                 **timeit.todict(prefix="time"),
             }
-            metrics_to_log.update(loss_metrics)
-        else:
-            # During random collection phase, only log FPS
-            metrics_to_log["throughput/fps"] = fps
-            metrics_to_log["throughput/iter_time"] = iter_time
 
-        if logger is not None:
-            log_metrics(logger, metrics_to_log, collected_frames)
+            if logger is not None:
+                log_metrics(logger, metrics, collected_frames)
 
-        # Reset timer for next iteration
-        t_iter_start = time.time()
+            # Reset timer and frame counter for next logging interval
+            t_log_start = time.time()
+            frames_at_log_start = collected_frames
 
-        policy[1].step(current_frames)
-        collector.update_policy_weights_()
-        # Evaluation
-        if (i % eval_iter) == 0:
+            # Update policy weights in collector (for async collection)
+            with timeit("train/weight_update") as weight_update_timer:
+                torchrl_logger.debug(
+                    f"optim_step={optim_step}: Starting weight update..."
+                )
+                policy[1].step(frames_collected_this_interval)
+                collector.update_policy_weights_()
+                # Increment policy version after weight update
+                collector.increment_version()
+                torchrl_logger.debug(
+                    f"optim_step={optim_step}: Weight update completed in "
+                    f"{weight_update_timer.elapsed():.3f}s, "
+                    f"policy_version={policy_version.version}"
+                )
+
+        # Evaluation (every eval_every optimization steps)
+        if (optim_step + 1) % eval_every == 0:
             # Real env
             with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
                 eval_rollout = test_env.rollout(
@@ -419,11 +539,13 @@ def main(cfg: DictConfig):  # noqa: F821
                     auto_cast_to_device=True,
                     break_when_any_done=True,
                 )
-                test_env.apply(dump_video)
+                test_env.apply(
+                    functools.partial(dump_video, step=replay_buffer.write_count)
+                )
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 eval_metrics = {"eval/reward": eval_reward}
                 if logger is not None:
-                    log_metrics(logger, eval_metrics, collected_frames)
+                    log_metrics(logger, eval_metrics, replay_buffer.write_count)
             # Simulated env
             if model_based_env_eval is not None:
                 with set_exploration_type(
@@ -439,16 +561,18 @@ def main(cfg: DictConfig):  # noqa: F821
                         .exclude("next", "action")
                         .to(device),
                     )
-                    model_based_env_eval.apply(dump_video)
+                    model_based_env_eval.apply(
+                        functools.partial(dump_video, step=replay_buffer.write_count)
+                    )
                     eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                     eval_metrics = {"eval/simulated_reward": eval_reward}
                     if logger is not None:
-                        log_metrics(logger, eval_metrics, collected_frames)
+                        log_metrics(logger, eval_metrics, replay_buffer.write_count)
 
     if not test_env.is_closed:
         test_env.close()
-    # Note: train envs are managed by the collector workers
-    collector.shutdown()
+    # Shutdown async collector (use async_shutdown since we used start())
+    collector.async_shutdown()
 
     del test_env
     del collector
