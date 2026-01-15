@@ -185,14 +185,14 @@ printf "* Running tests for different gym versions\n"
 # Test gym 0.13 (already installed)
 printf "* Testing gym 0.13\n"
 run_tests
-uv pip uninstall -y gym atari-py
+uv pip uninstall gym atari-py
 
 # Test gym 0.19 (broken, install without dependencies)
 printf "* Testing gym 0.19\n"
 uv pip install wheel==0.38.4
 uv pip install gym==0.19
 run_tests
-uv pip uninstall -y gym wheel
+uv pip uninstall gym wheel
 
 # Test gym 0.20
 printf "* Testing gym 0.20\n"
@@ -200,34 +200,34 @@ uv pip install wheel==0.38.4
 uv pip install 'gym[atari]==0.20'
 uv pip install ale-py==0.7
 run_tests
-uv pip uninstall -y gym ale-py wheel
+uv pip uninstall gym ale-py wheel
 
 # Test gym 0.25
 printf "* Testing gym 0.25\n"
 uv pip install 'gym[atari]==0.25'
 run_tests
-uv pip uninstall -y gym
+uv pip uninstall gym
 
 # Test gym 0.26
 printf "* Testing gym 0.26\n"
 uv pip install 'gym[atari,accept-rom-license]==0.26'
 uv pip install gym-super-mario-bros
 run_tests
-uv pip uninstall -y gym gym-super-mario-bros
+uv pip uninstall gym gym-super-mario-bros
 
 # Test gymnasium 0.27 and 0.28
 for GYM_VERSION in '0.27' '0.28'; do
     printf "* Testing gymnasium ${GYM_VERSION}\n"
     uv pip install "gymnasium[atari,ale-py]==${GYM_VERSION}"
     run_tests
-    uv pip uninstall -y gymnasium ale-py
+    uv pip uninstall gymnasium ale-py
 done
 
 # Test gymnasium >=1.1.0
 printf "* Testing gymnasium >=1.1.0\n"
 uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
 run_tests
-uv pip uninstall -y gymnasium mo-gymnasium gymnasium-robotics ale-py
+uv pip uninstall gymnasium mo-gymnasium gymnasium-robotics ale-py
 
 # Test latest gymnasium
 printf "* Testing latest gymnasium\n"
