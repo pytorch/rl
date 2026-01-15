@@ -121,6 +121,7 @@ from torchrl.envs.libs.unity_mlagents import (
     UnityMLAgentsWrapper,
 )
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
+from torchrl.envs.libs.procgen import ProcgenEnv
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
@@ -5348,29 +5349,20 @@ class TestIsaacLab:
 class TestProcgen:
     @pytest.mark.parametrize("envname", ["coinrun", "starpilot"])
     def test_procgen_envs_available(self, envname):
-        from torchrl.envs.libs.procgen import ProcgenEnv
-
         # availability check
         assert envname in ProcgenEnv.available_envs
 
     def test_procgen_invalid_env_raises(self):
-        from torchrl.envs.libs.procgen import ProcgenEnv
-        import pytest
-
         with pytest.raises(ValueError):
             ProcgenEnv("this_env_does_not_exist")
 
     def test_procgen_num_envs_batch_size(self):
-        from torchrl.envs.libs.procgen import ProcgenEnv
         env = ProcgenEnv("coinrun", num_envs=3)
         td = env.reset()
         assert td["observation"].shape[0] == 3
         env.close()
 
     def test_procgen_seeding_is_deterministic(self):
-        from torchrl.envs.libs.procgen import ProcgenEnv
-        import torch
-
         e1 = ProcgenEnv("coinrun", num_envs=2)
         e2 = ProcgenEnv("coinrun", num_envs=2)
         e1.set_seed(0)
@@ -5382,7 +5374,6 @@ class TestProcgen:
         e2.close()
 
     def test_procgen_step_keys_and_shapes(self):
-        from torchrl.envs.libs.procgen import ProcgenEnv
         env = ProcgenEnv("coinrun", num_envs=2)
         env.reset()
         td = env.rand_step()
@@ -5393,8 +5384,6 @@ class TestProcgen:
 
     @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
     def test_procgen_env_creation_and_reset(self):
-        from torchrl.envs.libs.procgen import ProcgenEnv
-
         env = ProcgenEnv("coinrun", num_envs=4)
         td = env.reset()
         # ensure batch size corresponds to num_envs
@@ -5402,8 +5391,6 @@ class TestProcgen:
 
     @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
     def test_procgen_env_step(self):
-        from torchrl.envs.libs.procgen import ProcgenEnv
-
         env = ProcgenEnv("coinrun", num_envs=2)
         env.reset()
         out = env.rand_step()
