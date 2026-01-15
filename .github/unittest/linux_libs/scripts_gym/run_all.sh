@@ -13,10 +13,8 @@ apt-get install -y --no-install-recommends libglfw3 libgl1-mesa-glx libosmesa6 l
 apt-get install -y --no-install-recommends libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 apt-get install -y --no-install-recommends librhash0 x11proto-dev cmake
 
-# Add deadsnakes PPA for Python 3.10
-add-apt-repository ppa:deadsnakes/ppa -y
-apt-get update
-apt-get install -y --no-install-recommends python3.10 python3.10-dev python3.10-venv python3.10-distutils
+# Install Python 3.10 (Ubuntu 22.04 has Python 3.10 as default)
+apt-get install -y --no-install-recommends python3 python3-dev python3-venv python3-pip
 
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
