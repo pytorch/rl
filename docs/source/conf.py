@@ -144,7 +144,7 @@ sphinx_gallery_conf = {
     "download_all_examples": True,
     "abort_on_example_error": True,
     # "show_memory": True,
-    "plot_gallery": "False",
+    "plot_gallery": True,
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
     "write_computation_times": True,
     # "compress_images": ("images", "thumbnails"),
