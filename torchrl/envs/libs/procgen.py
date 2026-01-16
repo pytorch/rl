@@ -5,7 +5,6 @@ import warnings
 from typing import Optional, List
 
 import torch
-import procgen
 from tensordict import TensorDict
 
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
