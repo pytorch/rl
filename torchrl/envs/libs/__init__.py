@@ -27,7 +27,6 @@ from .robohive import RoboHiveEnv
 from .smacv2 import SMACv2Env, SMACv2Wrapper
 from .unity_mlagents import UnityMLAgentsEnv, UnityMLAgentsWrapper
 from .vmas import VmasEnv, VmasWrapper
-from .procgen import ProcgenEnv, ProcgenWrapper
 
 __all__ = [
     "BraxEnv",
@@ -53,8 +52,6 @@ __all__ = [
     "OpenSpielWrapper",
     "PettingZooEnv",
     "PettingZooWrapper",
-    "ProcgenEnv",
-    "ProcgenWrapper",
     "RoboHiveEnv",
     "SMACv2Env",
     "SMACv2Wrapper",
