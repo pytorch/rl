@@ -186,16 +186,17 @@ run_tests
 uv pip uninstall gym atari-py
 
 # Test gym 0.19 (broken, install without dependencies)
+# Use --no-build-isolation to use our pinned setuptools version (fixes extras_require error)
 printf "* Testing gym 0.19\n"
 uv pip install wheel==0.38.4
-uv pip install gym==0.19
+uv pip install gym==0.19 --no-build-isolation
 run_tests
 uv pip uninstall gym wheel
 
 # Test gym 0.20
 printf "* Testing gym 0.20\n"
 uv pip install wheel==0.38.4
-uv pip install 'gym[atari]==0.20'
+uv pip install 'gym[atari]==0.20' --no-build-isolation
 uv pip install ale-py==0.7
 run_tests
 uv pip uninstall gym ale-py wheel
