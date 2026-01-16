@@ -17,6 +17,11 @@ __all__ = ["ProcgenWrapper", "ProcgenEnv"]
 
 _has_procgen = importlib.util.find_spec("procgen") is not None
 
+if _has_procgen:
+    import procgen  # type: ignore
+else:
+    procgen = None  # type: ignore
+
 def _get_procgen_envs() -> List[str]:
     if not _has_procgen:
         raise ImportError("procgen is not installed.")
