@@ -2,13 +2,13 @@ matplotlib
 numpy
 sphinx-copybutton
 sphinx-gallery
-sphinx===5.0.0
+sphinx>=5.0.0,<8.0.0
 Jinja2==3.1.4
 sphinx-autodoc-typehints
 sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
 sphinxcontrib-htmlhelp
-pytorch-sphinx-theme2 @ git+https://github.com/pytorch/pytorch_sphinx_theme.git
+pytorch-sphinx-theme
 myst-parser
 docutils
 sphinx_design
@@ -16,7 +16,7 @@ sphinx_design
 torchvision
 dm_control>=1.0.0
 mujoco>=3.0.0,<3.3.6
-gymnasium[classic_control,atari]
+gymnasium[classic_control,atari,mujoco]
 pygame
 tqdm
 ipython

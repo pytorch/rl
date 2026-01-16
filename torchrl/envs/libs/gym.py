@@ -164,15 +164,34 @@ class set_gym_backend(_DecoratorContextManager):
         self._call()
 
     def __enter__(self):
-        # we save a complete list of setters as well as whether they should be set.
-        # we want the full list because we want to be able to nest the calls to set_gym_backend.
-        # we also want to keep track of which ones are set to reproduce what was set before.
-        self._setters_saved = copy(implement_for._implementations)
+        global DEFAULT_GYM
+        # Save the current DEFAULT_GYM so we can restore it on exit
+        self._default_gym_saved = DEFAULT_GYM
         self._call()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        implement_for.reset(setters_dict=self._setters_saved)
-        delattr(self, "_setters_saved")
+        global DEFAULT_GYM
+        # Restore the previous DEFAULT_GYM
+        saved_gym = self._default_gym_saved
+        DEFAULT_GYM = saved_gym
+        delattr(self, "_default_gym_saved")
+        # Re-activate the implementations for the original backend
+        # If saved_gym was None, we need to determine the default backend
+        # by calling gym_backend() which will initialize DEFAULT_GYM
+        if saved_gym is None:
+            # Initialize DEFAULT_GYM with the default backend (gymnasium first, then gym)
+            saved_gym = gym_backend()
+        # Re-apply the original backend's implementations
+        for setter in copy(implement_for._setters):
+            check_module = (
+                callable(setter.module_name)
+                and setter.module_name.__name__ == saved_gym.__name__
+            ) or setter.module_name == saved_gym.__name__
+            check_version = setter.check_version(
+                saved_gym.__version__, setter.from_version, setter.to_version
+            )
+            if check_module and check_version:
+                setter.module_set()
 
     def clone(self):
         # override this method if your children class takes __init__ parameters
