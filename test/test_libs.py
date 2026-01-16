@@ -1943,6 +1943,28 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
+    def test_delayed_num_envs_recorded_and_batched(self):
+        """Ensure DMControlEnv records delayed num_envs and batched() produces ParallelEnv."""
+        env = DMControlEnv("cheetah", "run", num_envs=3)
+        assert hasattr(env, "_delayed_num_envs")
+        assert int(env._delayed_num_envs) == 3
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        assert not isinstance(env, ParallelEnv)
+        penv = env.batched(use_buffers=False)
+        assert isinstance(penv, ParallelEnv)
+        assert penv.batch_size == torch.Size([3])
+
+    def test_set_seed_and_reset_works(self):
+        """Smoke test that setting seed and reset works (seed forwarded into build)."""
+        env = DMControlEnv("cheetah", "run")
+        final_seed = env.set_seed(0)
+        assert final_seed is not None
+        td = env.reset()
+        from tensordict import TensorDict
+
+        assert isinstance(td, TensorDict)
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
