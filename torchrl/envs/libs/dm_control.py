@@ -24,6 +24,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import GymLikeEnv
 from torchrl.envs.utils import _classproperty
+from torchrl.envs.common import _EnvPostInit
 
 if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
@@ -114,6 +115,25 @@ def _robust_to_tensor(array: float | np.ndarray) -> torch.Tensor:
     else:
         return torch.as_tensor(array)
 
+class _DMControlMeta(_EnvPostInit):
+    def __call__(cls, *args, num_envs: int | None = None, **kwargs):
+        # determine num_envs from explicit kw, kwargs, or positional args
+        if num_envs is None:
+            if "num_envs" in kwargs:
+                num_envs = kwargs.pop("num_envs")
+            elif len(args) >= 3:
+                num_envs = args[2]
+            else:
+                num_envs = 1
+
+        if cls.__name__ == "DMControlEnv" and num_envs is not None and int(num_envs) > 1:
+            inner_kwargs = kwargs.copy()
+            inner_kwargs["num_envs"] = 1
+            env_inst = super().__call__(*args, **inner_kwargs)
+            setattr(env_inst, "_delayed_num_envs", int(num_envs))
+            return env_inst
+
+        return super().__call__(*args, **kwargs)
 
 class DMControlWrapper(GymLikeEnv):
     """DeepMind Control lab environment wrapper.
@@ -205,10 +225,37 @@ class DMControlWrapper(GymLikeEnv):
             kwargs["env"] = env
         super().__init__(**kwargs)
 
+    def batched(self, num_envs: int | None = None, **parallel_kwargs):
+        """Convert this env into a `ParallelEnv`.
+
+        If this instance was created with a delayed `num_envs`, that value is
+        used unless `num_envs` is provided. Stored `parallel_kwargs` from the
+        constructor (if any) are merged with the ones passed to this method;
+        explicit args here take precedence.
+        """
+        from torchrl.envs import ParallelEnv, EnvCreator
+
+        n = int(num_envs or getattr(self, "_delayed_num_envs", 1))
+
+        # retrieve constructor kwargs to recreate envs inside the parallel
+        ctor_kwargs = getattr(self, "_constructor_kwargs", {}).copy()
+        # env-specific positional identifiers
+        env_name = ctor_kwargs.pop("env_name", None) or getattr(self, "env_name", None)
+        task_name = ctor_kwargs.pop("task_name", None) or getattr(self, "task_name", None)
+
+        def make_env():
+            return self.__class__(env_name, task_name, **ctor_kwargs)
+
+        merged_parallel_kwargs = {}
+        merged_parallel_kwargs.update(getattr(self, "_delayed_parallel_kwargs", {}) or {})
+        merged_parallel_kwargs.update(parallel_kwargs or {})
+
+        return ParallelEnv(n, EnvCreator(make_env), **merged_parallel_kwargs)
+
     def _build_env(
         self,
         env,
-        _seed: int | None = None,
+        _seed: int | None,
         from_pixels: bool = False,
         render_kwargs: dict | None = None,
         pixels_only: bool = False,
@@ -342,7 +389,7 @@ class DMControlWrapper(GymLikeEnv):
         )
 
 
-class DMControlEnv(DMControlWrapper):
+class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
     """DeepMind Control lab environment wrapper.
 
     The DeepMind control library can be found here: https://github.com/deepmind/dm_control.
@@ -353,6 +400,7 @@ class DMControlEnv(DMControlWrapper):
         env_name (str): name of the environment.
         task_name (str): name of the task.
         num_envs (int, optional): number of parallel environments. Defaults to 1.
+        parallel_kwargs (dict, optional): keyword arguments for ParallelEnv when num_envs > 1.
 
     Keyword Args:
         from_pixels (bool, optional): if ``True``, an attempt to return the pixel
@@ -412,23 +460,7 @@ class DMControlEnv(DMControlWrapper):
         >>> penv = DMControlEnv("cheetah", "run", num_envs=4, parallel_kwargs={"serial_for_single": True})
     """
 
-    def __new__(cls, env_name, task_name, num_envs=1, *, parallel_kwargs: dict | None = None, **kwargs):
-        if num_envs > 1:
-            from torchrl.envs import ParallelEnv, EnvCreator
-
-            def make_env():
-                return cls(
-                    env_name=env_name,
-                    task_name=task_name,
-                    num_envs=1,   # force base env
-                    **kwargs,
-                )
-            
-            return ParallelEnv(num_envs, EnvCreator(make_env), **(parallel_kwargs or {}))
-        else:
-            return super().__new__(cls)
-
-    def __init__(self, env_name, task_name, num_envs=1, **kwargs):
+    def __init__(self, env_name, task_name, **kwargs):
         if not _has_dmc:
             raise ImportError(
                 "dm_control python package was not found. Please install this dependency."
@@ -472,6 +504,7 @@ class DMControlEnv(DMControlWrapper):
         env = suite.load(env_name, task_name, task_kwargs=kwargs)
         return super()._build_env(
             env,
+            _seed=_seed,
             from_pixels=from_pixels,
             pixels_only=pixels_only,
             camera_id=camera_id,
@@ -503,3 +536,21 @@ class DMControlEnv(DMControlWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, task={self.task_name}, batch_size={self.batch_size})"
+
+    @classmethod
+    def make_parallel(cls, env_name, task_name, num_envs: int = 1, **kwargs):
+        """Create and return a `ParallelEnv` for this env class.
+
+        Any kwargs intended for the ParallelEnv may be passed under the
+        `parallel_kwargs` key. Remaining kwargs are forwarded to the env
+        constructor.
+        """
+        from torchrl.envs import ParallelEnv, EnvCreator
+
+        parallel_kwargs = kwargs.pop("parallel_kwargs", {}) or {}
+
+        def make_env():
+            inner_kwargs = kwargs.copy()
+            return cls(env_name, task_name, num_envs=1, **inner_kwargs)
+
+        return ParallelEnv(int(num_envs), EnvCreator(make_env), **parallel_kwargs)

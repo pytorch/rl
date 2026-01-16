@@ -2464,6 +2464,22 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             self.set_seed(self._seeds[0])
         return self
 
+    @classmethod
+    def make_parallel(cls, *args, num_envs: int = 1, **parallel_kwargs) -> "EnvBase":
+        """Backward-compatible factory matching EnvBase.make_parallel signature.
+
+        Supports calls like:
+          ParallelEnv.make_parallel(create_env_fn, num_envs=4, ...)
+        or the constructor form:
+          ParallelEnv.make_parallel(num_workers, create_env_fn, ...)
+        """
+        if len(args) >= 1 and isinstance(args[0], int):
+            return cls(*args, **parallel_kwargs)
+        if len(args) >= 1:
+            create_env_fn = args[0]
+            other_args = args[1:]
+            return cls(int(num_envs), create_env_fn, *other_args, **parallel_kwargs)
+        return cls(int(num_envs), **parallel_kwargs)
 
 def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
     return OrderedDict(
