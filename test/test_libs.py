@@ -140,11 +140,40 @@ _has_atari_py = False
 if importlib.util.find_spec("atari_py") is not None:
     try:
         import atari_py
+
         # Verify atari_py is functional by checking for required attribute
         _has_atari_py = hasattr(atari_py, "get_game_path")
     except Exception:
         _has_atari_py = False
-_has_mujoco = importlib.util.find_spec("mujoco") is not None or importlib.util.find_spec("mujoco_py") is not None
+_has_mujoco = (
+    importlib.util.find_spec("mujoco") is not None
+    or importlib.util.find_spec("mujoco_py") is not None
+)
+
+
+def _has_atari_for_gym():
+    """Check if Atari support is available for the current gym backend."""
+    return False
+
+
+@implement_for("gym", None, "0.25.0")
+def _has_atari_for_gym():  # noqa: F811
+    """For gym < 0.25: requires functional atari_py."""
+    return _has_atari_py
+
+
+@implement_for("gym", "0.25.0", None)
+def _has_atari_for_gym():  # noqa: F811
+    """For gym >= 0.25: requires ale_py."""
+    return _has_ale
+
+
+@implement_for("gymnasium")
+def _has_atari_for_gym():  # noqa: F811
+    """For gymnasium: requires ale_py."""
+    return _has_ale
+
+
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
     CLIFFWALKING_VERSIONED,
@@ -816,8 +845,8 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == PONG_VERSIONED() and not _has_ale and not _has_atari_py:
-            pytest.skip("Atari not available (missing ale_py/atari_py); skipping Atari gym test.")
+        if env_name == PONG_VERSIONED() and not _has_atari_for_gym():
+            pytest.skip("Atari not available for current gym version; skipping Atari gym test.")
         if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
@@ -940,8 +969,8 @@ class TestGym:
         ],
     )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == PONG_VERSIONED() and not _has_ale and not _has_atari_py:
-            pytest.skip("Atari not available (missing ale_py/atari_py); skipping Atari gym test.")
+        if env_name == PONG_VERSIONED() and not _has_atari_for_gym():
+            pytest.skip("Atari not available for current gym version; skipping Atari gym test.")
         if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
