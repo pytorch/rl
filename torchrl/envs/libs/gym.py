@@ -1281,7 +1281,18 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         self._seed_calls_reset = False
         self._env.seed(seed=seed)
 
-    @implement_for("gym", "0.19.0", None)
+    @implement_for("gym", "0.19.0", "0.21.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        # In gym 0.19-0.21, reset() doesn't accept seed kwarg yet,
+        # and VectorEnv.seed uses seeds= (plural) instead of seed=
+        self._seed_calls_reset = False
+        if hasattr(self._env, "num_envs"):
+            # Vector environment uses seeds= (plural)
+            self._env.seed(seeds=seed)
+        else:
+            self._env.seed(seed=seed)
+
+    @implement_for("gym", "0.21.0", None)
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         try:
             self.reset(seed=seed)
