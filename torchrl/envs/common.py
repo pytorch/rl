@@ -12,7 +12,7 @@ import weakref
 from collections.abc import Callable, Iterator
 from copy import deepcopy
 from functools import partial, wraps
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -749,6 +749,34 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         return self.full_action_spec.cardinality()
+
+    @classmethod
+    @abc.abstractmethod
+    def make_parallel(
+        cls,
+        create_env_fn,
+        *,
+        num_envs: int = 1,
+        create_env_kwargs: dict | Sequence[dict] | None = None,
+        pin_memory: bool = False,
+        share_individual_td: bool | None = None,
+        shared_memory: bool = True,
+        memmap: bool = False,
+        policy_proof: Callable | None = None,
+        device: DEVICE_TYPING | None = None,
+        allow_step_when_done: bool = False,
+        num_threads: int | None = None,
+        num_sub_threads: int = 1,
+        serial_for_single: bool = False,
+        non_blocking: bool = False,
+        mp_start_method: str | None = None,
+        use_buffers: bool | None = None,
+        consolidate: bool = True,
+        daemon: bool = False,
+        **parallel_kwargs,
+    ) -> "EnvBase":
+        """Factory method exposing ParallelEnv-like signature for IDEs."""
+        raise NotImplementedError
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -2645,6 +2673,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
+            autoreset=bool(autoreset),
         )
 
     @implement_for("gym", None, "0.21", class_method=True)
@@ -2703,6 +2732,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             reward_threshold=reward_threshold,
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            disable_env_checker=disable_env_checker,
         )
 
     @implement_for("gymnasium", None, "1.0.0", class_method=True)
@@ -3647,6 +3678,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         This method allows to easily code non-stopping rollout functions.
 
         Examples:
+           
             >>> from torchrl.envs import ParallelEnv, GymEnv
             >>> def rollout(env, n):
             ...     data_ = env.reset()
