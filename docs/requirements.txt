@@ -8,7 +8,7 @@ sphinx-autodoc-typehints
 sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
 sphinxcontrib-htmlhelp
-pytorch_sphinx_theme @ git+https://github.com/pytorch/pytorch_sphinx_theme.git
+pytorch-sphinx-theme2 @ git+https://github.com/pytorch/pytorch_sphinx_theme.git
 myst-parser
 docutils
 sphinx_design
