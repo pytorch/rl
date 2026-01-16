@@ -132,9 +132,7 @@ class RewardTransform(Transform):
 
     """
 
-    def _step(
-        self, tensordict: TensorDict, next_tensordict: TensorDict
-    ) -> TensorDict:
+    def _step(self, tensordict: TensorDict, next_tensordict: TensorDict) -> TensorDict:
         """Process the tensordict and assign rewards based on the LLM's response.
 
         Args:
@@ -156,7 +154,9 @@ class RewardTransform(Transform):
             # Recall that rewards have a trailing singleton dimension.
             next_tensordict["reward"] = torch.full((1, 1), 2.0)
         # Check if we successfully reached the website
-        elif "google.com" in last_item.content and "success" in last_item.content.lower():
+        elif (
+            "google.com" in last_item.content and "success" in last_item.content.lower()
+        ):
             torchrl_logger.info("Reached the website google.com")
             next_tensordict["reward"] = torch.full((1, 1), 1.0)
         else:
@@ -250,7 +250,9 @@ def simulate_llm_response(
         print("\nEnvironment Response:")
         print("--------------------")
         # Print the formatted history with the tool response
-        torchrl_logger.info(s_["history"].prompt.apply_chat_template(tokenizer=env.tokenizer))
+        torchrl_logger.info(
+            s_["history"].prompt.apply_chat_template(tokenizer=env.tokenizer)
+        )
         print(f"Reward: {s['next', 'reward'].item()}")
 
     return s, s_

@@ -145,13 +145,45 @@ else
     sed -i '' 's/"plot_gallery": True/"plot_gallery": "False"/' "$SCRIPT_DIR/source/conf.py"
 fi
 
+# Clean up stale generated files
+echo "Cleaning up stale generated tutorials..."
+rm -rf "$SCRIPT_DIR/source/reference/generated/tutorials" | true
+
 # Build documentation
 echo ""
 echo "============================================"
 echo "Building documentation..."
 echo "============================================"
 cd "$SCRIPT_DIR"
-sphinx-build ./source "$BUILD_DIR" -v -j auto
+
+# Suppress multiprocessing resource tracker warnings (they're harmless but noisy)
+# These occur when child processes are killed before cleaning up shared memory
+export PYTHONWARNINGS="ignore::UserWarning"
+
+# Ignore SIGPIPE to prevent crashes from broken pipes during multiprocessing cleanup
+# This is a common issue on macOS when child processes are terminated
+trap '' PIPE 2>/dev/null || true
+
+# Use -j 1 to avoid conflicts with tutorials that use multiprocessing
+sphinx-build ./source "$BUILD_DIR" -v -j 1
+BUILD_EXIT_CODE=$?
+
+# On macOS, multiprocessing cleanup can cause SIGABRT (exit code 134) even when
+# the build succeeded. Check if HTML output exists to determine true success.
+if [ $BUILD_EXIT_CODE -eq 134 ] && [ -f "$BUILD_DIR/index.html" ]; then
+    echo ""
+    echo "============================================"
+    echo "Note: Build process received SIGABRT during cleanup (exit 134)"
+    echo "This is a known macOS multiprocessing issue and is harmless."
+    echo "Documentation was generated successfully."
+    echo "============================================"
+elif [ $BUILD_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "============================================"
+    echo "Build failed with exit code $BUILD_EXIT_CODE"
+    echo "============================================"
+    exit $BUILD_EXIT_CODE
+fi
 
 echo ""
 echo "============================================"

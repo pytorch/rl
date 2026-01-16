@@ -79,7 +79,9 @@ except NameError:
     is_sphinx = False
 
 try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+    multiprocessing.set_start_method(
+        "spawn" if is_sphinx else "fork", force=not is_sphinx
+    )
 except RuntimeError:
     pass
 
@@ -605,6 +607,7 @@ def parallel_env_constructor(
         create_env_fn=EnvCreator(lambda: make_env()),
         create_env_kwargs=None,
         pin_memory=False,
+        mp_start_method="fork" if is_fork else "spawn",
     )
     env = make_transformed_env(parallel_env)
     # we call `init_stats` for a limited number of steps, just to instantiate

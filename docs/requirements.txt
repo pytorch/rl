@@ -34,3 +34,5 @@ hydra-submitit-launcher
 transformers
 accelerate
 sentencepiece
+playwright
+ale-py>=0.9.0

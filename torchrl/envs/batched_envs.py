@@ -35,6 +35,7 @@ from torch import multiprocessing as mp
 
 from torchrl._utils import (
     _check_for_faulty_process,
+    _get_default_mp_start_method,
     _make_ordinal_device,
     logger as torchrl_logger,
     rl_warnings,
@@ -1513,7 +1514,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if self._mp_start_method is not None:
             ctx = mp.get_context(self._mp_start_method)
         else:
-            ctx = mp.get_context("spawn")
+            ctx = mp.get_context(_get_default_mp_start_method())
         # Use ctx.Process directly to ensure all multiprocessing primitives
         # (Queue, Pipe, Process, Event) come from the same context.
         # Warning filtering and num_threads are handled in the worker functions.
