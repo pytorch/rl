@@ -204,19 +204,21 @@ pip install --upgrade pip setuptools wheel  # restore latest versions
 
 # Test gym 0.25
 printf "* Testing gym 0.25\n"
-# Unset mujoco-py env vars (gym 0.25+ and gymnasium use new mujoco package)
+# Uninstall mujoco-py (gym 0.25+ uses new mujoco package for v4 envs)
+uv pip uninstall mujoco-py
+# Unset mujoco-py env vars
 unset MUJOCO_PY_MJKEY_PATH MUJOCO_PY_MUJOCO_PATH
 # Remove mujoco210 from LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | sed 's|[^:]*mujoco210[^:]*:*||g')
-uv pip install 'numpy<2.0'  # gym 0.25 is incompatible with numpy 2.x
-uv pip install 'gym[atari,mujoco]==0.25'
+uv pip install 'numpy>=1.21,<1.25'  # gym 0.25 needs older numpy for seeding compatibility
+uv pip install 'gym[atari]==0.25' mujoco
 run_tests
 uv pip uninstall gym mujoco
 
 # Test gym 0.26
 printf "* Testing gym 0.26\n"
-uv pip install 'numpy<2.0'  # gym 0.26 is incompatible with numpy 2.x
-uv pip install 'gym[atari,accept-rom-license,mujoco]==0.26'
+uv pip install 'numpy>=1.21,<1.25'  # gym 0.26 needs older numpy for seeding compatibility
+uv pip install 'gym[atari,accept-rom-license]==0.26' mujoco
 uv pip install gym-super-mario-bros
 run_tests
 uv pip uninstall gym gym-super-mario-bros mujoco
