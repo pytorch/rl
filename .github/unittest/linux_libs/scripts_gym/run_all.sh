@@ -197,7 +197,7 @@ pip install --upgrade pip setuptools wheel  # restore latest versions
 printf "* Testing gym 0.20\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
 pip install 'gym[atari]==0.20'
-pip install 'ale-py>=0.7,<0.8'
+pip install 'ale-py==0.7.4'
 run_tests
 pip uninstall -y gym ale-py wheel
 pip install --upgrade pip setuptools wheel  # restore latest versions
