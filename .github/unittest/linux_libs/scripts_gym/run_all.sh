@@ -185,22 +185,22 @@ printf "* Testing gym 0.13\n"
 run_tests
 uv pip uninstall gym atari-py
 
-# Test gym 0.19 (broken metadata, use pip with --no-build-isolation)
+# Test gym 0.19 (broken metadata, needs pip<24.1)
 printf "* Testing gym 0.19\n"
-pip install wheel==0.38.4 setuptools==65.3.0
-pip install gym==0.19 --no-build-isolation
+pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
+pip install gym==0.19
 run_tests
 pip uninstall -y gym wheel
-uv pip install setuptools wheel  # restore latest versions
+pip install --upgrade pip setuptools wheel  # restore latest versions
 
-# Test gym 0.20
+# Test gym 0.20 (also needs older pip for metadata issues)
 printf "* Testing gym 0.20\n"
-pip install wheel==0.38.4 setuptools==65.3.0
-pip install 'gym[atari]==0.20' --no-build-isolation
+pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
+pip install 'gym[atari]==0.20'
 pip install ale-py==0.7
 run_tests
 pip uninstall -y gym ale-py wheel
-uv pip install setuptools wheel  # restore latest versions
+pip install --upgrade pip setuptools wheel  # restore latest versions
 
 # Test gym 0.25
 printf "* Testing gym 0.25\n"
