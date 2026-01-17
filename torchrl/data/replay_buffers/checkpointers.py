@@ -298,7 +298,37 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
             raise RuntimeError("Cannot save a non-initialized storage.")
         metadata = {}
         _storage = storage._storage
+
+        is_full = getattr(storage, "_is_full", None)
+        last_cursor = getattr(storage, "_last_cursor", None)
+
+        def _compute_shift(last_cursor):
+            if last_cursor is None:
+                return None
+            if isinstance(last_cursor, slice):
+                return last_cursor.stop + 1
+            if isinstance(last_cursor, int):
+                return last_cursor + 1
+            if isinstance(last_cursor, torch.Tensor):
+                return last_cursor.reshape(-1)[-1].item() + 1
+            if isinstance(last_cursor, np.ndarray):
+                return last_cursor.reshape(-1)[-1].item() + 1
+            raise ValueError(f"Unrecognised last_cursor type {type(last_cursor)}.")
+        
+        shift = _compute_shift(last_cursor)
+
         for hook in self._save_hooks:
+            if hasattr(hook, "is_full"):
+                hook.is_full = bool(is_full)
+            if hasattr(hook, "shift"):
+                if shift is None:
+                    warnings.warn(
+                        "Could not determine storage shift from _last_cursor; defaulting shift=0 for save hook.",
+                        UserWarning,
+                    )
+                    hook.shift = 0
+                else:
+                    hook.shift = shift
             _storage = hook(_storage, path=path)
         if is_tensor_collection(_storage):
             if (
