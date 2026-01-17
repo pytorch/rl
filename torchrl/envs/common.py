@@ -9,10 +9,10 @@ import abc
 import re
 import warnings
 import weakref
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from copy import deepcopy
 from functools import partial, wraps
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -750,8 +750,58 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         return self.full_action_spec.cardinality()
 
+    def configure_parallel(
+        self,
+        *,
+        use_buffers: bool | None = None,
+        shared_memory: bool | None = None,
+        memmap: bool | None = None,
+        mp_start_method: str | None = None,
+        num_threads: int | None = None,
+        num_sub_threads: int | None = None,
+        non_blocking: bool | None = None,
+        daemon: bool | None = None,
+    ) -> EnvBase:
+        """Configure parallel execution parameters.
+
+        This method allows configuring parameters for parallel environment
+        execution before the environment is started. It is only effective
+        on :class:`~torchrl.envs.BatchedEnvBase` and its subclasses.
+
+        Args:
+            use_buffers (bool, optional): whether communication between workers should
+                occur via circular preallocated memory buffers.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map.
+            mp_start_method (str, optional): the multiprocessing start method.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+            non_blocking (bool, optional): if ``True``, device moves will be done using
+                the ``non_blocking=True`` option.
+            daemon (bool, optional): whether the processes should be daemonized.
+
+        Returns:
+            self: Returns self for method chaining.
+
+        Raises:
+            NotImplementedError: If called on an environment that does not support
+                parallel configuration.
+            RuntimeError: If called after the environment has already started.
+
+        Example:
+            >>> env = DMControlEnv("cheetah", "run", num_envs=4)
+            >>> env.configure_parallel(use_buffers=True, num_threads=2)
+            >>> env.reset()  # Environment starts here, configure_parallel no longer effective
+
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support configure_parallel. "
+            "This method is only available on BatchedEnvBase and its subclasses."
+        )
+
     @classmethod
-    @abc.abstractmethod
     def make_parallel(
         cls,
         create_env_fn,
@@ -774,9 +824,74 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         consolidate: bool = True,
         daemon: bool = False,
         **parallel_kwargs,
-    ) -> "EnvBase":
-        """Factory method exposing ParallelEnv-like signature for IDEs."""
-        raise NotImplementedError
+    ) -> EnvBase:
+        """Factory method to create a ParallelEnv from an environment creator.
+
+        This method provides a convenient way to create parallel environments
+        with the same signature as :class:`~torchrl.envs.ParallelEnv`.
+
+        Args:
+            create_env_fn (callable): A callable that creates an environment instance.
+            num_envs (int, optional): Number of parallel environments. Defaults to 1.
+            create_env_kwargs (dict or list of dicts, optional): kwargs to be used
+                with the environments being created.
+            pin_memory (bool, optional): Whether to pin memory. Defaults to False.
+            share_individual_td (bool, optional): if ``True``, a different tensordict
+                is created for every process/worker and a lazy stack is returned.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory. Defaults to True.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map. Defaults to False.
+            policy_proof (callable, optional): if provided, it'll be used to get
+                the list of tensors to return through step() and reset() methods.
+            device (str, int, torch.device, optional): The device of the batched
+                environment.
+            allow_step_when_done (bool, optional): Allow stepping when done.
+                Defaults to False.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+                Defaults to 1.
+            serial_for_single (bool, optional): if ``True``, creating a parallel
+                environment with a single worker will return a SerialEnv instead.
+                Defaults to False.
+            non_blocking (bool, optional): if ``True``, device moves will be done
+                using the ``non_blocking=True`` option. Defaults to False.
+            mp_start_method (str, optional): the multiprocessing start method.
+            use_buffers (bool, optional): whether communication between workers
+                should occur via circular preallocated memory buffers.
+            consolidate (bool, optional): Whether to consolidate tensordicts.
+                Defaults to True.
+            daemon (bool, optional): whether the processes should be daemonized.
+                Defaults to False.
+            **parallel_kwargs: Additional keyword arguments passed to ParallelEnv.
+
+        Returns:
+            EnvBase: A ParallelEnv (or SerialEnv if serial_for_single=True and num_envs=1).
+
+        """
+        from torchrl.envs import ParallelEnv
+
+        return ParallelEnv(
+            num_workers=num_envs,
+            create_env_fn=create_env_fn,
+            create_env_kwargs=create_env_kwargs,
+            pin_memory=pin_memory,
+            share_individual_td=share_individual_td,
+            shared_memory=shared_memory,
+            memmap=memmap,
+            policy_proof=policy_proof,
+            device=device,
+            allow_step_when_done=allow_step_when_done,
+            num_threads=num_threads,
+            num_sub_threads=num_sub_threads,
+            serial_for_single=serial_for_single,
+            non_blocking=non_blocking,
+            mp_start_method=mp_start_method,
+            use_buffers=use_buffers,
+            consolidate=consolidate,
+            daemon=daemon,
+            **parallel_kwargs,
+        )
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -3678,7 +3793,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         This method allows to easily code non-stopping rollout functions.
 
         Examples:
-           
             >>> from torchrl.envs import ParallelEnv, GymEnv
             >>> def rollout(env, n):
             ...     data_ = env.reset()
