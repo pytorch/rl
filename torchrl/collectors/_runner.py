@@ -230,7 +230,7 @@ def _main_async_collector(
             set_truncated=set_truncated,
             use_buffers=use_buffers,
             replay_buffer=replay_buffer,
-            extend_buffer=False,
+            extend_buffer=extend_buffer,
             traj_pool=traj_pool,
             trust_policy=trust_policy,
             compile_policy=compile_policy,
