@@ -5326,6 +5326,7 @@ class Hash(UnaryTransform):
             transform instantiation and these modifications will be reflected in
             the map. Missing hashes will be mapped to ``None``. Default: ``None``
 
+    Examples:
         >>> from torchrl.envs import GymEnv, UnaryTransform, Hash
         >>> env = GymEnv("Pendulum-v1")
         >>> # Add a string output
@@ -6749,7 +6750,7 @@ def _sum_left(val, dest):
 class gSDENoise(TensorDictPrimer):
     """A gSDE noise initializer.
 
-    See the :func:`~torchrl.modules.models.exploration.gSDEModule' for more info.
+    See the :func:`~torchrl.modules.models.exploration.gSDEModule` for more info.
     """
 
     def __init__(

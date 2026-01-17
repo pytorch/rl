@@ -208,6 +208,8 @@ class BatchedEnvBase(EnvBase):
 
     Those queries will return a list of length equal to the number of workers containing the
     values resulting from those queries.
+
+    Example:
         >>> env = ParallelEnv(3, my_env_fun)
         >>> custom_attribute_list = env.custom_attribute
         >>> custom_method_list = env.custom_method(*args)

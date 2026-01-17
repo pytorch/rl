@@ -121,7 +121,7 @@ class vLLMWrapper(LLMWrapperBase):
             - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
 
-                    .. warning:: This argument is under development and may change in the future.
+            .. warning:: This argument is under development and may change in the future.
 
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
@@ -236,16 +236,15 @@ class vLLMWrapper(LLMWrapperBase):
         - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
         - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
 
-        Example output structure for `input_mode="history"`:
-        ```
-        TensorDict(
-            text=Text(prompt=..., response=..., full=...),
-            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
-            tokens=Tokens(prompt=..., response=..., full=...),
-            log_probs=LogProbs(prompt=..., response=..., full=...),
-            history=ChatHistory(prompt=..., response=..., full=...)
-        )
-        ```
+        Example output structure for `input_mode="history"`::
+
+            TensorDict(
+                text=Text(prompt=..., response=..., full=...),
+                masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+                tokens=Tokens(prompt=..., response=..., full=...),
+                log_probs=LogProbs(prompt=..., response=..., full=...),
+                history=ChatHistory(prompt=..., response=..., full=...)
+            )
 
     Example:
         >>> from vllm import LLM

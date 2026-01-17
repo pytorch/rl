@@ -192,6 +192,11 @@ html_theme_options = {
     "logo_only": False,
     "analytics_id": "UA-117752657-2",
 }
+# Workaround for pytorch_sphinx_theme compatibility with newer Sphinx versions
+# The theme's layout.html references 'style' which was removed in Sphinx 7.0
+html_context = {
+    "style": "pytorch.css",
+}
 html_css_files = [
     "https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css",
     "css/custom.css",

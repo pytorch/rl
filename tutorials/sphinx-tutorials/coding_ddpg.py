@@ -119,7 +119,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #   method will receive a TensorDict as input that contains all the necessary
 #   information to return a loss value.
 #
-#   .. code-block::Python
+#   .. code-block:: python
 #
 #       >>> data = replay_buffer.sample()
 #       >>> loss_dict = loss_module(data)
@@ -134,7 +134,7 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #     optimizer for different sets of parameters for instance. Summing the losses
 #     can be simply done via
 #
-#     ..code - block::Python
+#     .. code-block:: python
 #
 #       >>> loss_val = sum(loss for key, loss in loss_dict.items() if key.startswith("loss_"))
 #
