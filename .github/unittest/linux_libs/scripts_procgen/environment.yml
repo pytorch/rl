@@ -14,7 +14,7 @@ dependencies:
     - setuptools
     - pyglet
     - pillow
-    - opencv
+    - opencv-python-headless
     - tensordict
     - pytest
     - pytest-xdist

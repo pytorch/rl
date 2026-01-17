@@ -113,6 +113,7 @@ from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
+from torchrl.envs.libs.procgen import ProcgenEnv, ProcgenWrapper
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.unity_mlagents import (
@@ -5398,6 +5399,110 @@ class TestProcgen:
         assert "observation" in out
         assert "reward" in out
         assert "done" in out
+
+@pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
+class TestProcgen:
+    @pytest.mark.parametrize("envname", ["coinrun", "starpilot"])
+    def test_procgen_envs_available(self, envname):
+        # availability check
+        assert envname in ProcgenEnv.available_envs
+
+    def test_procgen_invalid_env_raises(self):
+        with pytest.raises(ValueError):
+            ProcgenEnv("this_env_does_not_exist")
+
+    def test_procgen_num_envs_batch_size(self):
+        env = ProcgenEnv("coinrun", num_envs=3)
+        try:
+            td = env.reset()
+            assert td["observation"].shape[0] == 3
+        finally:
+            env.close()
+
+    def test_procgen_seeding_is_deterministic(self):
+        e1 = ProcgenEnv("coinrun", num_envs=2)
+        e2 = ProcgenEnv("coinrun", num_envs=2)
+        try:
+            e1.set_seed(0)
+            e2.set_seed(0)
+            t1 = e1.reset()
+            t2 = e2.reset()
+            assert torch.equal(t1["observation"], t2["observation"])
+        finally:
+            e1.close()
+            e2.close()
+
+    def test_procgen_step_keys_and_shapes(self):
+        env = ProcgenEnv("coinrun", num_envs=2)
+        try:
+            env.reset()
+            td = env.rand_step()
+            for k in ("observation", "reward", "done"):
+                assert k in td
+            assert td["observation"].shape[0] == 2
+        finally:
+            env.close()
+
+    def test_procgen_env_creation_and_reset(self):
+        env = ProcgenEnv("coinrun", num_envs=4)
+        try:
+            td = env.reset()
+            # ensure batch size corresponds to num_envs
+            assert td["observation"].shape[0] == 4
+        finally:
+            env.close()
+
+    def test_procgen_env_step(self):
+        env = ProcgenEnv("coinrun", num_envs=2)
+        try:
+            env.reset()
+            out = env.rand_step()
+            # basic checks on returned tensordict
+            assert "observation" in out
+            assert "reward" in out
+            assert "done" in out
+        finally:
+            env.close()
+
+    def test_procgen_check_env_specs(self):
+        env = ProcgenEnv("coinrun", num_envs=2)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    def test_procgen_wrapper(self):
+        import procgen as procgen_lib
+
+        raw_env = procgen_lib.ProcgenEnv(num_envs=2, env_name="coinrun")
+        env = ProcgenWrapper(env=raw_env)
+        try:
+            check_env_specs(env)
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
+            out = env.rand_step()
+            assert "observation" in out
+            assert "reward" in out
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("distribution_mode", ["easy", "hard"])
+    def test_procgen_distribution_mode(self, distribution_mode):
+        env = ProcgenEnv("coinrun", num_envs=2, distribution_mode=distribution_mode)
+        try:
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
+        finally:
+            env.close()
+
+    def test_procgen_start_level_num_levels(self):
+        env = ProcgenEnv("coinrun", num_envs=2, start_level=0, num_levels=10)
+        try:
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

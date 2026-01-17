@@ -22,7 +22,7 @@ conda deactivate && conda activate ./env
 # this workflow only tests the libs
 python -c "import procgen"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenSpiel --error-for-skips --runslow
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestProcgen --error-for-skips --runslow
 
 coverage combine -q
 coverage xml -i

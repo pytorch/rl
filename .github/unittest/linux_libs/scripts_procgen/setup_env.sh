@@ -8,6 +8,9 @@
 set -e
 set -v
 
+# default to Python 3.9 if not provided by CI
+PYTHON_VERSION="${PYTHON_VERSION:-3.9}"
+
 apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
