@@ -1,5 +1,7 @@
 .. currentmodule:: torchrl.data.replay_buffers
 
+.. _checkpoint-rb:
+
 Storage Backends
 ================
 

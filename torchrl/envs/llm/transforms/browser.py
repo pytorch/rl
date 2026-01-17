@@ -106,7 +106,7 @@ class BrowserTransform(SimpleToolTransform):
     This transform allows LLM agents to interact with web pages through a browser,
     supporting actions like navigation, clicking, typing, and extracting content.
 
-    For a complete example of how to use this transform, see the :ref:`llm_tools` tutorial.
+    For a complete example of how to use this transform, see the LLM Tools tutorial in the documentation.
 
     Args:
         allowed_domains (list[str], optional): List of allowed domains. If None, all domains are allowed.

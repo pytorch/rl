@@ -38,7 +38,7 @@ class DecisionTransformer(nn.Module):
         action_dim (int): dimension of the action space
         config (:obj:`~.DTConfig` or dict, optional): transformer architecture configuration,
             used to create the GPT2Config from transformers.
-            Defaults to :obj:`~.default_config`.
+            Defaults to ``default_config``.
 
 
     Example:

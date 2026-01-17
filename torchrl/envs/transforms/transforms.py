@@ -2031,8 +2031,8 @@ class ClipTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
 
     Keyword Args:
         low (scalar, optional): the lower bound of the clipped space.
@@ -2798,8 +2798,8 @@ class UnsqueezeTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
             Defaults to ``in_keys_in`` if not provided.
     """
 
@@ -2968,8 +2968,8 @@ class PermuteTransform(Transform):
         in_keys (list of NestedKeys): input entries (read).
         out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
             not provided.
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls. Defaults to ``in_keys_in`` if
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls. Defaults to ``in_keys_in`` if
             not provided.
 
     Examples:
@@ -3481,7 +3481,7 @@ class CatFrames(ObservationTransform):
 
     When used within a transformed environment,
     :class:`CatFrames` is a stateful class, and it can be reset to its native state by
-    calling the :meth:`~.reset` method. This method accepts tensordicts with a
+    calling the ``reset`` method. This method accepts tensordicts with a
     ``"_reset"`` entry that indicates which buffer to reset.
 
     Args:
@@ -5834,10 +5834,10 @@ class Stack(Transform):
     Args:
         in_keys (sequence of NestedKey): keys to be stacked.
         out_key (NestedKey): key of the resulting stacked entry.
-        in_key_inv (NestedKey, optional): key to unstack during :meth:`~.inv`
+        in_key_inv (NestedKey, optional): key to unstack during ``inv``
             calls. Default is ``None``.
         out_keys_inv (sequence of NestedKey, optional): keys of the resulting
-            unstacked entries after :meth:`~.inv` calls. Default is ``None``.
+            unstacked entries after ``inv`` calls. Default is ``None``.
         dim (int, optional): dimension to insert. Default is ``-1``.
         allow_positive_dim (bool, optional): if ``True``, positive dimensions
             are accepted.  Defaults to ``False``, ie. non-negative dimensions are
@@ -8439,7 +8439,7 @@ class InitTracker(Transform):
     """Reset tracker.
 
     This transform populates the step/reset tensordict with a reset tracker entry
-    that is set to ``True`` whenever :meth:`~.reset` is called.
+    that is set to ``True`` whenever ``reset`` is called.
 
     Args:
          init_key (NestedKey, optional): the key to be used for the tracker entry.
@@ -9404,8 +9404,8 @@ class SignTransform(Transform):
     Args:
         in_keys (list of NestedKeys): input entries (read)
         out_keys (list of NestedKeys): input entries (write)
-        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
-        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+        in_keys_inv (list of NestedKeys): input entries (read) during ``inv`` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during ``inv`` calls.
 
     Examples:
         >>> from torchrl.envs import GymEnv, TransformedEnv, SignTransform
