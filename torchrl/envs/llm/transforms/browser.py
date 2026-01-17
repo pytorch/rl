@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 from tensordict import TensorDictBase
 
-from torchrl.envs.llm.transforms.tools import MCPToolTransform
+from torchrl.envs.llm.transforms.tools import SimpleToolTransform
 
 # Schema for the browser tool
 BROWSER_SCHEMA = {
@@ -100,13 +100,13 @@ BROWSER_SCHEMA = {
 }
 
 
-class BrowserTransform(MCPToolTransform):
+class BrowserTransform(SimpleToolTransform):
     """A transform that enables web browsing capabilities.
 
     This transform allows LLM agents to interact with web pages through a browser,
     supporting actions like navigation, clicking, typing, and extracting content.
 
-    For a complete example of how to use this transform, see the :ref:`llm_tools` tutorial.
+    For a complete example of how to use this transform, see the LLM Tools tutorial in the documentation.
 
     Args:
         allowed_domains (list[str], optional): List of allowed domains. If None, all domains are allowed.
@@ -134,10 +134,10 @@ class BrowserTransform(MCPToolTransform):
         super().__init__(
             tools={"browser": self._execute_browser_action},
             tool_schemas={"browser": BROWSER_SCHEMA},
-            tokenizer=tokenizer,
             tool_name=tool_name,
             timeout=timeout,
         )
+        self.tokenizer = tokenizer
 
     async def _init_browser(self):
         """Initialize the browser if not already initialized."""

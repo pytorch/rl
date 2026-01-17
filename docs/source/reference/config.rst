@@ -433,11 +433,10 @@ Data Collection Configurations
     :toctree: generated/
     :template: rl_template_class.rst
 
-    DataCollectorConfig
-    SyncDataCollectorConfig
-    AsyncDataCollectorConfig
-    MultiSyncDataCollectorConfig
-    MultiaSyncDataCollectorConfig
+    CollectorConfig
+    AsyncCollectorConfig
+    MultiSyncCollectorConfig
+    MultiAsyncCollectorConfig
 
 Replay Buffer and Storage Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

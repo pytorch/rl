@@ -548,7 +548,7 @@ print(info)
 #   tensordict passed to the loss module, making it possible to update the
 #   weights without effort:
 #
-#   ..code - block::Python
+#   .. code-block:: python
 #
 #      >>> data = replay_buffer.sample()
 #      >>> loss_val = loss_module(data)

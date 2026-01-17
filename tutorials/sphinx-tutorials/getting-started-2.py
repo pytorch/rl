@@ -25,7 +25,7 @@ Getting started with model optimization
 #
 # The typical training loop therefore looks like this:
 #
-#   ..code - block::Python
+#   .. code-block:: python
 #
 #     >>> for i in range(n_collections):
 #     ...     data = get_next_batch(env, policy)

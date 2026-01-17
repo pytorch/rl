@@ -176,7 +176,7 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     ```
 
     _Solution_: Link conda to the right `libOpenGL.so` file (replace `/path/to/conda` and `mujoco_env` with the proper paths and names):
-    ```shelf
+    ```shell
     conda install -y -c conda-forge libglvnd-glx-cos7-x86_64 --force-reinstall
     conda install -y -c conda-forge xvfbwrapper --force-reinstall
     conda env config vars set LD_PRELOAD=/path/to/conda/envs/mujoco_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0

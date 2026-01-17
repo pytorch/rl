@@ -403,10 +403,12 @@ class DistributionalDQNLoss(LossModule):
         value_network (DistributionalQValueActor or nn.Module): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
+
             .. note::
-              Unlike :class:`DQNLoss`, this class does not currently support
-              custom value functions. The next value estimation is always
-              bootstrapped.
+               Unlike :class:`DQNLoss`, this class does not currently support
+               custom value functions. The next value estimation is always
+               bootstrapped.
+
         delay_value (bool): whether to duplicate the value network into a new
             target value network to create double DQN
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]

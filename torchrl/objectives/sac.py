@@ -75,7 +75,7 @@ class SACLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
         value_network (TensorDictModule, optional): V(s) parametric model.
@@ -1048,8 +1048,7 @@ class DiscreteSACLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha",
-       "alpha", "entropy"]``
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]``.
     The output keys can also be filtered using :meth:`DiscreteSACLoss.select_out_keys` method.
 
     Examples:

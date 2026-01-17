@@ -1530,7 +1530,9 @@ class LazyMemmapStorage(LazyTensorStorage):
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
         This will only work if the default :class:`~torchrl.data.TensorStorageCheckpointer` checkpointer is used.
-        Example:
+
+        Example::
+
             >>> from tensordict import TensorDict
             >>> from torchrl.data import TensorStorage, LazyMemmapStorage, ReplayBuffer
             >>> import tempfile

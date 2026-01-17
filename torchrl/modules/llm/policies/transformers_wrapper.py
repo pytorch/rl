@@ -70,7 +70,7 @@ class TransformersWrapper(LLMWrapperBase):
             - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
 
-                    .. warning:: This argument is under development and may change in the future.
+            .. warning:: This argument is under development and may change in the future.
 
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
@@ -149,13 +149,16 @@ class TransformersWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
-        batching (bool | None, optional): Whether to enable batching. See :ref:`ref_batching` below for more details.
-        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+        batching (bool | None, optional): Whether to enable batching. See `Batching`_ below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
+        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
 
-    .. _ref_batching:
-        Batching is a feature that allows the module to process multiple inputs in a single call.
+    .. _Batching:
+
+    **Batching**
+
+    Batching is a feature that allows the module to process multiple inputs in a single call.
         It is designed to work in a multi-threaded environment.
         To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
         If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
@@ -188,16 +191,15 @@ class TransformersWrapper(LLMWrapperBase):
         - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
         - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
 
-        Example output structure for `input_mode="history"`:
-        ```
-        TensorDict(
-            text=Text(prompt=..., response=..., full=...),
-            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
-            tokens=Tokens(prompt=..., response=..., full=...),
-            log_probs=LogProbs(prompt=..., response=..., full=...),
-            history=ChatHistory(prompt=..., response=..., full=...)
-        )
-        ```
+        Example output structure for `input_mode="history"`::
+
+            TensorDict(
+                text=Text(prompt=..., response=..., full=...),
+                masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+                tokens=Tokens(prompt=..., response=..., full=...),
+                log_probs=LogProbs(prompt=..., response=..., full=...),
+                history=ChatHistory(prompt=..., response=..., full=...)
+            )
 
     Example:
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -236,8 +238,8 @@ class TransformersWrapper(LLMWrapperBase):
         collector: The collector associated with the module, if it exists.
 
     .. seealso::
-        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
-        - :class:`~torchrl.modules.llm.policies.vLLMWrapper` (see :ref:`ref_vllm_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`
+        - :class:`~torchrl.modules.llm.policies.vLLMWrapper`
     """
 
     def __init__(

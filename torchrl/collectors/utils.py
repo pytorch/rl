@@ -369,7 +369,11 @@ def _make_meta_params(param):
 class _TrajectoryPool:
     def __init__(self, ctx=None, lock: bool = False):
         self.ctx = ctx
-        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int).share_memory_()
+        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int)
+        # Only use shared memory when multiprocessing context is provided
+        # This avoids issues with shared memory when the mp subsystem is in a bad state
+        if ctx is not None:
+            self._traj_id = self._traj_id.share_memory_()
         if ctx is None:
             self.lock = contextlib.nullcontext() if not lock else mp.RLock()
         else:

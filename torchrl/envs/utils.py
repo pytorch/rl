@@ -1140,8 +1140,10 @@ def _terminated_or_truncated(
         key (NestedKey, optional): where the aggregated result should be written.
             If ``None``, then the function will not write any key but just output
             whether any of the done values was true.
+
             .. note:: if a value is already present for the ``key`` entry,
-                the previous value will prevail and no update will be achieved.
+               the previous value will prevail and no update will be achieved.
+
         write_full_false (bool, optional): if ``True``, the reset keys will be
             written even if the output is ``False`` (ie, no done is ``True``
             in the provided data structure).
@@ -1265,8 +1267,10 @@ def terminated_or_truncated(
         key (NestedKey, optional): where the aggregated result should be written.
             If ``None``, then the function will not write any key but just output
             whether any of the done values was true.
+
             .. note:: if a value is already present for the ``key`` entry,
-                the previous value will prevail and no update will be achieved.
+               the previous value will prevail and no update will be achieved.
+
         write_full_false (bool, optional): if ``True``, the reset keys will be
             written even if the output is ``False`` (ie, no done is ``True``
             in the provided data structure).
