@@ -135,7 +135,45 @@ from torchrl.modules import (
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_ale = importlib.util.find_spec("ale_py") is not None
-_has_mujoco = importlib.util.find_spec("mujoco") is not None
+# Check for atari_py (used by older gym versions) and verify it's functional
+_has_atari_py = False
+if importlib.util.find_spec("atari_py") is not None:
+    try:
+        import atari_py
+
+        # Verify atari_py is functional by checking for required attribute
+        _has_atari_py = hasattr(atari_py, "get_game_path")
+    except Exception:
+        _has_atari_py = False
+_has_mujoco = (
+    importlib.util.find_spec("mujoco") is not None
+    or importlib.util.find_spec("mujoco_py") is not None
+)
+
+
+def _has_atari_for_gym():
+    """Check if Atari support is available for the current gym backend."""
+    return False
+
+
+@implement_for("gym", None, "0.25.0")
+def _has_atari_for_gym():  # noqa: F811
+    """For gym < 0.25: requires functional atari_py."""
+    return _has_atari_py
+
+
+@implement_for("gym", "0.25.0", None)
+def _has_atari_for_gym():  # noqa: F811
+    """For gym >= 0.25: requires ale_py."""
+    return _has_ale
+
+
+@implement_for("gymnasium")
+def _has_atari_for_gym():  # noqa: F811
+    """For gymnasium: requires ale_py."""
+    return _has_ale
+
+
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
     CLIFFWALKING_VERSIONED,
@@ -807,8 +845,10 @@ class TestGym:
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == PONG_VERSIONED() and not _has_ale:
-            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if env_name == PONG_VERSIONED() and not _has_atari_for_gym():
+            pytest.skip(
+                "Atari not available for current gym version; skipping Atari gym test."
+            )
         if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
@@ -931,8 +971,10 @@ class TestGym:
         ],
     )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
-        if env_name == PONG_VERSIONED() and not _has_ale:
-            pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
+        if env_name == PONG_VERSIONED() and not _has_atari_for_gym():
+            pytest.skip(
+                "Atari not available for current gym version; skipping Atari gym test."
+            )
         if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
@@ -1182,30 +1224,36 @@ class TestGym:
     @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
         "envname",
-        ["CartPole-v1", "HalfCheetah-v4"],
+        ["cp", "hc"],
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
+        if envname == "hc" and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         with set_gym_backend("gym"):
             gym = gym_backend()
-            # we can't use parametrize with implement_for
-            for envname in ["CartPole-v1", "HalfCheetah-v4"]:
-                env = GymWrapper(
-                    gym.vector.SyncVectorEnv(
-                        2 * [lambda envname=envname: gym.make(envname)]
-                    )
+            if envname == "hc":
+                envname = HALFCHEETAH_VERSIONED()
+            else:
+                envname = CARTPOLE_VERSIONED()
+            env = GymWrapper(
+                gym.vector.SyncVectorEnv(
+                    2 * [lambda envname=envname: gym.make(envname)]
                 )
-                assert env.batch_size == torch.Size([2])
-                check_env_specs(env)
-                env = GymWrapper(
-                    gym.vector.AsyncVectorEnv(
-                        2 * [lambda envname=envname: gym.make(envname)]
-                    )
+            )
+            assert env.batch_size == torch.Size([2])
+            check_env_specs(env)
+            env = GymWrapper(
+                gym.vector.AsyncVectorEnv(
+                    2 * [lambda envname=envname: gym.make(envname)]
                 )
-                assert env.batch_size == torch.Size([2])
-                check_env_specs(env)
-                env.close()
-                del env
+            )
+            assert env.batch_size == torch.Size([2])
+            check_env_specs(env)
+            env.close()
+            del env
 
     @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
@@ -1214,6 +1262,10 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
+        if envname == "hc" and not _has_mujoco:
+            pytest.skip(
+                "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
+            )
         gb = gym_backend()
         try:
             with set_gym_backend("gym"):
@@ -1236,7 +1288,7 @@ class TestGym:
                     )
                 env.close()
             del env
-            if envname != "CartPole-v1":
+            if "CartPole" not in envname:
                 with set_gym_backend("gym"):
                     env = GymEnv(envname, num_envs=2, from_pixels=True)
                     env.set_seed(0)
@@ -1250,7 +1302,7 @@ class TestGym:
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
         "envname",
-        ["CartPole-v1", "HalfCheetah-v4"],
+        ["cp", "hc"],
     )
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
         # skipping tests for older versions of gym
@@ -1259,7 +1311,7 @@ class TestGym:
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
         "envname",
-        ["CartPole-v1", "HalfCheetah-v4"],
+        ["cp", "hc"],
     )
     def test_vecenvs_env(self, envname):  # noqa: F811
         # skipping tests for older versions of gym
