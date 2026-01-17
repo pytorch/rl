@@ -102,7 +102,7 @@ Errors to look for that may be related to this misconception are the following:
 
 ## Common bugs
 - For bugs related to mujoco (incl. DeepMind Control suite and other libraries),
-  refer to the [MUJOCO_INSTALLATION](MUJOCO_INSTALLATION.md) file.
+  refer to the [MUJOCO_INSTALLATION](./MUJOCO_INSTALLATION.md) file.
 - `ValueError: bad value(s) in fds_to_keep`: this can have multiple reasons. One that is common in torchrl
   is that you are trying to send a tensor across processes that is a view of another tensor.
   For instance, when sending the tensor `b = tensor.expand(new_shape)` across processes, the reference to the original

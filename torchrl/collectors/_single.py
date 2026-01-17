@@ -215,8 +215,8 @@ class Collector(BaseCollector):
             number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
             ``frames_per_batch``, an exception is raised.
-             Endless collectors can be created by passing ``total_frames=-1``.
-             Defaults to ``-1`` (endless collector).
+            Endless collectors can be created by passing ``total_frames=-1``.
+            Defaults to ``-1`` (endless collector).
         device (int, str or torch.device, optional): The generic device of the
             collector. The ``device`` args fills any non-specified device: if
             ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or

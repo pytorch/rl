@@ -125,8 +125,8 @@ class SafeModule(TensorDictModule):
             output preserves type, device and batch-size). Defaults to `True`.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
-        be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
-        case, the 'params' (and 'buffers') keyword argument must be specified:
+    be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
+    case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
         >>> import torch

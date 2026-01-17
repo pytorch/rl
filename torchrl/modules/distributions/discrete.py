@@ -74,8 +74,8 @@ class OneHotCategorical(D.Categorical):
         grad_method (ReparamGradientStrategy, optional): strategy to gather
             reparameterized samples.
             ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients
-             by using the softmax valued log-probability as a proxy to the
-             sample gradients.
+            by using the softmax valued log-probability as a proxy to the
+            sample gradients.
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 

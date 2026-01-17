@@ -24,9 +24,12 @@ except NameError:
     is_sphinx = False
 
 try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
+    multiprocessing.set_start_method(
+        "spawn" if is_sphinx else "fork", force=not is_sphinx
+    )
 except RuntimeError:
     pass
+mp_context = "spawn" if is_sphinx else "fork"
 
 # sphinx_gallery_end_ignore
 
@@ -175,7 +178,7 @@ def env2_maker():
     )
 
 
-env = ParallelEnv(2, [env1_maker, env2_maker])
+env = ParallelEnv(2, [env1_maker, env2_maker], mp_start_method=mp_context)
 assert not env._single_task
 
 tdreset = env.reset()
