@@ -2479,6 +2479,7 @@ class TestEnvPool:
         )
         action = env.action_spec.rand()
         env.set_seed(seed)
+        torch.manual_seed(seed)  # Seed torch for reproducible random actions
         td0a = env.reset()
         td1a = env.step(td0a.clone().set("action", action))
         td2a = env.rollout(max_steps=10)
@@ -2491,6 +2492,7 @@ class TestEnvPool:
             N=N,
         )
         env.set_seed(seed)
+        torch.manual_seed(seed)  # Seed torch for reproducible random actions
         td0b = env.reset()
         td1b = env.step(td0b.clone().set("action", action))
         td2b = env.rollout(max_steps=10)

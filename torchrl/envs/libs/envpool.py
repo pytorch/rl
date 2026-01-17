@@ -166,8 +166,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_ = self._step_mdp(tensordict)
 
         # EnvPool auto-resets internally, so we skip calling reset().
-        # Just return tensordict_ as-is. Done envs will get reset observations
-        # on the next step() call automatically.
+        # However, we need to clear the done flags in tensordict_ since envpool
+        # has already reset those environments. The next step() will return
+        # the reset observations automatically.
+        for key in self.done_keys:
+            if key in tensordict_.keys(True):
+                tensordict_.set(key, torch.zeros_like(tensordict_.get(key)))
 
         return tensordict, tensordict_
 
