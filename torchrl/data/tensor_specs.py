@@ -3917,6 +3917,20 @@ class Categorical(TensorSpec):
         """
         if mask is not None:
             try:
+                mask = torch.as_tensor(mask, dtype=torch.bool, device=self.device)
+            except Exception:
+                pass
+            try:
+                if getattr(self.space, "n", None) is not None:
+                    n = int(self.space.n)
+                    # If mask total elements matches n but last dim isn't n, reshape to (n,)
+                    if mask.numel() == n and mask.ndim == 1 and mask.shape[-1] != n:
+                        mask = mask.reshape(n)
+                    elif mask.numel() == n and mask.ndim >= 1 and mask.shape != _remove_neg_shapes(*self.shape, n):
+                        mask = mask.reshape(n)
+            except Exception:
+                pass
+            try:
                 mask = mask.expand(_remove_neg_shapes(*self.shape, self.space.n))
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
