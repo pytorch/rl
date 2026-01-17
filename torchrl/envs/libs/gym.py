@@ -1869,13 +1869,19 @@ class GymEnv(GymWrapper):
             self.batch_size = torch.Size([num_envs, *self.batch_size])
         return env
 
-    @implement_for("gym", None, "0.25.1")
+    @implement_for("gym", None, "0.25.0")
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
-        # Do nothing for older gym versions.
+        # Do nothing for older gym versions (render_mode was introduced in 0.25.0).
         pass
 
-    @implement_for("gym", "0.25.1", None)
+    @implement_for("gym", "0.25.0", None)
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        if from_pixels:
+            kwargs.setdefault("render_mode", "rgb_array")
+
+    @implement_for("gymnasium", None, "0.27.0")
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        # gymnasium < 0.27.0 also supports render_mode (forked from gym 0.26+)
         if from_pixels:
             kwargs.setdefault("render_mode", "rgb_array")
 
