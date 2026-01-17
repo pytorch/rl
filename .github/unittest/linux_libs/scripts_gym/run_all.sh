@@ -202,21 +202,19 @@ run_tests
 pip uninstall -y gym ale-py wheel
 pip install --upgrade pip setuptools wheel  # restore latest versions
 
-# Test gym 0.25
+# Test gym 0.25 (uses mujoco-py for HalfCheetah-v3)
 printf "* Testing gym 0.25\n"
-# Uninstall mujoco-py (gym 0.25+ uses new mujoco package for v4 envs)
-uv pip uninstall mujoco-py
-# Unset mujoco-py env vars
-unset MUJOCO_PY_MJKEY_PATH MUJOCO_PY_MUJOCO_PATH
-# Remove mujoco210 from LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | sed 's|[^:]*mujoco210[^:]*:*||g')
 uv pip install 'numpy>=1.21,<1.25'  # gym 0.25 needs older numpy for seeding compatibility
-uv pip install 'gym[atari]==0.25' mujoco
+uv pip install 'gym[atari]==0.25'
 run_tests
-uv pip uninstall gym mujoco
+uv pip uninstall gym
 
-# Test gym 0.26
+# Test gym 0.26 (uses new mujoco bindings for HalfCheetah-v4)
 printf "* Testing gym 0.26\n"
+# Uninstall mujoco-py and switch to new mujoco package
+uv pip uninstall mujoco-py
+unset MUJOCO_PY_MJKEY_PATH MUJOCO_PY_MUJOCO_PATH
+export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | sed 's|[^:]*mujoco210[^:]*:*||g')
 uv pip install 'numpy>=1.21,<1.25'  # gym 0.26 needs older numpy for seeding compatibility
 uv pip install 'gym[atari,accept-rom-license]==0.26' mujoco
 uv pip install gym-super-mario-bros

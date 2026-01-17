@@ -111,7 +111,20 @@ def _set_gym_environments():  # noqa: F811
     _CLIFFWALKING_VERSIONED = "CliffWalking-v0"
 
 
-@implement_for("gym", "0.21.0", None)
+@implement_for("gym", "0.21.0", "0.26.0")
+def _set_gym_environments():  # noqa: F811
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
+
+    _CARTPOLE_VERSIONED = "CartPole-v1"
+    # Use v3 for gym < 0.26 (uses mujoco-py); v4 requires gym 0.26+ with new mujoco bindings
+    _HALFCHEETAH_VERSIONED = "HalfCheetah-v3"
+    _PENDULUM_VERSIONED = "Pendulum-v1"
+    _PONG_VERSIONED = "ALE/Pong-v5"
+    _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
+    _CLIFFWALKING_VERSIONED = "CliffWalking-v0"
+
+
+@implement_for("gym", "0.26.0", None)
 def _set_gym_environments():  # noqa: F811
     global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
 
