@@ -26,6 +26,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     Paper: https://arxiv.org/abs/2206.10558
 
+    EnvPool environments auto-reset internally when episodes end. This wrapper
+    handles that behavior by caching the auto-reset observations and returning
+    them appropriately in step_and_maybe_reset.
+
     Args:
         env (envpool.python.envpool.EnvPoolMixin): the envpool to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
@@ -137,6 +141,35 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
         return tensordict_out
+
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> tuple[TensorDictBase, TensorDictBase]:
+        """Runs a step and handles envpool's internal auto-reset.
+
+        EnvPool auto-resets internally when episodes end. When done=True:
+        - The observation returned is the final observation of the ending episode
+        - The NEXT call to step() returns the first observation of a new episode
+
+        This method handles this by skipping explicit reset() calls for done
+        environments. EnvPool maintains its own internal state, so the next
+        step() will automatically return the reset observation.
+
+        Note: The observation in tensordict_ for done envs will be the final
+        observation (not the reset observation). This is acceptable because
+        envpool ignores the input observation and uses its internal state.
+        """
+        # Perform the step
+        tensordict = self.step(tensordict)
+
+        # Move data from "next" to root for the next iteration
+        tensordict_ = self._step_mdp(tensordict)
+
+        # EnvPool auto-resets internally, so we skip calling reset().
+        # Just return tensordict_ as-is. Done envs will get reset observations
+        # on the next step() call automatically.
+
+        return tensordict, tensordict_
 
     def _get_action_spec(self) -> TensorSpec:
         # local import to avoid importing gym in the script
@@ -378,6 +411,9 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         import envpool
 
         create_env_kwargs = create_env_kwargs or {}
+        # EnvPool requires max_num_players to be set for single-player environments
+        if "max_num_players" not in create_env_kwargs:
+            create_env_kwargs["max_num_players"] = 1
         env = envpool.make(
             task_id=env_name,
             env_type="gym",

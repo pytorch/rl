@@ -2290,7 +2290,11 @@ class TestEnvPool:
     def test_env_wrapper_creation(self, env_name):
         env_name = env_name.replace("ALE/", "")  # EnvPool naming convention
         envpool_env = envpool.make(
-            task_id=env_name, env_type="gym", num_envs=4, gym_reset_return_info=True
+            task_id=env_name,
+            env_type="gym",
+            num_envs=4,
+            gym_reset_return_info=True,
+            max_num_players=1,  # Required for single-player environments
         )
         env = MultiThreadedEnvWrapper(envpool_env)
         env.reset()
