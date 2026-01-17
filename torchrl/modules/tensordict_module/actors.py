@@ -1452,7 +1452,7 @@ class ActorValueOperator(SafeSequential):
             value_operator,
         )
 
-    def get_policy_operator(self) -> SafeSequential:
+    def get_policy_operator(self) -> TensorDictSequential:
         """Returns a standalone policy operator that maps an observation to an action."""
         if isinstance(self.module[1], SafeProbabilisticTensorDictSequential):
             return SafeProbabilisticTensorDictSequential(
@@ -1460,15 +1460,15 @@ class ActorValueOperator(SafeSequential):
             )
         return SafeSequential(self.module[0], self.module[1])
 
-    def get_value_operator(self) -> SafeSequential:
+    def get_value_operator(self) -> TensorDictSequential:
         """Returns a standalone value network operator that maps an observation to a value estimate."""
         return SafeSequential(self.module[0], self.module[2])
 
-    def get_policy_head(self) -> SafeSequential:
+    def get_policy_head(self) -> TensorDictModule:
         """Returns the policy head."""
         return self.module[1]
 
-    def get_value_head(self) -> SafeSequential:
+    def get_value_head(self) -> TensorDictModule:
         """Returns the value head."""
         return self.module[2]
 
@@ -1625,11 +1625,11 @@ class ActorCriticOperator(ActorValueOperator):
             "network computing this value, please call td_sequence.get_critic_operator()"
         )
 
-    def get_policy_head(self) -> SafeSequential:
+    def get_policy_head(self) -> TensorDictModule:
         """Returns the policy head."""
         return self.module[1]
 
-    def get_value_head(self) -> SafeSequential:
+    def get_value_head(self) -> TensorDictModule:
         """Returns the value head."""
         return self.module[2]
 
@@ -1741,11 +1741,11 @@ class ActorCriticWrapper(SafeSequential):
             value_operator,
         )
 
-    def get_policy_operator(self) -> SafeSequential:
+    def get_policy_operator(self) -> TensorDictModule:
         """Returns a standalone policy operator that maps an observation to an action."""
         return self.module[0]
 
-    def get_value_operator(self) -> SafeSequential:
+    def get_value_operator(self) -> TensorDictModule:
         """Returns a standalone value network operator that maps an observation to a value estimate."""
         return self.module[1]
 
