@@ -17,6 +17,7 @@ from tensordict.nn import (
     composite_lp_aggregate,
     CompositeDistribution,
     dispatch,
+    ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
     TensorDictModule,
 )
@@ -26,7 +27,6 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -67,7 +67,7 @@ class SACLoss(LossModule):
     and "Soft Actor-Critic Algorithms and Applications" https://arxiv.org/abs/1812.05905
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
@@ -317,7 +317,7 @@ class SACLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         value_network: TensorDictModule | None = None,
         *,
@@ -952,7 +952,7 @@ class DiscreteSACLoss(LossModule):
     """Discrete SAC Loss module.
 
     Args:
-        actor_network (ProbabilisticActor): the actor to be trained
+        actor_network (ProbabilisticTensorDictSequential): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         action_space (str or TensorSpec): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
@@ -1153,7 +1153,7 @@ class DiscreteSACLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule,
         *,
         action_space: str | TensorSpec = None,

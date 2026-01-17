@@ -208,9 +208,10 @@ printf "* Testing gym 0.25\n"
 # Upgrade PyOpenGL for new mujoco package (needs EGL device extensions like EGLDeviceEXT)
 uv pip install 'pyopengl>=3.1.6'
 uv pip install 'numpy>=1.21,<1.24'  # gym 0.25 needs numpy<1.24 for AsyncVectorEnv deepcopy compatibility
-uv pip install 'gym[atari]==0.25' mujoco
+# gym 0.25 was released mid-2022 and requires mujoco<3.0.1 (3.0.1 renamed solver_iter -> solver_niter)
+uv pip install 'gym[atari]==0.25' 'mujoco<3.0.1'
 run_tests
-uv pip uninstall gym
+uv pip uninstall gym mujoco
 
 # Test gym 0.26 (uses new mujoco bindings for HalfCheetah-v4)
 printf "* Testing gym 0.26\n"
