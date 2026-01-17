@@ -17,7 +17,9 @@ import numpy as np
 import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
@@ -2066,7 +2068,16 @@ class terminal_obs_reader(default_info_dict_reader):
                 zero_like = tree_map(lambda x: np.zeros_like(x), nparray[nz])
                 for idx in is_none.nonzero()[0]:
                     nparray[idx] = zero_like
-            return tree_map(lambda *x: np.stack(x), *nparray)
+            # tree_map with multiple trees was added in PyTorch 2.2
+            if TORCH_VERSION >= version.parse("2.2"):
+                return tree_map(lambda *x: np.stack(x), *nparray)
+            else:
+                # For older PyTorch versions, manually flatten/unflatten
+                flat_lists_specs = [tree_flatten(tree) for tree in nparray]
+                flat_lists = [fl for fl, _ in flat_lists_specs]
+                spec = flat_lists_specs[0][1]
+                stacked = [np.stack(elems) for elems in zip(*flat_lists)]
+                return tree_unflatten(stacked, spec)
 
         info_dict = tree_map(replace_none, info_dict)
         # convert info_dict to a tensordict
