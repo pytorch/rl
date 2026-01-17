@@ -39,9 +39,10 @@ def get_services(backend: str = "ray", **init_kwargs) -> ServiceBase:
         backend: Service backend to use. Currently only "ray" is supported.
         **init_kwargs: Backend-specific initialization arguments.
             For Ray:
-                - ray_init_config (dict, optional): Arguments to pass to ray.init()
-                - namespace (str, optional): Ray namespace for service isolation.
-                    Defaults to "torchrl_services".
+
+            - ray_init_config (dict, optional): Arguments to pass to ray.init()
+            - namespace (str, optional): Ray namespace for service isolation.
+              Defaults to "torchrl_services".
 
     Returns:
         ServiceBase: A service registry instance.

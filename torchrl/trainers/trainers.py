@@ -1840,8 +1840,7 @@ class UpdateWeights(TrainerHookBase):
             weight_update_map are provided, weight_update_map takes precedence.
         weight_update_map (dict[str, str], optional): A mapping from destination paths
             (keys in collector's weight_sync_schemes) to source paths on the trainer.
-            Example: {"policy": "loss_module.actor_network",
-                     "replay_buffer.transforms[0]": "loss_module.critic_network"}
+            Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
         trainer (Trainer, optional): The trainer instance, required when using
             weight_update_map to resolve source paths.
 

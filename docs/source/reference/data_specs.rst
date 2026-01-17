@@ -1,5 +1,7 @@
 .. currentmodule:: torchrl.data
 
+.. _ref_specs:
+
 TensorSpec System
 =================
 
