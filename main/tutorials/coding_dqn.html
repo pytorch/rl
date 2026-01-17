@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -26,7 +26,7 @@
 
   
 
-  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
   <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
@@ -34,247 +34,70 @@
   <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
   <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
   <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="API Reference" href="../reference/index.html" />
-    <link rel="prev" title="TorchRL objectives: Coding a DDPG loss" href="coding_ddpg.html" />
-  <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','UA-117752657-2');</script>
-    <!-- End Google Tag Manager -->
-  
+    <link rel="prev" title="TorchRL objectives: Coding a DDPG loss" href="coding_ddpg.html" /> 
 
   
   <script src="../_static/js/modernizr.min.js"></script>
-
-  <!-- Preload the theme fonts -->
-
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-
-<!-- Preload the katex fonts -->
-
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
 </head>
 
 <div class="container-fluid header-holder tutorials-header" id="header-holder">
   <div class="container">
     <div class="header-container">
-      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
 
       <div class="main-menu">
         <ul>
-
-          <li class="main-menu-item">
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Learn
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
-                  <span class=dropdown-title>Get Started</span>
-                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
-                  <span class="dropdown-title">Tutorials</span>
-                  <p>Whats new in PyTorch tutorials</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
-                  <span class="dropdown-title">Learn the Basics</span>
-                  <p>Familiarize yourself with PyTorch concepts and modules</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
-                  <span class="dropdown-title">PyTorch Recipes</span>
-                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
-                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
-                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
-                </a>
-              </div>
-            </div>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
           </li>
 
           <li>
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Ecosystem
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
-                  <span class="dropdown-title">Tools</span>
-                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
-                  <span class=dropdown-title>Community</span>
-                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
-                  <span class=dropdown-title>Forums</span>
-                  <p>A place to discuss PyTorch code, issues, install, research</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
-                  <span class=dropdown-title>Developer Resources</span>
-                  <p>Find resources and get questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
-                  <span class="dropdown-title">Contributor Awards - 2024</span>
-                  <p>Award winners announced at this year's PyTorch Conference</p>
-                </a>
-              </div>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
           </li>
 
           <li>
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Edge
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
-                  <span class="dropdown-title">About PyTorch Edge</span>
-                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
-                  <span class="dropdown-title">ExecuTorch</span>
-                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
-                  <span class="dropdown-title">ExecuTorch Docs</span>
-                </a>
-              </div>
-            </div>  
-          </li>
-
-          <li class="main-menu-item">
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Docs
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
-                  <span class="dropdown-title">PyTorch</span>
-                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
-                  <span class="dropdown-title">PyTorch Domains</span>
-                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
-                </a>
-              </div>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
           </li>
 
           <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Blogs & News 
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
-                  <span class="dropdown-title">PyTorch Blog</span>
-                  <p>Catch up on the latest technical news and happenings</p>
-                </a>
-                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
-                  <span class="dropdown-title">Community Blog</span>
-                  <p>Stories from the PyTorch ecosystem</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
-                  <span class="dropdown-title">Videos</span>
-                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
-                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
-                  <span class="dropdown-title">Community Stories</span>
-                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/events">
-                  <span class="dropdown-title">Events</span>
-                  <p>Find events, webinars, and podcasts</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
-                  <span class="dropdown-title">Newsletter</span>
-                  <p>Stay up-to-date with the latest updates</p>
-                </a>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
           </li>
 
           <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                About
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
-                  <span class="dropdown-title">PyTorch Foundation</span>
-                  <p>Learn more about the PyTorch Foundation</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
-                  <span class="dropdown-title">Governing Board</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
-                  <span class="dropdown-title">Cloud Credit Program</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
-                  <span class="dropdown-title">Technical Advisory Council</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
-                  <span class="dropdown-title">Staff</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
-                  <span class="dropdown-title">Contact Us</span>
-                </a>
-              </div>
-            </div>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="main-menu-item">
-            <div class="no-dropdown">
-              <a href="https://pytorch.org/join" data-cta="join">
-                Become a Member
-              </a>
-            </div>
-          </li>
           <li>
-           <div class="main-menu-item">
-             <a href="https://github.com/pytorch/pytorch" class="github-icon">
-             </a>
-           </div>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
           </li>
-          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+
           <li>
-            <div class="main-menu-item">
-             <a href="https://github.com/pytorch/pytorch" class="search-icon">
-             </a>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
           </li>
-          --->
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
         </ul>
       </div>
 
       <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
     </div>
+
   </div>
 </div>
+
 
 <body class="pytorch-body">
 
    
+  <div>
 
     
 
@@ -289,7 +112,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.10.0+gd79e651) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.10.0) &#x25BC</span></a>
     </div>
     
 
@@ -324,7 +147,6 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -333,7 +155,6 @@
 <li class="toctree-l1"><a class="reference internal" href="dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="export.html">Exporting TorchRL modules</a></li>
-<li class="toctree-l1"><a class="reference internal" href="llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
 </ul>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
@@ -355,9 +176,11 @@
     </nav>
 
     <div class="pytorch-container">
-      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
-        <div class="pytorch-breadcrumbs-wrapper">
-          
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
 
 
 
@@ -401,17 +224,14 @@
 
   
 </div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
         </div>
 
-        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
-          Shortcuts
-        </div>
-      </div>
-
-      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
         <div class="pytorch-content-left">
-
-        
     
 
     <div class="pytorch-call-to-action-links">
@@ -436,15 +256,11 @@
 
     
     
-          <!-- Google Tag Manager (noscript) -->
-          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
-          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
-             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+             <article itemprop="articleBody" class="pytorch-article">
               
   <div class="sphx-glr-download-link-note admonition note">
 <p class="admonition-title">Note</p>
@@ -452,7 +268,7 @@
 to download the full example code.</p>
 </div>
 <section class="sphx-glr-example-title" id="torchrl-trainer-a-dqn-example">
-<span id="sphx-glr-tutorials-coding-dqn-py"></span><h1>TorchRL trainer: A DQN example<a class="headerlink" href="#torchrl-trainer-a-dqn-example" title="Permalink to this heading">¶</a></h1>
+<span id="sphx-glr-tutorials-coding-dqn-py"></span><h1>TorchRL trainer: A DQN example<a class="headerlink" href="#torchrl-trainer-a-dqn-example" title="Link to this heading">¶</a></h1>
 <p><strong>Author</strong>: <a class="reference external" href="https://github.com/vmoens">Vincent Moens</a></p>
 <span class="target" id="coding-dqn"></span><p>TorchRL provides a generic <a class="reference internal" href="../reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a> class to handle
 your training loop. The trainer executes a nested loop where the outer loop
@@ -491,7 +307,7 @@ in a replay buffer;</p></li>
 <p><strong>Prerequisites</strong>: We encourage you to get familiar with torchrl through the
 <a class="reference internal" href="coding_ppo.html#coding-ppo"><span class="std std-ref">PPO tutorial</span></a> first.</p>
 <section id="dqn">
-<h2>DQN<a class="headerlink" href="#dqn" title="Permalink to this heading">¶</a></h2>
+<h2>DQN<a class="headerlink" href="#dqn" title="Link to this heading">¶</a></h2>
 <p>DQN (<a class="reference external" href="https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf">Deep Q-Learning</a>) was
 the founding work in deep reinforcement learning.</p>
 <p>On a high level, the algorithm is quite simple: Q-learning consists in
@@ -520,35 +336,35 @@ Gymnasium doc from where this environment is retrieved:</p>
 <p>We do not aim at giving a SOTA implementation of the algorithm, but rather
 to provide a high-level illustration of TorchRL features in the context
 of this algorithm.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span><span class="p">,</span> <span class="n">SyncDataCollector</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <span class="n">MultiStep</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">MultiaSyncDataCollector</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyMemmapStorage</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MultiStep</span></a><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">EnvCreator</span><span class="p">,</span>
     <span class="n">ExplorationType</span><span class="p">,</span>
-    <span class="n">ParallelEnv</span><span class="p">,</span>
-    <span class="n">RewardScaling</span><span class="p">,</span>
-    <span class="n">StepCounter</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ParallelEnv</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">RewardScaling</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">StepCounter</span></a><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.libs.gym</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">CatFrames</span><span class="p">,</span>
-    <span class="n">Compose</span><span class="p">,</span>
-    <span class="n">GrayScale</span><span class="p">,</span>
-    <span class="n">ObservationNorm</span><span class="p">,</span>
-    <span class="n">Resize</span><span class="p">,</span>
-    <span class="n">ToTensorImage</span><span class="p">,</span>
-    <span class="n">TransformedEnv</span><span class="p">,</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatFrames</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Compose</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GrayScale</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ObservationNorm</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Resize</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ToTensorImage</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">DuelingCnnDQNet</span><span class="p">,</span> <span class="n">EGreedyModule</span><span class="p">,</span> <span class="n">QValueActor</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DuelingCnnDQNet</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">EGreedyModule</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">QValueActor</span></a>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives</span><span class="w"> </span><span class="kn">import</span> <span class="n">DQNLoss</span><span class="p">,</span> <span class="n">SoftUpdate</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.record.loggers.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSVLogger</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">DQNLoss</span></a><span class="p">,</span> <span class="n">SoftUpdate</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.csv</span> <span class="kn">import</span> <span class="n">CSVLogger</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">LogScalar</span><span class="p">,</span>
     <span class="n">LogValidationReward</span><span class="p">,</span>
     <span class="n">ReplayBufferTrainer</span><span class="p">,</span>
@@ -557,7 +373,7 @@ of this algorithm.</p>
 <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">is_notebook</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">is_notebook</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">shell</span> <span class="o">=</span> <span class="n">get_ipython</span><span class="p">()</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
         <span class="k">if</span> <span class="n">shell</span> <span class="o">==</span> <span class="s2">&quot;ZMQInteractiveShell&quot;</span><span class="p">:</span>
@@ -587,7 +403,7 @@ place, it is easy to see how one could misplace or misuse one component in
 the training script. The trainer is there to orchestrate everything for you!</p>
 </section>
 <section id="building-the-environment">
-<h2>Building the environment<a class="headerlink" href="#building-the-environment" title="Permalink to this heading">¶</a></h2>
+<h2>Building the environment<a class="headerlink" href="#building-the-environment" title="Link to this heading">¶</a></h2>
 <p>First let’s write a helper function that will output an environment. As usual,
 the “raw” environment may be too simple to be used in practice and we’ll need
 some data transformation to expose its output to the policy.</p>
@@ -620,7 +436,7 @@ transforms.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">obs_norm_sd</span></code> will contain the normalizing constants for
 the <code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationNorm</span></code> transform.</p></li>
 </ul>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">make_env</span><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span>
     <span class="n">parallel</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">obs_norm_sd</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
@@ -629,15 +445,15 @@ the <code class="xref py py-class docutils literal notranslate"><span class="pre
         <span class="n">obs_norm_sd</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;standard_normal&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
     <span class="k">if</span> <span class="n">parallel</span><span class="p">:</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">maker</span><span class="p">():</span>
-            <span class="k">return</span> <span class="n">GymEnv</span><span class="p">(</span>
+        <span class="k">def</span> <span class="nf">maker</span><span class="p">():</span>
+            <span class="k">return</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a><span class="p">(</span>
                 <span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span>
                 <span class="n">from_pixels</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                 <span class="n">pixels_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="n">base_env</span> <span class="o">=</span> <span class="n">ParallelEnv</span><span class="p">(</span>
+        <span class="n">base_env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ParallelEnv</span></a><span class="p">(</span>
             <span class="n">num_workers</span><span class="p">,</span>
             <span class="n">EnvCreator</span><span class="p">(</span><span class="n">maker</span><span class="p">),</span>
             <span class="c1"># Don&#39;t create a sub-process if we have only one worker</span>
@@ -645,30 +461,30 @@ the <code class="xref py py-class docutils literal notranslate"><span class="pre
             <span class="n">mp_start_method</span><span class="o">=</span><span class="n">mp_context</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">base_env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span>
+        <span class="n">base_env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GymEnv</span></a><span class="p">(</span>
             <span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span>
             <span class="n">from_pixels</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">pixels_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
+    <span class="n">env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">(</span>
         <span class="n">base_env</span><span class="p">,</span>
-        <span class="n">Compose</span><span class="p">(</span>
-            <span class="n">StepCounter</span><span class="p">(),</span>  <span class="c1"># to count the steps of each trajectory</span>
-            <span class="n">ToTensorImage</span><span class="p">(),</span>
-            <span class="n">RewardScaling</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mf">0.1</span><span class="p">),</span>
-            <span class="n">GrayScale</span><span class="p">(),</span>
-            <span class="n">Resize</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
-            <span class="n">CatFrames</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">3</span><span class="p">),</span>
-            <span class="n">ObservationNorm</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">obs_norm_sd</span><span class="p">),</span>
+        <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Compose</span></a><span class="p">(</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">StepCounter</span></a><span class="p">(),</span>  <span class="c1"># to count the steps of each trajectory</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ToTensorImage</span></a><span class="p">(),</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">RewardScaling</span></a><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mf">0.1</span><span class="p">),</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">GrayScale</span></a><span class="p">(),</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Resize</span></a><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatFrames</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">3</span><span class="p">),</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ObservationNorm</span></a><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">obs_norm_sd</span><span class="p">),</span>
         <span class="p">),</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">env</span>
 </pre></div>
 </div>
 <section id="compute-normalizing-constants">
-<h3>Compute normalizing constants<a class="headerlink" href="#compute-normalizing-constants" title="Permalink to this heading">¶</a></h3>
+<h3>Compute normalizing constants<a class="headerlink" href="#compute-normalizing-constants" title="Link to this heading">¶</a></h3>
 <p>To normalize images, we don’t want to normalize each pixel independently
 with a full <code class="docutils literal notranslate"><span class="pre">[C,</span> <span class="pre">W,</span> <span class="pre">H]</span></code> normalizing mask, but with simpler <code class="docutils literal notranslate"><span class="pre">[C,</span> <span class="pre">1,</span> <span class="pre">1]</span></code>
 shaped set of normalizing constants (loc and scale parameters).
@@ -676,7 +492,7 @@ We will be using the <code class="docutils literal notranslate"><span class="pre
 of <code class="xref py py-meth docutils literal notranslate"><span class="pre">init_stats()</span></code> to instruct which
 dimensions must be reduced, and the <code class="docutils literal notranslate"><span class="pre">keep_dims</span></code> parameter to ensure that
 not all dimensions disappear in the process:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_norm_stats</span><span class="p">():</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">get_norm_stats</span><span class="p">():</span>
     <span class="n">test_env</span> <span class="o">=</span> <span class="n">make_env</span><span class="p">()</span>
     <span class="n">test_env</span><span class="o">.</span><span class="n">transform</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">init_stats</span><span class="p">(</span>
         <span class="n">num_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">cat_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">reduce_dim</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">4</span><span class="p">],</span> <span class="n">keep_dims</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
@@ -693,7 +509,7 @@ not all dimensions disappear in the process:</p>
 </section>
 </section>
 <section id="building-the-model-deep-q-network">
-<h2>Building the model (Deep Q-network)<a class="headerlink" href="#building-the-model-deep-q-network" title="Permalink to this heading">¶</a></h2>
+<h2>Building the model (Deep Q-network)<a class="headerlink" href="#building-the-model-deep-q-network" title="Link to this heading">¶</a></h2>
 <p>The following function builds a <a class="reference internal" href="../reference/generated/torchrl.modules.DuelingCnnDQNet.html#torchrl.modules.DuelingCnnDQNet" title="torchrl.modules.DuelingCnnDQNet"><code class="xref py py-class docutils literal notranslate"><span class="pre">DuelingCnnDQNet</span></code></a>
 object which is a simple CNN followed by a two-layer MLP. The only trick used
 here is that the action values (i.e. left and right action value) are
@@ -707,13 +523,13 @@ computed using</p>
 <p>Our network is wrapped in a <a class="reference internal" href="../reference/generated/torchrl.modules.QValueActor.html#torchrl.modules.QValueActor" title="torchrl.modules.QValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueActor</span></code></a>,
 which will read the state-action
 values, pick up the one with the maximum value and write all those results
-in the input <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">make_model</span><span class="p">(</span><span class="n">dummy_env</span><span class="p">):</span>
+in the input <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">make_model</span><span class="p">(</span><span class="n">dummy_env</span><span class="p">):</span>
     <span class="n">cnn_kwargs</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;num_cells&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">],</span>
         <span class="s2">&quot;kernel_sizes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
         <span class="s2">&quot;strides&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="s2">&quot;activation_class&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ELU.html#torch.nn.ELU" title="torch.nn.ELU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">ELU</span></a><span class="p">,</span>
+        <span class="s2">&quot;activation_class&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ELU.html#torch.nn.ELU" title="torch.nn.ELU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ELU</span></a><span class="p">,</span>
         <span class="c1"># This can be used to reduce the size of the last layer of the CNN</span>
         <span class="c1"># &quot;squeeze_output&quot;: True,</span>
         <span class="c1"># &quot;aggregator_class&quot;: nn.AdaptiveAvgPool2d,</span>
@@ -725,36 +541,36 @@ in the input <code class="xref py py-class docutils literal notranslate"><span c
             <span class="mi">64</span><span class="p">,</span>
             <span class="mi">64</span><span class="p">,</span>
         <span class="p">],</span>
-        <span class="s2">&quot;activation_class&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ELU.html#torch.nn.ELU" title="torch.nn.ELU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">ELU</span></a><span class="p">,</span>
+        <span class="s2">&quot;activation_class&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.ELU.html#torch.nn.ELU" title="torch.nn.ELU" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">ELU</span></a><span class="p">,</span>
     <span class="p">}</span>
-    <span class="n">net</span> <span class="o">=</span> <span class="n">DuelingCnnDQNet</span><span class="p">(</span>
+    <span class="n">net</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DuelingCnnDQNet</span></a><span class="p">(</span>
         <span class="n">dummy_env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="n">cnn_kwargs</span><span class="p">,</span> <span class="n">mlp_kwargs</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">)</span>
     <span class="n">net</span><span class="o">.</span><span class="n">value</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">bias</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="n">init_bias</span><span class="p">)</span>
 
-    <span class="n">actor</span> <span class="o">=</span> <span class="n">QValueActor</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="n">spec</span><span class="o">=</span><span class="n">dummy_env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">actor</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">QValueActor</span></a><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="n">spec</span><span class="o">=</span><span class="n">dummy_env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">)</span>
     <span class="c1"># init actor: because the model is composed of lazy conv/linear layers,</span>
     <span class="c1"># we must pass a fake batch of data through it to instantiate them.</span>
     <span class="n">tensordict</span> <span class="o">=</span> <span class="n">dummy_env</span><span class="o">.</span><span class="n">fake_tensordict</span><span class="p">()</span>
     <span class="n">actor</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 
     <span class="c1"># we join our actor with an EGreedyModule for data collection</span>
-    <span class="n">exploration_module</span> <span class="o">=</span> <span class="n">EGreedyModule</span><span class="p">(</span>
+    <span class="n">exploration_module</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">EGreedyModule</span></a><span class="p">(</span>
         <span class="n">spec</span><span class="o">=</span><span class="n">dummy_env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span>
         <span class="n">annealing_num_steps</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="n">eps_init</span><span class="o">=</span><span class="n">eps_greedy_val</span><span class="p">,</span>
         <span class="n">eps_end</span><span class="o">=</span><span class="n">eps_greedy_val_env</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">actor_explore</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">exploration_module</span><span class="p">)</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">exploration_module</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">actor</span><span class="p">,</span> <span class="n">actor_explore</span>
+    <span class="k">return</span> <span class="n">actor</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a>
 </pre></div>
 </div>
 </section>
 <section id="collecting-and-storing-data">
-<h2>Collecting and storing data<a class="headerlink" href="#collecting-and-storing-data" title="Permalink to this heading">¶</a></h2>
+<h2>Collecting and storing data<a class="headerlink" href="#collecting-and-storing-data" title="Link to this heading">¶</a></h2>
 <section id="replay-buffers">
-<h3>Replay buffers<a class="headerlink" href="#replay-buffers" title="Permalink to this heading">¶</a></h3>
+<h3>Replay buffers<a class="headerlink" href="#replay-buffers" title="Link to this heading">¶</a></h3>
 <p>Replay buffers play a central role in off-policy RL algorithms such as DQN.
 They constitute the dataset we will be sampling from during training.</p>
 <p>Here, we will use a regular sampling strategy, although a prioritized RB
@@ -768,19 +584,19 @@ time must always have the same shape.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">buffer_scratch_dir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">get_replay_buffer</span><span class="p">(</span><span class="n">buffer_size</span><span class="p">,</span> <span class="n">n_optim</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">get_replay_buffer</span><span class="p">(</span><span class="n">buffer_size</span><span class="p">,</span> <span class="n">n_optim</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">):</span>
     <span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
         <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
         <span class="n">storage</span><span class="o">=</span><span class="n">LazyMemmapStorage</span><span class="p">(</span><span class="n">buffer_size</span><span class="p">,</span> <span class="n">scratch_dir</span><span class="o">=</span><span class="n">buffer_scratch_dir</span><span class="p">),</span>
         <span class="n">prefetch</span><span class="o">=</span><span class="n">n_optim</span><span class="p">,</span>
-        <span class="n">transform</span><span class="o">=</span><span class="k">lambda</span> <span class="n">td</span><span class="p">:</span> <span class="n">td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">transform</span><span class="o">=</span><span class="k">lambda</span> <span class="n">td</span><span class="p">:</span> <span class="n">td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">replay_buffer</span>
 </pre></div>
 </div>
 </section>
 <section id="data-collector">
-<h3>Data collector<a class="headerlink" href="#data-collector" title="Permalink to this heading">¶</a></h3>
+<h3>Data collector<a class="headerlink" href="#data-collector" title="Link to this heading">¶</a></h3>
 <p>As in <a class="reference internal" href="coding_ppo.html#coding-ppo"><span class="std std-ref">PPO</span></a> and
 <a class="reference internal" href="coding_ddpg.html#coding-ddpg"><span class="std std-ref">DDPG</span></a>, we will be using
 a data collector as a dataloader in the outer loop.</p>
@@ -811,36 +627,36 @@ collectors such as ours, different storing devices mean that the data that
 we collect won’t sit on the same device each time, which is something that
 out training loop must account for. For simplicity, we set the devices to
 the same value for all sub-collectors.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_collector</span><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">get_collector</span><span class="p">(</span>
     <span class="n">stats</span><span class="p">,</span>
     <span class="n">num_collectors</span><span class="p">,</span>
-    <span class="n">actor_explore</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="p">,</span>
     <span class="n">total_frames</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
 <span class="p">):</span>
     <span class="c1"># We can&#39;t use nested child processes with mp_start_method=&quot;fork&quot;</span>
     <span class="k">if</span> <span class="n">is_fork</span><span class="p">:</span>
-        <span class="bp">cls</span> <span class="o">=</span> <span class="n">SyncDataCollector</span>
+        <span class="bp">cls</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">SyncDataCollector</span></a>
         <span class="n">env_arg</span> <span class="o">=</span> <span class="n">make_env</span><span class="p">(</span><span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">obs_norm_sd</span><span class="o">=</span><span class="n">stats</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="bp">cls</span> <span class="o">=</span> <span class="n">MultiaSyncDataCollector</span>
+        <span class="bp">cls</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="torch.utils.data.IterableDataset" class="sphx-glr-backref-module-torch-utils-data sphx-glr-backref-type-py-class"><span class="n">MultiaSyncDataCollector</span></a>
         <span class="n">env_arg</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">make_env</span><span class="p">(</span><span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">obs_norm_sd</span><span class="o">=</span><span class="n">stats</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">)</span>
         <span class="p">]</span> <span class="o">*</span> <span class="n">num_collectors</span>
     <span class="n">data_collector</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
         <span class="n">env_arg</span><span class="p">,</span>
-        <span class="n">policy</span><span class="o">=</span><span class="n">actor_explore</span><span class="p">,</span>
+        <span class="n">policy</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
         <span class="c1"># this is the default behavior: the collector runs in ``&quot;random&quot;`` (or explorative) mode</span>
-        <span class="n">exploration_type</span><span class="o">=</span><span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">,</span>
+        <span class="n">exploration_type</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">ExplorationType</span><span class="o">.</span><span class="n">RANDOM</span></a><span class="p">,</span>
         <span class="c1"># We set the all the devices to be identical. Below is an example of</span>
         <span class="c1"># heterogeneous devices</span>
-        <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-        <span class="n">storing_device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+        <span class="n">storing_device</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
         <span class="n">split_trajs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">postproc</span><span class="o">=</span><span class="n">MultiStep</span><span class="p">(</span><span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
+        <span class="n">postproc</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MultiStep</span></a><span class="p">(</span><span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">data_collector</span>
 </pre></div>
@@ -848,11 +664,11 @@ the same value for all sub-collectors.</p>
 </section>
 </section>
 <section id="loss-function">
-<h2>Loss function<a class="headerlink" href="#loss-function" title="Permalink to this heading">¶</a></h2>
+<h2>Loss function<a class="headerlink" href="#loss-function" title="Link to this heading">¶</a></h2>
 <p>Building our loss function is straightforward: we only need to provide
 the model and a bunch of hyperparameters to the DQNLoss class.</p>
 <section id="target-parameters">
-<h3>Target parameters<a class="headerlink" href="#target-parameters" title="Permalink to this heading">¶</a></h3>
+<h3>Target parameters<a class="headerlink" href="#target-parameters" title="Link to this heading">¶</a></h3>
 <p>Many off-policy RL algorithms use the concept of “target parameters” when it
 comes to estimate the value of the next state or state-action pair.
 The target parameters are lagged copies of the model parameters. Because
@@ -860,8 +676,8 @@ their predictions mismatch those of the current model configuration, they
 help learning by putting a pessimistic bound on the value being estimated.
 This is a powerful trick (known as “Double Q-Learning”) that is ubiquitous
 in similar algorithms.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_loss_module</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">gamma</span><span class="p">):</span>
-    <span class="n">loss_module</span> <span class="o">=</span> <span class="n">DQNLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">delay_value</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">get_loss_module</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">gamma</span><span class="p">):</span>
+    <span class="n">loss_module</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">DQNLoss</span></a><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">delay_value</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">loss_module</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">)</span>
     <span class="n">target_updater</span> <span class="o">=</span> <span class="n">SoftUpdate</span><span class="p">(</span><span class="n">loss_module</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">0.995</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">loss_module</span><span class="p">,</span> <span class="n">target_updater</span>
@@ -870,20 +686,20 @@ in similar algorithms.</p>
 </section>
 </section>
 <section id="hyperparameters">
-<h2>Hyperparameters<a class="headerlink" href="#hyperparameters" title="Permalink to this heading">¶</a></h2>
+<h2>Hyperparameters<a class="headerlink" href="#hyperparameters" title="Link to this heading">¶</a></h2>
 <p>Let’s start with our hyperparameters. The following setting should work well
 in practice, and the performance of the algorithm should hopefully not be
 too sensitive to slight variations of these.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">is_fork</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;fork&quot;</span>
-<span class="n">device</span> <span class="o">=</span> <span class="p">(</span>
-    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
     <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_fork</span>
-    <span class="k">else</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+    <span class="k">else</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <section id="optimizer">
-<h3>Optimizer<a class="headerlink" href="#optimizer" title="Permalink to this heading">¶</a></h3>
+<h3>Optimizer<a class="headerlink" href="#optimizer" title="Link to this heading">¶</a></h3>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># the learning rate of the optimizer</span>
 <span class="n">lr</span> <span class="o">=</span> <span class="mf">2e-3</span>
 <span class="c1"># weight decay</span>
@@ -896,7 +712,7 @@ too sensitive to slight variations of these.</p>
 </div>
 </section>
 <section id="dqn-parameters">
-<h3>DQN parameters<a class="headerlink" href="#dqn-parameters" title="Permalink to this heading">¶</a></h3>
+<h3>DQN parameters<a class="headerlink" href="#dqn-parameters" title="Link to this heading">¶</a></h3>
 <p>gamma decay factor</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">gamma</span> <span class="o">=</span> <span class="mf">0.99</span>
 </pre></div>
@@ -909,7 +725,7 @@ update</p>
 </div>
 </section>
 <section id="data-collection-and-replay-buffer">
-<h3>Data collection and replay buffer<a class="headerlink" href="#data-collection-and-replay-buffer" title="Permalink to this heading">¶</a></h3>
+<h3>Data collection and replay buffer<a class="headerlink" href="#data-collection-and-replay-buffer" title="Link to this heading">¶</a></h3>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Values to be used for proper training have been commented.</p>
@@ -947,7 +763,7 @@ episodes has been collected.</p>
 </div>
 </section>
 <section id="environment-and-exploration">
-<h3>Environment and exploration<a class="headerlink" href="#environment-and-exploration" title="Permalink to this heading">¶</a></h3>
+<h3>Environment and exploration<a class="headerlink" href="#environment-and-exploration" title="Link to this heading">¶</a></h3>
 <p>We set the initial and final value of the epsilon factor in Epsilon-greedy
 exploration.
 Since our policy is deterministic, exploration is crucial: without it, the
@@ -970,7 +786,7 @@ value e.g. 500000</p>
 </section>
 </section>
 <section id="building-a-trainer">
-<h2>Building a Trainer<a class="headerlink" href="#building-a-trainer" title="Permalink to this heading">¶</a></h2>
+<h2>Building a Trainer<a class="headerlink" href="#building-a-trainer" title="Link to this heading">¶</a></h2>
 <p>TorchRL’s <a class="reference internal" href="../reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a> class constructor takes the
 following keyword-only arguments:</p>
 <ul class="simple">
@@ -989,24 +805,39 @@ variable.</p></li>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">stats</span> <span class="o">=</span> <span class="n">get_norm_stats</span><span class="p">()</span>
 <span class="n">test_env</span> <span class="o">=</span> <span class="n">make_env</span><span class="p">(</span><span class="n">parallel</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">obs_norm_sd</span><span class="o">=</span><span class="n">stats</span><span class="p">)</span>
 <span class="c1"># Get model</span>
-<span class="n">actor</span><span class="p">,</span> <span class="n">actor_explore</span> <span class="o">=</span> <span class="n">make_model</span><span class="p">(</span><span class="n">test_env</span><span class="p">)</span>
+<span class="n">actor</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a> <span class="o">=</span> <span class="n">make_model</span><span class="p">(</span><span class="n">test_env</span><span class="p">)</span>
 <span class="n">loss_module</span><span class="p">,</span> <span class="n">target_net_updater</span> <span class="o">=</span> <span class="n">get_loss_module</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">gamma</span><span class="p">)</span>
 
 <span class="n">collector</span> <span class="o">=</span> <span class="n">get_collector</span><span class="p">(</span>
     <span class="n">stats</span><span class="o">=</span><span class="n">stats</span><span class="p">,</span>
     <span class="n">num_collectors</span><span class="o">=</span><span class="n">num_collectors</span><span class="p">,</span>
-    <span class="n">actor_explore</span><span class="o">=</span><span class="n">actor_explore</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
     <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
-    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">optimizer</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span>
-    <span class="n">loss_module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">lr</span><span class="p">,</span> <span class="n">weight_decay</span><span class="o">=</span><span class="n">wd</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="n">betas</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">loss_module</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">lr</span><span class="p">,</span> <span class="n">weight_decay</span><span class="o">=</span><span class="n">wd</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="n">betas</span>
 <span class="p">)</span>
 <span class="n">exp_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;dqn_exp_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid1</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="n">tmpdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">CSVLogger</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">log_dir</span><span class="o">=</span><span class="n">tmpdir</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;log dir: </span><span class="si">{</span><span class="n">logger</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>state dict of the observation norm: OrderedDict([(&#39;standard_normal&#39;, tensor(True)), (&#39;loc&#39;, tensor([[[0.9895]],
+
+        [[0.9895]],
+
+        [[0.9895]],
+
+        [[0.9895]]])), (&#39;scale&#39;, tensor([[[0.0737]],
+
+        [[0.0737]],
+
+        [[0.0737]],
+
+        [[0.0737]]]))])
 </pre></div>
 </div>
 <p>We can control how often the scalars should be logged. Here we set this
@@ -1018,7 +849,7 @@ to a low value as our training loop is short:</p>
     <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
     <span class="n">frame_skip</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
-    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="p">,</span>
     <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
     <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">n_optim</span><span class="p">,</span>
     <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
@@ -1026,7 +857,7 @@ to a low value as our training loop is short:</p>
 </pre></div>
 </div>
 <section id="registering-hooks">
-<h3>Registering hooks<a class="headerlink" href="#registering-hooks" title="Permalink to this heading">¶</a></h3>
+<h3>Registering hooks<a class="headerlink" href="#registering-hooks" title="Link to this heading">¶</a></h3>
 <p>Registering hooks can be achieved in two separate ways:</p>
 <ul class="simple">
 <li><p>If the hook has it, the <a class="reference internal" href="../reference/generated/torchrl.trainers.TrainerHookBase.html#torchrl.trainers.TrainerHookBase.register" title="torchrl.trainers.TrainerHookBase.register"><code class="xref py py-meth docutils literal notranslate"><span class="pre">register()</span></code></a>
@@ -1037,7 +868,7 @@ requires 3 hooks (<code class="docutils literal notranslate"><span class="pre">e
 can be cumbersome to implement.</p></li>
 </ul>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">buffer_hook</span> <span class="o">=</span> <span class="n">ReplayBufferTrainer</span><span class="p">(</span>
-    <span class="n">get_replay_buffer</span><span class="p">(</span><span class="n">buffer_size</span><span class="p">,</span> <span class="n">n_optim</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+    <span class="n">get_replay_buffer</span><span class="p">(</span><span class="n">buffer_size</span><span class="p">,</span> <span class="n">n_optim</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">),</span>
     <span class="n">flatten_tensordicts</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">buffer_hook</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
@@ -1047,9 +878,9 @@ can be cumbersome to implement.</p></li>
     <span class="n">record_interval</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>  <span class="c1"># log every 100 optimization steps</span>
     <span class="n">record_frames</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>  <span class="c1"># maximum number of frames in the record</span>
     <span class="n">frame_skip</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">policy_exploration</span><span class="o">=</span><span class="n">actor_explore</span><span class="p">,</span>
+    <span class="n">policy_exploration</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a><span class="p">,</span>
     <span class="n">environment</span><span class="o">=</span><span class="n">test_env</span><span class="p">,</span>
-    <span class="n">exploration_type</span><span class="o">=</span><span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span><span class="p">,</span>
+    <span class="n">exploration_type</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span></a><span class="p">,</span>
     <span class="n">log_keys</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">)],</span>
     <span class="n">out_keys</span><span class="o">=</span><span class="p">{(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">):</span> <span class="s2">&quot;rewards&quot;</span><span class="p">},</span>
     <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -1058,7 +889,7 @@ can be cumbersome to implement.</p></li>
 </pre></div>
 </div>
 <p>The exploration module epsilon factor is also annealed:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps&quot;</span><span class="p">,</span> <span class="n">actor_explore</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">step</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">trainer</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">actor_explore</span></a><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">step</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">)</span>
 </pre></div>
 </div>
 <ul class="simple">
@@ -1095,8 +926,325 @@ Check the <a class="reference internal" href="../reference/generated/torchrl.tra
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
 </pre></div>
 </div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0/5000 [00:00&lt;?, ?it/s]
+  1%|          | 32/5000 [00:08&lt;21:17,  3.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   1%|          | 32/5000 [00:08&lt;21:17,  3.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   1%|▏         | 64/5000 [00:08&lt;09:16,  8.88it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   1%|▏         | 64/5000 [00:08&lt;09:16,  8.88it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   2%|▏         | 96/5000 [00:08&lt;05:23, 15.17it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   2%|▏         | 96/5000 [00:08&lt;05:23, 15.17it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   3%|▎         | 128/5000 [00:09&lt;03:37, 22.40it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3142, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1494, rewards: 0.1000, total_rewards: 0.9346:   3%|▎         | 128/5000 [00:09&lt;03:37, 22.40it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3142, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1494, rewards: 0.1000, total_rewards: 0.9346:   3%|▎         | 160/5000 [00:09&lt;02:37, 30.75it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3687, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1564, rewards: 0.1000, total_rewards: 0.9346:   3%|▎         | 160/5000 [00:09&lt;02:37, 30.75it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3687, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1564, rewards: 0.1000, total_rewards: 0.9346:   4%|▍         | 192/5000 [00:10&lt;02:01, 39.53it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   4%|▍         | 192/5000 [00:10&lt;02:01, 39.53it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   4%|▍         | 224/5000 [00:10&lt;01:39, 47.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:   4%|▍         | 224/5000 [00:10&lt;01:39, 47.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:   5%|▌         | 256/5000 [00:10&lt;01:24, 55.99it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3172, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1520, rewards: 0.1000, total_rewards: 0.9346:   5%|▌         | 256/5000 [00:10&lt;01:24, 55.99it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3172, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1520, rewards: 0.1000, total_rewards: 0.9346:   6%|▌         | 288/5000 [00:11&lt;01:14, 63.10it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3385, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1483, rewards: 0.1000, total_rewards: 0.9346:   6%|▌         | 288/5000 [00:11&lt;01:14, 63.10it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3385, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1483, rewards: 0.1000, total_rewards: 0.9346:   6%|▋         | 320/5000 [00:11&lt;01:07, 68.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:   6%|▋         | 320/5000 [00:11&lt;01:07, 68.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:   7%|▋         | 352/5000 [00:11&lt;01:01, 74.98it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   7%|▋         | 352/5000 [00:11&lt;01:01, 74.98it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:   8%|▊         | 384/5000 [00:12&lt;00:56, 81.50it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:   8%|▊         | 384/5000 [00:12&lt;00:56, 81.50it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:   8%|▊         | 416/5000 [00:12&lt;00:55, 81.99it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:   8%|▊         | 416/5000 [00:12&lt;00:55, 81.99it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:   9%|▉         | 448/5000 [00:12&lt;00:53, 85.52it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:   9%|▉         | 448/5000 [00:12&lt;00:53, 85.52it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  10%|▉         | 480/5000 [00:13&lt;00:51, 87.96it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  10%|▉         | 480/5000 [00:13&lt;00:51, 87.96it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  10%|█         | 512/5000 [00:13&lt;00:50, 89.32it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  10%|█         | 512/5000 [00:13&lt;00:50, 89.32it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  11%|█         | 544/5000 [00:13&lt;00:49, 90.32it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  11%|█         | 544/5000 [00:13&lt;00:49, 90.32it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  12%|█▏        | 576/5000 [00:14&lt;00:49, 90.25it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  12%|█▏        | 576/5000 [00:14&lt;00:49, 90.25it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  12%|█▏        | 608/5000 [00:14&lt;00:47, 91.81it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  12%|█▏        | 608/5000 [00:14&lt;00:47, 91.81it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  13%|█▎        | 640/5000 [00:14&lt;00:47, 91.95it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  13%|█▎        | 640/5000 [00:14&lt;00:47, 91.95it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  13%|█▎        | 672/5000 [00:15&lt;00:46, 92.42it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  13%|█▎        | 672/5000 [00:15&lt;00:46, 92.42it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  14%|█▍        | 704/5000 [00:15&lt;00:46, 92.30it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  14%|█▍        | 704/5000 [00:15&lt;00:46, 92.30it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  15%|█▍        | 736/5000 [00:15&lt;00:46, 92.12it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  15%|█▍        | 736/5000 [00:15&lt;00:46, 92.12it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  15%|█▌        | 768/5000 [00:16&lt;00:45, 92.18it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  15%|█▌        | 768/5000 [00:16&lt;00:45, 92.18it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  16%|█▌        | 800/5000 [00:16&lt;00:45, 91.74it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  16%|█▌        | 800/5000 [00:16&lt;00:45, 91.74it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  17%|█▋        | 832/5000 [00:17&lt;00:45, 90.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  17%|█▋        | 832/5000 [00:17&lt;00:45, 90.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  17%|█▋        | 864/5000 [00:17&lt;00:44, 92.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  17%|█▋        | 864/5000 [00:17&lt;00:44, 92.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  18%|█▊        | 896/5000 [00:17&lt;00:44, 93.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  18%|█▊        | 896/5000 [00:17&lt;00:44, 93.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  19%|█▊        | 928/5000 [00:18&lt;00:44, 91.19it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  19%|█▊        | 928/5000 [00:18&lt;00:44, 91.19it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  19%|█▉        | 960/5000 [00:18&lt;00:45, 89.59it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3899, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1473, rewards: 0.1000, total_rewards: 0.9346:  19%|█▉        | 960/5000 [00:18&lt;00:45, 89.59it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3899, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1473, rewards: 0.1000, total_rewards: 0.9346:  20%|█▉        | 992/5000 [00:18&lt;00:45, 88.84it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  20%|█▉        | 992/5000 [00:18&lt;00:45, 88.84it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  20%|██        | 1024/5000 [00:19&lt;00:44, 88.65it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  20%|██        | 1024/5000 [00:19&lt;00:44, 88.65it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  21%|██        | 1056/5000 [00:19&lt;00:44, 89.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  21%|██        | 1056/5000 [00:19&lt;00:44, 89.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  22%|██▏       | 1088/5000 [00:19&lt;00:44, 88.55it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  22%|██▏       | 1088/5000 [00:19&lt;00:44, 88.55it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  22%|██▏       | 1120/5000 [00:20&lt;00:43, 88.87it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  22%|██▏       | 1120/5000 [00:20&lt;00:43, 88.87it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  23%|██▎       | 1152/5000 [00:20&lt;00:42, 89.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  23%|██▎       | 1152/5000 [00:20&lt;00:42, 89.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 0.9346:  24%|██▎       | 1184/5000 [00:20&lt;00:42, 90.76it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  24%|██▎       | 1184/5000 [00:20&lt;00:42, 90.76it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  24%|██▍       | 1216/5000 [00:21&lt;00:41, 91.47it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  24%|██▍       | 1216/5000 [00:21&lt;00:41, 91.47it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  25%|██▍       | 1248/5000 [00:21&lt;00:41, 90.47it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  25%|██▍       | 1248/5000 [00:21&lt;00:41, 90.47it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  26%|██▌       | 1280/5000 [00:21&lt;00:40, 92.10it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  26%|██▌       | 1280/5000 [00:21&lt;00:40, 92.10it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  26%|██▌       | 1312/5000 [00:22&lt;00:39, 92.98it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  26%|██▌       | 1312/5000 [00:22&lt;00:39, 92.98it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  27%|██▋       | 1344/5000 [00:22&lt;00:39, 93.21it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  27%|██▋       | 1344/5000 [00:22&lt;00:39, 93.21it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  28%|██▊       | 1376/5000 [00:23&lt;00:38, 93.92it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  28%|██▊       | 1376/5000 [00:23&lt;00:38, 93.92it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  28%|██▊       | 1408/5000 [00:23&lt;00:40, 89.71it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  28%|██▊       | 1408/5000 [00:23&lt;00:40, 89.71it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  29%|██▉       | 1440/5000 [00:23&lt;00:38, 91.43it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  29%|██▉       | 1440/5000 [00:23&lt;00:38, 91.43it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  29%|██▉       | 1472/5000 [00:24&lt;00:38, 90.80it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  29%|██▉       | 1472/5000 [00:24&lt;00:38, 90.80it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  30%|███       | 1504/5000 [00:24&lt;00:38, 91.02it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  30%|███       | 1504/5000 [00:24&lt;00:38, 91.02it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  31%|███       | 1536/5000 [00:24&lt;00:38, 91.04it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  31%|███       | 1536/5000 [00:24&lt;00:38, 91.04it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  31%|███▏      | 1568/5000 [00:25&lt;00:36, 92.98it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  31%|███▏      | 1568/5000 [00:25&lt;00:36, 92.98it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  32%|███▏      | 1600/5000 [00:25&lt;00:36, 92.39it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  32%|███▏      | 1600/5000 [00:25&lt;00:36, 92.39it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3869, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1461, rewards: 0.1000, total_rewards: 0.9346:  33%|███▎      | 1632/5000 [00:25&lt;00:37, 89.92it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  33%|███▎      | 1632/5000 [00:25&lt;00:37, 89.92it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  33%|███▎      | 1664/5000 [00:26&lt;00:36, 90.44it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  33%|███▎      | 1664/5000 [00:26&lt;00:36, 90.44it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  34%|███▍      | 1696/5000 [00:26&lt;00:35, 92.92it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3808, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1498, rewards: 0.1000, total_rewards: 0.9346:  34%|███▍      | 1696/5000 [00:26&lt;00:35, 92.92it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3808, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1498, rewards: 0.1000, total_rewards: 0.9346:  35%|███▍      | 1728/5000 [00:26&lt;00:35, 93.15it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  35%|███▍      | 1728/5000 [00:26&lt;00:35, 93.15it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  35%|███▌      | 1760/5000 [00:27&lt;00:35, 91.06it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  35%|███▌      | 1760/5000 [00:27&lt;00:35, 91.06it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  36%|███▌      | 1792/5000 [00:27&lt;00:35, 90.78it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 0.9346:  36%|███▌      | 1792/5000 [00:27&lt;00:35, 90.78it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 0.9346:  36%|███▋      | 1824/5000 [00:27&lt;00:34, 90.87it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  36%|███▋      | 1824/5000 [00:27&lt;00:34, 90.87it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  37%|███▋      | 1856/5000 [00:28&lt;00:34, 91.96it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  37%|███▋      | 1856/5000 [00:28&lt;00:34, 91.96it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  38%|███▊      | 1888/5000 [00:28&lt;00:33, 93.26it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  38%|███▊      | 1888/5000 [00:28&lt;00:33, 93.26it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  38%|███▊      | 1920/5000 [00:28&lt;00:33, 92.02it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  38%|███▊      | 1920/5000 [00:28&lt;00:33, 92.02it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  39%|███▉      | 1952/5000 [00:29&lt;00:32, 93.12it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  39%|███▉      | 1952/5000 [00:29&lt;00:32, 93.12it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  40%|███▉      | 1984/5000 [00:29&lt;00:33, 90.86it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  40%|███▉      | 1984/5000 [00:29&lt;00:33, 90.86it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  40%|████      | 2016/5000 [00:30&lt;00:32, 92.38it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 0.9346:  40%|████      | 2016/5000 [00:30&lt;00:32, 92.38it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 0.9346:  41%|████      | 2048/5000 [00:30&lt;00:31, 92.48it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  41%|████      | 2048/5000 [00:30&lt;00:31, 92.48it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  42%|████▏     | 2080/5000 [00:30&lt;00:31, 93.42it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  42%|████▏     | 2080/5000 [00:30&lt;00:31, 93.42it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  42%|████▏     | 2112/5000 [00:31&lt;00:31, 91.06it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  42%|████▏     | 2112/5000 [00:31&lt;00:31, 91.06it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  43%|████▎     | 2144/5000 [00:31&lt;00:31, 91.62it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  43%|████▎     | 2144/5000 [00:31&lt;00:31, 91.62it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  44%|████▎     | 2176/5000 [00:31&lt;00:29, 94.39it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  44%|████▎     | 2176/5000 [00:31&lt;00:29, 94.39it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3718, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1477, rewards: 0.1000, total_rewards: 0.9346:  44%|████▍     | 2208/5000 [00:32&lt;00:29, 93.16it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  44%|████▍     | 2208/5000 [00:32&lt;00:29, 93.16it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  45%|████▍     | 2240/5000 [00:32&lt;00:30, 90.86it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  45%|████▍     | 2240/5000 [00:32&lt;00:30, 90.86it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  45%|████▌     | 2272/5000 [00:32&lt;00:29, 92.70it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  45%|████▌     | 2272/5000 [00:32&lt;00:29, 92.70it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  46%|████▌     | 2304/5000 [00:33&lt;00:29, 91.38it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  46%|████▌     | 2304/5000 [00:33&lt;00:29, 91.38it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  47%|████▋     | 2336/5000 [00:33&lt;00:29, 89.79it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  47%|████▋     | 2336/5000 [00:33&lt;00:29, 89.79it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  47%|████▋     | 2368/5000 [00:33&lt;00:29, 90.02it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  47%|████▋     | 2368/5000 [00:33&lt;00:29, 90.02it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  48%|████▊     | 2400/5000 [00:34&lt;00:30, 85.33it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  48%|████▊     | 2400/5000 [00:34&lt;00:30, 85.33it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  49%|████▊     | 2432/5000 [00:34&lt;00:30, 83.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  49%|████▊     | 2432/5000 [00:34&lt;00:30, 83.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  49%|████▉     | 2464/5000 [00:35&lt;00:30, 82.36it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  49%|████▉     | 2464/5000 [00:35&lt;00:30, 82.36it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  50%|████▉     | 2496/5000 [00:35&lt;00:31, 80.43it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  50%|████▉     | 2496/5000 [00:35&lt;00:31, 80.43it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  51%|█████     | 2528/5000 [00:35&lt;00:30, 81.48it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  51%|█████     | 2528/5000 [00:35&lt;00:30, 81.48it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  51%|█████     | 2560/5000 [00:36&lt;00:29, 82.24it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  51%|█████     | 2560/5000 [00:36&lt;00:29, 82.24it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  52%|█████▏    | 2592/5000 [00:36&lt;00:27, 87.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  52%|█████▏    | 2592/5000 [00:36&lt;00:27, 87.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  52%|█████▏    | 2624/5000 [00:36&lt;00:26, 90.20it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  52%|█████▏    | 2624/5000 [00:36&lt;00:26, 90.20it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  53%|█████▎    | 2656/5000 [00:37&lt;00:26, 90.04it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 0.9346:  53%|█████▎    | 2656/5000 [00:37&lt;00:26, 90.04it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 0.9346:  54%|█████▍    | 2688/5000 [00:37&lt;00:25, 89.23it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  54%|█████▍    | 2688/5000 [00:37&lt;00:25, 89.23it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 0.9346:  54%|█████▍    | 2720/5000 [00:37&lt;00:25, 90.08it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  54%|█████▍    | 2720/5000 [00:37&lt;00:25, 90.08it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  55%|█████▌    | 2752/5000 [00:38&lt;00:24, 89.99it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  55%|█████▌    | 2752/5000 [00:38&lt;00:24, 89.99it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  56%|█████▌    | 2784/5000 [00:38&lt;00:25, 88.11it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  56%|█████▌    | 2784/5000 [00:38&lt;00:25, 88.11it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  56%|█████▋    | 2816/5000 [00:39&lt;00:24, 87.94it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  56%|█████▋    | 2816/5000 [00:39&lt;00:24, 87.94it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  57%|█████▋    | 2848/5000 [00:39&lt;00:23, 90.66it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  57%|█████▋    | 2848/5000 [00:39&lt;00:23, 90.66it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  58%|█████▊    | 2880/5000 [00:39&lt;00:22, 92.74it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  58%|█████▊    | 2880/5000 [00:39&lt;00:22, 92.74it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  58%|█████▊    | 2912/5000 [00:40&lt;00:22, 91.21it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  58%|█████▊    | 2912/5000 [00:40&lt;00:22, 91.21it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  59%|█████▉    | 2944/5000 [00:40&lt;00:22, 90.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  59%|█████▉    | 2944/5000 [00:40&lt;00:22, 90.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  60%|█████▉    | 2976/5000 [00:40&lt;00:22, 89.95it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  60%|█████▉    | 2976/5000 [00:40&lt;00:22, 89.95it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  60%|██████    | 3008/5000 [00:41&lt;00:21, 90.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  60%|██████    | 3008/5000 [00:41&lt;00:21, 90.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  61%|██████    | 3040/5000 [00:41&lt;00:21, 90.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  61%|██████    | 3040/5000 [00:41&lt;00:21, 90.00it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 0.9346:  61%|██████▏   | 3072/5000 [00:41&lt;00:21, 91.25it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  61%|██████▏   | 3072/5000 [00:41&lt;00:21, 91.25it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 0.9346:  62%|██████▏   | 3104/5000 [00:42&lt;00:21, 89.01it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  62%|██████▏   | 3104/5000 [00:42&lt;00:21, 89.01it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  63%|██████▎   | 3136/5000 [00:42&lt;00:21, 87.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  63%|██████▎   | 3136/5000 [00:42&lt;00:21, 87.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  63%|██████▎   | 3168/5000 [00:42&lt;00:20, 88.96it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  63%|██████▎   | 3168/5000 [00:42&lt;00:20, 88.96it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 0.9346:  64%|██████▍   | 3200/5000 [00:43&lt;00:20, 87.51it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  64%|██████▍   | 3200/5000 [00:43&lt;00:20, 87.51it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 0.9346:  65%|██████▍   | 3232/5000 [00:50&lt;02:14, 13.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  65%|██████▍   | 3232/5000 [00:50&lt;02:14, 13.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  65%|██████▌   | 3264/5000 [00:50&lt;01:38, 17.61it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  65%|██████▌   | 3264/5000 [00:50&lt;01:38, 17.61it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  66%|██████▌   | 3296/5000 [00:51&lt;01:13, 23.08it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  66%|██████▌   | 3296/5000 [00:51&lt;01:13, 23.08it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  67%|██████▋   | 3328/5000 [00:51&lt;00:56, 29.74it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  67%|██████▋   | 3328/5000 [00:51&lt;00:56, 29.74it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  67%|██████▋   | 3360/5000 [00:52&lt;00:44, 37.20it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  67%|██████▋   | 3360/5000 [00:52&lt;00:44, 37.20it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  68%|██████▊   | 3392/5000 [00:52&lt;00:35, 45.48it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  68%|██████▊   | 3392/5000 [00:52&lt;00:35, 45.48it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  68%|██████▊   | 3424/5000 [00:52&lt;00:29, 53.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  68%|██████▊   | 3424/5000 [00:52&lt;00:29, 53.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  69%|██████▉   | 3456/5000 [00:53&lt;00:25, 61.10it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  69%|██████▉   | 3456/5000 [00:53&lt;00:25, 61.10it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  70%|██████▉   | 3488/5000 [00:53&lt;00:22, 67.27it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  70%|██████▉   | 3488/5000 [00:53&lt;00:22, 67.27it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  70%|███████   | 3520/5000 [00:53&lt;00:20, 73.11it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 5.2632:  70%|███████   | 3520/5000 [00:53&lt;00:20, 73.11it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 5.2632:  71%|███████   | 3552/5000 [00:54&lt;00:18, 78.59it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  71%|███████   | 3552/5000 [00:54&lt;00:18, 78.59it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  72%|███████▏  | 3584/5000 [00:54&lt;00:17, 81.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 5.2632:  72%|███████▏  | 3584/5000 [00:54&lt;00:17, 81.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 5.2632:  72%|███████▏  | 3616/5000 [00:54&lt;00:16, 83.86it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  72%|███████▏  | 3616/5000 [00:54&lt;00:16, 83.86it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  73%|███████▎  | 3648/5000 [00:55&lt;00:15, 86.44it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  73%|███████▎  | 3648/5000 [00:55&lt;00:15, 86.44it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  74%|███████▎  | 3680/5000 [00:55&lt;00:15, 86.56it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 5.2632:  74%|███████▎  | 3680/5000 [00:55&lt;00:15, 86.56it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4082, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1378, rewards: 0.1000, total_rewards: 5.2632:  74%|███████▍  | 3712/5000 [00:55&lt;00:14, 88.82it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  74%|███████▍  | 3712/5000 [00:55&lt;00:14, 88.82it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  75%|███████▍  | 3744/5000 [00:56&lt;00:13, 90.19it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  75%|███████▍  | 3744/5000 [00:56&lt;00:13, 90.19it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  76%|███████▌  | 3776/5000 [00:56&lt;00:13, 91.46it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  76%|███████▌  | 3776/5000 [00:56&lt;00:13, 91.46it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  76%|███████▌  | 3808/5000 [00:56&lt;00:13, 88.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  76%|███████▌  | 3808/5000 [00:56&lt;00:13, 88.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  77%|███████▋  | 3840/5000 [00:57&lt;00:13, 88.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  77%|███████▋  | 3840/5000 [00:57&lt;00:13, 88.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  77%|███████▋  | 3872/5000 [00:57&lt;00:12, 88.04it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 5.2632:  77%|███████▋  | 3872/5000 [00:57&lt;00:12, 88.04it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3778, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1485, rewards: 0.1000, total_rewards: 5.2632:  78%|███████▊  | 3904/5000 [00:58&lt;00:12, 87.39it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  78%|███████▊  | 3904/5000 [00:58&lt;00:12, 87.39it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  79%|███████▊  | 3936/5000 [00:58&lt;00:12, 87.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  79%|███████▊  | 3936/5000 [00:58&lt;00:12, 87.73it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  79%|███████▉  | 3968/5000 [00:58&lt;00:11, 88.79it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  79%|███████▉  | 3968/5000 [00:58&lt;00:11, 88.79it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  80%|████████  | 4000/5000 [00:59&lt;00:11, 89.84it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  80%|████████  | 4000/5000 [00:59&lt;00:11, 89.84it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  81%|████████  | 4032/5000 [00:59&lt;00:10, 89.21it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  81%|████████  | 4032/5000 [00:59&lt;00:10, 89.21it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  81%|████████▏ | 4064/5000 [00:59&lt;00:10, 91.08it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  81%|████████▏ | 4064/5000 [00:59&lt;00:10, 91.08it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  82%|████████▏ | 4096/5000 [01:00&lt;00:09, 91.01it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  82%|████████▏ | 4096/5000 [01:00&lt;00:09, 91.01it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  83%|████████▎ | 4128/5000 [01:00&lt;00:09, 90.85it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  83%|████████▎ | 4128/5000 [01:00&lt;00:09, 90.85it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  83%|████████▎ | 4160/5000 [01:00&lt;00:09, 89.50it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  83%|████████▎ | 4160/5000 [01:00&lt;00:09, 89.50it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  84%|████████▍ | 4192/5000 [01:01&lt;00:09, 88.63it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  84%|████████▍ | 4192/5000 [01:01&lt;00:09, 88.63it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  84%|████████▍ | 4224/5000 [01:01&lt;00:08, 87.77it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3899, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1473, rewards: 0.1000, total_rewards: 5.2632:  84%|████████▍ | 4224/5000 [01:01&lt;00:08, 87.77it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3899, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1473, rewards: 0.1000, total_rewards: 5.2632:  85%|████████▌ | 4256/5000 [01:02&lt;00:08, 88.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  85%|████████▌ | 4256/5000 [01:02&lt;00:08, 88.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  86%|████████▌ | 4288/5000 [01:02&lt;00:07, 91.33it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  86%|████████▌ | 4288/5000 [01:02&lt;00:07, 91.33it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  86%|████████▋ | 4320/5000 [01:02&lt;00:07, 89.75it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  86%|████████▋ | 4320/5000 [01:02&lt;00:07, 89.75it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  87%|████████▋ | 4352/5000 [01:03&lt;00:07, 87.40it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  87%|████████▋ | 4352/5000 [01:03&lt;00:07, 87.40it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  88%|████████▊ | 4384/5000 [01:03&lt;00:06, 88.22it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  88%|████████▊ | 4384/5000 [01:03&lt;00:06, 88.22it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  88%|████████▊ | 4416/5000 [01:03&lt;00:06, 90.24it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  88%|████████▊ | 4416/5000 [01:03&lt;00:06, 90.24it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  89%|████████▉ | 4448/5000 [01:04&lt;00:06, 89.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  89%|████████▉ | 4448/5000 [01:04&lt;00:06, 89.83it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  90%|████████▉ | 4480/5000 [01:04&lt;00:05, 91.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  90%|████████▉ | 4480/5000 [01:04&lt;00:05, 91.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4021, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1384, rewards: 0.1000, total_rewards: 5.2632:  90%|█████████ | 4512/5000 [01:04&lt;00:05, 91.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 5.2632:  90%|█████████ | 4512/5000 [01:04&lt;00:05, 91.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3688, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1462, rewards: 0.1000, total_rewards: 5.2632:  91%|█████████ | 4544/5000 [01:05&lt;00:05, 90.70it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  91%|█████████ | 4544/5000 [01:05&lt;00:05, 90.70it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  92%|█████████▏| 4576/5000 [01:05&lt;00:04, 91.42it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  92%|█████████▏| 4576/5000 [01:05&lt;00:04, 91.42it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  92%|█████████▏| 4608/5000 [01:05&lt;00:04, 91.05it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  92%|█████████▏| 4608/5000 [01:05&lt;00:04, 91.05it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  93%|█████████▎| 4640/5000 [01:06&lt;00:04, 87.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  93%|█████████▎| 4640/5000 [01:06&lt;00:04, 87.89it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  93%|█████████▎| 4672/5000 [01:06&lt;00:03, 82.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  93%|█████████▎| 4672/5000 [01:06&lt;00:03, 82.57it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  94%|█████████▍| 4704/5000 [01:07&lt;00:03, 80.93it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  94%|█████████▍| 4704/5000 [01:07&lt;00:03, 80.93it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  95%|█████████▍| 4736/5000 [01:07&lt;00:03, 79.76it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  95%|█████████▍| 4736/5000 [01:07&lt;00:03, 79.76it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  95%|█████████▌| 4768/5000 [01:07&lt;00:02, 81.66it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 5.2632:  95%|█████████▌| 4768/5000 [01:07&lt;00:02, 81.66it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4173, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1331, rewards: 0.1000, total_rewards: 5.2632:  96%|█████████▌| 4800/5000 [01:08&lt;00:02, 84.65it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  96%|█████████▌| 4800/5000 [01:08&lt;00:02, 84.65it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  97%|█████████▋| 4832/5000 [01:08&lt;00:01, 87.33it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  97%|█████████▋| 4832/5000 [01:08&lt;00:01, 87.33it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  97%|█████████▋| 4864/5000 [01:08&lt;00:01, 89.80it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  97%|█████████▋| 4864/5000 [01:08&lt;00:01, 89.80it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  98%|█████████▊| 4896/5000 [01:09&lt;00:01, 88.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  98%|█████████▊| 4896/5000 [01:09&lt;00:01, 88.97it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  99%|█████████▊| 4928/5000 [01:09&lt;00:00, 89.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  99%|█████████▊| 4928/5000 [01:09&lt;00:00, 89.14it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632:  99%|█████████▉| 4960/5000 [01:10&lt;00:00, 89.65it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632:  99%|█████████▉| 4960/5000 [01:10&lt;00:00, 89.65it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632: 100%|█████████▉| 4992/5000 [01:10&lt;00:00, 89.88it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632: 100%|█████████▉| 4992/5000 [01:10&lt;00:00, 89.88it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.4295, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1204, rewards: 0.1000, total_rewards: 5.2632: : 5024it [01:10, 88.80it/s]
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632: : 5024it [01:10, 88.80it/s]
+</pre></div>
+</div>
 <p>We can now quickly check the CSVs with the results.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">print_csv_files_in_folder</span><span class="p">(</span><span class="n">folder_path</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">print_csv_files_in_folder</span><span class="p">(</span><span class="n">folder_path</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Find all CSV files in a folder and prints the first 10 lines of each file.</span>
 
@@ -1127,10 +1275,76 @@ Check the <a class="reference internal" href="../reference/generated/torchrl.tra
 <span class="k">del</span> <span class="n">trainer</span>
 </pre></div>
 </div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/(&#39;next&#39;, &#39;reward&#39;).csv
+512,0.36880600452423096
+1024,0.40816524624824524
+1536,0.39912936091423035
+2048,0.3688059449195862
+2560,0.42945271730422974
+3072,0.39912936091423035
+3584,0.41726210713386536
+4096,0.42945271730422974
+4608,0.42945271730422974
+
+File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/(&#39;next&#39;, &#39;reward&#39;)_std.csv
+512,0.14623472094535828
+1024,0.13783447444438934
+1536,0.13742616772651672
+2048,0.14623472094535828
+2560,0.12037014216184616
+3072,0.13742616772651672
+3584,0.1331096589565277
+4096,0.12037014216184616
+4608,0.12037014216184616
+
+File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/optim_steps.csv
+512,128.0
+1024,256.0
+1536,384.0
+2048,512.0
+2560,640.0
+3072,768.0
+3584,896.0
+4096,1024.0
+4608,1152.0
+
+File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/loss.csv
+512,0.3426951766014099
+1024,0.41079214215278625
+1536,0.33836042881011963
+2048,0.2241026759147644
+2560,0.28600719571113586
+3072,0.30405092239379883
+3584,0.3469226062297821
+4096,0.39597591757774353
+4608,0.4208415150642395
+
+File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/grad_norm_0.csv
+512,2.5714685916900635
+1024,3.8912453651428223
+1536,2.474526882171631
+2048,2.413713216781616
+2560,2.7295305728912354
+3072,3.6437828540802
+3584,3.9934234619140625
+4096,4.018246650695801
+4608,5.458132743835449
+
+File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/rewards.csv
+3232,0.10000000894069672
+
+File: /tmp/tmp61aqlrit/dqn_exp_9a12a9a0-f35a-11f0-abd8-0242ac110002/scalars/total_rewards.csv
+3232,5.263157844543457
+
+
+
+(&#39;next&#39;, &#39;reward&#39;): 0.3991, (&#39;next&#39;, &#39;reward&#39;)_std: 0.1374, rewards: 0.1000, total_rewards: 5.2632: : 5024it [01:12, 69.03it/s]
+</pre></div>
+</div>
 </section>
 </section>
 <section id="conclusion-and-possible-improvements">
-<h2>Conclusion and possible improvements<a class="headerlink" href="#conclusion-and-possible-improvements" title="Permalink to this heading">¶</a></h2>
+<h2>Conclusion and possible improvements<a class="headerlink" href="#conclusion-and-possible-improvements" title="Link to this heading">¶</a></h2>
 <p>In this tutorial we have learned:</p>
 <ul class="simple">
 <li><p>How to write a Trainer, including building its components and registering
@@ -1151,6 +1365,7 @@ of the documentation.</p></li>
 for more information).</p></li>
 <li><p>More fancy exploration techniques, such as <code class="xref py py-class docutils literal notranslate"><span class="pre">NoisyLinear</span></code> layers and such.</p></li>
 </ul>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (1 minutes 21.966 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-coding-dqn-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/25730743bad2ad4374b1a37c2e8d077a/coding_dqn.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">coding_dqn.ipynb</span></code></a></p>
@@ -1182,11 +1397,7 @@ for more information).</p></li>
     </div>
   
 
-  
-
-    <hr>
-
-  
+  <hr/>
 
   <div role="contentinfo">
     <p>
@@ -1194,11 +1405,7 @@ for more information).</p></li>
 
     </p>
   </div>
-    
-      <div>
-        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
-      </div>
-     
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -1248,28 +1455,33 @@ for more information).</p></li>
         </div>
       </section>
     </div>
-
+  </div>
   
 
 
   
 
-     
-       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
-         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-         <script src="../_static/jquery.js"></script>
-         <script src="../_static/underscore.js"></script>
-         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-         <script src="../_static/doctools.js"></script>
-         <script src="../_static/design-tabs.js"></script>
-         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-     
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+      <script type="text/javascript" src="../https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
   
 
   <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
   <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
   <script type="text/javascript" src="../_static/js/theme.js"></script>
 
   <script type="text/javascript">
@@ -1333,20 +1545,20 @@ for more information).</p></li>
       <div class="row">
         <div class="col-md-4 text-center">
           <h2>Docs</h2>
-          <p>Access comprehensive developer documentation for PyTorch</p>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
           <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
         </div>
 
         <div class="col-md-4 text-center">
           <h2>Tutorials</h2>
-          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
           <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
         </div>
 
         <div class="col-md-4 text-center">
           <h2>Resources</h2>
-          <p>Find development resources and get your questions answered</p>
-          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
         </div>
       </div>
     </div>
@@ -1355,77 +1567,77 @@ for more information).</p></li>
   <footer class="site-footer">
     <div class="container footer-container">
       <div class="footer-logo-wrapper">
-        <a href="https://pytorch.org/" class="footer-logo"></a>
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
       </div>
 
       <div class="footer-links-wrapper">
         <div class="footer-links-col">
           <ul>
-            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
-            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
-            <li><a href="https://pytorch.org/features">Features</a></li>
-            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
-            <li><a href="https://pytorch.org/blog/">Blog</a></li>
-            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
           </ul>
         </div>
 
         <div class="footer-links-col">
           <ul>
-            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
             <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
             <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
             <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
             <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
-            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
           </ul>
         </div>
 
-        <div class="footer-links-col">
+        <div class="footer-links-col follow-us-col">
           <ul>
-            <li class="list-title">Stay up to date</li>
-            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
-            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
-            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
-            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
-          </ul>  
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
           </div>
-
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title">PyTorch Podcasts</li>
-            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
-            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
-            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
-            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
-          </ul>
-         </div>
         </div>
-        
-        <div class="privacy-policy">
-          <ul>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
-            <li class="privacy-policy-links">|</li>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
-          </ul>
-        </div>
-        <div class="copyright">
-        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
-          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
-          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
-          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
-          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
       </div>
-     </div>
-
+    </div>
   </footer>
-
-  <div class="cookie-banner-wrapper">
-  <div class="container">
-    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="../_static/images/pytorch-x.svg">
-  </div>
-</div>
 
   <!-- End Footer -->
 
@@ -1435,7 +1647,7 @@ for more information).</p></li>
     <div class="container-fluid">
       <div class="container">
         <div class="mobile-main-menu-header-container">
-          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
           <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
         </div>
       </div>
@@ -1444,129 +1656,37 @@ for more information).</p></li>
     <div class="mobile-main-menu-links-container">
       <div class="main-menu">
         <ul>
-           <li class="resources-mobile-menu-title">
-             <a>Learn</a>
-           </li>
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/get-started">Get Started</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials">Tutorials</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
-             </li>
-           </ul>
-           <li class="resources-mobile-menu-title">
-             <a>Ecosystem</a>
-           </li>
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/ecosystem">Tools</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/#community-module">Community</a>
-             </li>
-             <li>
-               <a href="https://discuss.pytorch.org/">Forums</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/resources">Developer Resources</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
-             </li>
-           </ul>
-
-           <li class="resources-mobile-menu-title">
-             <a>Edge</a>
-           </li>
-
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
-             </li>
-             
-             <li>
-               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
-             </li>
-           </ul>
-
-           <li class="resources-mobile-menu-title">
-             <a>Docs</a>
-           </li>
-
-           <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
-            </li>
-          </ul>
-
-          <li class="resources-mobile-menu-title">
-            <a>Blog & News</a>
-          </li>
-            
-           <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/community-blog">Community Blog</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/videos">Videos</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/community-stories">Community Stories</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/events">Events</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/newsletter">Newsletter</a>
-             </li>
-          </ul>
-          
-          <li class="resources-mobile-menu-title">
-            <a>About</a>
+          <li>
+            <a href="#">Get Started</a>
           </li>
 
-          <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/governing-board">Governing Board</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/staff">Staff</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/contact-us">Contact Us</a>
-            </li>
-          </ul>
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
         </ul>
       </div>
     </div>
@@ -1577,21 +1697,20 @@ for more information).</p></li>
   <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
 
   <script type="text/javascript">
-    $(document).ready(function() {
-      mobileMenu.bind();
-      mobileTOC.bind();
-      pytorchAnchors.bind();
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
       sideMenus.bind();
       scrollToAnchor.bind();
       highlightNavigation.bind();
-      mainMenuDropdown.bind();
-      filterTags.bind();
-
-      // Add class to links that have code blocks, since we cannot create links in code blocks
-      $("article.pytorch-article a span.pre").each(function(e) {
-        $(this).closest("a").addClass("has-code");
-      });
     })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
   </script>
 </body>
 </html>

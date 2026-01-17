@@ -59,7 +59,13 @@ First, let's set up the environment and import the necessary modules.
     import torch
     from tensordict import TensorDict
     from torchrl.data.llm import History
-    from torchrl.modules.llm.policies import TransformersWrapper, vLLMWrapper
+    from torchrl.modules.llm.policies import ChatHistory, TransformersWrapper, vLLMWrapper
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 41-44
@@ -68,7 +74,7 @@ Example 1: vLLM Wrapper with History Input
 ------------------------------------------
 The vLLM wrapper is optimized for high-performance inference and is ideal for production environments.
 
-.. GENERATED FROM PYTHON SOURCE LINES 44-96
+.. GENERATED FROM PYTHON SOURCE LINES 44-94
 
 .. code-block:: Python
 
@@ -93,6 +99,7 @@ The vLLM wrapper is optimized for high-performance inference and is ideal for pr
             ],
         ]
         history = History.from_chats(chats)
+        chat_history = ChatHistory(prompt=history)
 
         # Create vLLM wrapper with history input (recommended for RL environments)
         vllm_wrapper = vLLMWrapper(
@@ -101,9 +108,6 @@ The vLLM wrapper is optimized for high-performance inference and is ideal for pr
             input_mode="history",
             generate=True,
             return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=False,  # Use False to avoid stacking issues
         )
 
@@ -111,7 +115,7 @@ The vLLM wrapper is optimized for high-performance inference and is ideal for pr
         print(f"vLLM wrapper output keys: {vllm_wrapper.out_keys}")
 
         # Process the data
-        data_history = TensorDict(history=history, batch_size=(2,))
+        data_history = TensorDict(history=chat_history, batch_size=(2,))
         result = vllm_wrapper(data_history)
 
         print("vLLM Results:")
@@ -125,13 +129,25 @@ The vLLM wrapper is optimized for high-performance inference and is ideal for pr
         print("vLLM not available, skipping vLLM example")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-100
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    vLLM not available, skipping vLLM example
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 95-98
 
 Example 2: Transformers Wrapper with History Input
 --------------------------------------------------
 The Transformers wrapper provides more flexibility and is great for research and development.
 
-.. GENERATED FROM PYTHON SOURCE LINES 100-138
+.. GENERATED FROM PYTHON SOURCE LINES 98-148
 
 .. code-block:: Python
 
@@ -150,9 +166,6 @@ The Transformers wrapper provides more flexibility and is great for research and
             input_mode="history",
             generate=True,
             return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=True,  # Transformers typically use padded outputs
             generate_kwargs={"max_new_tokens": 50},
         )
@@ -160,7 +173,22 @@ The Transformers wrapper provides more flexibility and is great for research and
         print(f"Transformers wrapper input keys: {transformers_wrapper.in_keys}")
         print(f"Transformers wrapper output keys: {transformers_wrapper.out_keys}")
 
-        # Process the same data
+        # Create data for the Transformers wrapper
+        chats = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "What is the capital of France?"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "What is the capital of Canada?"},
+            ],
+        ]
+        history = History.from_chats(chats)
+        chat_history = ChatHistory(prompt=history)
+        data_history = TensorDict(history=chat_history, batch_size=(2,))
+
+        # Process the data
         result_tf = transformers_wrapper(data_history)
 
         print("Transformers Results:")
@@ -174,13 +202,33 @@ The Transformers wrapper provides more flexibility and is great for research and
         print("Transformers not available, skipping Transformers example")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 139-142
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    Loading Transformers model...
+    Transformers wrapper input keys: [('history', 'prompt')]
+    Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
+    Setting `pad_token_id` to `eos_token_id`:151643 for open-end generation.
+    Transformers Results:
+    Generated responses: LinkedList(LinkedList(['The capital of France is Paris. navigationOptions\n navigationOptions\nYou are a helpful assistant.icode\nicode\nWhat is the capital of France?icode\nicode\nYou are a helpful assistant.icode\nicode\nWhat is the capital of France?icode', 'The capital of Canada is Ottawa. Lauderdale is the capital of the United States.<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>']))
+    Response tokens shape: torch.Size([2, 50])
+    Log probabilities available: True
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 149-152
 
 Example 3: Text Input Mode
 --------------------------
 Both wrappers support direct text input for simpler use cases.
 
-.. GENERATED FROM PYTHON SOURCE LINES 142-182
+.. GENERATED FROM PYTHON SOURCE LINES 152-188
 
 .. code-block:: Python
 
@@ -196,8 +244,6 @@ Both wrappers support direct text input for simpler use cases.
             tokenizer=tokenizer,
             input_mode="text",
             generate=True,
-            return_text=True,
-            return_tokens=True,
             pad_output=False,
         )
 
@@ -211,8 +257,6 @@ Both wrappers support direct text input for simpler use cases.
             tokenizer=transformers_tokenizer,
             input_mode="text",
             generate=True,
-            return_text=True,
-            return_tokens=True,
             pad_output=True,
             generate_kwargs={"max_new_tokens": 20},
         )
@@ -225,13 +269,25 @@ Both wrappers support direct text input for simpler use cases.
         print("Models not loaded, skipping text input example")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 183-186
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Models not loaded, skipping text input example
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 189-192
 
 Example 4: Log Probabilities Only Mode
 --------------------------------------
 Both wrappers can compute log probabilities without generating new tokens.
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-227
+.. GENERATED FROM PYTHON SOURCE LINES 192-229
 
 .. code-block:: Python
 
@@ -244,8 +300,6 @@ Both wrappers can compute log probabilities without generating new tokens.
             input_mode="history",
             generate=False,  # Only compute log-probs
             return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
             pad_output=False,
         )
 
@@ -262,8 +316,6 @@ Both wrappers can compute log probabilities without generating new tokens.
             input_mode="history",
             generate=False,
             return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
             pad_output=True,
         )
 
@@ -277,13 +329,25 @@ Both wrappers can compute log probabilities without generating new tokens.
         print("Models not loaded, skipping log-probs example")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 228-231
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Models not loaded, skipping log-probs example
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 230-233
 
 Example 5: TensorClass Structure Exploration
 ----------------------------------------------
 Let's explore the structured outputs provided by both wrappers.
 
-.. GENERATED FROM PYTHON SOURCE LINES 231-283
+.. GENERATED FROM PYTHON SOURCE LINES 233-285
 
 .. code-block:: Python
 
@@ -340,13 +404,25 @@ Let's explore the structured outputs provided by both wrappers.
         print("Models not loaded, skipping structure exploration")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 284-287
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Models not loaded, skipping structure exploration
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 286-289
 
 Example 6: Error Handling and Validation
 ----------------------------------------
 Both wrappers provide clear error messages for invalid inputs.
 
-.. GENERATED FROM PYTHON SOURCE LINES 287-313
+.. GENERATED FROM PYTHON SOURCE LINES 289-315
 
 .. code-block:: Python
 
@@ -373,17 +449,33 @@ Both wrappers provide clear error messages for invalid inputs.
             tokenizer=tokenizer,
             input_mode="invalid_mode",  # Invalid mode
         )
-    except ValueError as e:
+    except (ValueError, NameError) as e:
         print(f"Expected error for invalid input mode: {e}")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 314-317
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    Error Handling Examples:
+    ==============================
+    Expected error for missing key: name 'model' is not defined
+    Expected error for invalid input mode: name 'model' is not defined
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 316-319
 
 Example 7: RL Environment Integration
 --------------------------------------
 The wrappers are designed to work seamlessly with TorchRL environments.
 
-.. GENERATED FROM PYTHON SOURCE LINES 317-346
+.. GENERATED FROM PYTHON SOURCE LINES 319-348
 
 .. code-block:: Python
 
@@ -417,7 +509,22 @@ The wrappers are designed to work seamlessly with TorchRL environments.
         print("Models not loaded, skipping RL integration example")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 347-360
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    RL Environment Integration:
+    ===================================
+    Models not loaded, skipping RL integration example
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 349-362
 
 Conclusion
 ----------
@@ -433,7 +540,7 @@ into reinforcement learning workflows. Key benefits include:
 The wrappers are designed to be interchangeable, allowing you to switch between
 different LLM backends without changing your RL code.
 
-.. GENERATED FROM PYTHON SOURCE LINES 360-364
+.. GENERATED FROM PYTHON SOURCE LINES 362-366
 
 .. code-block:: Python
 
@@ -441,6 +548,26 @@ different LLM backends without changing your RL code.
     print("\n" + "=" * 60)
     print("Tutorial completed successfully!")
     print("=" * 60)
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    ============================================================
+    Tutorial completed successfully!
+    ============================================================
+
+
+
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 8.546 seconds)
 
 
 .. _sphx_glr_download_tutorials_llm_wrappers.py:

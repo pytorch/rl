@@ -88,6 +88,12 @@ backend API allows. Here's an example using gym:
     env = GymEnv("Pendulum-v1")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 69-89
 
 Running an environment
@@ -120,6 +126,26 @@ looks like:
     print(reset)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 95-96
 
 Now let's take a random action in the action space. First, sample the action:
@@ -130,6 +156,27 @@ Now let's take a random action in the action space. First, sample the action:
 
     reset_with_action = env.rand_action(reset)
     print(reset_with_action)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 100-105
@@ -148,6 +195,18 @@ dictionary:
     print(reset_with_action["action"])
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    tensor([0.2720])
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 109-113
 
 We now need to pass this action to the environment.
@@ -162,6 +221,37 @@ Multi-Agent RL or stateless environments:
 
     stepped_data = env.step(reset_with_action)
     print(stepped_data)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 118-134
@@ -194,6 +284,26 @@ the Markov Decision Process, or MDP.
     print(data)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 141-151
 
 Environment rollouts
@@ -216,6 +326,37 @@ allows you to run them in a closed loop at will:
     print(rollout)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([10]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 156-161
 
 This data looks pretty much like the ``stepped_data`` above with the
@@ -231,6 +372,37 @@ environment, you can index the tensordict like you would index a tensor:
 
     transition = rollout[3]
     print(transition)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 166-200
@@ -282,6 +454,39 @@ The transform is integrated with the environment through a
     print(rollout)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    step_count: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            step_count: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([10]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 208-215
 
 As you can see, our environment now has one more entry, ``"step_count"`` that
@@ -298,6 +503,27 @@ truncated by looking at the truncated entry:
 
 
     print(rollout["next", "truncated"])
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    tensor([[False],
+            [False],
+            [False],
+            [False],
+            [False],
+            [False],
+            [False],
+            [False],
+            [False],
+            [ True]])
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 219-252
@@ -335,6 +561,11 @@ To explore further what TorchRL's environments can do, go and check:
   to control the gym backend thanks to
   :func:`~torchrl.envs.set_gym_backend`.
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 0.034 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-0.py:

@@ -156,7 +156,13 @@ description and more about the algorithm itself.
     from tqdm import tqdm
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 156-167
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 158-169
 
 Define Hyperparameters
 ----------------------
@@ -170,7 +176,7 @@ must be corrected for this value (since one environment step will
 actually return ``frame_skip`` frames).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-178
+.. GENERATED FROM PYTHON SOURCE LINES 169-180
 
 .. code-block:: Python
 
@@ -186,7 +192,13 @@ actually return ``frame_skip`` frames).
     max_grad_norm = 1.0
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-189
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 181-191
 
 Data collection parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -199,7 +211,7 @@ as fast as it can in terms of environment interactions: the lower the ``total_fr
 the better.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-193
+.. GENERATED FROM PYTHON SOURCE LINES 191-195
 
 .. code-block:: Python
 
@@ -208,7 +220,13 @@ the better.
     total_frames = 10_000
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 194-205
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 196-207
 
 PPO parameters
 ~~~~~~~~~~~~~~
@@ -222,7 +240,7 @@ we will further split in smaller sub-batches during the inner training loop.
 The size of these sub-batches is controlled by ``sub_batch_size``.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 205-214
+.. GENERATED FROM PYTHON SOURCE LINES 207-216
 
 .. code-block:: Python
 
@@ -236,7 +254,13 @@ The size of these sub-batches is controlled by ``sub_batch_size``.
     entropy_eps = 1e-4
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-226
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 217-228
 
 Define an environment
 ---------------------
@@ -250,7 +274,7 @@ to a large panel of RL simulators, allowing you to easily swap one environment
 with another. For example, creating a wrapped gym environment can be achieved with few characters:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 226-229
+.. GENERATED FROM PYTHON SOURCE LINES 228-231
 
 .. code-block:: Python
 
@@ -258,7 +282,13 @@ with another. For example, creating a wrapped gym environment can be achieved wi
     base_env = GymEnv("InvertedDoublePendulum-v4", device=device)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-280
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 232-282
 
 There are a few things to notice in this code: first, we created
 the environment by calling the ``GymEnv`` wrapper. If extra keyword arguments
@@ -311,7 +341,7 @@ to as ``"observation"`` and our transform layers will be told to modify this
 entry and this entry only:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 280-291
+.. GENERATED FROM PYTHON SOURCE LINES 282-293
 
 .. code-block:: Python
 
@@ -327,21 +357,33 @@ entry and this entry only:
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 292-296
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 294-298
 
 As you may have noticed, we have created a normalization layer but we did not
 set its normalization parameters. To do this, :class:`~torchrl.envs.transforms.ObservationNorm` can
 automatically gather the summary statistics of our environment:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 296-298
+.. GENERATED FROM PYTHON SOURCE LINES 298-300
 
 .. code-block:: Python
 
     env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 299-304
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 301-306
 
 The :class:`~torchrl.envs.transforms.ObservationNorm` transform has now been populated with a
 location and a scale that will be used to normalize the data.
@@ -349,14 +391,26 @@ location and a scale that will be used to normalize the data.
 Let us do a little sanity check for the shape of our summary stats:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 304-306
+.. GENERATED FROM PYTHON SOURCE LINES 306-308
 
 .. code-block:: Python
 
     print("normalization constant shape:", env.transform[0].loc.shape)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 307-326
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    normalization constant shape: torch.Size([11])
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 309-328
 
 An environment is not only defined by its simulator and transforms, but also
 by a series of metadata that describe what can be expected during its
@@ -378,7 +432,7 @@ is to be expected when executing an action in the environment,
 everything an environment requires to execute a single step.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 326-331
+.. GENERATED FROM PYTHON SOURCE LINES 328-333
 
 .. code-block:: Python
 
@@ -388,20 +442,101 @@ everything an environment requires to execute a single step.
     print("action_spec (as defined by input_spec):", env.action_spec)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 332-335
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    observation_spec: Composite(
+        observation: UnboundedContinuous(
+            shape=torch.Size([11]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        step_count: BoundedDiscrete(
+            shape=torch.Size([1]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, contiguous=True),
+                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, contiguous=True)),
+            device=cpu,
+            dtype=torch.int64,
+            domain=discrete),
+        device=cpu,
+        shape=torch.Size([]),
+        data_cls=None)
+    reward_spec: UnboundedContinuous(
+        shape=torch.Size([1]),
+        space=ContinuousBox(
+            low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+        device=cpu,
+        dtype=torch.float32,
+        domain=continuous)
+    input_spec: Composite(
+        full_state_spec: Composite(
+            step_count: BoundedDiscrete(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, contiguous=True),
+                    high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, contiguous=True)),
+                device=cpu,
+                dtype=torch.int64,
+                domain=discrete),
+            device=cpu,
+            shape=torch.Size([]),
+            data_cls=None),
+        full_action_spec: Composite(
+            action: BoundedContinuous(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            device=cpu,
+            shape=torch.Size([]),
+            data_cls=None),
+        device=cpu,
+        shape=torch.Size([]),
+        data_cls=None)
+    action_spec (as defined by input_spec): BoundedContinuous(
+        shape=torch.Size([1]),
+        space=ContinuousBox(
+            low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+        device=cpu,
+        dtype=torch.float32,
+        domain=continuous)
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 334-337
 
 the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
 specs. If no error is raised, we can be confident that the specs are properly defined:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 335-337
+.. GENERATED FROM PYTHON SOURCE LINES 337-339
 
 .. code-block:: Python
 
     check_env_specs(env)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 338-352
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 340-354
 
 For fun, let's see what a simple random rollout looks like. You can
 call `env.rollout(n_steps)` and get an overview of what the environment inputs
@@ -418,7 +553,7 @@ number of steps, we will retrieve a :class:`~tensordict.TensorDict` instance wit
 that matches this trajectory length:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 352-356
+.. GENERATED FROM PYTHON SOURCE LINES 354-358
 
 .. code-block:: Python
 
@@ -427,7 +562,41 @@ that matches this trajectory length:
     print("Shape of the rollout TensorDict:", rollout.batch_size)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 357-390
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    rollout of three steps: TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([3, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    step_count: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=cpu,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([3, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+            step_count: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+            terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([3]),
+        device=cpu,
+        is_shared=False)
+    Shape of the rollout TensorDict: torch.Size([3])
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 359-392
 
 Our rollout data has a shape of ``torch.Size([3])``, which matches the number of steps
 we ran it for. The ``"next"`` entry points to the data coming after the current step.
@@ -463,7 +632,7 @@ We design the policy in three steps:
 3. Create a probabilistic :class:`~tensordict.nn.TensorDictModule` that can generate this distribution and sample from it.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 390-402
+.. GENERATED FROM PYTHON SOURCE LINES 392-404
 
 .. code-block:: Python
 
@@ -480,7 +649,13 @@ We design the policy in three steps:
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 403-408
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 405-410
 
 To enable the policy to "talk" with the environment through the ``tensordict``
 data carrier, we wrap the ``nn.Module`` in a :class:`~tensordict.nn.TensorDictModule`. This
@@ -488,7 +663,7 @@ class will simply ready the ``in_keys`` it is provided with and write the
 outputs in-place at the registered ``out_keys``.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 408-412
+.. GENERATED FROM PYTHON SOURCE LINES 410-414
 
 .. code-block:: Python
 
@@ -497,7 +672,13 @@ outputs in-place at the registered ``out_keys``.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 413-428
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 415-430
 
 We now need to build a distribution out of the location and scale of our
 normal distribution. To do so, we instruct the
@@ -515,7 +696,7 @@ like, as the :class:`~torchrl.modules.TanhNormal` distribution constructor will 
 what ``in_key`` string should be used for every keyword argument that is to be used.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 428-441
+.. GENERATED FROM PYTHON SOURCE LINES 430-443
 
 .. code-block:: Python
 
@@ -533,7 +714,13 @@ what ``in_key`` string should be used for every keyword argument that is to be u
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 442-453
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 444-455
 
 Value network
 -------------
@@ -547,7 +734,7 @@ structure as the policy, but for simplicity we assign it its own set of
 parameters.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 453-468
+.. GENERATED FROM PYTHON SOURCE LINES 455-470
 
 .. code-block:: Python
 
@@ -567,7 +754,13 @@ parameters.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 469-474
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 471-476
 
 let's try our policy and value modules. As we said earlier, the usage of
 :class:`~tensordict.nn.TensorDictModule` makes it possible to directly read the output
@@ -575,7 +768,7 @@ of the environment to run these modules, as they know what information to read
 and where to write it:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 474-477
+.. GENERATED FROM PYTHON SOURCE LINES 476-479
 
 .. code-block:: Python
 
@@ -583,7 +776,43 @@ and where to write it:
     print("Running value:", value_module(env.reset()))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 478-508
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Running policy: TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            action_log_prob: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            loc: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            observation: Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+            scale: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            step_count: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=cpu,
+        is_shared=False)
+    Running value: TensorDict(
+        fields={
+            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            observation: Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+            state_value: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+            step_count: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False),
+            terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=cpu,
+        is_shared=False)
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 480-510
 
 Data collector
 --------------
@@ -616,7 +845,7 @@ training loop allows you to write data loading pipelines
 that are 100% oblivious to the actual specificities of the rollout content.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 508-517
+.. GENERATED FROM PYTHON SOURCE LINES 510-519
 
 .. code-block:: Python
 
@@ -630,7 +859,13 @@ that are 100% oblivious to the actual specificities of the rollout content.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 518-536
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 520-538
 
 Replay buffer
 -------------
@@ -651,7 +886,7 @@ sample the sub-batches from the collected batch, but using these classes
 make it easy for us to build the inner training loop in a reproducible way.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 536-542
+.. GENERATED FROM PYTHON SOURCE LINES 538-544
 
 .. code-block:: Python
 
@@ -662,7 +897,13 @@ make it easy for us to build the inner training loop in a reproducible way.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 543-564
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 545-566
 
 Loss function
 -------------
@@ -686,7 +927,7 @@ Both of these will be used by :class:`~torchrl.objectives.ClipPPOLoss` to
 return the policy and value losses.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 564-585
+.. GENERATED FROM PYTHON SOURCE LINES 566-587
 
 .. code-block:: Python
 
@@ -712,7 +953,13 @@ return the policy and value losses.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 586-604
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 588-606
 
 Training loop
 -------------
@@ -733,7 +980,7 @@ The steps include:
 * Repeat
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 604-674
+.. GENERATED FROM PYTHON SOURCE LINES 606-676
 
 .. code-block:: Python
 
@@ -808,7 +1055,18 @@ The steps include:
         scheduler.step()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 675-682
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+      0%|          | 0/10000 [00:00<?, ?it/s]     10%|█         | 1000/10000 [00:02<00:23, 377.99it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.0980 (init= 9.0980), step count (max): 11, lr policy:  0.0003:  10%|█         | 1000/10000 [00:02<00:23, 377.99it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.0980 (init= 9.0980), step count (max): 11, lr policy:  0.0003:  20%|██        | 2000/10000 [00:05<00:21, 377.75it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.1236 (init= 9.0980), step count (max): 12, lr policy:  0.0003:  20%|██        | 2000/10000 [00:05<00:21, 377.75it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.1236 (init= 9.0980), step count (max): 12, lr policy:  0.0003:  30%|███       | 3000/10000 [00:07<00:18, 381.52it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.1639 (init= 9.0980), step count (max): 17, lr policy:  0.0003:  30%|███       | 3000/10000 [00:07<00:18, 381.52it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.1639 (init= 9.0980), step count (max): 17, lr policy:  0.0003:  40%|████      | 4000/10000 [00:10<00:15, 383.42it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.1887 (init= 9.0980), step count (max): 21, lr policy:  0.0002:  40%|████      | 4000/10000 [00:10<00:15, 383.42it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.1887 (init= 9.0980), step count (max): 21, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:13<00:12, 386.35it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2079 (init= 9.0980), step count (max): 32, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:13<00:12, 386.35it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2079 (init= 9.0980), step count (max): 32, lr policy:  0.0002:  60%|██████    | 6000/10000 [00:15<00:10, 388.17it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2234 (init= 9.0980), step count (max): 26, lr policy:  0.0001:  60%|██████    | 6000/10000 [00:15<00:10, 388.17it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2234 (init= 9.0980), step count (max): 26, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:18<00:07, 389.18it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2361 (init= 9.0980), step count (max): 44, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:18<00:07, 389.18it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2361 (init= 9.0980), step count (max): 44, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:20<00:05, 388.97it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2488 (init= 9.0980), step count (max): 35, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:20<00:05, 388.97it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2488 (init= 9.0980), step count (max): 35, lr policy:  0.0001:  90%|█████████ | 9000/10000 [00:23<00:02, 377.24it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2546 (init= 9.0980), step count (max): 37, lr policy:  0.0000:  90%|█████████ | 9000/10000 [00:23<00:02, 377.24it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2546 (init= 9.0980), step count (max): 37, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:26<00:00, 382.82it/s]    eval cumulative reward:  101.6930 (init:  101.6930), eval step-count: 10, average reward= 9.2548 (init= 9.0980), step count (max): 50, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:26<00:00, 382.82it/s]
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 677-684
 
 Results
 -------
@@ -818,7 +1076,7 @@ step count of 1000 steps, which is the maximum number of steps before the
 trajectory is truncated.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 682-697
+.. GENERATED FROM PYTHON SOURCE LINES 684-699
 
 .. code-block:: Python
 
@@ -838,7 +1096,18 @@ trajectory is truncated.
     plt.show()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 698-718
+
+
+.. image-sg:: /tutorials/images/sphx_glr_coding_ppo_001.png
+   :alt: training rewards (average), Max step count (training), Return (test), Max step count (test)
+   :srcset: /tutorials/images/sphx_glr_coding_ppo_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 700-720
 
 Conclusion and next steps
 -------------------------
@@ -860,6 +1129,11 @@ If you want to experiment with this tutorial a bit more, you can apply the follo
   inverted pendulum in action. Check :py:mod:`torchrl.record` to
   know more.
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 27.115 seconds)
 
 
 .. _sphx_glr_download_tutorials_coding_ppo.py:

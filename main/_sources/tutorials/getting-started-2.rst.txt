@@ -43,7 +43,7 @@ similar to what can be found in traditional supervised learning examples.
 
 The typical training loop therefore looks like this:
 
-  ..code - block::Python
+  .. code-block:: python
 
     >>> for i in range(n_collections):
     ...     data = get_next_batch(env, policy)
@@ -107,6 +107,12 @@ we need to get a trainable loss module:
     ddpg_loss = DDPGLoss(actor_network=actor, value_network=value_net)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 87-91
 
 And that is it! Our loss module can now be run with data coming from the
@@ -122,6 +128,29 @@ the loss functionality):
     rollout = env.rollout(max_steps=100, policy=actor)
     loss_vals = ddpg_loss(rollout)
     print(loss_vals)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+            pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            td_error: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 97-114
@@ -155,6 +184,12 @@ you can sum over only the entries which keys start with the ``"loss_"`` prefix:
             total_loss += val
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 121-132
 
 Training a LossModule
@@ -180,6 +215,12 @@ per module if that is your choice).
     total_loss.backward()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 139-141
 
 The following items will typically be
@@ -192,6 +233,12 @@ found in your training loop:
 
     optim.step()
     optim.zero_grad()
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 146-164
@@ -224,6 +271,12 @@ knowledge of the underlying mechanisms of the loss module.
     updater = SoftUpdate(ddpg_loss, eps=0.99)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 169-171
 
 In your training loop, you will need to update the target parameters at each
@@ -237,6 +290,12 @@ optimization step or each collection step:
     updater.step()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 175-183
 
 This is all you need to know about loss modules to get started!
@@ -247,6 +306,11 @@ To further explore the topic, have a look at:
 - The :ref:`Coding a DDPG loss tutorial <coding_ddpg>`;
 - Losses in action in :ref:`PPO <coding_ppo>` or :ref:`DQN <coding_dqn>`.
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 0.057 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-2.py:

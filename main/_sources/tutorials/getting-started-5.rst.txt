@@ -73,6 +73,12 @@ transform. If you need a refresher, check our these features are presented in
     from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 53-63
 
 Designing a policy
@@ -100,6 +106,12 @@ for :ref:`inference <gs_storage>`.
         env.action_spec, annealing_num_steps=100_000, eps_init=0.5
     )
     policy_explore = Seq(policy, exploration_module)
+
+
+
+
+
+
 
 
 
@@ -136,6 +148,12 @@ and a :ref:`replay buffer <gs_storage_rb>` to store that data for training.
     from torch.optim import Adam
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 102-107
 
 Loss module and optimizer
@@ -154,6 +172,12 @@ its optimizer and target parameter updater:
     loss = DQNLoss(value_network=policy, action_space=env.action_spec, delay_value=True)
     optim = Adam(loss.parameters(), lr=0.02)
     updater = SoftUpdate(loss, eps=0.99)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 115-120
@@ -178,6 +202,12 @@ We'll be using a CSV logger to log our results, and save rendered videos.
     record_env = TransformedEnv(
         GymEnv("CartPole-v1", from_pixels=True, pixels_only=False), video_recorder
     )
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 132-140
@@ -230,6 +260,12 @@ as having longer trajectories).
     )
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 175-180
 
 Rendering
@@ -247,6 +283,12 @@ video locally (notice that we are not exploring).
     video_recorder.dump()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 185-193
 
 This is what your rendered CartPole video will look like after a full
@@ -257,6 +299,11 @@ training loop:
 This concludes our series of "Getting started with TorchRL" tutorials!
 Feel free to share feedback about it on GitHub.
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.625 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-5.py:

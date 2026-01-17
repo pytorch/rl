@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -26,7 +26,7 @@
 
   
 
-  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
   <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
@@ -34,247 +34,70 @@
   <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
   <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
   <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Introduction to TorchRL" href="torchrl_demo.html" />
-    <link rel="prev" title="Reinforcement Learning (PPO) with TorchRL Tutorial" href="coding_ppo.html" />
-  <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','UA-117752657-2');</script>
-    <!-- End Google Tag Manager -->
-  
+    <link rel="next" title="Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial" href="multiagent_ppo.html" />
+    <link rel="prev" title="Reinforcement Learning (PPO) with TorchRL Tutorial" href="coding_ppo.html" /> 
 
   
   <script src="../_static/js/modernizr.min.js"></script>
-
-  <!-- Preload the theme fonts -->
-
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-
-<!-- Preload the katex fonts -->
-
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
 </head>
 
 <div class="container-fluid header-holder tutorials-header" id="header-holder">
   <div class="container">
     <div class="header-container">
-      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
 
       <div class="main-menu">
         <ul>
-
-          <li class="main-menu-item">
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Learn
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
-                  <span class=dropdown-title>Get Started</span>
-                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
-                  <span class="dropdown-title">Tutorials</span>
-                  <p>Whats new in PyTorch tutorials</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
-                  <span class="dropdown-title">Learn the Basics</span>
-                  <p>Familiarize yourself with PyTorch concepts and modules</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
-                  <span class="dropdown-title">PyTorch Recipes</span>
-                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
-                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
-                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
-                </a>
-              </div>
-            </div>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
           </li>
 
           <li>
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Ecosystem
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
-                  <span class="dropdown-title">Tools</span>
-                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
-                  <span class=dropdown-title>Community</span>
-                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
-                  <span class=dropdown-title>Forums</span>
-                  <p>A place to discuss PyTorch code, issues, install, research</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
-                  <span class=dropdown-title>Developer Resources</span>
-                  <p>Find resources and get questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
-                  <span class="dropdown-title">Contributor Awards - 2024</span>
-                  <p>Award winners announced at this year's PyTorch Conference</p>
-                </a>
-              </div>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
           </li>
 
           <li>
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Edge
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
-                  <span class="dropdown-title">About PyTorch Edge</span>
-                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
-                  <span class="dropdown-title">ExecuTorch</span>
-                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
-                  <span class="dropdown-title">ExecuTorch Docs</span>
-                </a>
-              </div>
-            </div>  
-          </li>
-
-          <li class="main-menu-item">
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Docs
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
-                  <span class="dropdown-title">PyTorch</span>
-                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
-                  <span class="dropdown-title">PyTorch Domains</span>
-                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
-                </a>
-              </div>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
           </li>
 
           <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Blogs & News 
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
-                  <span class="dropdown-title">PyTorch Blog</span>
-                  <p>Catch up on the latest technical news and happenings</p>
-                </a>
-                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
-                  <span class="dropdown-title">Community Blog</span>
-                  <p>Stories from the PyTorch ecosystem</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
-                  <span class="dropdown-title">Videos</span>
-                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
-                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
-                  <span class="dropdown-title">Community Stories</span>
-                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/events">
-                  <span class="dropdown-title">Events</span>
-                  <p>Find events, webinars, and podcasts</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
-                  <span class="dropdown-title">Newsletter</span>
-                  <p>Stay up-to-date with the latest updates</p>
-                </a>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
           </li>
 
           <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                About
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
-                  <span class="dropdown-title">PyTorch Foundation</span>
-                  <p>Learn more about the PyTorch Foundation</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
-                  <span class="dropdown-title">Governing Board</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
-                  <span class="dropdown-title">Cloud Credit Program</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
-                  <span class="dropdown-title">Technical Advisory Council</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
-                  <span class="dropdown-title">Staff</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
-                  <span class="dropdown-title">Contact Us</span>
-                </a>
-              </div>
-            </div>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="main-menu-item">
-            <div class="no-dropdown">
-              <a href="https://pytorch.org/join" data-cta="join">
-                Become a Member
-              </a>
-            </div>
-          </li>
           <li>
-           <div class="main-menu-item">
-             <a href="https://github.com/pytorch/pytorch" class="github-icon">
-             </a>
-           </div>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
           </li>
-          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+
           <li>
-            <div class="main-menu-item">
-             <a href="https://github.com/pytorch/pytorch" class="search-icon">
-             </a>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
           </li>
-          --->
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
         </ul>
       </div>
 
       <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
     </div>
+
   </div>
 </div>
+
 
 <body class="pytorch-body">
 
    
+  <div>
 
     
 
@@ -289,7 +112,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.10.0+gd79e651) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.10.0) &#x25BC</span></a>
     </div>
     
 
@@ -324,7 +147,6 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Pendulum: Writing your environment and transforms with TorchRL</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -333,7 +155,6 @@
 <li class="toctree-l1"><a class="reference internal" href="dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="export.html">Exporting TorchRL modules</a></li>
-<li class="toctree-l1"><a class="reference internal" href="llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
@@ -355,9 +176,11 @@
     </nav>
 
     <div class="pytorch-container">
-      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
-        <div class="pytorch-breadcrumbs-wrapper">
-          
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
 
 
 
@@ -401,17 +224,14 @@
 
   
 </div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
         </div>
 
-        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
-          Shortcuts
-        </div>
-      </div>
-
-      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
         <div class="pytorch-content-left">
-
-        
     
 
     <div class="pytorch-call-to-action-links">
@@ -436,15 +256,11 @@
 
     
     
-          <!-- Google Tag Manager (noscript) -->
-          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
-          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
-             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+             <article itemprop="articleBody" class="pytorch-article">
               
   <div class="sphx-glr-download-link-note admonition note">
 <p class="admonition-title">Note</p>
@@ -452,7 +268,7 @@
 to download the full example code.</p>
 </div>
 <section class="sphx-glr-example-title" id="pendulum-writing-your-environment-and-transforms-with-torchrl">
-<span id="sphx-glr-tutorials-pendulum-py"></span><h1>Pendulum: Writing your environment and transforms with TorchRL<a class="headerlink" href="#pendulum-writing-your-environment-and-transforms-with-torchrl" title="Permalink to this heading">¶</a></h1>
+<span id="sphx-glr-tutorials-pendulum-py"></span><h1>Pendulum: Writing your environment and transforms with TorchRL<a class="headerlink" href="#pendulum-writing-your-environment-and-transforms-with-torchrl" title="Link to this heading">¶</a></h1>
 <p><strong>Author</strong>: <a class="reference external" href="https://github.com/vmoens">Vincent Moens</a></p>
 <p id="pendulum-tuto">Creating an environment (a simulator or an interface to a physical control system)
 is an integrative part of reinforcement learning and control engineering.</p>
@@ -464,7 +280,7 @@ control library</a>.</p>
 <figure class="align-center" id="id1">
 <img alt="Pendulum" src="../_images/pendulum.gif" />
 <figcaption>
-<p><span class="caption-text">Simple Pendulum</span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+<p><span class="caption-text">Simple Pendulum</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
 <p>Key learnings:</p>
@@ -474,7 +290,7 @@ control library</a>.</p>
 - Implementing behavior: seeding, reset and step.</p></li>
 <li><p>Transforming your environment inputs and outputs, and writing your own
 transforms;</p></li>
-<li><p>How to use <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> to carry arbitrary data structures
+<li><p>How to use <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> to carry arbitrary data structures
 through the <code class="docutils literal notranslate"><span class="pre">codebase</span></code>.</p>
 <p>In the process, we will touch three crucial components of TorchRL:</p>
 </li>
@@ -515,25 +331,25 @@ simulation graph.</p></li>
 <li><p>Finally, we will train a simple policy to solve the system we implemented.</p></li>
 </ul>
 <p>A built-in version of this environment can be found in class:<cite>~torchrl.envs.PendulumEnv</cite>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">tqdm</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModule</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">tqdm</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">CatTensors</span><span class="p">,</span>
-    <span class="n">EnvBase</span><span class="p">,</span>
-    <span class="n">Transform</span><span class="p">,</span>
-    <span class="n">TransformedEnv</span><span class="p">,</span>
-    <span class="n">UnsqueezeTransform</span><span class="p">,</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatTensors</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnvBase</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Transform</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">UnsqueezeTransform</span></a><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">_apply_to_composite</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_env_specs</span><span class="p">,</span> <span class="n">step_mdp</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="n">_apply_to_composite</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">check_env_specs</span><span class="p">,</span> <span class="n">step_mdp</span>
 
 <span class="n">DEFAULT_X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
 <span class="n">DEFAULT_Y</span> <span class="o">=</span> <span class="mf">1.0</span>
@@ -571,11 +387,11 @@ angular position is then updated according to</p>
 position), the angular velocity is close to 0 (no motion) and the torque is
 0 too.</p>
 <section id="coding-the-effect-of-an-action-step">
-<h2>Coding the effect of an action: <code class="xref py py-func docutils literal notranslate"><span class="pre">_step()</span></code><a class="headerlink" href="#coding-the-effect-of-an-action-step" title="Permalink to this heading">¶</a></h2>
+<h2>Coding the effect of an action: <code class="xref py py-func docutils literal notranslate"><span class="pre">_step()</span></code><a class="headerlink" href="#coding-the-effect-of-an-action-step" title="Link to this heading">¶</a></h2>
 <p>The step method is the first thing to consider, as it will encode
 the simulation that is of interest to us. In TorchRL, the
 <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> class has a <code class="xref py py-meth docutils literal notranslate"><span class="pre">EnvBase.step()</span></code>
-method that receives a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code>
+method that receives a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a>
 instance with an <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code> entry indicating what action is to be taken.</p>
 <p>To facilitate the reading and writing from that <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> and to make sure
 that the keys are consistent with what’s expected from the library, the
@@ -596,7 +412,7 @@ at the corresponding entries in a new <code class="xref py py-class docutils lit
 of <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step()</span></code></a> in the input <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> to enforce
 input/output consistency.</p>
 <p>Typically, for stateful environments, this will look like this:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">())</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">())</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
@@ -642,7 +458,7 @@ and/or speeds that are far from 0.</p>
 <p>In our example, <code class="xref py py-meth docutils literal notranslate"><span class="pre">EnvBase._step()</span></code> is encoded as a static method since our
 environment is stateless. In stateful settings, the <code class="docutils literal notranslate"><span class="pre">self</span></code> argument is
 needed as the state needs to be read from the environment.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">):</span>
     <span class="n">th</span><span class="p">,</span> <span class="n">thdot</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;thdot&quot;</span><span class="p">]</span>  <span class="c1"># th := theta</span>
 
     <span class="n">g_force</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">]</span>
@@ -662,8 +478,8 @@ needed as the state needs to be read from the environment.</p>
     <span class="p">)</span>
     <span class="n">new_th</span> <span class="o">=</span> <span class="n">th</span> <span class="o">+</span> <span class="n">new_thdot</span> <span class="o">*</span> <span class="n">dt</span>
     <span class="n">reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">costs</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">done</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
-    <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <span class="n">done</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">bool</span></a><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
         <span class="p">{</span>
             <span class="s2">&quot;th&quot;</span><span class="p">:</span> <span class="n">new_th</span><span class="p">,</span>
             <span class="s2">&quot;thdot&quot;</span><span class="p">:</span> <span class="n">new_thdot</span><span class="p">,</span>
@@ -676,13 +492,13 @@ needed as the state needs to be read from the environment.</p>
     <span class="k">return</span> <span class="n">out</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">angle_normalize</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">angle_normalize</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
     <span class="k">return</span> <span class="p">((</span><span class="n">x</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">%</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">pi</span>
 </pre></div>
 </div>
 </section>
 <section id="resetting-the-simulator-reset">
-<h2>Resetting the simulator: <code class="xref py py-func docutils literal notranslate"><span class="pre">_reset()</span></code><a class="headerlink" href="#resetting-the-simulator-reset" title="Permalink to this heading">¶</a></h2>
+<h2>Resetting the simulator: <code class="xref py py-func docutils literal notranslate"><span class="pre">_reset()</span></code><a class="headerlink" href="#resetting-the-simulator-reset" title="Link to this heading">¶</a></h2>
 <p>The second method we need to care about is the
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code> method. Like
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">_step()</span></code>, it should write the observation entries
@@ -705,7 +521,7 @@ of the pendulum in a nested <code class="docutils literal notranslate"><span cla
 <p>In this example, we do not pass a done state as this is not mandatory
 for <code class="xref py py-meth docutils literal notranslate"><span class="pre">_reset()</span></code> and our environment is non-terminating, so we always
 expect it to be <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
         <span class="c1"># if no ``tensordict`` is passed, we generate a single set of hyperparameters</span>
         <span class="c1"># Otherwise, we assume that the input ``tensordict`` contains all the relevant</span>
@@ -730,7 +546,7 @@ expect it to be <code class="docutils literal notranslate"><span class="pre">Fal
         <span class="o">*</span> <span class="p">(</span><span class="n">high_thdot</span> <span class="o">-</span> <span class="n">low_thdot</span><span class="p">)</span>
         <span class="o">+</span> <span class="n">low_thdot</span>
     <span class="p">)</span>
-    <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <span class="n">out</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
         <span class="p">{</span>
             <span class="s2">&quot;th&quot;</span><span class="p">:</span> <span class="n">th</span><span class="p">,</span>
             <span class="s2">&quot;thdot&quot;</span><span class="p">:</span> <span class="n">thdot</span><span class="p">,</span>
@@ -743,7 +559,7 @@ expect it to be <code class="docutils literal notranslate"><span class="pre">Fal
 </div>
 </section>
 <section id="environment-metadata-env-spec">
-<h2>Environment metadata: <code class="docutils literal notranslate"><span class="pre">env.*_spec</span></code><a class="headerlink" href="#environment-metadata-env-spec" title="Permalink to this heading">¶</a></h2>
+<h2>Environment metadata: <code class="docutils literal notranslate"><span class="pre">env.*_spec</span></code><a class="headerlink" href="#environment-metadata-env-spec" title="Link to this heading">¶</a></h2>
 <p>The specs define the input and output domain of the environment.
 It is important that the specs accurately define the tensors that will be
 received at runtime, as they are often used to carry information about
@@ -776,10 +592,10 @@ within <code class="docutils literal notranslate"><span class="pre">output_spec<
 <p>In other words, the <code class="docutils literal notranslate"><span class="pre">observation_spec</span></code> and related properties are
 convenient shortcuts to the content of the output and input spec containers.</p>
 <p>TorchRL offers multiple <a class="reference internal" href="../reference/generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>
-<span class="xref std std-ref">subclasses</span> to
+<a class="reference internal" href="../reference/data_specs.html#ref-specs"><span class="std std-ref">subclasses</span></a> to
 encode the environment’s input and output characteristics.</p>
 <section id="specs-shape">
-<h3>Specs shape<a class="headerlink" href="#specs-shape" title="Permalink to this heading">¶</a></h3>
+<h3>Specs shape<a class="headerlink" href="#specs-shape" title="Link to this heading">¶</a></h3>
 <p>The environment specs leading dimensions must match the
 environment batch-size. This is done to enforce that every component of an
 environment (including its transforms) have an accurate representation of
@@ -787,20 +603,20 @@ the expected input and output shapes. This is something that should be
 accurately coded in stateful settings.</p>
 <p>For non batch-locked environments, such as the one in our example (see below),
 this is irrelevant as the environment batch size will most likely be empty.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_make_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_params</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">_make_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_params</span><span class="p">):</span>
     <span class="c1"># Under the hood, this will populate self.output_spec[&quot;observation&quot;]</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
         <span class="n">th</span><span class="o">=</span><span class="n">Bounded</span><span class="p">(</span>
             <span class="n">low</span><span class="o">=-</span><span class="n">torch</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span>
             <span class="n">high</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span>
             <span class="n">shape</span><span class="o">=</span><span class="p">(),</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span>
         <span class="p">),</span>
         <span class="n">thdot</span><span class="o">=</span><span class="n">Bounded</span><span class="p">(</span>
             <span class="n">low</span><span class="o">=-</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_speed&quot;</span><span class="p">],</span>
             <span class="n">high</span><span class="o">=</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_speed&quot;</span><span class="p">],</span>
             <span class="n">shape</span><span class="o">=</span><span class="p">(),</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span>
         <span class="p">),</span>
         <span class="c1"># we need to add the ``params`` to the observation specs, as we want</span>
         <span class="c1"># to pass it at each step during a rollout</span>
@@ -816,22 +632,22 @@ this is irrelevant as the environment batch size will most likely be empty.</p>
         <span class="n">low</span><span class="o">=-</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_torque&quot;</span><span class="p">],</span>
         <span class="n">high</span><span class="o">=</span><span class="n">td_params</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="s2">&quot;max_torque&quot;</span><span class="p">],</span>
         <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
-        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">,</span>
     <span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">td_params</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">make_composite_from_td</span><span class="p">(</span><span class="n">td</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">make_composite_from_td</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">):</span>
     <span class="c1"># custom function to convert a ``tensordict`` in a similar spec structure</span>
     <span class="c1"># of unbounded values.</span>
     <span class="n">composite</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
         <span class="p">{</span>
             <span class="n">key</span><span class="p">:</span> <span class="n">make_composite_from_td</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">)</span>
             <span class="k">else</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.items" title="tensordict.TensorDict.items" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">td</span><span class="o">.</span><span class="n">items</span></a><span class="p">()</span>
         <span class="p">},</span>
-        <span class="n">shape</span><span class="o">=</span><span class="n">td</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.shape" title="tensordict.TensorDict.shape" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-property"><span class="n">td</span><span class="o">.</span><span class="n">shape</span></a><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">composite</span>
 </pre></div>
@@ -839,34 +655,34 @@ this is irrelevant as the environment batch size will most likely be empty.</p>
 </section>
 </section>
 <section id="reproducible-experiments-seeding">
-<h2>Reproducible experiments: seeding<a class="headerlink" href="#reproducible-experiments-seeding" title="Permalink to this heading">¶</a></h2>
+<h2>Reproducible experiments: seeding<a class="headerlink" href="#reproducible-experiments-seeding" title="Link to this heading">¶</a></h2>
 <p>Seeding an environment is a common operation when initializing an experiment.
 The only goal of <code class="xref py py-func docutils literal notranslate"><span class="pre">EnvBase._set_seed()</span></code> is to set the seed of the contained
 simulator. If possible, this operation should not call <code class="docutils literal notranslate"><span class="pre">reset()</span></code> or interact
 with the environment execution. The parent <code class="xref py py-func docutils literal notranslate"><span class="pre">EnvBase.set_seed()</span></code> method
 incorporates a mechanism that allows seeding multiple environments with a
 different pseudo-random and reproducible seed.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">rng</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">rng</span> <span class="o">=</span> <span class="n">rng</span>
 </pre></div>
 </div>
 </section>
 <section id="wrapping-things-together-the-envbase-class">
-<h2>Wrapping things together: the <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> class<a class="headerlink" href="#wrapping-things-together-the-envbase-class" title="Permalink to this heading">¶</a></h2>
+<h2>Wrapping things together: the <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> class<a class="headerlink" href="#wrapping-things-together-the-envbase-class" title="Link to this heading">¶</a></h2>
 <p>We can finally put together the pieces and design our environment class.
 The specs initialization needs to be performed during the environment
 construction, so we must take care of calling the <code class="xref py py-func docutils literal notranslate"><span class="pre">_make_spec()</span></code> method
 within <code class="xref py py-func docutils literal notranslate"><span class="pre">PendulumEnv.__init__()</span></code>.</p>
 <p>We add a static method <code class="xref py py-meth docutils literal notranslate"><span class="pre">PendulumEnv.gen_params()</span></code> which deterministically
 generates a set of hyperparameters to be used during execution:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">gen_params</span><span class="p">(</span><span class="n">g</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">gen_params</span><span class="p">(</span><span class="n">g</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a ``tensordict`` containing the physical parameters such as gravitational force and torque or speed limits.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">batch_size</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
         <span class="p">{</span>
-            <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">(</span>
+            <span class="s2">&quot;params&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
                 <span class="p">{</span>
                     <span class="s2">&quot;max_speed&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
                     <span class="s2">&quot;max_torque&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span>
@@ -881,29 +697,29 @@ generates a set of hyperparameters to be used during execution:</p>
         <span class="p">[],</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
-        <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">td</span>
+        <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.expand" title="tensordict.TensorDict.expand" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">td</span><span class="o">.</span><span class="n">expand</span></a><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a>
 </pre></div>
 </div>
 <p>We define the environment as non-<code class="docutils literal notranslate"><span class="pre">batch_locked</span></code> by turning the <code class="docutils literal notranslate"><span class="pre">homonymous</span></code>
 attribute to <code class="docutils literal notranslate"><span class="pre">False</span></code>. This means that we will <strong>not</strong> enforce the input
 <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> to have a <code class="docutils literal notranslate"><span class="pre">batch-size</span></code> that matches the one of the environment.</p>
 <p>The following code will just put together the pieces we have coded above.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">PendulumEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">PendulumEnv</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnvBase</span></a><span class="p">):</span>
     <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;render_modes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;rgb_array&quot;</span><span class="p">],</span>
         <span class="s2">&quot;render_fps&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
     <span class="p">}</span>
     <span class="n">batch_locked</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">td_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">td_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gen_params</span><span class="p">()</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_spec</span><span class="p">(</span><span class="n">td_params</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">seed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.empty.html#torch.empty" title="torch.empty" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">empty</span></a><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">seed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.empty.html#torch.empty" title="torch.empty" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">empty</span></a><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">int64</span></a><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
 
     <span class="c1"># Helpers: _make_step and gen_params</span>
@@ -918,12 +734,12 @@ attribute to <code class="docutils literal notranslate"><span class="pre">False<
 </div>
 </section>
 <section id="testing-our-environment">
-<h2>Testing our environment<a class="headerlink" href="#testing-our-environment" title="Permalink to this heading">¶</a></h2>
+<h2>Testing our environment<a class="headerlink" href="#testing-our-environment" title="Link to this heading">¶</a></h2>
 <p>TorchRL provides a simple function <code class="xref py py-func docutils literal notranslate"><span class="pre">check_env_specs()</span></code>
 to check that a (transformed) environment has an input/output structure that
 matches the one dictated by its specs.
 Let us try it out:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <span class="n">PendulumEnv</span><span class="p">()</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">PendulumEnv</span></a><span class="p">()</span>
 <span class="n">check_env_specs</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -934,10 +750,186 @@ signature:</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reward_spec:&quot;</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_spec</span><span class="p">)</span>
 </pre></div>
 </div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>observation_spec: Composite(
+    th: BoundedContinuous(
+        shape=torch.Size([]),
+        space=ContinuousBox(
+            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+        device=cpu,
+        dtype=torch.float32,
+        domain=continuous),
+    thdot: BoundedContinuous(
+        shape=torch.Size([]),
+        space=ContinuousBox(
+            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+        device=cpu,
+        dtype=torch.float32,
+        domain=continuous),
+    params: Composite(
+        max_speed: UnboundedDiscrete(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),
+            device=cpu,
+            dtype=torch.int64,
+            domain=discrete),
+        max_torque: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        dt: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        g: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        m: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        l: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([]),
+        data_cls=None),
+    device=cpu,
+    shape=torch.Size([]),
+    data_cls=None)
+state_spec: Composite(
+    th: BoundedContinuous(
+        shape=torch.Size([]),
+        space=ContinuousBox(
+            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+        device=cpu,
+        dtype=torch.float32,
+        domain=continuous),
+    thdot: BoundedContinuous(
+        shape=torch.Size([]),
+        space=ContinuousBox(
+            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+        device=cpu,
+        dtype=torch.float32,
+        domain=continuous),
+    params: Composite(
+        max_speed: UnboundedDiscrete(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, contiguous=True)),
+            device=cpu,
+            dtype=torch.int64,
+            domain=discrete),
+        max_torque: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        dt: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        g: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        m: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        l: UnboundedContinuous(
+            shape=torch.Size([]),
+            space=ContinuousBox(
+                low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        device=cpu,
+        shape=torch.Size([]),
+        data_cls=None),
+    device=cpu,
+    shape=torch.Size([]),
+    data_cls=None)
+reward_spec: UnboundedContinuous(
+    shape=torch.Size([1]),
+    space=ContinuousBox(
+        low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+        high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+    device=cpu,
+    dtype=torch.float32,
+    domain=continuous)
+</pre></div>
+</div>
 <p>We can execute a couple of commands too to check that the output structure
 matches what is expected.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reset tensordict&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reset tensordict&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>reset tensordict TensorDict(
+    fields={
+        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+        params: TensorDict(
+            fields={
+                dt: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                l: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                m: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                max_speed: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                max_torque: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False),
+        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+        th: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+        thdot: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([]),
+    device=None,
+    is_shared=False)
 </pre></div>
 </div>
 <p>We can run the <code class="xref py py-func docutils literal notranslate"><span class="pre">env.rand_step()</span></code> to generate
@@ -945,13 +937,57 @@ an action randomly from the <code class="docutils literal notranslate"><span cla
 the hyperparameters and the current state <strong>must</strong> be passed since our
 environment is stateless. In stateful contexts, <code class="docutils literal notranslate"><span class="pre">env.rand_step()</span></code> works
 perfectly too.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;random step tensordict&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;random step tensordict&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>random step tensordict TensorDict(
+    fields={
+        action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+        next: TensorDict(
+            fields={
+                done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                params: TensorDict(
+                    fields={
+                        dt: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        l: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        m: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        max_speed: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                        max_torque: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                th: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                thdot: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False),
+        params: TensorDict(
+            fields={
+                dt: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                l: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                m: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                max_speed: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                max_torque: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False),
+        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+        th: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+        thdot: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([]),
+    device=None,
+    is_shared=False)
 </pre></div>
 </div>
 </section>
 <section id="transforming-an-environment">
-<h2>Transforming an environment<a class="headerlink" href="#transforming-an-environment" title="Permalink to this heading">¶</a></h2>
+<h2>Transforming an environment<a class="headerlink" href="#transforming-an-environment" title="Link to this heading">¶</a></h2>
 <p>Writing environment transforms for stateless simulators is slightly more
 complicated than for stateful ones: transforming an output entry that needs
 to be read at the following iteration requires to apply the inverse transform
@@ -962,10 +998,10 @@ transforms!</p>
 <code class="docutils literal notranslate"><span class="pre">[&quot;th&quot;,</span> <span class="pre">&quot;thdot&quot;]</span></code> to be able to stack them along the last
 dimension. We also pass them as <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code> to squeeze them back to their
 original shape once they are passed as input in the next iteration.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">TransformedEnv</span></a><span class="p">(</span>
     <span class="n">env</span><span class="p">,</span>
     <span class="c1"># ``Unsqueeze`` the observations that we will concatenate</span>
-    <span class="n">UnsqueezeTransform</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">UnsqueezeTransform</span></a><span class="p">(</span>
         <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">,</span> <span class="s2">&quot;thdot&quot;</span><span class="p">],</span>
         <span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">,</span> <span class="s2">&quot;thdot&quot;</span><span class="p">],</span>
@@ -974,7 +1010,7 @@ original shape once they are passed as input in the next iteration.</p>
 </pre></div>
 </div>
 <section id="writing-custom-transforms">
-<h3>Writing custom transforms<a class="headerlink" href="#writing-custom-transforms" title="Permalink to this heading">¶</a></h3>
+<h3>Writing custom transforms<a class="headerlink" href="#writing-custom-transforms" title="Link to this heading">¶</a></h3>
 <p>TorchRL’s transforms may not cover all the operations one wants to execute
 after an environment has been executed.
 Writing a transform does not require much effort. As for the environment
@@ -988,23 +1024,23 @@ design, there are two steps in writing a transform:</p>
 <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a>. The structure of the class allows to
 customize the behavior in the different contexts.</p>
 <p>A <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a> skeleton can be summarized as follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Transform</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">Transform</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">inv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">inv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="o">...</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_inv_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="o">...</span>
 </pre></div>
 </div>
 <p>There are three entry points (<code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code>, <code class="xref py py-func docutils literal notranslate"><span class="pre">_step()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">inv()</span></code>)
-which all receive <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code> instances. The first two
+which all receive <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code></a> instances. The first two
 will eventually go through the keys indicated by <code class="xref py py-obj docutils literal notranslate"><span class="pre">in_keys</span></code>
 and call <code class="xref py py-meth docutils literal notranslate"><span class="pre">_apply_transform()</span></code> to each of these. The results will
 be written in the entries pointed by <code class="xref py py-obj docutils literal notranslate"><span class="pre">Transform.out_keys</span></code> if provided
@@ -1026,21 +1062,21 @@ re-written, and the <code class="xref py py-func docutils literal notranslate"><
 <p>Let us code new transforms that will compute the <code class="docutils literal notranslate"><span class="pre">sine</span></code> and <code class="docutils literal notranslate"><span class="pre">cosine</span></code>
 values of the position angle, as these values are more useful to us to learn
 a policy than the raw angle value:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">SinTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">SinTransform</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Transform</span></a><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">sin</span><span class="p">()</span>
 
     <span class="c1"># The transform must also modify the data at reset time</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a>
+    <span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
 
     <span class="c1"># _apply_to_composite will execute the observation spec transform across all</span>
     <span class="c1"># in_keys/out_keys pairs and write the result in the observation_spec which</span>
     <span class="c1"># is of type ``Composite``</span>
     <span class="nd">@_apply_to_composite</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">Bounded</span><span class="p">(</span>
             <span class="n">low</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
             <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
@@ -1050,21 +1086,21 @@ a policy than the raw angle value:</p>
         <span class="p">)</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">CosTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">CosTransform</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">Transform</span></a><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">cos</span><span class="p">()</span>
 
     <span class="c1"># The transform must also modify the data at reset time</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a>
+    <span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
 
     <span class="c1"># _apply_to_composite will execute the observation spec transform across all</span>
     <span class="c1"># in_keys/out_keys pairs and write the result in the observation_spec which</span>
     <span class="c1"># is of type ``Composite``</span>
     <span class="nd">@_apply_to_composite</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">Bounded</span><span class="p">(</span>
             <span class="n">low</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
             <span class="n">high</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
@@ -1074,19 +1110,36 @@ a policy than the raw angle value:</p>
         <span class="p">)</span>
 
 
-<span class="n">t_sin</span> <span class="o">=</span> <span class="n">SinTransform</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sin&quot;</span><span class="p">])</span>
-<span class="n">t_cos</span> <span class="o">=</span> <span class="n">CosTransform</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cos&quot;</span><span class="p">])</span>
+<span class="n">t_sin</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">SinTransform</span></a><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sin&quot;</span><span class="p">])</span>
+<span class="n">t_cos</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CosTransform</span></a><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;th&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cos&quot;</span><span class="p">])</span>
 <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">t_sin</span><span class="p">)</span>
 <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">t_cos</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TransformedEnv(
+    env=PendulumEnv(),
+    transform=Compose(
+            UnsqueezeTransform(dim=-1, in_keys=[&#39;th&#39;, &#39;thdot&#39;], out_keys=[&#39;th&#39;, &#39;thdot&#39;], in_keys_inv=[&#39;th&#39;, &#39;thdot&#39;], out_keys_inv=[&#39;th&#39;, &#39;thdot&#39;]),
+            SinTransform(keys=[&#39;th&#39;]),
+            CosTransform(keys=[&#39;th&#39;])))
 </pre></div>
 </div>
 <p>Concatenates the observations onto an “observation” entry.
 <code class="docutils literal notranslate"><span class="pre">del_keys=False</span></code> ensures that we keep these values for the next
 iteration.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">cat_transform</span> <span class="o">=</span> <span class="n">CatTensors</span><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">cat_transform</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">CatTensors</span></a><span class="p">(</span>
     <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sin&quot;</span><span class="p">,</span> <span class="s2">&quot;cos&quot;</span><span class="p">,</span> <span class="s2">&quot;thdot&quot;</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">out_key</span><span class="o">=</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="n">del_keys</span><span class="o">=</span><span class="kc">False</span>
 <span class="p">)</span>
 <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">cat_transform</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TransformedEnv(
+    env=PendulumEnv(),
+    transform=Compose(
+            UnsqueezeTransform(dim=-1, in_keys=[&#39;th&#39;, &#39;thdot&#39;], out_keys=[&#39;th&#39;, &#39;thdot&#39;], in_keys_inv=[&#39;th&#39;, &#39;thdot&#39;], out_keys_inv=[&#39;th&#39;, &#39;thdot&#39;]),
+            SinTransform(keys=[&#39;th&#39;]),
+            CosTransform(keys=[&#39;th&#39;]),
+            CatTensors(in_keys=[&#39;cos&#39;, &#39;sin&#39;, &#39;thdot&#39;], out_key=observation)))
 </pre></div>
 </div>
 <p>Once more, let us check that our environment specs match what is received:</p>
@@ -1096,7 +1149,7 @@ iteration.</p>
 </section>
 </section>
 <section id="executing-a-rollout">
-<h2>Executing a rollout<a class="headerlink" href="#executing-a-rollout" title="Permalink to this heading">¶</a></h2>
+<h2>Executing a rollout<a class="headerlink" href="#executing-a-rollout" title="Link to this heading">¶</a></h2>
 <p>Executing a rollout is a succession of simple steps:</p>
 <ul class="simple">
 <li><p>reset the environment</p></li>
@@ -1112,9 +1165,9 @@ iteration.</p>
 </ul>
 <p>These operations have been conveniently wrapped in the <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a>
 method, from which we provide a simplified version here below.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">simple_rollout</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">simple_rollout</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
     <span class="c1"># preallocate:</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">steps</span><span class="p">])</span>
+    <span class="n">data</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">steps</span><span class="p">])</span>
     <span class="c1"># reset</span>
     <span class="n">_data</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
@@ -1128,9 +1181,59 @@ method, from which we provide a simplified version here below.</p>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;data from rollout:&quot;</span><span class="p">,</span> <span class="n">simple_rollout</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
 </pre></div>
 </div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>data from rollout: TensorDict(
+    fields={
+        action: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        cos: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        done: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        next: TensorDict(
+            fields={
+                cos: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                observation: Tensor(shape=torch.Size([100, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                params: TensorDict(
+                    fields={
+                        dt: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                        g: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                        l: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                        m: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                        max_speed: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.int64, is_shared=False),
+                        max_torque: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([100]),
+                    device=None,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                sin: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                th: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                thdot: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([100]),
+            device=None,
+            is_shared=False),
+        observation: Tensor(shape=torch.Size([100, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+        params: TensorDict(
+            fields={
+                dt: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                g: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                l: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                m: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False),
+                max_speed: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.int64, is_shared=False),
+                max_torque: Tensor(shape=torch.Size([100]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([100]),
+            device=None,
+            is_shared=False),
+        sin: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        terminated: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        th: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        thdot: Tensor(shape=torch.Size([100, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([100]),
+    device=None,
+    is_shared=False)
+</pre></div>
+</div>
 </section>
 <section id="batching-computations">
-<h2>Batching computations<a class="headerlink" href="#batching-computations" title="Permalink to this heading">¶</a></h2>
+<h2>Batching computations<a class="headerlink" href="#batching-computations" title="Link to this heading">¶</a></h2>
 <p>The last unexplored end of our tutorial is the ability that we have to
 batch computations in TorchRL. Because our environment does not
 make any assumptions regarding the input data shape, we can seamlessly
@@ -1139,26 +1242,149 @@ environments such as our Pendulum, we can change the batch size on the fly
 without recreating the environment.
 To do this, we just generate parameters with the desired shape.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># number of environments to be executed in batch</span>
-<span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">]))</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reset (batch size of 10)&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">)</span>
-<span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rand step (batch size of 10)&quot;</span><span class="p">,</span> <span class="n">td</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">]))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reset (batch size of 10)&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rand step (batch size of 10)&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>reset (batch size of 10) TensorDict(
+    fields={
+        cos: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+        params: TensorDict(
+            fields={
+                dt: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                g: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                l: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                m: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                max_speed: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                max_torque: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False),
+        sin: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        th: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        thdot: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=None,
+    is_shared=False)
+rand step (batch size of 10) TensorDict(
+    fields={
+        action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        cos: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        next: TensorDict(
+            fields={
+                cos: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                params: TensorDict(
+                    fields={
+                        dt: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                        g: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                        l: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                        m: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                        max_speed: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                        max_torque: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=None,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                sin: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                th: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                thdot: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False),
+        observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+        params: TensorDict(
+            fields={
+                dt: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                g: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                l: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                m: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+                max_speed: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                max_torque: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False),
+        sin: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        th: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        thdot: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=None,
+    is_shared=False)
 </pre></div>
 </div>
 <p>Executing a rollout with a batch of data requires us to reset the environment
 out of the rollout function, since we need to define the batch_size
 dynamically and this is not supported by <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#id2" title="torchrl.envs.EnvBase.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a>:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">(</span>
     <span class="mi">3</span><span class="p">,</span>
     <span class="n">auto_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># we&#39;re executing the reset out of the ``rollout`` call</span>
     <span class="n">tensordict</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">])),</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rollout of len 3 (batch size of 10):&quot;</span><span class="p">,</span> <span class="n">rollout</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rollout of len 3 (batch size of 10):&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>rollout of len 3 (batch size of 10): TensorDict(
+    fields={
+        action: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        cos: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        done: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        next: TensorDict(
+            fields={
+                cos: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                observation: Tensor(shape=torch.Size([10, 3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                params: TensorDict(
+                    fields={
+                        dt: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        g: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        l: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        m: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        max_speed: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.int64, is_shared=False),
+                        max_torque: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([10, 3]),
+                    device=None,
+                    is_shared=False),
+                reward: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                sin: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                terminated: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                th: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                thdot: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 3]),
+            device=None,
+            is_shared=False),
+        observation: Tensor(shape=torch.Size([10, 3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+        params: TensorDict(
+            fields={
+                dt: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                g: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                l: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                m: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                max_speed: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.int64, is_shared=False),
+                max_torque: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10, 3]),
+            device=None,
+            is_shared=False),
+        sin: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        terminated: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        th: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+        thdot: Tensor(shape=torch.Size([10, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([10, 3]),
+    device=None,
+    is_shared=False)
 </pre></div>
 </div>
 </section>
 <section id="training-a-simple-policy">
-<h2>Training a simple policy<a class="headerlink" href="#training-a-simple-policy" title="Permalink to this heading">¶</a></h2>
+<h2>Training a simple policy<a class="headerlink" href="#training-a-simple-policy" title="Link to this heading">¶</a></h2>
 <p>In this example, we will train a simple policy using the reward as a
 differentiable objective, such as a negative loss.
 We will take advantage of the fact that our dynamic system is fully
@@ -1172,28 +1398,28 @@ be coded with a custom environment in TorchRL.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
-<span class="n">net</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">net</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
 <span class="p">)</span>
-<span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
-    <span class="n">net</span><span class="p">,</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">net</span></a><span class="p">,</span>
     <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
     <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>and our optimizer:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">optim</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optim</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">policy</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">)</span>
 </pre></div>
 </div>
 <section id="training-loop">
-<h3>Training loop<a class="headerlink" href="#training-loop" title="Permalink to this heading">¶</a></h3>
+<h3>Training loop<a class="headerlink" href="#training-loop" title="Link to this heading">¶</a></h3>
 <p>We will successively:</p>
 <ul class="simple">
 <li><p>generate a trajectory</p></li>
@@ -1207,33 +1433,33 @@ which demonstrates that the pendulum is upward and still as desired.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">32</span>
 <span class="n">n_iter</span> <span class="o">=</span> <span class="mi">1000</span>  <span class="c1"># set to 20_000 for a proper training</span>
 <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span> <span class="o">//</span> <span class="n">batch_size</span><span class="p">))</span>
-<span class="n">scheduler</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR" title="torch.optim.lr_scheduler.CosineAnnealingLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">lr_scheduler</span><span class="o">.</span><span class="n">CosineAnnealingLR</span></a><span class="p">(</span><span class="n">optim</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR" title="torch.optim.lr_scheduler.CosineAnnealingLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">scheduler</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR" title="torch.optim.lr_scheduler.CosineAnnealingLR" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">lr_scheduler</span><span class="o">.</span><span class="n">CosineAnnealingLR</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optim</span></a><span class="p">,</span> <span class="n">n_iter</span><span class="p">)</span>
 <span class="n">logs</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
 
 <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">pbar</span><span class="p">:</span>
-    <span class="n">init_td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">]))</span>
-    <span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><span class="n">init_td</span><span class="p">,</span> <span class="n">auto_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">traj_return</span> <span class="o">=</span> <span class="n">rollout</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
-    <span class="p">(</span><span class="o">-</span><span class="n">traj_return</span><span class="p">)</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
-    <span class="n">gn</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html#torch.nn.utils.clip_grad_norm_" title="torch.nn.utils.clip_grad_norm_" class="sphx-glr-backref-module-torch-nn-utils sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_norm_</span></a><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="mf">1.0</span><span class="p">)</span>
-    <span class="n">optim</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-    <span class="n">optim</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">init_td</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">gen_params</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">batch_size</span><span class="p">]))</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span> <span class="n">tensordict</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">init_td</span></a><span class="p">,</span> <span class="n">auto_reset</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <span class="p">(</span><span class="o">-</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a><span class="p">)</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">gn</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html#torch.nn.utils.clip_grad_norm_" title="torch.nn.utils.clip_grad_norm_" class="sphx-glr-backref-module-torch-nn-utils sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">clip_grad_norm_</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">net</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="mf">1.0</span><span class="p">)</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optim</span></a><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam.zero_grad" title="torch.optim.Adam.zero_grad" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-method"><span class="n">optim</span><span class="o">.</span><span class="n">zero_grad</span></a><span class="p">()</span>
     <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
-        <span class="sa">f</span><span class="s2">&quot;reward: </span><span class="si">{</span><span class="n">traj_return</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, &quot;</span>
-        <span class="sa">f</span><span class="s2">&quot;last reward: </span><span class="si">{</span><span class="n">rollout</span><span class="p">[</span><span class="o">...</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">&#39;next&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;reward&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, gradient norm: </span><span class="si">{</span><span class="n">gn</span><span class="si">:</span><span class="s2"> 4.4</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;reward: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;last reward: </span><span class="si">{</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="o">...</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">&#39;next&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;reward&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2">, gradient norm: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">gn</span></a><span class="si">:</span><span class="s2"> 4.4</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="p">)</span>
-    <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;return&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">traj_return</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-    <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;last_reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rollout</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-    <span class="n">scheduler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+    <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;return&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">traj_return</span></a><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">logs</span><span class="p">[</span><span class="s2">&quot;last_reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rollout</span></a><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html#torch.optim.lr_scheduler.CosineAnnealingLR.step" title="torch.optim.lr_scheduler.CosineAnnealingLR.step" class="sphx-glr-backref-module-torch-optim-lr_scheduler sphx-glr-backref-type-py-method"><span class="n">scheduler</span><span class="o">.</span><span class="n">step</span></a><span class="p">()</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">plot</span><span class="p">():</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="k">def</span> <span class="nf">plot</span><span class="p">():</span>
+    <span class="kn">import</span> <span class="nn">matplotlib</span>
+    <span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
 
     <span class="n">is_ipython</span> <span class="o">=</span> <span class="s2">&quot;inline&quot;</span> <span class="ow">in</span> <span class="n">matplotlib</span><span class="o">.</span><span class="n">get_backend</span><span class="p">()</span>
     <span class="k">if</span> <span class="n">is_ipython</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">IPython</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+        <span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">display</span>
 
     <span class="k">with</span> <span class="n">plt</span><span class="o">.</span><span class="n">ion</span><span class="p">():</span>
         <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
@@ -1254,23 +1480,90 @@ which demonstrates that the pendulum is upward and still as desired.</p>
 <span class="n">plot</span><span class="p">()</span>
 </pre></div>
 </div>
+<img src="../_images/sphx_glr_pendulum_001.png" srcset="../_images/sphx_glr_pendulum_001.png" alt="returns, last reward" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  0%|          | 0/31 [00:00&lt;?, ?it/s]
+reward: -6.0488, last reward: -5.0748, gradient norm:  8.519:   0%|          | 0/31 [00:00&lt;?, ?it/s]
+reward: -6.0488, last reward: -5.0748, gradient norm:  8.519:   3%|▎         | 1/31 [00:00&lt;00:05,  5.90it/s]
+reward: -7.0499, last reward: -7.4472, gradient norm:  5.073:   3%|▎         | 1/31 [00:00&lt;00:05,  5.90it/s]
+reward: -7.0499, last reward: -7.4472, gradient norm:  5.073:   6%|▋         | 2/31 [00:00&lt;00:04,  5.87it/s]
+reward: -7.0685, last reward: -7.0408, gradient norm:  5.552:   6%|▋         | 2/31 [00:00&lt;00:04,  5.87it/s]
+reward: -7.0685, last reward: -7.0408, gradient norm:  5.552:  10%|▉         | 3/31 [00:00&lt;00:04,  5.86it/s]
+reward: -6.5154, last reward: -5.9086, gradient norm:  2.522:  10%|▉         | 3/31 [00:00&lt;00:04,  5.86it/s]
+reward: -6.5154, last reward: -5.9086, gradient norm:  2.522:  13%|█▎        | 4/31 [00:00&lt;00:04,  5.85it/s]
+reward: -6.1989, last reward: -5.9502, gradient norm:  6.202:  13%|█▎        | 4/31 [00:00&lt;00:04,  5.85it/s]
+reward: -6.1989, last reward: -5.9502, gradient norm:  6.202:  16%|█▌        | 5/31 [00:00&lt;00:04,  5.85it/s]
+reward: -6.2615, last reward: -5.5823, gradient norm:  35.69:  16%|█▌        | 5/31 [00:01&lt;00:04,  5.85it/s]
+reward: -6.2615, last reward: -5.5823, gradient norm:  35.69:  19%|█▉        | 6/31 [00:01&lt;00:04,  5.85it/s]
+reward: -5.6889, last reward: -5.0177, gradient norm:  1.597:  19%|█▉        | 6/31 [00:01&lt;00:04,  5.85it/s]
+reward: -5.6889, last reward: -5.0177, gradient norm:  1.597:  23%|██▎       | 7/31 [00:01&lt;00:04,  5.84it/s]
+reward: -6.1425, last reward: -6.8900, gradient norm:  80.88:  23%|██▎       | 7/31 [00:01&lt;00:04,  5.84it/s]
+reward: -6.1425, last reward: -6.8900, gradient norm:  80.88:  26%|██▌       | 8/31 [00:01&lt;00:03,  5.83it/s]
+reward: -5.7549, last reward: -5.7239, gradient norm:  22.82:  26%|██▌       | 8/31 [00:01&lt;00:03,  5.83it/s]
+reward: -5.7549, last reward: -5.7239, gradient norm:  22.82:  29%|██▉       | 9/31 [00:01&lt;00:03,  5.83it/s]
+reward: -6.3881, last reward: -7.6365, gradient norm:  2.2:  29%|██▉       | 9/31 [00:01&lt;00:03,  5.83it/s]
+reward: -6.3881, last reward: -7.6365, gradient norm:  2.2:  32%|███▏      | 10/31 [00:01&lt;00:03,  5.82it/s]
+reward: -5.9144, last reward: -8.1405, gradient norm:  9.733:  32%|███▏      | 10/31 [00:01&lt;00:03,  5.82it/s]
+reward: -5.9144, last reward: -8.1405, gradient norm:  9.733:  35%|███▌      | 11/31 [00:01&lt;00:03,  5.82it/s]
+reward: -6.1779, last reward: -6.2076, gradient norm:  1.9:  35%|███▌      | 11/31 [00:02&lt;00:03,  5.82it/s]
+reward: -6.1779, last reward: -6.2076, gradient norm:  1.9:  39%|███▊      | 12/31 [00:02&lt;00:03,  5.82it/s]
+reward: -5.8988, last reward: -8.4056, gradient norm:  6.826:  39%|███▊      | 12/31 [00:02&lt;00:03,  5.82it/s]
+reward: -5.8988, last reward: -8.4056, gradient norm:  6.826:  42%|████▏     | 13/31 [00:02&lt;00:03,  5.82it/s]
+reward: -5.9572, last reward: -7.9945, gradient norm:  2.641:  42%|████▏     | 13/31 [00:02&lt;00:03,  5.82it/s]
+reward: -5.9572, last reward: -7.9945, gradient norm:  2.641:  45%|████▌     | 14/31 [00:02&lt;00:02,  5.84it/s]
+reward: -5.9890, last reward: -6.8192, gradient norm:  1.553:  45%|████▌     | 14/31 [00:02&lt;00:02,  5.84it/s]
+reward: -5.9890, last reward: -6.8192, gradient norm:  1.553:  48%|████▊     | 15/31 [00:02&lt;00:02,  5.82it/s]
+reward: -5.9993, last reward: -6.8228, gradient norm:  4.542:  48%|████▊     | 15/31 [00:02&lt;00:02,  5.82it/s]
+reward: -5.9993, last reward: -6.8228, gradient norm:  4.542:  52%|█████▏    | 16/31 [00:02&lt;00:02,  5.84it/s]
+reward: -5.7797, last reward: -5.2908, gradient norm:  6.433:  52%|█████▏    | 16/31 [00:02&lt;00:02,  5.84it/s]
+reward: -5.7797, last reward: -5.2908, gradient norm:  6.433:  55%|█████▍    | 17/31 [00:02&lt;00:02,  5.82it/s]
+reward: -5.9296, last reward: -3.5670, gradient norm:  5.998:  55%|█████▍    | 17/31 [00:03&lt;00:02,  5.82it/s]
+reward: -5.9296, last reward: -3.5670, gradient norm:  5.998:  58%|█████▊    | 18/31 [00:03&lt;00:02,  5.81it/s]
+reward: -6.1010, last reward: -5.6365, gradient norm:  2.905:  58%|█████▊    | 18/31 [00:03&lt;00:02,  5.81it/s]
+reward: -6.1010, last reward: -5.6365, gradient norm:  2.905:  61%|██████▏   | 19/31 [00:03&lt;00:02,  5.82it/s]
+reward: -6.0344, last reward: -5.5450, gradient norm:  19.98:  61%|██████▏   | 19/31 [00:03&lt;00:02,  5.82it/s]
+reward: -6.0344, last reward: -5.5450, gradient norm:  19.98:  65%|██████▍   | 20/31 [00:03&lt;00:01,  5.81it/s]
+reward: -5.7237, last reward: -6.4863, gradient norm:  21.41:  65%|██████▍   | 20/31 [00:03&lt;00:01,  5.81it/s]
+reward: -5.7237, last reward: -6.4863, gradient norm:  21.41:  68%|██████▊   | 21/31 [00:03&lt;00:01,  5.84it/s]
+reward: -5.6982, last reward: -5.6618, gradient norm:  14.66:  68%|██████▊   | 21/31 [00:03&lt;00:01,  5.84it/s]
+reward: -5.6982, last reward: -5.6618, gradient norm:  14.66:  71%|███████   | 22/31 [00:03&lt;00:01,  5.87it/s]
+reward: -6.0723, last reward: -5.2971, gradient norm:  9.819:  71%|███████   | 22/31 [00:03&lt;00:01,  5.87it/s]
+reward: -6.0723, last reward: -5.2971, gradient norm:  9.819:  74%|███████▍  | 23/31 [00:03&lt;00:01,  5.89it/s]
+reward: -5.9490, last reward: -5.0178, gradient norm:  32.63:  74%|███████▍  | 23/31 [00:04&lt;00:01,  5.89it/s]
+reward: -5.9490, last reward: -5.0178, gradient norm:  32.63:  77%|███████▋  | 24/31 [00:04&lt;00:01,  5.88it/s]
+reward: -5.4482, last reward: -4.3906, gradient norm:  5.35:  77%|███████▋  | 24/31 [00:04&lt;00:01,  5.88it/s]
+reward: -5.4482, last reward: -4.3906, gradient norm:  5.35:  81%|████████  | 25/31 [00:04&lt;00:01,  5.88it/s]
+reward: -5.5244, last reward: -5.7712, gradient norm:  8.962:  81%|████████  | 25/31 [00:04&lt;00:01,  5.88it/s]
+reward: -5.5244, last reward: -5.7712, gradient norm:  8.962:  84%|████████▍ | 26/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.8727, last reward: -5.7764, gradient norm:  4.507:  84%|████████▍ | 26/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.8727, last reward: -5.7764, gradient norm:  4.507:  87%|████████▋ | 27/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.8392, last reward: -6.1349, gradient norm:  1.999:  87%|████████▋ | 27/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.8392, last reward: -6.1349, gradient norm:  1.999:  90%|█████████ | 28/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.9741, last reward: -6.1388, gradient norm:  2.582:  90%|█████████ | 28/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.9741, last reward: -6.1388, gradient norm:  2.582:  94%|█████████▎| 29/31 [00:04&lt;00:00,  5.89it/s]
+reward: -5.9081, last reward: -5.4845, gradient norm:  8.69:  94%|█████████▎| 29/31 [00:05&lt;00:00,  5.89it/s]
+reward: -5.9081, last reward: -5.4845, gradient norm:  8.69:  97%|█████████▋| 30/31 [00:05&lt;00:00,  5.89it/s]
+reward: -5.8374, last reward: -4.9709, gradient norm:  32.36:  97%|█████████▋| 30/31 [00:05&lt;00:00,  5.89it/s]
+reward: -5.8374, last reward: -4.9709, gradient norm:  32.36: 100%|██████████| 31/31 [00:05&lt;00:00,  5.89it/s]
+reward: -5.8374, last reward: -4.9709, gradient norm:  32.36: 100%|██████████| 31/31 [00:05&lt;00:00,  5.85it/s]
+</pre></div>
+</div>
 </section>
 </section>
 <section id="conclusion">
-<h2>Conclusion<a class="headerlink" href="#conclusion" title="Permalink to this heading">¶</a></h2>
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">¶</a></h2>
 <p>In this tutorial, we have learned how to code a stateless environment from
 scratch. We touched the subjects of:</p>
 <ul class="simple">
 <li><p>The four essential components that need to be taken care of when coding
 an environment (<code class="docutils literal notranslate"><span class="pre">step</span></code>, <code class="docutils literal notranslate"><span class="pre">reset</span></code>, seeding and building specs).
 We saw how these methods and classes interact with the
-<code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> class;</p></li>
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> class;</p></li>
 <li><p>How to test that an environment is properly coded using
 <code class="xref py py-func docutils literal notranslate"><span class="pre">check_env_specs()</span></code>;</p></li>
 <li><p>How to append transforms in the context of stateless environments and how
 to write custom transformations;</p></li>
 <li><p>How to train a policy on a fully differentiable simulator.</p></li>
 </ul>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.523 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-pendulum-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/36eee5b78ddb0e674d19a3401b49da68/pendulum.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">pendulum.ipynb</span></code></a></p>
@@ -1294,7 +1587,7 @@ to write custom transformations;</p></li>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl_demo.html" class="btn btn-neutral float-right" title="Introduction to TorchRL" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="multiagent_ppo.html" class="btn btn-neutral float-right" title="Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="coding_ppo.html" class="btn btn-neutral" title="Reinforcement Learning (PPO) with TorchRL Tutorial" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
@@ -1302,11 +1595,7 @@ to write custom transformations;</p></li>
     </div>
   
 
-  
-
-    <hr>
-
-  
+  <hr/>
 
   <div role="contentinfo">
     <p>
@@ -1314,11 +1603,7 @@ to write custom transformations;</p></li>
 
     </p>
   </div>
-    
-      <div>
-        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
-      </div>
-     
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -1361,28 +1646,33 @@ to write custom transformations;</p></li>
         </div>
       </section>
     </div>
-
+  </div>
   
 
 
   
 
-     
-       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
-         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-         <script src="../_static/jquery.js"></script>
-         <script src="../_static/underscore.js"></script>
-         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-         <script src="../_static/doctools.js"></script>
-         <script src="../_static/design-tabs.js"></script>
-         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-     
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+      <script type="text/javascript" src="../https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
   
 
   <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
   <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
   <script type="text/javascript" src="../_static/js/theme.js"></script>
 
   <script type="text/javascript">
@@ -1446,20 +1736,20 @@ to write custom transformations;</p></li>
       <div class="row">
         <div class="col-md-4 text-center">
           <h2>Docs</h2>
-          <p>Access comprehensive developer documentation for PyTorch</p>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
           <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
         </div>
 
         <div class="col-md-4 text-center">
           <h2>Tutorials</h2>
-          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
           <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
         </div>
 
         <div class="col-md-4 text-center">
           <h2>Resources</h2>
-          <p>Find development resources and get your questions answered</p>
-          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
         </div>
       </div>
     </div>
@@ -1468,77 +1758,77 @@ to write custom transformations;</p></li>
   <footer class="site-footer">
     <div class="container footer-container">
       <div class="footer-logo-wrapper">
-        <a href="https://pytorch.org/" class="footer-logo"></a>
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
       </div>
 
       <div class="footer-links-wrapper">
         <div class="footer-links-col">
           <ul>
-            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
-            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
-            <li><a href="https://pytorch.org/features">Features</a></li>
-            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
-            <li><a href="https://pytorch.org/blog/">Blog</a></li>
-            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
           </ul>
         </div>
 
         <div class="footer-links-col">
           <ul>
-            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
             <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
             <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
             <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
             <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
-            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
           </ul>
         </div>
 
-        <div class="footer-links-col">
+        <div class="footer-links-col follow-us-col">
           <ul>
-            <li class="list-title">Stay up to date</li>
-            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
-            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
-            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
-            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
-          </ul>  
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
           </div>
-
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title">PyTorch Podcasts</li>
-            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
-            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
-            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
-            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
-          </ul>
-         </div>
         </div>
-        
-        <div class="privacy-policy">
-          <ul>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
-            <li class="privacy-policy-links">|</li>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
-          </ul>
-        </div>
-        <div class="copyright">
-        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
-          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
-          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
-          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
-          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
       </div>
-     </div>
-
+    </div>
   </footer>
-
-  <div class="cookie-banner-wrapper">
-  <div class="container">
-    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="../_static/images/pytorch-x.svg">
-  </div>
-</div>
 
   <!-- End Footer -->
 
@@ -1548,7 +1838,7 @@ to write custom transformations;</p></li>
     <div class="container-fluid">
       <div class="container">
         <div class="mobile-main-menu-header-container">
-          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
           <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
         </div>
       </div>
@@ -1557,129 +1847,37 @@ to write custom transformations;</p></li>
     <div class="mobile-main-menu-links-container">
       <div class="main-menu">
         <ul>
-           <li class="resources-mobile-menu-title">
-             <a>Learn</a>
-           </li>
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/get-started">Get Started</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials">Tutorials</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
-             </li>
-           </ul>
-           <li class="resources-mobile-menu-title">
-             <a>Ecosystem</a>
-           </li>
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/ecosystem">Tools</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/#community-module">Community</a>
-             </li>
-             <li>
-               <a href="https://discuss.pytorch.org/">Forums</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/resources">Developer Resources</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
-             </li>
-           </ul>
-
-           <li class="resources-mobile-menu-title">
-             <a>Edge</a>
-           </li>
-
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
-             </li>
-             
-             <li>
-               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
-             </li>
-           </ul>
-
-           <li class="resources-mobile-menu-title">
-             <a>Docs</a>
-           </li>
-
-           <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
-            </li>
-          </ul>
-
-          <li class="resources-mobile-menu-title">
-            <a>Blog & News</a>
-          </li>
-            
-           <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/community-blog">Community Blog</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/videos">Videos</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/community-stories">Community Stories</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/events">Events</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/newsletter">Newsletter</a>
-             </li>
-          </ul>
-          
-          <li class="resources-mobile-menu-title">
-            <a>About</a>
+          <li>
+            <a href="#">Get Started</a>
           </li>
 
-          <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/governing-board">Governing Board</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/staff">Staff</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/contact-us">Contact Us</a>
-            </li>
-          </ul>
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
         </ul>
       </div>
     </div>
@@ -1690,21 +1888,20 @@ to write custom transformations;</p></li>
   <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
 
   <script type="text/javascript">
-    $(document).ready(function() {
-      mobileMenu.bind();
-      mobileTOC.bind();
-      pytorchAnchors.bind();
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
       sideMenus.bind();
       scrollToAnchor.bind();
       highlightNavigation.bind();
-      mainMenuDropdown.bind();
-      filterTags.bind();
-
-      // Add class to links that have code blocks, since we cannot create links in code blocks
-      $("article.pytorch-article a span.pre").each(function(e) {
-        $(this).closest("a").addClass("has-code");
-      });
     })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
   </script>
 </body>
 </html>

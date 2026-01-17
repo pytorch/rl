@@ -71,6 +71,12 @@ hyperparameters.
     logger = CSVLogger(exp_name="my_exp")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 51-55
 
 Once the logger is instantiated, the only thing left to do is call the
@@ -84,6 +90,12 @@ reward, loss value or time elapsed for executing a piece of code.
 
 
     logger.log_scalar("my_scalar", 0.4)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 59-77
@@ -121,6 +133,39 @@ observations to be returned as well.
     from torchrl.envs import TransformedEnv
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.int64, is_shared=False),
+            done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    pixels: Tensor(shape=torch.Size([3, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                    reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            pixels: Tensor(shape=torch.Size([3, 400, 600, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+            terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([3]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 87-92
 
 We now have built an environment that renders images with its observations.
@@ -140,6 +185,12 @@ the :ref:`first tutorial <gs_env_ted>`.
     record_env = TransformedEnv(env, recorder)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 99-102
 
 When running this environment, all the ``"pixels"`` entries will be saved in
@@ -156,6 +207,12 @@ RAM usage, you are advised to call this method whenever appropriate!):
     # recorder.dump()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 108-117
 
 In this specific case, the video format can be chosen when instantiating
@@ -167,6 +224,11 @@ This is all we wanted to cover in the getting started tutorial.
 You should now be ready to code your
 :ref:`first training loop with TorchRL <gs_first_training>`!
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 0.110 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-4.py:

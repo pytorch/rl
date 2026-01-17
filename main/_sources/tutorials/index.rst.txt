@@ -155,23 +155,6 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
-  .. image:: /tutorials/images/thumb/sphx_glr_llm_browser_thumb.png
-    :alt:
-
-  :doc:`/tutorials/llm_browser`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">TorchRL LLM: Building Tool-Enabled Environments</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
-
-.. only:: html
-
   .. image:: /tutorials/images/thumb/sphx_glr_dqn_with_rnn_thumb.png
     :alt:
 
@@ -321,23 +304,6 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Introduction to TorchRL">
-
-.. only:: html
-
-  .. image:: /tutorials/images/thumb/sphx_glr_torchrl_demo_thumb.png
-    :alt:
-
-  :doc:`/tutorials/torchrl_demo`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Introduction to TorchRL</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and TorchRL to solve a Competitive Multi-Agent Reinforcement Learning (MARL) problem.">
 
 .. only:: html
@@ -388,7 +354,6 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-5
    /tutorials/getting-started-1
    /tutorials/multi_task
-   /tutorials/llm_browser
    /tutorials/dqn_with_rnn
    /tutorials/export
    /tutorials/multiagent_ppo
@@ -398,7 +363,6 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/llm_wrappers
    /tutorials/coding_dqn
    /tutorials/pendulum
-   /tutorials/torchrl_demo
    /tutorials/multiagent_competitive_ddpg
    /tutorials/coding_ddpg
 

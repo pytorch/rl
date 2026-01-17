@@ -41,6 +41,12 @@ Get started with data collection and storage
     import tempfile
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 22-57
 
 There is no learning without data. In supervised learning, users are
@@ -99,6 +105,19 @@ we will use a dummy, random policy in this example.
     collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /pytorch/rl/torchrl/collectors/_base.py:1034: DeprecationWarning: SyncDataCollector has been deprecated and will be removed in v0.13. Please use Collector instead.
+      warnings.warn(
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 74-82
 
 We now expect that our collector will deliver batches of size ``200`` no
@@ -120,6 +139,43 @@ of what this data looks like:
         break
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([200, 2]), device=cpu, dtype=torch.int64, is_shared=False),
+            collector: TensorDict(
+                fields={
+                    traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([200]),
+                device=None,
+                is_shared=False),
+            done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([200]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([200, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([200]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 88-93
 
 As you can see, our data is augmented with some collector-specific metadata
@@ -136,6 +192,26 @@ number the corresponding transition belongs to:
     print(data["collector", "traj_ids"])
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
+            3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+            4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+            4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5,
+            5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+            6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+            7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9,
+            9, 9, 9, 9, 9, 9, 9, 9])
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 97-143
 
 Data collectors are very useful when it comes to coding state-of-the-art
@@ -144,7 +220,7 @@ specific technique to solve a problem in a given number of interactions with
 the environment (the ``total_frames`` argument in the collector).
 For this reason, most training loops in our examples look like this:
 
-  ..code - block::Python
+  .. code-block:: python
 
     >>> for data in collector:
     ...     # your algorithm here
@@ -160,7 +236,7 @@ store it. In RL, the typical setting is that the data is collected, stored
 temporarily and cleared after a little while given some heuristic:
 first-in first-out or other. A typical pseudo-code would look like this:
 
-..code - block::Python
+.. code-block:: python
 
   >>> for data in collector:
   ...     storage.store(data)
@@ -199,6 +275,12 @@ how big you want your buffer to be.
     )
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 153-157
 
 Populating the buffer can be done via the
@@ -214,6 +296,12 @@ the data we just collected, we initialize and populate the buffer in one go:
     indices = buffer.extend(data)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 161-163
 
 We can check that the buffer now has the same number of elements as what
@@ -225,6 +313,12 @@ we got from the collector:
 
 
     assert len(buffer) == collector.frames_per_batch
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 167-172
@@ -242,6 +336,43 @@ will be unique:
 
     sample = buffer.sample(batch_size=30)
     print(sample)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([30, 2]), device=cpu, dtype=torch.int64, is_shared=False),
+            collector: TensorDict(
+                fields={
+                    traj_ids: Tensor(shape=torch.Size([30]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([30]),
+                device=cpu,
+                is_shared=False),
+            done: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([30, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([30]),
+                device=cpu,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([30, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([30, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([30]),
+        device=cpu,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 177-199
@@ -268,6 +399,11 @@ Next steps
   batch-size in the constructor, then try to iterate over it. This is
   equivalent to calling ``rb.sample()`` within a loop!
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 0.082 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-3.py:

@@ -25,7 +25,7 @@
 
   
 
-  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pytorch.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
   <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
@@ -33,245 +33,68 @@
   <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
   <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
   <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
-  <link rel="stylesheet" href="../../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../../genindex.html" />
-    <link rel="search" title="Search" href="../../../search.html" />
-  <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','UA-117752657-2');</script>
-    <!-- End Google Tag Manager -->
-  
+    <link rel="search" title="Search" href="../../../search.html" /> 
 
   
   <script src="../../../_static/js/modernizr.min.js"></script>
-
-  <!-- Preload the theme fonts -->
-
-<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-
-<!-- Preload the katex fonts -->
-
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
 </head>
 
 <div class="container-fluid header-holder tutorials-header" id="header-holder">
   <div class="container">
     <div class="header-container">
-      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
 
       <div class="main-menu">
         <ul>
-
-          <li class="main-menu-item">
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Learn
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
-                  <span class=dropdown-title>Get Started</span>
-                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
-                  <span class="dropdown-title">Tutorials</span>
-                  <p>Whats new in PyTorch tutorials</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
-                  <span class="dropdown-title">Learn the Basics</span>
-                  <p>Familiarize yourself with PyTorch concepts and modules</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
-                  <span class="dropdown-title">PyTorch Recipes</span>
-                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
-                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
-                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
-                </a>
-              </div>
-            </div>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
           </li>
 
           <li>
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Ecosystem
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
-                  <span class="dropdown-title">Tools</span>
-                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
-                  <span class=dropdown-title>Community</span>
-                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
-                  <span class=dropdown-title>Forums</span>
-                  <p>A place to discuss PyTorch code, issues, install, research</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
-                  <span class=dropdown-title>Developer Resources</span>
-                  <p>Find resources and get questions answered</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
-                  <span class="dropdown-title">Contributor Awards - 2024</span>
-                  <p>Award winners announced at this year's PyTorch Conference</p>
-                </a>
-              </div>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
           </li>
 
           <li>
-          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Edge
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
-                  <span class="dropdown-title">About PyTorch Edge</span>
-                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
-                  <span class="dropdown-title">ExecuTorch</span>
-                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
-                  <span class="dropdown-title">ExecuTorch Docs</span>
-                </a>
-              </div>
-            </div>  
-          </li>
-
-          <li class="main-menu-item">
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Docs
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
-                  <span class="dropdown-title">PyTorch</span>
-                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
-                  <span class="dropdown-title">PyTorch Domains</span>
-                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
-                </a>
-              </div>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
           </li>
 
           <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                Blogs & News 
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
-                  <span class="dropdown-title">PyTorch Blog</span>
-                  <p>Catch up on the latest technical news and happenings</p>
-                </a>
-                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
-                  <span class="dropdown-title">Community Blog</span>
-                  <p>Stories from the PyTorch ecosystem</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
-                  <span class="dropdown-title">Videos</span>
-                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
-                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
-                  <span class="dropdown-title">Community Stories</span>
-                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/events">
-                  <span class="dropdown-title">Events</span>
-                  <p>Find events, webinars, and podcasts</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
-                  <span class="dropdown-title">Newsletter</span>
-                  <p>Stay up-to-date with the latest updates</p>
-                </a>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
           </li>
 
           <li>
-            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
-              <a class="with-down-arrow">
-                About
-              </a>
-              <div class="resources-dropdown-menu">
-                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
-                  <span class="dropdown-title">PyTorch Foundation</span>
-                  <p>Learn more about the PyTorch Foundation</p>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
-                  <span class="dropdown-title">Governing Board</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
-                  <span class="dropdown-title">Cloud Credit Program</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
-                  <span class="dropdown-title">Technical Advisory Council</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
-                  <span class="dropdown-title">Staff</span>
-                </a>
-                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
-                  <span class="dropdown-title">Contact Us</span>
-                </a>
-              </div>
-            </div>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
           </li>
 
-          <li class="main-menu-item">
-            <div class="no-dropdown">
-              <a href="https://pytorch.org/join" data-cta="join">
-                Become a Member
-              </a>
-            </div>
-          </li>
           <li>
-           <div class="main-menu-item">
-             <a href="https://github.com/pytorch/pytorch" class="github-icon">
-             </a>
-           </div>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
           </li>
-          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+
           <li>
-            <div class="main-menu-item">
-             <a href="https://github.com/pytorch/pytorch" class="search-icon">
-             </a>
-            </div>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
           </li>
-          --->
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
         </ul>
       </div>
 
       <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
     </div>
+
   </div>
 </div>
+
 
 <body class="pytorch-body">
 
    
+  <div>
 
     
 
@@ -286,7 +109,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0+gd79e651) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.10.0) &#x25BC</span></a>
     </div>
     
 
@@ -321,7 +144,6 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
@@ -330,7 +152,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
@@ -352,9 +173,11 @@
     </nav>
 
     <div class="pytorch-container">
-      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
-        <div class="pytorch-breadcrumbs-wrapper">
-          
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
 
 
 
@@ -396,48 +219,41 @@
 
   
 </div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
         </div>
 
-        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
-          Shortcuts
-        </div>
-      </div>
-
-      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
         <div class="pytorch-content-left">
-
-        
     
     
-          <!-- Google Tag Manager (noscript) -->
-          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
-          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
-             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+             <article itemprop="articleBody" class="pytorch-article">
               
   <h1>Source code for torchrl.collectors._single</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">textwrap</span> <span class="kn">import</span> <span class="n">indent</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_with_warmup</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">compile_with_warmup</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_ends_with</span><span class="p">,</span>
     <span class="n">_make_ordinal_device</span><span class="p">,</span>
     <span class="n">_replace_last</span><span class="p">,</span>
@@ -445,39 +261,39 @@
     <span class="n">prod</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">ProfileConfig</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors._constants</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">ProfileConfig</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._constants</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">cudagraph_mark_step_begin</span><span class="p">,</span>
     <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
     <span class="n">ExplorationType</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_TrajectoryPool</span><span class="p">,</span> <span class="n">split_trajectories</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">TransformedEnv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_do_nothing</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyVersion</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">_TrajectoryPool</span><span class="p">,</span> <span class="n">split_trajectories</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors.weight_update</span> <span class="kn">import</span> <span class="n">WeightUpdaterBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">TransformedEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_do_nothing</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.llm.transforms</span> <span class="kn">import</span> <span class="n">PolicyVersion</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_aggregate_end_of_traj</span><span class="p">,</span>
     <span class="n">_make_compatible_policy</span><span class="p">,</span>
     <span class="n">set_exploration_type</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.tensordict_module.exploration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">RandomPolicy</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.exploration</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">set_exploration_modules_spec_from_env</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightSyncScheme</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.weight_update.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_model</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update</span> <span class="kn">import</span> <span class="n">WeightSyncScheme</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.utils</span> <span class="kn">import</span> <span class="n">_resolve_model</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">_CollectorProfiler</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">_CollectorProfiler</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper class for profiling collector rollouts in single-process mode.</span>
 
 <span class="sd">    Manages the PyTorch profiler lifecycle for the Collector class.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">profile_config</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="kc">None</span>
@@ -508,9 +324,9 @@
             <span class="p">)</span>  <span class="c1"># Use worker_idx 0 for single-process</span>
             <span class="n">save_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+            <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
-            <span class="k">def</span><span class="w"> </span><span class="nf">on_trace_ready</span><span class="p">(</span><span class="n">prof</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">):</span>
+            <span class="k">def</span> <span class="nf">on_trace_ready</span><span class="p">(</span><span class="n">prof</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">):</span>
                 <span class="n">prof</span><span class="o">.</span><span class="n">export_chrome_trace</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">save_path</span><span class="p">))</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Collector: Profiling trace saved to </span><span class="si">{</span><span class="n">save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -525,9 +341,9 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Start the profiler.&quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+        <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
@@ -536,7 +352,7 @@
                 <span class="sa">f</span><span class="s2">&quot;Will profile rollouts </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Step the profiler after a rollout.</span>
 
 <span class="sd">        Returns:</span>
@@ -555,9 +371,9 @@
 
         <span class="k">return</span> <span class="kc">False</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the profiler and export trace.&quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+        <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
@@ -567,12 +383,12 @@
             <span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">is_active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">is_active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if profiling is active.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span>
 
     <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">profile_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">profile_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager for profiling a single rollout.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span><span class="s2">&quot;collector_rollout&quot;</span><span class="p">):</span>
@@ -581,7 +397,7 @@
             <span class="k">yield</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_cuda_sync_if_initialized</span><span class="p">():</span>
+<span class="k">def</span> <span class="nf">_cuda_sync_if_initialized</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Synchronize CUDA only if it has been initialized.</span>
 
 <span class="sd">    This is a safe alternative to calling `torch.cuda.synchronize()` directly.</span>
@@ -595,8 +411,10 @@
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
 
-<div class="viewcode-block" id="Collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector">[docs]</a><span class="nd">@accept_remote_rref_udf_invocation</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Collector</span><span class="p">(</span><span class="n">BaseCollector</span><span class="p">):</span>
+<div class="viewcode-block" id="Collector">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector">[docs]</a>
+<span class="nd">@accept_remote_rref_udf_invocation</span>
+<span class="k">class</span> <span class="nc">Collector</span><span class="p">(</span><span class="n">BaseCollector</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generic data collector for RL problems. Requires an environment constructor and a policy.</span>
 
 <span class="sd">    Args:</span>
@@ -637,8 +455,8 @@
 <span class="sd">            number of frames returned by the collector</span>
 <span class="sd">            during its lifespan. If the ``total_frames`` is not divisible by</span>
 <span class="sd">            ``frames_per_batch``, an exception is raised.</span>
-<span class="sd">             Endless collectors can be created by passing ``total_frames=-1``.</span>
-<span class="sd">             Defaults to ``-1`` (endless collector).</span>
+<span class="sd">            Endless collectors can be created by passing ``total_frames=-1``.</span>
+<span class="sd">            Defaults to ``-1`` (endless collector).</span>
 <span class="sd">        device (int, str or torch.device, optional): The generic device of the</span>
 <span class="sd">            collector. The ``device`` args fills any non-specified device: if</span>
 <span class="sd">            ``device`` is not ``None`` and any of ``storing_device``, ``policy_device`` or</span>
@@ -834,7 +652,7 @@
 
     <span class="n">_ignore_rb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">create_env_fn</span><span class="p">:</span> <span class="p">(</span>
             <span class="n">EnvBase</span> <span class="o">|</span> <span class="n">EnvCreator</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">]]</span>  <span class="c1"># noqa: F821</span>
@@ -992,13 +810,13 @@
         <span class="k">if</span> <span class="n">weight_recv_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_scheme_receiver</span><span class="p">(</span><span class="n">weight_recv_schemes</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_init_env</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_init_env</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">create_env_fn</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="n">EnvCreator</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
         <span class="n">create_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize and configure the environment.&quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
+        <span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">BatchedEnvBase</span>
 
         <span class="k">if</span> <span class="n">create_env_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">create_env_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
@@ -1016,7 +834,7 @@
                 <span class="n">env</span><span class="o">.</span><span class="n">update_kwargs</span><span class="p">(</span><span class="n">create_env_kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">env</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_init_policy</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_init_policy</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
@@ -1038,7 +856,7 @@
 
         <span class="k">return</span> <span class="n">policy</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_devices</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_setup_devices</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">storing_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
@@ -1067,7 +885,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">no_cuda_sync</span> <span class="o">=</span> <span class="n">no_cuda_sync</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cast_to_policy_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sync_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_get_sync_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the appropriate synchronization function for a device.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
             <span class="c1"># When destination is not CUDA, we may need to sync to wait for</span>
@@ -1089,13 +907,13 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_do_nothing</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_policy_version_tracking</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_setup_policy_version_tracking</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">PolicyVersion</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up policy version tracking if requested.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="n">track_policy_version</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
+            <span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">BatchedEnvBase</span>
 
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">BatchedEnvBase</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1110,7 +928,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_replay_buffer</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_setup_replay_buffer</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extend_buffer</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
@@ -1156,7 +974,7 @@
             <span class="n">use_buffers</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">_has_dynamic_specs</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_policy_and_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_setup_policy_and_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up policy, wrapped policy, and extract weights.&quot;&quot;&quot;</span>
         <span class="c1"># Store weak reference to original policy before any transformations</span>
         <span class="c1"># This allows update_policy_weights_ to sync from the original when no scheme is configured</span>
@@ -1190,7 +1008,7 @@
                 <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                         <span class="s2">&quot;Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True. Scroll up for more details.&quot;</span>
-                    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+                    <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">wrapped_policy</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">policy</span>
@@ -1219,7 +1037,7 @@
                 <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                         <span class="s2">&quot;Failed to wrap the policy. If the policy needs to be trusted, set trust_policy=True. Scroll up for more details.&quot;</span>
-                    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+                    <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">wrapped_policy</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span> <span class="o">=</span> <span class="n">policy</span>
@@ -1245,7 +1063,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span>
             <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_compile_wrapped_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_compile_wrapped_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply compilation and/or cudagraph to a policy.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
             <span class="n">policy</span> <span class="o">=</span> <span class="n">compile_with_warmup</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy_kwargs</span><span class="p">)</span>
@@ -1260,7 +1078,7 @@
         <span class="k">return</span> <span class="n">policy</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_wrapped_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_wrapped_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the compiled policy, compiling it lazily if needed.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">policy</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_maybe_compiled</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cudagraphed_policy</span><span class="p">:</span>
@@ -1274,19 +1092,19 @@
         <span class="k">return</span> <span class="n">policy</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_orig_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_orig_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the original policy passed to the collector, if still alive.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_orig_policy_ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_orig_policy_ref</span><span class="p">()</span>
         <span class="k">return</span> <span class="kc">None</span>
 
     <span class="nd">@_wrapped_policy</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_wrapped_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_wrapped_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Allow setting the wrapped policy during initialization.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_uncompiled</span> <span class="o">=</span> <span class="n">value</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy_maybe_compiled</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_env_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_apply_env_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply device to environment if specified.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">)</span>
@@ -1299,7 +1117,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_max_frames_per_traj</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_frames_per_traj</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_setup_max_frames_per_traj</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_frames_per_traj</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up maximum frames per trajectory and add StepCounter if needed.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_frames_per_traj</span> <span class="o">=</span> <span class="p">(</span>
             <span class="nb">int</span><span class="p">(</span><span class="n">max_frames_per_traj</span><span class="p">)</span> <span class="k">if</span> <span class="n">max_frames_per_traj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
@@ -1321,7 +1139,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_frames_per_traj</span><span class="p">)</span>
             <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_total_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_setup_total_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate and set total frames.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">total_frames</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">total_frames</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">total_frames</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
@@ -1337,7 +1155,7 @@
             <span class="nb">int</span><span class="p">(</span><span class="n">total_frames</span><span class="p">)</span> <span class="k">if</span> <span class="n">total_frames</span> <span class="o">!=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">total_frames</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_init_random_frames</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_setup_init_random_frames</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">init_random_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up initial random frames.&quot;&quot;&quot;</span>
@@ -1356,7 +1174,7 @@
                 <span class="s2">&quot;To silence this message, set the environment variable RL_WARNINGS to False.&quot;</span>
             <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_postproc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_setup_postproc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up post-processing transform.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
         <span class="k">if</span> <span class="p">(</span>
@@ -1368,7 +1186,7 @@
             <span class="k">if</span> <span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">and</span> <span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_frames_per_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_setup_frames_per_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate and validate frames per batch.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -1380,7 +1198,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="o">-</span><span class="n">frames_per_batch</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_weight_sync</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_setup_weight_sync</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">WeightSyncScheme</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
@@ -1420,13 +1238,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_traj_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_traj_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">pool</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_traj_pool_val&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">pool</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">pool</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_traj_pool_val</span> <span class="o">=</span> <span class="n">_TrajectoryPool</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">pool</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_make_shuttle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_make_shuttle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
@@ -1444,7 +1262,7 @@
             <span class="n">traj_ids</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_final_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">make_rollout</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_maybe_make_final_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">make_rollout</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">fake_tensordict</span><span class="p">()</span>
@@ -1565,7 +1383,7 @@
                 <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
 
                 <span class="c1"># check that we don&#39;t have exclusive keys, because they don&#39;t appear in keys</span>
-                <span class="k">def</span><span class="w"> </span><span class="nf">check_exclusive</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+                <span class="k">def</span> <span class="nf">check_exclusive</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
                     <span class="k">if</span> <span class="p">(</span>
                         <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">)</span>
                         <span class="ow">and</span> <span class="n">val</span><span class="o">.</span><span class="n">_has_exclusive_keys</span>
@@ -1585,7 +1403,7 @@
                 <span class="c1"># changed them here).</span>
                 <span class="c1"># This will cause a failure to update entries when policy and env device mismatch and</span>
                 <span class="c1"># casting is necessary.</span>
-                <span class="k">def</span><span class="w"> </span><span class="nf">filter_policy</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value_output</span><span class="p">,</span> <span class="n">value_input</span><span class="p">,</span> <span class="n">value_input_clone</span><span class="p">):</span>
+                <span class="k">def</span> <span class="nf">filter_policy</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value_output</span><span class="p">,</span> <span class="n">value_input</span><span class="p">,</span> <span class="n">value_input_clone</span><span class="p">):</span>
                     <span class="k">if</span> <span class="p">(</span><span class="n">value_input</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
                         <span class="p">(</span><span class="n">value_output</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">value_input</span><span class="p">)</span>
                         <span class="ow">and</span> <span class="p">(</span>
@@ -1638,7 +1456,7 @@
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_set_truncated_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_set_truncated_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_truncated_keys</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_truncated</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">_ends_with</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">done_keys</span><span class="p">):</span>
@@ -1652,7 +1470,7 @@
             <span class="p">]</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_devices</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_get_devices</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">storing_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
@@ -1675,11 +1493,13 @@
         <span class="k">return</span> <span class="n">storing_device</span><span class="p">,</span> <span class="n">policy_device</span><span class="p">,</span> <span class="n">env_device</span>
 
     <span class="c1"># for RPC</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
 
     <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="Collector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
+<div class="viewcode-block" id="Collector.update_policy_weights_">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.update_policy_weights_">[docs]</a>
+    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -1697,7 +1517,8 @@
             <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_fallback_update</span><span class="p">(</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_fallback_update</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -1722,7 +1543,9 @@
         <span class="p">):</span>
             <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_w_state_dict</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Collector.set_seed"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<div class="viewcode-block" id="Collector.set_seed">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.set_seed">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the seeds of the environments stored in the DataCollector.</span>
 
 <span class="sd">        Args:</span>
@@ -1749,14 +1572,17 @@
         <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">static_seed</span><span class="o">=</span><span class="n">static_seed</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_increment_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numel</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">_increment_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numel</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="n">numel</span>
         <span class="n">completed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span>
         <span class="k">if</span> <span class="n">completed</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">completed</span>
 
-<div class="viewcode-block" id="Collector.iterator"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.iterator">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
+<div class="viewcode-block" id="Collector.iterator">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.iterator">[docs]</a>
+    <span class="k">def</span> <span class="nf">iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Iterates through the DataCollector.</span>
 
 <span class="sd">        Yields: TensorDictBase objects containing (chunks of) trajectories</span>
@@ -1777,7 +1603,7 @@
             <span class="c1"># this way of checking cuda is robust to lazy stacks with mismatching shapes</span>
             <span class="n">cuda_devices</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
-            <span class="k">def</span><span class="w"> </span><span class="nf">cuda_check</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">def</span> <span class="nf">cuda_check</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">:</span>
                     <span class="n">cuda_devices</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
@@ -1864,7 +1690,10 @@
         <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
             <span class="n">profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Collector.start"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.start">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+<div class="viewcode-block" id="Collector.start">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.start">[docs]</a>
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector in a separate thread for asynchronous data collection.</span>
 
 <span class="sd">        The collected data is stored in the provided replay buffer. This method is useful when you want to decouple data</span>
@@ -1941,15 +1770,16 @@
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">_run_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span><span class="p">:</span>
                 <span class="k">return</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">is_running</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">is_running</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_should_use_random_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_should_use_random_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Determine if random frames should be used instead of the policy.</span>
 
 <span class="sd">        When a replay buffer is provided, uses `replay_buffer.write_count` as the</span>
@@ -1966,7 +1796,9 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">write_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span>
 
-<div class="viewcode-block" id="Collector.async_shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.async_shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span>
+<div class="viewcode-block" id="Collector.async_shutdown">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.async_shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">async_shutdown</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by ray.init() during async execution.&quot;&quot;&quot;</span>
@@ -1975,14 +1807,15 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">close_env</span><span class="o">=</span><span class="n">close_env</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_postproc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">_postproc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
             <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_private_keys</span><span class="p">:</span>
 
-            <span class="k">def</span><span class="w"> </span><span class="nf">is_private</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+            <span class="k">def</span> <span class="nf">is_private</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">):</span>
                     <span class="k">return</span> <span class="kc">True</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">_key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">_key</span> <span class="ow">in</span> <span class="n">key</span><span class="p">):</span>
@@ -1995,7 +1828,7 @@
             <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">excluded_keys</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict_out</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_update_traj_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_update_traj_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># we can&#39;t use the reset keys because they&#39;re gone</span>
         <span class="n">traj_sop</span> <span class="o">=</span> <span class="n">_aggregate_end_of_traj</span><span class="p">(</span>
             <span class="n">env_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">),</span> <span class="n">done_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">done_keys</span>
@@ -2017,8 +1850,10 @@
             <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">masked_scatter</span><span class="p">(</span><span class="n">traj_sop</span><span class="p">,</span> <span class="n">new_traj</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span> <span class="n">traj_ids</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Collector.rollout"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.rollout">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="Collector.rollout">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.rollout">[docs]</a>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes a rollout in the environment using the provided policy.</span>
 
 <span class="sd">        Returns:</span>
@@ -2201,7 +2036,8 @@
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_set_truncated</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_set_truncated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">final_rollout</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_set_truncated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">final_rollout</span><span class="p">):</span>
         <span class="n">last_step</span> <span class="o">=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">final_rollout</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span>
         <span class="k">for</span> <span class="n">truncated_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_truncated_keys</span><span class="p">:</span>
             <span class="n">truncated</span> <span class="o">=</span> <span class="n">final_rollout</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">truncated_key</span><span class="p">]</span>
@@ -2213,8 +2049,10 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">final_rollout</span>
 
-<div class="viewcode-block" id="Collector.reset"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.reset">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="Collector.reset">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.reset">[docs]</a>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets the environments to a new initial state.&quot;&quot;&quot;</span>
         <span class="c1"># metadata</span>
         <span class="n">collector_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
@@ -2242,7 +2080,10 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">[</span><span class="s2">&quot;collector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">collector_metadata</span></div>
 
-<div class="viewcode-block" id="Collector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span>
+
+<div class="viewcode-block" id="Collector.shutdown">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -2272,7 +2113,8 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">pass</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
@@ -2282,7 +2124,9 @@
             <span class="c1"># __del__ will not affect the program.</span>
             <span class="k">pass</span>
 
-<div class="viewcode-block" id="Collector.state_dict"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>
+<div class="viewcode-block" id="Collector.state_dict">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.state_dict">[docs]</a>
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the local state_dict of the data collector (environment and policy).</span>
 
 <span class="sd">        Returns:</span>
@@ -2290,7 +2134,7 @@
 <span class="sd">            `&quot;env_state_dict&quot;`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
+        <span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">BatchedEnvBase</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">TransformedEnv</span><span class="p">):</span>
             <span class="n">env_state_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
@@ -2312,7 +2156,10 @@
 
         <span class="k">return</span> <span class="n">state_dict</span></div>
 
-<div class="viewcode-block" id="Collector.load_state_dict"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.load_state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+
+<div class="viewcode-block" id="Collector.load_state_dict">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.load_state_dict">[docs]</a>
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a state_dict on the environment and policy.</span>
 
 <span class="sd">        Args:</span>
@@ -2334,7 +2181,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;iter&quot;</span><span class="p">]</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">env_str</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;env=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
             <span class="n">policy_str</span> <span class="o">=</span> <span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;policy=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="s2">&quot; &quot;</span><span class="p">)</span>
@@ -2353,7 +2201,9 @@
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(not_init)&quot;</span>
 
-<div class="viewcode-block" id="Collector.increment_version"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.increment_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="Collector.increment_version">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.increment_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the policy version.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">,</span> <span class="s2">&quot;increment_version&quot;</span><span class="p">):</span>
@@ -2362,14 +2212,17 @@
                 <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span></div>
 
+
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The current policy version.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">version</span>
 
-<div class="viewcode-block" id="Collector.get_policy_version"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.get_policy_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="Collector.get_policy_version">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.get_policy_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current policy version.</span>
 
 <span class="sd">        This method exists to support remote calls in Ray actors, since properties</span>
@@ -2380,22 +2233,34 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version</span></div>
 
-<div class="viewcode-block" id="Collector.getattr_policy"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.getattr_policy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getattr_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+
+<div class="viewcode-block" id="Collector.getattr_policy">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.getattr_policy">[docs]</a>
+    <span class="k">def</span> <span class="nf">getattr_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an attribute from the policy.&quot;&quot;&quot;</span>
         <span class="c1"># send command to policy to return the attr</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="Collector.getattr_env"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.getattr_env">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getattr_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+
+<div class="viewcode-block" id="Collector.getattr_env">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.getattr_env">[docs]</a>
+    <span class="k">def</span> <span class="nf">getattr_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an attribute from the environment.&quot;&quot;&quot;</span>
         <span class="c1"># send command to env to return the attr</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="Collector.getattr_rb"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.getattr_rb">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getattr_rb</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+
+<div class="viewcode-block" id="Collector.getattr_rb">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.getattr_rb">[docs]</a>
+    <span class="k">def</span> <span class="nf">getattr_rb</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an attribute from the replay buffer.&quot;&quot;&quot;</span>
         <span class="c1"># send command to rb to return the attr</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="Collector.get_model"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.get_model">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+
+<div class="viewcode-block" id="Collector.get_model">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.get_model">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get model instance by ID (for weight sync schemes).</span>
 
 <span class="sd">        Args:</span>
@@ -2419,11 +2284,13 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_receive_weights_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">_receive_weights_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_receive_weights_scheme</span><span class="p">()</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">SyncDataCollector</span><span class="p">(</span><span class="n">Collector</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacyCollectorMeta</span><span class="p">):</span>
+
+<span class="k">class</span> <span class="nc">SyncDataCollector</span><span class="p">(</span><span class="n">Collector</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_LegacyCollectorMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Deprecated version of :class:`~torchrl.collectors.Collector`.&quot;&quot;&quot;</span>
 
     <span class="o">...</span>
@@ -2435,11 +2302,7 @@
             <footer>
   
 
-  
-
-    <hr>
-
-  
+  <hr/>
 
   <div role="contentinfo">
     <p>
@@ -2447,11 +2310,7 @@
 
     </p>
   </div>
-    
-      <div>
-        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
-      </div>
-     
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -2469,27 +2328,32 @@
         </div>
       </section>
     </div>
-
+  </div>
   
 
 
   
 
-     
-       <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
-         <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
-         <script src="../../../_static/jquery.js"></script>
-         <script src="../../../_static/underscore.js"></script>
-         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-         <script src="../../../_static/doctools.js"></script>
-         <script src="../../../_static/design-tabs.js"></script>
-     
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
 
   
 
   <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
   <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
   <script type="text/javascript" src="../../../_static/js/theme.js"></script>
 
   <script type="text/javascript">
@@ -2553,20 +2417,20 @@
       <div class="row">
         <div class="col-md-4 text-center">
           <h2>Docs</h2>
-          <p>Access comprehensive developer documentation for PyTorch</p>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
           <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
         </div>
 
         <div class="col-md-4 text-center">
           <h2>Tutorials</h2>
-          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
           <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
         </div>
 
         <div class="col-md-4 text-center">
           <h2>Resources</h2>
-          <p>Find development resources and get your questions answered</p>
-          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
         </div>
       </div>
     </div>
@@ -2575,77 +2439,77 @@
   <footer class="site-footer">
     <div class="container footer-container">
       <div class="footer-logo-wrapper">
-        <a href="https://pytorch.org/" class="footer-logo"></a>
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
       </div>
 
       <div class="footer-links-wrapper">
         <div class="footer-links-col">
           <ul>
-            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
-            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
-            <li><a href="https://pytorch.org/features">Features</a></li>
-            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
-            <li><a href="https://pytorch.org/blog/">Blog</a></li>
-            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
           </ul>
         </div>
 
         <div class="footer-links-col">
           <ul>
-            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
             <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
             <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
             <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
             <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
-            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
           </ul>
         </div>
 
-        <div class="footer-links-col">
+        <div class="footer-links-col follow-us-col">
           <ul>
-            <li class="list-title">Stay up to date</li>
-            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
-            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
-            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
-            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
-          </ul>  
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
           </div>
-
-        <div class="footer-links-col">
-          <ul>
-            <li class="list-title">PyTorch Podcasts</li>
-            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
-            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
-            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
-            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
-          </ul>
-         </div>
         </div>
-        
-        <div class="privacy-policy">
-          <ul>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
-            <li class="privacy-policy-links">|</li>
-            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
-          </ul>
-        </div>
-        <div class="copyright">
-        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
-          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
-          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
-          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
-          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
       </div>
-     </div>
-
+    </div>
   </footer>
-
-  <div class="cookie-banner-wrapper">
-  <div class="container">
-    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="../../../_static/images/pytorch-x.svg">
-  </div>
-</div>
 
   <!-- End Footer -->
 
@@ -2655,7 +2519,7 @@
     <div class="container-fluid">
       <div class="container">
         <div class="mobile-main-menu-header-container">
-          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
           <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
         </div>
       </div>
@@ -2664,129 +2528,37 @@
     <div class="mobile-main-menu-links-container">
       <div class="main-menu">
         <ul>
-           <li class="resources-mobile-menu-title">
-             <a>Learn</a>
-           </li>
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/get-started">Get Started</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials">Tutorials</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
-             </li>
-           </ul>
-           <li class="resources-mobile-menu-title">
-             <a>Ecosystem</a>
-           </li>
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/ecosystem">Tools</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/#community-module">Community</a>
-             </li>
-             <li>
-               <a href="https://discuss.pytorch.org/">Forums</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/resources">Developer Resources</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
-             </li>
-           </ul>
-
-           <li class="resources-mobile-menu-title">
-             <a>Edge</a>
-           </li>
-
-           <ul class="resources-mobile-menu-items">
-             <li>
-               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
-             </li>
-             
-             <li>
-               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
-             </li>
-             <li>
-               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
-             </li>
-           </ul>
-
-           <li class="resources-mobile-menu-title">
-             <a>Docs</a>
-           </li>
-
-           <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
-            </li>
-          </ul>
-
-          <li class="resources-mobile-menu-title">
-            <a>Blog & News</a>
-          </li>
-            
-           <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/community-blog">Community Blog</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/videos">Videos</a>
-            </li>
-
-            <li>
-              <a href="https://pytorch.org/community-stories">Community Stories</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/events">Events</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/newsletter">Newsletter</a>
-             </li>
-          </ul>
-          
-          <li class="resources-mobile-menu-title">
-            <a>About</a>
+          <li>
+            <a href="#">Get Started</a>
           </li>
 
-          <ul class="resources-mobile-menu-items">
-            <li>
-              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
-            </li>
-            <li>
-              <a href="https://pytorch.org/governing-board">Governing Board</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/staff">Staff</a>
-            </li>
-            <li>
-               <a href="https://pytorch.org/contact-us">Contact Us</a>
-            </li>
-          </ul>
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
         </ul>
       </div>
     </div>
@@ -2797,21 +2569,20 @@
   <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
 
   <script type="text/javascript">
-    $(document).ready(function() {
-      mobileMenu.bind();
-      mobileTOC.bind();
-      pytorchAnchors.bind();
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
       sideMenus.bind();
       scrollToAnchor.bind();
       highlightNavigation.bind();
-      mainMenuDropdown.bind();
-      filterTags.bind();
-
-      // Add class to links that have code blocks, since we cannot create links in code blocks
-      $("article.pytorch-article a span.pre").each(function(e) {
-        $(this).closest("a").addClass("has-code");
-      });
     })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
   </script>
 </body>
 </html>

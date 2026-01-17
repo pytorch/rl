@@ -1,6 +1,0 @@
-﻿torchrl.trainers.algorithms.configs.collectors.SyncDataCollectorConfig
-======================================================================
-
-.. currentmodule:: torchrl.trainers.algorithms.configs.collectors
-
-.. autoclass:: SyncDataCollectorConfig

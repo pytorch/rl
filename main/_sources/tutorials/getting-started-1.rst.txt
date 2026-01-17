@@ -82,6 +82,12 @@ instantiated in the previous tutorial.
     )
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 61-65
 
 This is all that's required to execute our policy! The use of a lazy module
@@ -96,6 +102,37 @@ run in the environment:
 
     rollout = env.rollout(max_steps=10, policy=policy)
     print(rollout)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([10]),
+        device=None,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 70-83
@@ -126,6 +163,37 @@ with many common environments straightforward:
     print(rollout)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([10]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 91-102
 
 The list of available specialized TensorDictModules is available in the
@@ -154,6 +222,12 @@ the :class:`~torchrl.modules.MLP` and the :class:`~torchrl.modules.ConvNet`
     )
     policy = Actor(module)
     rollout = env.rollout(max_steps=10, policy=policy)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 114-139
@@ -209,6 +283,40 @@ normal distribution using three components:
     print(rollout)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            action_log_prob: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            loc: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([10]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+            scale: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([10]),
+        device=None,
+        is_shared=False)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 160-172
 
 There are a few things to note about this rollout:
@@ -239,6 +347,12 @@ your application requires it. This can be controlled via the
         rollout = env.rollout(max_steps=10, policy=policy)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 183-197
 
 Check the ``default_interaction_type`` keyword argument in
@@ -267,6 +381,12 @@ To see this module in action, let's revert to a deterministic policy:
     policy = Actor(MLP(3, 1, num_cells=[32, 64]))
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 204-212
 
 Our :math:`\epsilon`-greedy exploration module will usually be customized
@@ -285,6 +405,12 @@ to :meth:`~torchrl.modules.EGreedyModule.step` is required (see the last
     exploration_module = EGreedyModule(
         spec=env.action_spec, annealing_num_steps=1000, eps_init=0.5
     )
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 217-221
@@ -307,6 +433,12 @@ to :class:`~torch.nn.Sequential` in the tensordict realm).
     with set_exploration_type(ExplorationType.RANDOM):
         # Turns on exploration
         rollout = env.rollout(max_steps=10, policy=exploration_policy)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 232-251
@@ -340,6 +472,23 @@ for a clearer understanding:
     print(env.action_spec)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    OneHot(
+        shape=torch.Size([2]),
+        space=CategoricalBox(n=2),
+        device=cpu,
+        dtype=torch.int64,
+        domain=discrete)
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 256-258
 
 We build a value network that produces one value per action when it reads a
@@ -356,6 +505,12 @@ state from the environment:
         in_keys=["observation"],
         out_keys=["action_value"],
     )
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 267-270
@@ -377,6 +532,12 @@ network:
     )
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 279-283
 
 Let's check it out! We run the policy for a couple of steps and look at the
@@ -391,6 +552,39 @@ output. We should find an ``"action_value"`` as well as a
 
     rollout = env.rollout(max_steps=3, policy=policy)
     print(rollout)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.int64, is_shared=False),
+            action_value: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+            chosen_action_value: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+            done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            next: TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False),
+            observation: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+            truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+        batch_size=torch.Size([3]),
+        device=None,
+        is_shared=False)
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 288-292
@@ -411,6 +605,12 @@ once again:
         rollout_explore = env.rollout(max_steps=3, policy=policy_explore)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 299-315
 
 This is it for our short tutorial on building a policy with TorchRL!
@@ -429,6 +629,11 @@ Next steps:
 - Compare this to the usage of transformers with the Decision Transformers
   examples (see the ``example`` directory on GitHub).
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 0.070 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-1.py:
