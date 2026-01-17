@@ -113,6 +113,7 @@ from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
+from torchrl.envs.libs.procgen import ProcgenEnv, ProcgenWrapper
 from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.unity_mlagents import (
@@ -121,7 +122,6 @@ from torchrl.envs.libs.unity_mlagents import (
     UnityMLAgentsWrapper,
 )
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
-from torchrl.envs.libs.procgen import ProcgenEnv
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
@@ -5345,6 +5345,7 @@ class TestIsaacLab:
         # Check that done obs are None
         assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
 
+
 @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
 class TestProcgen:
     @pytest.mark.parametrize("envname", ["coinrun", "starpilot"])
@@ -5358,46 +5359,96 @@ class TestProcgen:
 
     def test_procgen_num_envs_batch_size(self):
         env = ProcgenEnv("coinrun", num_envs=3)
-        td = env.reset()
-        assert td["observation"].shape[0] == 3
-        env.close()
+        try:
+            td = env.reset()
+            assert td["observation"].shape[0] == 3
+        finally:
+            env.close()
 
     def test_procgen_seeding_is_deterministic(self):
         e1 = ProcgenEnv("coinrun", num_envs=2)
         e2 = ProcgenEnv("coinrun", num_envs=2)
-        e1.set_seed(0)
-        e2.set_seed(0)
-        t1 = e1.reset()
-        t2 = e2.reset()
-        assert torch.equal(t1["observation"], t2["observation"])
-        e1.close()
-        e2.close()
+        try:
+            e1.set_seed(0)
+            e2.set_seed(0)
+            t1 = e1.reset()
+            t2 = e2.reset()
+            assert torch.equal(t1["observation"], t2["observation"])
+        finally:
+            e1.close()
+            e2.close()
 
     def test_procgen_step_keys_and_shapes(self):
         env = ProcgenEnv("coinrun", num_envs=2)
-        env.reset()
-        td = env.rand_step()
-        for k in ("observation", "reward", "done"):
-            assert k in td
-        assert td["observation"].shape[0] == 2
-        env.close()
+        try:
+            env.reset()
+            td = env.rand_step()
+            for k in ("observation", "reward", "done"):
+                assert k in td
+            assert td["observation"].shape[0] == 2
+        finally:
+            env.close()
 
-    @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
     def test_procgen_env_creation_and_reset(self):
         env = ProcgenEnv("coinrun", num_envs=4)
-        td = env.reset()
-        # ensure batch size corresponds to num_envs
-        assert td["observation"].shape[0] == 4
+        try:
+            td = env.reset()
+            # ensure batch size corresponds to num_envs
+            assert td["observation"].shape[0] == 4
+        finally:
+            env.close()
 
-    @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
     def test_procgen_env_step(self):
         env = ProcgenEnv("coinrun", num_envs=2)
-        env.reset()
-        out = env.rand_step()
-        # basic checks on returned tensordict
-        assert "observation" in out
-        assert "reward" in out
-        assert "done" in out
+        try:
+            env.reset()
+            out = env.rand_step()
+            # basic checks on returned tensordict
+            assert "observation" in out
+            assert "reward" in out
+            assert "done" in out
+        finally:
+            env.close()
+
+    def test_procgen_check_env_specs(self):
+        env = ProcgenEnv("coinrun", num_envs=2)
+        try:
+            check_env_specs(env)
+        finally:
+            env.close()
+
+    def test_procgen_wrapper(self):
+        import procgen as procgen_lib
+
+        raw_env = procgen_lib.ProcgenEnv(num_envs=2, env_name="coinrun")
+        env = ProcgenWrapper(env=raw_env)
+        try:
+            check_env_specs(env)
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
+            out = env.rand_step()
+            assert "observation" in out
+            assert "reward" in out
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("distribution_mode", ["easy", "hard"])
+    def test_procgen_distribution_mode(self, distribution_mode):
+        env = ProcgenEnv("coinrun", num_envs=2, distribution_mode=distribution_mode)
+        try:
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
+        finally:
+            env.close()
+
+    def test_procgen_start_level_num_levels(self):
+        env = ProcgenEnv("coinrun", num_envs=2, start_level=0, num_levels=10)
+        try:
+            td = env.reset()
+            assert td["observation"].shape[0] == 2
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

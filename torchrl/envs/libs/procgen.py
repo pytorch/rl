@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 import warnings
-from typing import Optional, List
 
 import torch
 from tensordict import TensorDict
@@ -21,7 +20,8 @@ if _has_procgen:
 else:
     procgen = None  # type: ignore
 
-def _get_procgen_envs() -> List[str]:
+
+def _get_procgen_envs() -> list[str]:
     if not _has_procgen:
         raise ImportError("procgen is not installed.")
     env_names = getattr(procgen, "ENV_NAMES", None)
@@ -32,6 +32,7 @@ def _get_procgen_envs() -> List[str]:
         return list(getattr(env_mod, "ENV_NAMES", []))
     except Exception:
         return list(getattr(procgen, "ENV_NAMES", []))
+
 
 class ProcgenWrapper(_EnvWrapper):
     """OpenAI Procgen environment wrapper.
@@ -65,7 +66,7 @@ class ProcgenWrapper(_EnvWrapper):
         TensorDict(
             fields={
                 done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 3, 64, 64]), device=cpu, dtype=torch.uint8, is_shared=False),        
+                observation: Tensor(shape=torch.Size([4, 3, 64, 64]), device=cpu, dtype=torch.uint8, is_shared=False),
                 reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
                 terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
                 truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},
@@ -81,7 +82,7 @@ class ProcgenWrapper(_EnvWrapper):
     lib = procgen
 
     @_classproperty
-    def available_envs(cls) -> List[str]:
+    def available_envs(cls) -> list[str]:
         if not _has_procgen:
             return []
         return _get_procgen_envs()
@@ -126,7 +127,7 @@ class ProcgenWrapper(_EnvWrapper):
         except Exception:
             pass
 
-    def _set_seed(self, seed: Optional[int]) -> None:
+    def _set_seed(self, seed: int | None) -> None:
         if seed is None:
             return
         try:
@@ -162,13 +163,13 @@ class ProcgenWrapper(_EnvWrapper):
 
     def _step(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         action = tensordict.get("action")
-        obs, reward, done = self._env.step(action)
+        obs, reward, done, info = self._env.step(action)
 
         rgb = torch.from_numpy(obs["rgb"]).to(self.device).permute(0, 3, 1, 2)
         reward = torch.as_tensor(reward, device=self.device).view(-1, 1)
         done = torch.as_tensor(done, device=self.device).view(-1, 1).bool()
 
-        return TensorDict(
+        td = TensorDict(
             {
                 "observation": rgb,
                 "reward": reward,
@@ -180,19 +181,50 @@ class ProcgenWrapper(_EnvWrapper):
             device=self.device,
         )
 
+        # Expose info dict fields (e.g., level_seed, prev_level_complete)
+        if info:
+            for key, val in info.items():
+                td.set(key, torch.as_tensor(val, device=self.device))
+
+        return td
+
+
 class ProcgenEnv(ProcgenWrapper):
     """OpenAI Procgen environment.
 
     Convenience class that constructs a Procgen environment by name.
 
+    See https://github.com/openai/procgen for more details on Procgen.
+
     Args:
         env_name (str): name of the Procgen game (e.g. ``"coinrun"``).
+            Available games: bigfish, bossfight, caveflyer, chaser, climber,
+            coinrun, dodgeball, fruitbot, heist, jumper, leaper, maze, miner,
+            ninja, plunder, starpilot.
 
     Keyword Args:
         num_envs (int, optional): number of parallel environments. Defaults to 1.
-        distribution_mode (str, optional): Procgen distribution mode.
-        start_level (int | None, optional): fixed start level.
-        num_levels (int | None, optional): number of levels.
+        distribution_mode (str, optional): Procgen distribution mode. One of
+            ``"easy"``, ``"hard"``, ``"extreme"``, ``"memory"``, ``"exploration"``.
+            Defaults to ``"hard"``.
+        start_level (int, optional): the level id to start from. Defaults to 0.
+        num_levels (int, optional): the number of unique levels that can be
+            generated. Set to 0 for unlimited levels. Defaults to 0.
+        use_sequential_levels (bool, optional): if ``True``, levels are played
+            sequentially rather than randomly. Defaults to ``False``.
+        center_agent (bool, optional): if ``True``, observations are centered
+            on the agent. Defaults to ``True``.
+        use_backgrounds (bool, optional): if ``True``, include background
+            assets. Defaults to ``True``.
+        use_monochrome_assets (bool, optional): if ``True``, use monochrome
+            assets for simpler visuals. Defaults to ``False``.
+        restrict_themes (bool, optional): if ``True``, restrict visual themes.
+            Defaults to ``False``.
+        use_generated_assets (bool, optional): if ``True``, use procedurally
+            generated assets. Defaults to ``False``.
+        paint_vel_info (bool, optional): if ``True``, paint velocity info on
+            observations. Defaults to ``False``.
+        render_mode (str, optional): render mode for the environment.
         device (torch.device | str, optional): device for tensors.
         allow_done_after_reset (bool, optional): tolerate done after reset.
 
