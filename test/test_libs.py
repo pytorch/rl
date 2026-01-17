@@ -1943,19 +1943,6 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
-<<<<<<< HEAD
-    def test_delayed_num_envs_recorded_and_batched(self):
-        """Ensure DMControlEnv records delayed num_envs and batched() produces ParallelEnv."""
-        env = DMControlEnv("cheetah", "run", num_envs=3)
-        assert hasattr(env, "_delayed_num_envs")
-        assert int(env._delayed_num_envs) == 3
-        from torchrl.envs.batched_envs import ParallelEnv
-
-        assert not isinstance(env, ParallelEnv)
-        penv = env.batched(use_buffers=False)
-        assert isinstance(penv, ParallelEnv)
-        assert penv.batch_size == torch.Size([3])
-=======
     def test_num_envs_returns_lazy_parallel_env(self):
         """Ensure DMControlEnv with num_envs > 1 returns a lazy ParallelEnv."""
         from torchrl.envs.batched_envs import ParallelEnv
@@ -1978,7 +1965,6 @@ class TestDMControl:
             assert env.batch_size == torch.Size([3])
         finally:
             env.close()
->>>>>>> 4f159182f5c28d74af9662d8141f074a2d4841ad
 
     def test_set_seed_and_reset_works(self):
         """Smoke test that setting seed and reset works (seed forwarded into build)."""
