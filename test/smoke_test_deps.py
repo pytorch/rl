@@ -80,9 +80,7 @@ def test_gym():
             )
         # Handle ale-py compatibility issues with older gym versions
         if isinstance(err, AttributeError) and "ale_py" in str(err):
-            pytest.skip(
-                f"ALE/gym version incompatibility: {err}"
-            )
+            pytest.skip(f"ALE/gym version incompatibility: {err}")
         raise
     env.reset()
 

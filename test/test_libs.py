@@ -846,7 +846,9 @@ class TestGym:
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED() and not _has_atari_for_gym():
-            pytest.skip("Atari not available for current gym version; skipping Atari gym test.")
+            pytest.skip(
+                "Atari not available for current gym version; skipping Atari gym test."
+            )
         if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
@@ -970,7 +972,9 @@ class TestGym:
     )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED() and not _has_atari_for_gym():
-            pytest.skip("Atari not available for current gym version; skipping Atari gym test.")
+            pytest.skip(
+                "Atari not available for current gym version; skipping Atari gym test."
+            )
         if env_name == HALFCHEETAH_VERSIONED() and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."

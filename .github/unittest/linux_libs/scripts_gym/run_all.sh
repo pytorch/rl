@@ -2,8 +2,13 @@
 
 # Consolidated script for gym tests using uv instead of conda
 
-set -e
 set -v
+# Note: We don't use set -e here because we want to collect all test failures
+# and report them at the end for easier debugging
+
+# Array to track failed gym versions
+declare -a FAILED_VERSIONS=()
+declare -a FAILED_ERRORS=()
 
 # 1. Install system dependencies FIRST (before using git)
 printf "* Installing system dependencies\n"
@@ -164,17 +169,40 @@ printf "* Starting Xvfb\n"
 unset LD_PRELOAD
 Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
 
-# 14. Function to run tests
+# 14. Function to run tests for a specific gym version
+# Usage: run_tests "version_name"
+# Returns 0 on success, 1 on failure (but doesn't exit the script)
 run_tests() {
+    local version_name="${1:-unknown}"
+    local test_failed=0
+    
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${env_dir}/lib
     
-    python -m torch.utils.collect_env
-    python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
-    python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym'
-    python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 -k "gym and not isaac" --mp_fork
+    python -m torch.utils.collect_env || true
     
-    coverage combine -q
-    coverage xml -i
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200; then
+        echo "ERROR: smoke_test.py failed for ${version_name}"
+        test_failed=1
+    fi
+    
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym'; then
+        echo "ERROR: smoke_test_deps.py failed for ${version_name}"
+        test_failed=1
+    fi
+    
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
+        echo "ERROR: test_libs.py failed for ${version_name}"
+        test_failed=1
+    fi
+    
+    coverage combine -q || true
+    coverage xml -i || true
+    
+    if [ $test_failed -eq 1 ]; then
+        FAILED_VERSIONS+=("${version_name}")
+        return 1
+    fi
+    return 0
 }
 
 # 15. Run tests for different gym versions
@@ -182,15 +210,15 @@ printf "* Running tests for different gym versions\n"
 
 # Test gym 0.13 (already installed)
 printf "* Testing gym 0.13\n"
-run_tests
-uv pip uninstall gym atari-py
+run_tests "gym==0.13" || true
+uv pip uninstall gym atari-py || true
 
 # Test gym 0.19 (broken metadata, needs pip<24.1)
 printf "* Testing gym 0.19\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
 pip install gym==0.19
-run_tests
-pip uninstall -y gym wheel
+run_tests "gym==0.19" || true
+pip uninstall -y gym wheel || true
 pip install --upgrade pip setuptools wheel  # restore latest versions
 
 # Test gym 0.20 (also needs older pip for metadata issues)
@@ -198,8 +226,8 @@ printf "* Testing gym 0.20\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
 pip install 'gym[atari]==0.20'
 pip install 'ale-py==0.7.4'
-run_tests
-pip uninstall -y gym ale-py wheel
+run_tests "gym==0.20" || true
+pip uninstall -y gym ale-py wheel || true
 pip install --upgrade pip setuptools wheel  # restore latest versions
 
 # Test gym 0.25 (needs both mujoco-py for env and mujoco for rendering)
@@ -208,40 +236,63 @@ printf "* Testing gym 0.25\n"
 # Upgrade PyOpenGL for new mujoco package (needs EGL device extensions like EGLDeviceEXT)
 uv pip install 'pyopengl>=3.1.6'
 uv pip install 'numpy>=1.21,<1.24'  # gym 0.25 needs numpy<1.24 for AsyncVectorEnv deepcopy compatibility
-# gym 0.25 was released mid-2022 and requires mujoco<3 (3.0 renamed solver_iter -> solver_niter)
-uv pip install 'gym[atari]==0.25' 'mujoco<3'
-run_tests
-uv pip uninstall gym mujoco
+# gym 0.25 was released mid-2022 and requires mujoco>=2.1.3,<2.3 (API changes in 2.3+, breaking changes in 3.0)
+uv pip install 'gym[atari]==0.25' 'mujoco>=2.1.3,<2.3'
+run_tests "gym==0.25" || true
+uv pip uninstall gym mujoco || true
 
 # Test gym 0.26 (uses new mujoco bindings for HalfCheetah-v4)
 printf "* Testing gym 0.26\n"
 # Uninstall mujoco-py and switch to new mujoco package for gym 0.26+
-uv pip uninstall mujoco-py
+uv pip uninstall mujoco-py || true
 unset MUJOCO_PY_MJKEY_PATH MUJOCO_PY_MUJOCO_PATH
 export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | sed 's|[^:]*mujoco210[^:]*:*||g')
 uv pip install 'numpy>=1.21,<1.24'  # gym 0.26 needs numpy<1.24 for AsyncVectorEnv deepcopy compatibility
-uv pip install 'gym[atari,accept-rom-license]==0.26' mujoco
+# gym 0.26 was released Sept 2022 and requires mujoco<3 (3.0 renamed solver_iter -> solver_niter)
+uv pip install 'gym[atari,accept-rom-license]==0.26' 'mujoco>=2.1.3,<3'
 uv pip install gym-super-mario-bros
-run_tests
-uv pip uninstall gym gym-super-mario-bros mujoco
+run_tests "gym==0.26" || true
+uv pip uninstall gym gym-super-mario-bros mujoco || true
 
-# Test gymnasium 0.27 and 0.28
+# Test gymnasium 0.27 and 0.28 (both released before mujoco 3.0)
 for GYM_VERSION in '0.27' '0.28'; do
     printf "* Testing gymnasium ${GYM_VERSION}\n"
-    uv pip install "gymnasium[atari,ale-py]==${GYM_VERSION}"
-    run_tests
-    uv pip uninstall gymnasium ale-py
+    # gymnasium 0.27/0.28 were released late 2022/early 2023, before mujoco 3.0 breaking changes
+    uv pip install "gymnasium[atari,ale-py]==${GYM_VERSION}" 'mujoco>=2.1.3,<3'
+    run_tests "gymnasium==${GYM_VERSION}" || true
+    uv pip uninstall gymnasium ale-py mujoco || true
 done
 
-# Test gymnasium >=1.1.0
+# Test gymnasium >=1.1.0 (supports mujoco 3.x with v5 environments)
 printf "* Testing gymnasium >=1.1.0\n"
-uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
-run_tests
-uv pip uninstall gymnasium mo-gymnasium gymnasium-robotics ale-py
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics mujoco
+run_tests "gymnasium>=1.1.0" || true
+uv pip uninstall gymnasium mo-gymnasium gymnasium-robotics ale-py mujoco || true
 
-# Test latest gymnasium
+# Test latest gymnasium (supports mujoco 3.x with v5 environments)
 printf "* Testing latest gymnasium\n"
-uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics
-run_tests
+uv pip install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics mujoco
+run_tests "gymnasium-latest" || true
 
-printf "* All tests completed\n"
+# =============================================================================
+# FINAL REPORT: Summarize all failures
+# =============================================================================
+printf "\n"
+printf "================================================================================\n"
+printf "                           TEST RESULTS SUMMARY\n"
+printf "================================================================================\n"
+
+if [ ${#FAILED_VERSIONS[@]} -eq 0 ]; then
+    printf "\n✅ All gym/gymnasium versions passed!\n\n"
+    exit 0
+else
+    printf "\n❌ The following gym/gymnasium versions had test failures:\n\n"
+    for version in "${FAILED_VERSIONS[@]}"; do
+        printf "   - %s\n" "$version"
+    done
+    printf "\n"
+    printf "Total: %d version(s) failed\n" "${#FAILED_VERSIONS[@]}"
+    printf "================================================================================\n"
+    printf "\nPlease check the logs above for detailed error messages.\n\n"
+    exit 1
+fi
