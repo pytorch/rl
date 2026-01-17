@@ -1802,6 +1802,28 @@ def test_batch_errors():
         pass
     rb.sample()
 
+def test_storage_save_hook(tmpdir):
+    from torchrl.data.replay_buffers import ReplayBuffer
+    from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+
+    hook = mock.Mock()
+    observed = {}
+
+    def side_effect(storage, path=None):
+        # record attributes that the checkpointer should have set before calling
+        observed["shift"] = getattr(hook, "shift", None)
+        observed["is_full"] = getattr(hook, "is_full", None)
+        return storage
+
+    hook.side_effect = side_effect
+
+    rb = ReplayBuffer(storage=LazyMemmapStorage(10))
+    rb.register_save_hook(hook)
+    rb.extend(torch.arange(5))
+    rb.dumps(tmpdir)
+
+    assert isinstance(observed.get("shift"), int)
+    assert isinstance(observed.get("is_full"), bool)
 
 @pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
 def test_add_warning():
