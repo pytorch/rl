@@ -1943,6 +1943,7 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
+<<<<<<< HEAD
     def test_delayed_num_envs_recorded_and_batched(self):
         """Ensure DMControlEnv records delayed num_envs and batched() produces ParallelEnv."""
         env = DMControlEnv("cheetah", "run", num_envs=3)
@@ -1954,6 +1955,30 @@ class TestDMControl:
         penv = env.batched(use_buffers=False)
         assert isinstance(penv, ParallelEnv)
         assert penv.batch_size == torch.Size([3])
+=======
+    def test_num_envs_returns_lazy_parallel_env(self):
+        """Ensure DMControlEnv with num_envs > 1 returns a lazy ParallelEnv."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        # When num_envs > 1, should return ParallelEnv directly (lazy)
+        env = DMControlEnv("cheetah", "run", num_envs=3)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_workers == 3
+            # ParallelEnv should be lazy (not started yet)
+            assert env.is_closed
+
+            # configure_parallel should work before env starts
+            env.configure_parallel(use_buffers=False)
+            assert env._use_buffers is False
+
+            # After reset, env is started
+            env.reset()
+            assert not env.is_closed
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+>>>>>>> 4f159182f5c28d74af9662d8141f074a2d4841ad
 
     def test_set_seed_and_reset_works(self):
         """Smoke test that setting seed and reset works (seed forwarded into build)."""
