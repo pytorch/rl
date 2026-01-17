@@ -1943,6 +1943,39 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
+    def test_num_envs_returns_lazy_parallel_env(self):
+        """Ensure DMControlEnv with num_envs > 1 returns a lazy ParallelEnv."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        # When num_envs > 1, should return ParallelEnv directly (lazy)
+        env = DMControlEnv("cheetah", "run", num_envs=3)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_workers == 3
+            # ParallelEnv should be lazy (not started yet)
+            assert env.is_closed
+
+            # configure_parallel should work before env starts
+            env.configure_parallel(use_buffers=False)
+            assert env._use_buffers is False
+
+            # After reset, env is started
+            env.reset()
+            assert not env.is_closed
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+
+    def test_set_seed_and_reset_works(self):
+        """Smoke test that setting seed and reset works (seed forwarded into build)."""
+        env = DMControlEnv("cheetah", "run")
+        final_seed = env.set_seed(0)
+        assert final_seed is not None
+        td = env.reset()
+        from tensordict import TensorDict
+
+        assert isinstance(td, TensorDict)
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
