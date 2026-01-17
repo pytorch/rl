@@ -205,6 +205,8 @@ pip install --upgrade pip setuptools wheel  # restore latest versions
 # Test gym 0.25 (needs both mujoco-py for env and mujoco for rendering)
 printf "* Testing gym 0.25\n"
 # gym 0.25 requires mujoco-py for HalfCheetah-v4 AND mujoco for rendering
+# Upgrade PyOpenGL for new mujoco package (needs EGL device extensions like EGLDeviceEXT)
+uv pip install 'pyopengl>=3.1.6'
 uv pip install 'numpy>=1.21,<1.24'  # gym 0.25 needs numpy<1.24 for AsyncVectorEnv deepcopy compatibility
 uv pip install 'gym[atari]==0.25' mujoco
 run_tests
