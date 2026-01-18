@@ -8961,7 +8961,19 @@ class ActionMask(Transform):
     It reads the mask from the input tensordict after the step is executed,
     and adapts the mask of the finite action spec.
 
-      .. note:: This transform will fail when used without an environment.
+    .. note:: This transform will fail when used without an environment.
+
+    .. note:: **MultiDiscrete action spaces with 2D masks (e.g., board games)**
+
+        When wrapping a Gym environment with a ``MultiDiscrete`` action space
+        (e.g., ``MultiDiscrete([5, 5])``) and an ``action_mask`` observation whose
+        shape matches the ``nvec`` (e.g., shape ``(5, 5)``), the :class:`~torchrl.envs.GymWrapper`
+        automatically converts the action space to a flattened ``Categorical(n=25)``
+        or ``OneHot(n=25)``. This allows the mask to represent all possible action
+        combinations (25 in this example) rather than independent sub-actions.
+
+        This is particularly useful for grid-based games where the mask indicates
+        which (row, column) positions are valid moves.
 
     Args:
         action_key (NestedKey, optional): the key where the action tensor can be found.

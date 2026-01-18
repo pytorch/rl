@@ -1382,33 +1382,40 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        try:
-            gym_spaces = gym_backend("spaces")
-            if isinstance(env.action_space, gym_spaces.multi_discrete.MultiDiscrete):
-                nvec = np.asarray(env.action_space.nvec)
-                if nvec.ndim == 1 and isinstance(observation_spec, Composite) and "action_mask" in observation_spec:
-                    mask_spec = observation_spec["action_mask"]
-                    if tuple(mask_spec.shape) == tuple(nvec):
-                        prod_n = int(np.prod(nvec))
-                        dtype = (
-                            numpy_to_torch_dtype_dict[env.action_space.dtype]
-                            if self._categorical_action_encoding
-                            else torch.long
+        # When the action space is MultiDiscrete and an action_mask is present in the
+        # observation with shape matching nvec, we convert to a flattened Categorical/OneHot
+        # so that the mask can be applied directly to all possible action combinations.
+        gym_spaces = gym_backend("spaces")
+        if isinstance(env.action_space, gym_spaces.multi_discrete.MultiDiscrete):
+            nvec = np.asarray(env.action_space.nvec)
+            if (
+                nvec.ndim == 1
+                and isinstance(observation_spec, Composite)
+                and "action_mask" in observation_spec
+            ):
+                mask_spec = observation_spec["action_mask"]
+                if tuple(mask_spec.shape) == tuple(nvec):
+                    prod_n = int(np.prod(nvec))
+                    dtype = (
+                        numpy_to_torch_dtype_dict[env.action_space.dtype]
+                        if self._categorical_action_encoding
+                        else torch.long
+                    )
+                    # Flattened categorical: n = product(nvec), shape = mask shape
+                    if self._categorical_action_encoding:
+                        action_spec = Categorical(
+                            prod_n,
+                            shape=mask_spec.shape,
+                            device=self.device,
+                            dtype=dtype,
                         )
-                        # Flattened categorical: n = product(nvec), shape = mask shape
-                        if self._categorical_action_encoding:
-                            action_spec = Categorical(
-                                prod_n, shape=mask_spec.shape, device=self.device, dtype=dtype
-                            )
-                        else:
-                            action_spec = OneHot(
-                                prod_n,
-                                shape=(*mask_spec.shape, prod_n),
-                                device=self.device,
-                                dtype=torch.bool,
-                            )
-        except Exception:
-            pass
+                    else:
+                        action_spec = OneHot(
+                            prod_n,
+                            shape=(*mask_spec.shape, prod_n),
+                            device=self.device,
+                            dtype=torch.bool,
+                        )
         if not isinstance(observation_spec, Composite):
             if self.from_pixels:
                 observation_spec = Composite(
@@ -1891,7 +1898,7 @@ class GymEnv(GymWrapper):
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         if num_envs > 0:
             try:
-                               env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+                env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
             except RuntimeError:
                 # It would fail if the environment is not pickable. In that case,
                 # delegating environment instantiation to each subprocess as a fallback.
