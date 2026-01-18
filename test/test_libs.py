@@ -1977,6 +1977,31 @@ class TestDMControl:
         assert isinstance(td, TensorDict)
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    def test_dmcontrol_kwargs_preserved_with_seed(self):
+        """Test that kwargs like camera_id are preserved when seed is provided.
+
+        Regression test for a bug where `kwargs = {"random": ...}` replaced
+        all kwargs instead of updating them when _seed was not None.
+        """
+        # Create env with custom camera_id and from_pixels=True
+        # The camera_id should be preserved even when seed is set internally
+        env = DMControlEnv(
+            "cheetah",
+            "run",
+            from_pixels=True,
+            pixels_only=True,
+            camera_id=1,  # Non-default camera_id
+        )
+        try:
+            # Verify the render_kwargs were set correctly
+            assert env.render_kwargs["camera_id"] == 1
+            # Verify env works
+            td = env.reset()
+            assert "pixels" in td.keys()
+        finally:
+            env.close()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
     @pytest.mark.parametrize(

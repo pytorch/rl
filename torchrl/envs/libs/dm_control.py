@@ -503,10 +503,10 @@ class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
                 f"dm_control from {self.git_url}"
             )
 
+        camera_id = kwargs.pop("camera_id", 0)
         if _seed is not None:
             random_state = np.random.RandomState(_seed)
-            kwargs = {"random": random_state}
-        camera_id = kwargs.pop("camera_id", 0)
+            kwargs["random"] = random_state
         env = suite.load(env_name, task_name, task_kwargs=kwargs)
         return super()._build_env(
             env,
