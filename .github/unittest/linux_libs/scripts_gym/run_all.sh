@@ -247,6 +247,11 @@ printf "* Testing gym 0.26\n"
 uv pip uninstall mujoco-py || true
 unset MUJOCO_PY_MJKEY_PATH MUJOCO_PY_MUJOCO_PATH
 export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | sed 's|[^:]*mujoco210[^:]*:*||g')
+# IMPORTANT: Rename mujoco-py folder so Python doesn't import it anymore
+# (Python can still import from the folder even after pip uninstall since it was an editable install)
+if [ -d "${root_dir}/mujoco-py" ]; then
+    mv "${root_dir}/mujoco-py" "${root_dir}/mujoco-py.disabled"
+fi
 uv pip install 'numpy>=1.21,<1.24'  # gym 0.26 needs numpy<1.24 for AsyncVectorEnv deepcopy compatibility
 # gym 0.26 was released Sept 2022 and requires mujoco<3 (3.0 renamed solver_iter -> solver_niter)
 uv pip install 'gym[atari,accept-rom-license]==0.26' 'mujoco>=2.1.3,<3'
