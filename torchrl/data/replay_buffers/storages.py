@@ -192,31 +192,19 @@ class Storage:
     def checkpointer(self):
         return self._checkpointer
 
-    def register_save_hook(self, hook: Callable[[Any], Any]) -> None:
-        """Register a save hook for this storage (forwarded to the checkpointer)."""
-        if not hasattr(self, "_checkpointer") or self._checkpointer is None:
-            self.checkpointer = None
-        cp = self._checkpointer
-        if hasattr(cp, "_save_hooks"):
-            cp._save_hooks.append(hook)
-        else:
-            # attach hooks directly on storage instance
-            if not hasattr(self, "_save_hooks"):
-                self._save_hooks = []
-            self._save_hooks.append(hook)
+    def register_save_hook(self, hook):
+        """Register a save hook for this storage.
 
-    def register_load_hook(self, hook: Callable[[Any], Any]) -> None:
-        """Register a load hook for this storage (forwarded to the checkpointer)."""
-        if not hasattr(self, "_checkpointer") or self._checkpointer is None:
-            self.checkpointer = None
-        cp = self._checkpointer
-        if hasattr(cp, "_load_hooks"):
-            cp._load_hooks.append(hook)
-        else:
-            # attach hooks directly on storage instance
-            if not hasattr(self, "_load_hooks"):
-                self._load_hooks = []
-            self._load_hooks.append(hook)
+        The hook is forwarded to the checkpointer.
+        """
+        self._checkpointer.register_save_hook(hook)
+
+    def register_load_hook(self, hook):
+        """Register a load hook for this storage.
+
+        The hook is forwarded to the checkpointer.
+        """
+        self._checkpointer.register_load_hook(hook)
 
     @checkpointer.setter
     def checkpointer(self, value: StorageCheckpointerBase | None) -> None:
