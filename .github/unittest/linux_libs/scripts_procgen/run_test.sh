@@ -2,8 +2,8 @@
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+# Activate the virtual environment
+source ./env/bin/activate
 
 apt-get update && apt-get install -y git wget cmake
 
@@ -17,7 +17,7 @@ root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
-conda deactivate && conda activate ./env
+deactivate 2>/dev/null || true && source ./env/bin/activate
 
 # this workflow only tests the libs
 python -c "import procgen"

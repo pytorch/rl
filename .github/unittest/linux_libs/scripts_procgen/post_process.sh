@@ -2,5 +2,5 @@
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+# Activate the virtual environment
+source ./env/bin/activate

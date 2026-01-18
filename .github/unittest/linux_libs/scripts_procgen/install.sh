@@ -7,7 +7,8 @@ unset PYTORCH_VERSION
 
 set -e
 
-# Note: This script is sourced by run_all.sh, so the environment is already active
+# Activate the virtual environment
+source ./env/bin/activate
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
