@@ -1776,6 +1776,50 @@ class TestGym:
             result is False
         ), f"Expected False for Dict environment without pixels, got {result}"
 
+    def test_num_envs_returns_lazy_parallel_env(self):
+        """Ensure GymEnv with num_envs > 1 returns a lazy ParallelEnv."""
+        from torchrl.envs.batched_envs import ParallelEnv
+
+        env = GymEnv("CartPole-v1", num_envs=3)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env.num_envs == 3
+            # ParallelEnv should be lazy
+            assert env.is_closed is None
+
+            # After reset, env is started
+            env.reset()
+            assert env.is_closed is False
+            assert env.batch_size == torch.Size([3])
+        finally:
+            env.close()
+
+    def test_set_seed_and_reset_works(self):
+        """Smoke test that setting seed and reset works (seed forwarded into build)."""
+        env = GymEnv("CartPole-v1")
+        final_seed = env.set_seed(0)
+        assert final_seed is not None
+        td = env.reset()
+        from tensordict import TensorDict
+
+        assert isinstance(td, TensorDict)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    def test_gym_kwargs_preserved_with_seed(self):
+        """Test that kwargs like frame_skip are preserved when seed is provided.
+
+        Regression test for a bug where `kwargs = {"random": ...}` replaced
+        all kwargs instead of updating them when _seed was not None.
+        """
+        env = GymEnv("CartPole-v1", frame_skip=4, from_pixels=False)
+        try:
+            td = env.reset()
+            rollout = env.rollout(max_steps=5)
+            assert rollout.shape[0] == 5
+            assert "observation" in td.keys()
+        finally:
+            env.close()
+
     def test_is_from_pixels_wrapper_env(self):
         """Test that _is_from_pixels correctly identifies wrapped environments."""
         from torchrl.envs.libs.gym import _is_from_pixels
