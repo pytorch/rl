@@ -60,6 +60,13 @@ chmod 755 git-lfs-3.4.0/git-lfs
 cp git-lfs-3.4.0/git-lfs /usr/local/bin/
 cd "${root_dir}"
 git lfs install
+
+# Configure git-lfs for better performance (higher timeouts, more concurrent transfers)
+git config --global lfs.activitytimeout 600
+git config --global lfs.dialtimeout 60
+git config --global lfs.tlstimeout 60
+git config --global lfs.concurrenttransfers 8
+git config --global http.version HTTP/1.1
 rm -rf git_lfs_tmp
 
 # 4. Install Conda dependencies
@@ -90,11 +97,43 @@ pip3 install . --no-build-isolation
 
 cd "${root_dir}"
 
-# 6. Download required Habitat test datasets
-# Use --no-prune to skip the slow git-lfs prune operation
-python -m habitat_sim.utils.datasets_download --uids replica_cad_dataset --data-path data/ --no-prune
-# Download the rearrange dataset as well
-python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path data/ --no-prune
+# 6. Download required Habitat test datasets manually (faster than datasets_download)
+# Using smudge-disabled clone + git lfs pull for better performance
+mkdir -p data/versioned_data
+mkdir -p data/objects
+mkdir -p data/robots
+
+echo "Downloading replica_cad_dataset..."
+git clone --depth 1 --branch v1.6 \
+  -c filter.lfs.smudge= -c filter.lfs.required=false \
+  https://huggingface.co/datasets/ai-habitat/ReplicaCAD_dataset.git \
+  data/versioned_data/replica_cad_dataset
+cd data/versioned_data/replica_cad_dataset
+git lfs pull
+cd "${root_dir}"
+
+# Create symlink expected by habitat
+ln -sf versioned_data/replica_cad_dataset data/replica_cad
+
+echo "Downloading YCB objects..."
+git clone --depth 1 \
+  -c filter.lfs.smudge= -c filter.lfs.required=false \
+  https://huggingface.co/datasets/ai-habitat/ycb.git \
+  data/objects/ycb
+cd data/objects/ycb
+git lfs pull
+cd "${root_dir}"
+
+echo "Downloading hab_fetch robot..."
+git clone --depth 1 \
+  -c filter.lfs.smudge= -c filter.lfs.required=false \
+  https://huggingface.co/datasets/ai-habitat/hab_fetch.git \
+  data/robots/hab_fetch
+cd data/robots/hab_fetch
+git lfs pull
+cd "${root_dir}"
+
+echo "Dataset downloads complete!"
 
 # Install habitat-lab
 git clone https://github.com/facebookresearch/habitat-lab.git
