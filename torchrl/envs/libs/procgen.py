@@ -34,6 +34,18 @@ def _get_procgen_envs() -> list[str]:
         return list(getattr(procgen, "ENV_NAMES", []))
 
 
+def _get_num_envs(env) -> int | None:
+    """Get the number of parallel environments from a procgen env."""
+    # procgen.ProcgenEnv returns a ToGymEnv wrapper; the num attribute
+    # may be on the wrapper, the inner env (.env), or as num_envs
+    return (
+        getattr(env, "num", None)
+        or getattr(env, "nenvs", None)
+        or getattr(env, "num_envs", None)
+        or getattr(getattr(env, "env", None), "num", None)
+    )
+
+
 class ProcgenWrapper(_EnvWrapper):
     """OpenAI Procgen environment wrapper.
 
@@ -87,6 +99,14 @@ class ProcgenWrapper(_EnvWrapper):
             return []
         return _get_procgen_envs()
 
+    def __init__(self, env, **kwargs):
+        # Detect num_envs before calling parent __init__ so batch_size is set
+        # before _make_specs() is called
+        n = _get_num_envs(env)
+        if n is not None and "batch_size" not in kwargs:
+            kwargs["batch_size"] = torch.Size([n])
+        super().__init__(env=env, **kwargs)
+
     def _check_kwargs(self, kwargs: dict) -> None:
         if "env" not in kwargs:
             raise TypeError("ProcgenWrapper requires an 'env' argument.")
@@ -105,40 +125,55 @@ class ProcgenWrapper(_EnvWrapper):
         return getattr(self._env, "action_space", None) or self._env.ac_space
 
     def _make_specs(self, env) -> None:
-        with set_gym_backend("gym"):
-            self.observation_spec = _gym_to_torchrl_spec_transform(
-                self.observation_space,
-                remap_state_to_observation=False,
+        from torchrl.data.tensor_specs import Bounded
+
+        batch_size = self.batch_size
+
+        # Procgen observation is rgb with shape (64, 64, 3) per env
+        # After permuting in _reset/_step it becomes (3, 64, 64) per env
+        # With batch_size, full shape is (*batch_size, 3, 64, 64)
+        self.observation_spec = Composite(
+            observation=Bounded(
+                low=0,
+                high=255,
+                shape=(*batch_size, 3, 64, 64),
+                dtype=torch.uint8,
                 device=self.device,
-            )
-            self.action_spec = _gym_to_torchrl_spec_transform(
+            ),
+            shape=batch_size,
+        )
+
+        # Procgen has Discrete(15) action space
+        with set_gym_backend("gym"):
+            action_spec = _gym_to_torchrl_spec_transform(
                 self.action_space,
                 categorical_action_encoding=True,
                 device=self.device,
             )
+        # Expand action spec to include batch dimension
+        if len(batch_size) > 0 and action_spec.shape[: len(batch_size)] != batch_size:
+            action_spec = action_spec.expand(*batch_size, *action_spec.shape)
+        self.action_spec = action_spec
 
         self.reward_spec = Composite(
-            reward=Unbounded(shape=(1,), dtype=torch.float32, device=self.device)
+            reward=Unbounded(
+                shape=(*batch_size, 1), dtype=torch.float32, device=self.device
+            ),
+            shape=batch_size,
         )
 
-        done_leaf = Categorical(n=2, shape=(1,), dtype=torch.bool, device=self.device)
+        done_leaf = Categorical(
+            n=2, shape=(*batch_size, 1), dtype=torch.bool, device=self.device
+        )
         self.done_spec = Composite(
             done=done_leaf.clone(),
             terminated=done_leaf.clone(),
             truncated=done_leaf.clone(),
+            shape=batch_size,
         )
 
     def _init_env(self) -> None:
-        # procgen.ProcgenEnv returns a ToGymEnv wrapper; the num attribute
-        # may be on the wrapper, the inner env (.env), or as num_envs
-        n = (
-            getattr(self._env, "num", None)
-            or getattr(self._env, "nenvs", None)
-            or getattr(self._env, "num_envs", None)
-            or getattr(getattr(self._env, "env", None), "num", None)
-        )
-        if n is not None:
-            self.batch_size = torch.Size([n])
+        # batch_size is set in __init__ before _make_specs() is called
         try:
             self._env.reset()
         except Exception:
@@ -170,11 +205,11 @@ class ProcgenWrapper(_EnvWrapper):
             device=self.device,
         )
 
-        zeros = torch.zeros((*self.batch_size, 1), device=self.device)
-        td.set("reward", zeros.clone())
-        td.set("done", zeros.bool())
-        td.set("terminated", zeros.bool())
-        td.set("truncated", zeros.bool())
+        # Set done flags (required by TorchRL)
+        zeros = torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.bool)
+        td.set("done", zeros)
+        td.set("terminated", zeros.clone())
+        td.set("truncated", zeros.clone())
 
         return td
 
@@ -201,7 +236,8 @@ class ProcgenWrapper(_EnvWrapper):
         )
 
         # Expose info dict fields (e.g., level_seed, prev_level_complete)
-        if info:
+        # Note: procgen may return info as a list of dicts or a single dict
+        if info and isinstance(info, dict):
             for key, val in info.items():
                 td.set(key, torch.as_tensor(val, device=self.device))
 
@@ -290,5 +326,26 @@ class ProcgenEnv(ProcgenWrapper):
         seed = kwargs.pop("seed", None)
         if seed is not None:
             kwargs["rand_seed"] = seed
-        env = procgen.ProcgenEnv(num_envs, env_name, **kwargs)
+        # Extract procgen-specific kwargs before passing to parent
+        procgen_kwargs = {}
+        for key in list(kwargs.keys()):
+            if key in (
+                "distribution_mode",
+                "start_level",
+                "num_levels",
+                "use_sequential_levels",
+                "center_agent",
+                "use_backgrounds",
+                "use_monochrome_assets",
+                "restrict_themes",
+                "use_generated_assets",
+                "paint_vel_info",
+                "render_mode",
+                "rand_seed",
+            ):
+                procgen_kwargs[key] = kwargs.pop(key)
+        env = procgen.ProcgenEnv(num_envs, env_name, **procgen_kwargs)
+        # Pass batch_size to parent; it will be set before _make_specs()
+        if "batch_size" not in kwargs:
+            kwargs["batch_size"] = torch.Size([num_envs])
         super().__init__(env=env, **kwargs)

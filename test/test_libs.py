@@ -5551,9 +5551,10 @@ class TestProcgen:
         try:
             env.reset()
             td = env.rand_step()
+            # After step, observation/reward/done are in td["next"]
             for k in ("observation", "reward", "done"):
-                assert k in td
-            assert td["observation"].shape[0] == 2
+                assert k in td["next"]
+            assert td["next"]["observation"].shape[0] == 2
         finally:
             env.close()
 
@@ -5571,10 +5572,10 @@ class TestProcgen:
         try:
             env.reset()
             out = env.rand_step()
-            # basic checks on returned tensordict
-            assert "observation" in out
-            assert "reward" in out
-            assert "done" in out
+            # After step, observation/reward/done are in out["next"]
+            assert "observation" in out["next"]
+            assert "reward" in out["next"]
+            assert "done" in out["next"]
         finally:
             env.close()
 
@@ -5595,8 +5596,9 @@ class TestProcgen:
             td = env.reset()
             assert td["observation"].shape[0] == 2
             out = env.rand_step()
-            assert "observation" in out
-            assert "reward" in out
+            # After step, observation/reward are in out["next"]
+            assert "observation" in out["next"]
+            assert "reward" in out["next"]
         finally:
             env.close()
 
