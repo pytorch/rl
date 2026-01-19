@@ -5429,60 +5429,6 @@ class TestProcgen:
 
     def test_procgen_num_envs_batch_size(self):
         env = ProcgenEnv("coinrun", num_envs=3)
-        td = env.reset()
-        assert td["observation"].shape[0] == 3
-        env.close()
-
-    def test_procgen_seeding_is_deterministic(self):
-        e1 = ProcgenEnv("coinrun", num_envs=2)
-        e2 = ProcgenEnv("coinrun", num_envs=2)
-        e1.set_seed(0)
-        e2.set_seed(0)
-        t1 = e1.reset()
-        t2 = e2.reset()
-        assert torch.equal(t1["observation"], t2["observation"])
-        e1.close()
-        e2.close()
-
-    def test_procgen_step_keys_and_shapes(self):
-        env = ProcgenEnv("coinrun", num_envs=2)
-        env.reset()
-        td = env.rand_step()
-        for k in ("observation", "reward", "done"):
-            assert k in td
-        assert td["observation"].shape[0] == 2
-        env.close()
-
-    @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
-    def test_procgen_env_creation_and_reset(self):
-        env = ProcgenEnv("coinrun", num_envs=4)
-        td = env.reset()
-        # ensure batch size corresponds to num_envs
-        assert td["observation"].shape[0] == 4
-
-    @pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
-    def test_procgen_env_step(self):
-        env = ProcgenEnv("coinrun", num_envs=2)
-        env.reset()
-        out = env.rand_step()
-        # basic checks on returned tensordict
-        assert "observation" in out
-        assert "reward" in out
-        assert "done" in out
-
-@pytest.mark.skipif(not _has_procgen, reason="Procgen not found")
-class TestProcgen:
-    @pytest.mark.parametrize("envname", ["coinrun", "starpilot"])
-    def test_procgen_envs_available(self, envname):
-        # availability check
-        assert envname in ProcgenEnv.available_envs
-
-    def test_procgen_invalid_env_raises(self):
-        with pytest.raises(ValueError):
-            ProcgenEnv("this_env_does_not_exist")
-
-    def test_procgen_num_envs_batch_size(self):
-        env = ProcgenEnv("coinrun", num_envs=3)
         try:
             td = env.reset()
             assert td["observation"].shape[0] == 3
@@ -5572,7 +5518,6 @@ class TestProcgen:
             assert td["observation"].shape[0] == 2
         finally:
             env.close()
-
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
