@@ -2469,8 +2469,11 @@ class TestJumanji:
 
 ENVPOOL_CLASSIC_CONTROL_ENVS = [
     PENDULUM_VERSIONED(),
-    "MountainCar-v0",
-    "MountainCarContinuous-v0",
+    # MountainCar envs disabled due to envpool bug: observations return duplicated
+    # position values instead of [position, velocity].
+    # See https://github.com/sail-sg/envpool/issues/XXX
+    # "MountainCar-v0",
+    # "MountainCarContinuous-v0",
     "Acrobot-v1",
     CARTPOLE_VERSIONED(),
 ]
@@ -2508,12 +2511,6 @@ class TestEnvPool:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_out", [False, True])
     def test_specs(self, env_name, frame_skip, transformed_out, T=10, N=3):
-        if "MountainCar" in env_name:
-            pytest.skip(
-                "EnvPool MountainCar returns incorrect observations "
-                "(duplicated position instead of [position, velocity]). "
-                "See https://github.com/sail-sg/envpool/issues/XXX"
-            )
         env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
