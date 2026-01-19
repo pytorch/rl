@@ -25,7 +25,12 @@ from torchrl.objectives.utils import (
     _reduce,
     _vmap_func,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    ValueEstimatorBase,
+)
 
 
 class REDQLoss_deprecated(LossModule):
@@ -464,6 +469,13 @@ class REDQLoss_deprecated(LossModule):
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
+
+        # Handle ValueEstimatorBase instance or class
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+
         self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
