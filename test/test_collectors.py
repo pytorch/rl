@@ -2683,6 +2683,35 @@ class TestPreemptiveThreshold:
         collector.shutdown()
         del collector
 
+    def test_multisync_split_trajs_set_seed():
+        """Test that MultiSyncCollector with split_trajs=True and set_seed works without errors."""
+        from torchrl.testing.mocking_classes import CountingEnv
+        env_maker = lambda: CountingEnv(max_steps=100)
+        policy = RandomPolicy(env_maker().action_spec)
+        collector = MultiSyncCollector(
+            create_env_fn=[env_maker, env_maker],
+            policy=policy,
+            total_frames=2000,
+            max_frames_per_traj=50,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device="cpu",
+            storing_device="cpu",
+            cat_results="stack",
+            split_trajs=True,
+        )
+        collector.set_seed(42)
+        try:
+            for i, data in enumerate(collector):
+                if i == 2:
+                    break
+            # Check that traj_ids are unique across the batch
+            traj_ids = data.get(("collector", "traj_ids"))
+            assert traj_ids.unique().numel() == traj_ids.numel(), "traj_ids should be unique"
+        finally:
+            collector.shutdown()
+            del collector
 
 class TestNestedEnvsCollector:
     def test_multi_collector_nested_env_consistency(self, seed=1):
