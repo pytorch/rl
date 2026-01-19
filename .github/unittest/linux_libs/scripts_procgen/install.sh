@@ -46,8 +46,9 @@ else
   exit 1
 fi
 
-# Ensure numpy is installed (may be removed during torch installation)
-uv pip install numpy
+# Ensure tensordict and torchrl dependencies are installed
+# (since we use --no-deps for tensordict and torchrl)
+uv pip install numpy pyvers packaging cloudpickle
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
