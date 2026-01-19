@@ -1936,13 +1936,13 @@ class TestMiniGrid:
         check_env_specs(env)
 
 
-@implement_for("gym", None, "0.26")
+@implement_for("gym", None, "0.25")
 def _make_gym_environment(env_name):  # noqa: F811
     gym = gym_backend()
     return gym.make(env_name)
 
 
-@implement_for("gym", "0.26", None)
+@implement_for("gym", "0.25", None)
 def _make_gym_environment(env_name):  # noqa: F811
     gym = gym_backend()
     return gym.make(env_name, render_mode="rgb_array")
