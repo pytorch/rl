@@ -1791,8 +1791,14 @@ class OneHot(TensorSpec):
                     [1, 0, 0]])
         """
         if mask is not None:
+            mask = torch.as_tensor(mask, dtype=torch.bool, device=self.device)
+            n = int(self.space.n)
+            # If mask total elements matches n but shape doesn't match expected, reshape to (n,)
+            expected_shape = self._safe_shape
+            if mask.numel() == n and mask.shape != expected_shape:
+                mask = mask.reshape(n)
             try:
-                mask = mask.expand(self._safe_shape)
+                mask = mask.expand(expected_shape)
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
             if mask.dtype != torch.bool:
@@ -3916,8 +3922,14 @@ class Categorical(TensorSpec):
             tensor([0, 2, 2, 0, 2, 0, 2, 2, 0, 2])
         """
         if mask is not None:
+            mask = torch.as_tensor(mask, dtype=torch.bool, device=self.device)
+            n = int(self.space.n)
+            # If mask total elements matches n but shape doesn't match expected, reshape to (n,)
+            expected_shape = _remove_neg_shapes(*self.shape, n)
+            if mask.numel() == n and mask.shape != expected_shape:
+                mask = mask.reshape(n)
             try:
-                mask = mask.expand(_remove_neg_shapes(*self.shape, self.space.n))
+                mask = mask.expand(expected_shape)
             except RuntimeError as err:
                 raise RuntimeError("Cannot expand mask to the desired shape.") from err
             if mask.dtype != torch.bool:
