@@ -8,6 +8,7 @@ cloudpickle
 pytest
 pytest-xdist
 pytest-instafail
+pytest-error-for-skips
 coverage
 
 # Procgen and related
