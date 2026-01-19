@@ -11235,6 +11235,21 @@
 <span class="sd">        &gt;&gt;&gt; assert (r[&quot;action&quot;] &lt; base_env.action_spec.high).all()</span>
 <span class="sd">        &gt;&gt;&gt; assert (r[&quot;action&quot;] &gt; base_env.action_spec.low).all()</span>
 
+<span class="sd">    .. note:: Custom Sampling Strategies</span>
+
+<span class="sd">        To implement a custom sampling strategy beyond the built-in options</span>
+<span class="sd">        (``MEDIAN``, ``LOW``, ``HIGH``, ``RANDOM``), subclass ``ActionDiscretizer``</span>
+<span class="sd">        and override the :meth:`~ActionDiscretizer.custom_arange` method. This</span>
+<span class="sd">        method computes the normalized interval positions (values in ``[0, 1)``)</span>
+<span class="sd">        that determine where each discrete action maps within the continuous</span>
+<span class="sd">        action interval.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; class LogSpacedActionDiscretizer(ActionDiscretizer):</span>
+<span class="sd">            ...     def custom_arange(self, nint, device):</span>
+<span class="sd">            ...         # Use logarithmic spacing instead of linear</span>
+<span class="sd">            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ActionDiscretizer.SamplingStrategy">
@@ -11284,7 +11299,35 @@
             <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">out_action_key</span><span class="p">)</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">sampling</span><span class="p">)</span><span class="si">}</span><span class="s2">,</span><span class="se">\n</span><span class="si">{</span><span class="n">_indent</span><span class="p">(</span><span class="n">categorical</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_custom_arange</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nint</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+<div class="viewcode-block" id="ActionDiscretizer.custom_arange">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.custom_arange">[docs]</a>
+    <span class="k">def</span> <span class="nf">custom_arange</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nint</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the normalized interval positions for discretization.</span>
+
+<span class="sd">        This method generates values in the range [0, 1) that determine where</span>
+<span class="sd">        each discrete action maps within the continuous action interval.</span>
+
+<span class="sd">        Override this method in a subclass to implement custom sampling</span>
+<span class="sd">        strategies beyond the built-in ``MEDIAN``, ``LOW``, ``HIGH``, and</span>
+<span class="sd">        ``RANDOM`` strategies.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            nint (int): the number of intervals (discrete actions) for this</span>
+<span class="sd">                action dimension.</span>
+<span class="sd">            device (torch.device): the device on which to create the tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor: a 1D tensor of shape ``(nint,)`` with values in</span>
+<span class="sd">                ``[0, 1)`` representing the normalized positions within each</span>
+<span class="sd">                interval.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; class CustomActionDiscretizer(ActionDiscretizer):</span>
+<span class="sd">            ...     def custom_arange(self, nint, device):</span>
+<span class="sd">            ...         # Custom sampling: use logarithmic spacing</span>
+<span class="sd">            ...         return torch.logspace(-2, 0, nint, device=device) - 0.01</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
             <span class="n">start</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
             <span class="n">end</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
@@ -11302,7 +11345,8 @@
             <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">result</span> <span class="o">+</span> <span class="n">result_</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">result_</span>
-        <span class="k">return</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
 
 <div class="viewcode-block" id="ActionDiscretizer.transform_input_spec">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.transform_input_spec">[docs]</a>
@@ -11336,7 +11380,7 @@
 
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
                 <span class="n">arange</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_custom_arange</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">custom_arange</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">,</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span>
                         <span class="p">(</span><span class="o">*</span><span class="n">n_act</span><span class="p">,</span> <span class="n">num_intervals</span><span class="p">)</span>
                     <span class="p">)</span>
                     <span class="o">*</span> <span class="n">interval</span>
@@ -11347,7 +11391,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;intervals&quot;</span><span class="p">,</span> <span class="n">low</span> <span class="o">+</span> <span class="n">arange</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">arange</span> <span class="o">=</span> <span class="p">[</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_custom_arange</span><span class="p">(</span><span class="n">_num_intervals</span><span class="p">,</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">*</span> <span class="n">interval</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">custom_arange</span><span class="p">(</span><span class="n">_num_intervals</span><span class="p">,</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">*</span> <span class="n">interval</span>
                     <span class="k">for</span> <span class="n">_num_intervals</span><span class="p">,</span> <span class="n">interval</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
                         <span class="n">num_intervals</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">interval</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
                     <span class="p">)</span>
