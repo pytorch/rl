@@ -163,7 +163,9 @@ class ProcgenWrapper(_EnvWrapper):
 
     def _step(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         action = tensordict.get("action")
-        obs, reward, done, info = self._env.step(action)
+        # Procgen expects numpy arrays, not PyTorch tensors
+        action_np = action.cpu().numpy()
+        obs, reward, done, info = self._env.step(action_np)
 
         rgb = torch.from_numpy(obs["rgb"]).to(self.device).permute(0, 3, 1, 2)
         reward = torch.as_tensor(reward, device=self.device).view(-1, 1)
@@ -224,6 +226,9 @@ class ProcgenEnv(ProcgenWrapper):
             generated assets. Defaults to ``False``.
         paint_vel_info (bool, optional): if ``True``, paint velocity info on
             observations. Defaults to ``False``.
+        seed (int, optional): random seed for the environment. Note that procgen
+            environments must be seeded at construction time; calling ``set_seed()``
+            after construction will not work reliably.
         render_mode (str, optional): render mode for the environment.
         device (torch.device | str, optional): device for tensors.
         allow_done_after_reset (bool, optional): tolerate done after reset.
@@ -264,5 +269,9 @@ class ProcgenEnv(ProcgenWrapper):
             )
 
         num_envs = kwargs.pop("num_envs", 1)
+        # Procgen uses rand_seed for seeding at construction time
+        seed = kwargs.pop("seed", None)
+        if seed is not None:
+            kwargs["rand_seed"] = seed
         env = procgen.ProcgenEnv(num_envs, env_name, **kwargs)
         super().__init__(env=env, **kwargs)

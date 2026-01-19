@@ -5535,11 +5535,10 @@ class TestProcgen:
             env.close()
 
     def test_procgen_seeding_is_deterministic(self):
-        e1 = ProcgenEnv("coinrun", num_envs=2)
-        e2 = ProcgenEnv("coinrun", num_envs=2)
+        # Procgen must be seeded at construction time via the seed parameter
+        e1 = ProcgenEnv("coinrun", num_envs=2, seed=0)
+        e2 = ProcgenEnv("coinrun", num_envs=2, seed=0)
         try:
-            e1.set_seed(0)
-            e2.set_seed(0)
             t1 = e1.reset()
             t2 = e2.reset()
             assert torch.equal(t1["observation"], t2["observation"])
