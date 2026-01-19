@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>PettingZooWrapper &mdash; torchrl main documentation</title>
+  <title>ProcgenWrapper &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="ProcgenWrapper" href="torchrl.envs.ProcgenWrapper.html" />
-    <link rel="prev" title="PettingZooEnv" href="torchrl.envs.PettingZooEnv.html" /> 
+    <link rel="next" title="RoboHiveEnv" href="torchrl.envs.RoboHiveEnv.html" />
+    <link rel="prev" title="PettingZooWrapper" href="torchrl.envs.PettingZooWrapper.html" /> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -215,13 +215,13 @@
         
           <li><a href="../envs_libraries.html">Library Wrappers</a> &gt;</li>
         
-      <li>PettingZooWrapper</li>
+      <li>ProcgenWrapper</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.envs.PettingZooWrapper.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.envs.ProcgenWrapper.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -246,113 +246,53 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <section id="pettingzoowrapper">
-<h1>PettingZooWrapper<a class="headerlink" href="#pettingzoowrapper" title="Link to this heading">¶</a></h1>
+  <section id="procgenwrapper">
+<h1>ProcgenWrapper<a class="headerlink" href="#procgenwrapper" title="Link to this heading">¶</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrl.envs.PettingZooWrapper">
-<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">PettingZooWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/pettingzoo.html#PettingZooWrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.PettingZooWrapper" title="Link to this definition">¶</a></dt>
-<dd><p>PettingZoo environment wrapper.</p>
-<p>To install petting zoo follow the guide <cite>here &lt;https://github.com/Farama-Foundation/PettingZoo#installation&gt;__</cite>.</p>
-<p>This class is a general torchrl wrapper for all PettingZoo environments.
-It is able to wrap both <code class="docutils literal notranslate"><span class="pre">pettingzoo.AECEnv</span></code> and <code class="docutils literal notranslate"><span class="pre">pettingzoo.ParallelEnv</span></code>.</p>
-<p>Let’s see how more in details:</p>
-<p>In wrapped <code class="docutils literal notranslate"><span class="pre">pettingzoo.ParallelEnv</span></code> all agents will step at each environment step.
-If the number of agents during the task varies, please set <code class="docutils literal notranslate"><span class="pre">use_mask=True</span></code>.
-<code class="docutils literal notranslate"><span class="pre">&quot;mask&quot;</span></code> will be provided
-as an output in each group and should be used to mask out dead agents.
-The environment will be reset as soon as one agent is done (unless <code class="docutils literal notranslate"><span class="pre">done_on_any</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>).</p>
-<p>In wrapped <code class="docutils literal notranslate"><span class="pre">pettingzoo.AECEnv</span></code>, at each step only one agent will act.
-For this reason, it is compulsory to set <code class="docutils literal notranslate"><span class="pre">use_mask=True</span></code> for this type of environment.
-<code class="docutils literal notranslate"><span class="pre">&quot;mask&quot;</span></code> will be provided as an output for each group and can be used to mask out non-acting agents.
-The environment will be reset only when all agents are done (unless <code class="docutils literal notranslate"><span class="pre">done_on_any</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>).</p>
-<p>If there are any unavailable actions for an agent,
-the environment will also automatically update the mask of its <code class="docutils literal notranslate"><span class="pre">action_spec</span></code> and output an <code class="docutils literal notranslate"><span class="pre">&quot;action_mask&quot;</span></code>
-for each group to reflect the latest available actions. This should be passed to a masked distribution during
-training.</p>
-<p>As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
-You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
-neural network. You can split agents in different groups where they are heterogenous or should be processed by
-different neural networks. To group, you just need to pass a <code class="docutils literal notranslate"><span class="pre">group_map</span></code> at env constructiuon time.</p>
-<p>By default, agents in pettingzoo will be grouped by name.
-For example, with agents <code class="docutils literal notranslate"><span class="pre">[&quot;agent_0&quot;,&quot;agent_1&quot;,&quot;agent_2&quot;,&quot;adversary_0&quot;]</span></code>, the tensordicts will look like:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">rand_action</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        agent: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                action: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                action_mask: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False),</span>
-<span class="go">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([3]))},</span>
-<span class="go">        adversary: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                action: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                action_mask: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False),</span>
-<span class="go">                terminated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">                truncated: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([1]))},</span>
-<span class="go">    batch_size=torch.Size([]))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="p">)</span>
-<span class="go">{&quot;agent&quot;: [&quot;agent_0&quot;, &quot;agent_1&quot;, &quot;agent_2&quot;], &quot;adversary&quot;: [&quot;adversary_0&quot;]}</span>
-</pre></div>
-</div>
-<p>Otherwise, a group map can be specified or selected from some premade options.
-See <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.envs.utils.MarlGroupMapType</span></code> for more info.
-For example, you can provide <code class="docutils literal notranslate"><span class="pre">MarlGroupMapType.ONE_GROUP_PER_AGENT</span></code>, telling that each agent should
-have its own tensordict (similar to the pettingzoo parallel API).</p>
-<p>Grouping is useful for leveraging vectorization among agents whose data goes through the same
-neural network.</p>
+<dt class="sig sig-object py" id="torchrl.envs.ProcgenWrapper">
+<span class="sig-prename descclassname"><span class="pre">torchrl.envs.</span></span><span class="sig-name descname"><span class="pre">ProcgenWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/libs/procgen.html#ProcgenWrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.ProcgenWrapper" title="Link to this definition">¶</a></dt>
+<dd><p>OpenAI Procgen environment wrapper.</p>
+<p>Wraps an existing <code class="xref py py-class docutils literal notranslate"><span class="pre">procgen.ProcgenEnv</span></code> instance and exposes it
+under the TorchRL environment API.</p>
+<p>This wrapper is responsible for:
+- Converting Procgen observations (<code class="docutils literal notranslate"><span class="pre">{&quot;rgb&quot;:</span> <span class="pre">np.ndarray}</span></code>) to Torch tensors
+- Handling vectorized Procgen semantics
+- Producing TorchRL-compliant <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> outputs</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>env</strong> (<code class="docutils literal notranslate"><span class="pre">pettingzoo.utils.env.ParallelEnv</span></code> or <code class="docutils literal notranslate"><span class="pre">pettingzoo.utils.env.AECEnv</span></code>) – the pettingzoo environment to wrap.</p></li>
-<li><p><strong>return_state</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to return the global state from pettingzoo
-(not available in all environments). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>group_map</strong> (<em>MarlGroupMapType</em><em> or </em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>]</em><em>, </em><em>optional</em>) – how to group agents in tensordicts for
-input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
-or selected from some premade options. See <code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.envs.utils.MarlGroupMapType</span></code> for more info.</p></li>
-<li><p><strong>use_mask</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the environment should output a <code class="docutils literal notranslate"><span class="pre">&quot;mask&quot;</span></code>. This is compulsory in
-wrapped <code class="docutils literal notranslate"><span class="pre">pettingzoo.AECEnv</span></code> to mask out non-acting agents and should be also used
-for <code class="docutils literal notranslate"><span class="pre">pettingzoo.ParallelEnv</span></code> when the number of agents can vary. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>categorical_actions</strong> (<em>bool</em><em>, </em><em>optional</em>) – if the environments actions are discrete, whether to transform
-them to categorical or one-hot.</p></li>
-<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – the seed. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>done_on_any</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the environment’s done keys are set by aggregating the agent keys
-using <code class="docutils literal notranslate"><span class="pre">any()</span></code> (when <code class="docutils literal notranslate"><span class="pre">True</span></code>) or <code class="docutils literal notranslate"><span class="pre">all()</span></code> (when <code class="docutils literal notranslate"><span class="pre">False</span></code>). Default (<code class="docutils literal notranslate"><span class="pre">None</span></code>) is to use <code class="docutils literal notranslate"><span class="pre">any()</span></code> for
-parallel environments and <code class="docutils literal notranslate"><span class="pre">all()</span></code> for AEC ones.</p></li>
+<dd class="field-odd"><p><strong>env</strong> (<em>procgen.ProcgenEnv</em>) – an already constructed Procgen environment.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.9)"><em>torch.device</em></a><em> | </em><em>str</em><em>, </em><em>optional</em>) – device on which tensors are placed.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.9)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – expected batch size.</p></li>
+<li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – tolerate done right after reset.</p></li>
 </ul>
+</dd>
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>available_envs</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of Procgen environment ids.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Parallel env</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.pettingzoo</span> <span class="kn">import</span> <span class="n">PettingZooWrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pettingzoo.butterfly</span> <span class="kn">import</span> <span class="n">pistonball_v6</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;n_pistons&quot;</span><span class="p">:</span> <span class="mi">21</span><span class="p">,</span> <span class="s2">&quot;continuous&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">PettingZooWrapper</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">env</span><span class="o">=</span><span class="n">pistonball_v6</span><span class="o">.</span><span class="n">parallel_env</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">return_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">group_map</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="c1"># Use default for parallel (all pistons grouped together)</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="p">)</span>
-<span class="gp">... </span><span class="p">{</span><span class="s1">&#39;piston&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;piston_0&#39;</span><span class="p">,</span> <span class="s1">&#39;piston_1&#39;</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="s1">&#39;piston_20&#39;</span><span class="p">]}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># AEC env</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pettingzoo.classic</span> <span class="kn">import</span> <span class="n">tictactoe_v3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.pettingzoo</span> <span class="kn">import</span> <span class="n">PettingZooWrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">MarlGroupMapType</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">PettingZooWrapper</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">env</span><span class="o">=</span><span class="n">tictactoe_v3</span><span class="o">.</span><span class="n">env</span><span class="p">(),</span>
-<span class="gp">... </span>    <span class="n">use_mask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="c1"># Must use it since one player plays at a time</span>
-<span class="gp">... </span>    <span class="n">group_map</span><span class="o">=</span><span class="kc">None</span> <span class="c1"># # Use default for AEC (one group per player)</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">group_map</span><span class="p">)</span>
-<span class="gp">... </span><span class="p">{</span><span class="s1">&#39;player_1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;player_1&#39;</span><span class="p">],</span> <span class="s1">&#39;player_2&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;player_2&#39;</span><span class="p">]}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">procgen</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.procgen</span> <span class="kn">import</span> <span class="n">ProcgenWrapper</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">procgen</span><span class="o">.</span><span class="n">ProcgenEnv</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;coinrun&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">ProcgenWrapper</span><span class="p">(</span><span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        observation: Tensor(shape=torch.Size([4, 3, 64, 64]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="go">        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">torch.Size([4, 3, 64, 64])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -367,10 +307,10 @@ parallel environments and <code class="docutils literal notranslate"><span class
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.ProcgenWrapper.html" class="btn btn-neutral float-right" title="ProcgenWrapper" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.RoboHiveEnv.html" class="btn btn-neutral float-right" title="RoboHiveEnv" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.PettingZooEnv.html" class="btn btn-neutral" title="PettingZooEnv" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.PettingZooWrapper.html" class="btn btn-neutral" title="PettingZooWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -396,8 +336,8 @@ parallel environments and <code class="docutils literal notranslate"><span class
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">PettingZooWrapper</a><ul>
-<li><a class="reference internal" href="#torchrl.envs.PettingZooWrapper"><code class="docutils literal notranslate"><span class="pre">PettingZooWrapper()</span></code></a></li>
+<li><a class="reference internal" href="#">ProcgenWrapper</a><ul>
+<li><a class="reference internal" href="#torchrl.envs.ProcgenWrapper"><code class="docutils literal notranslate"><span class="pre">ProcgenWrapper()</span></code></a></li>
 </ul>
 </li>
 </ul>
