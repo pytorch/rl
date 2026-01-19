@@ -3988,7 +3988,7 @@ class TestCollectorRB:
         when using ParallelEnv with multi-collectors and replay buffers.
         """
 
-        # Create a ParallelEnv - this is the key component that was failing
+        # Create a ParallelEnv factory - this is the key component that was failing
         def make_parallel_env():
             return ParallelEnv(
                 num_workers=2,
@@ -4000,7 +4000,7 @@ class TestCollectorRB:
         # Get action spec from a temporary env
         temp_env = make_parallel_env()
         action_spec = temp_env.action_spec
-        temp_env.close()
+        temp_env.close(raise_if_closed=False)
         del temp_env
 
         # Create replay buffer with ndim=2 to handle the batch dimension from ParallelEnv
@@ -4022,11 +4022,9 @@ class TestCollectorRB:
 
         try:
             # Collect data - this should not raise dimension mismatch errors
-            collected = 0
             for c in collector:
                 # When replay_buffer is used, iterator yields None
                 assert c is None
-                collected += 32
 
             # Verify buffer was populated correctly
             assert len(rb) >= 256, f"Expected at least 256 frames, got {len(rb)}"
