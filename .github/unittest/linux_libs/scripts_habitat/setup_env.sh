@@ -91,9 +91,10 @@ pip3 install . --no-build-isolation
 cd "${root_dir}"
 
 # 6. Download required Habitat test datasets
-python -m habitat_sim.utils.datasets_download --uids replica_cad_dataset --data-path data/
+# Use --no-prune to skip the slow git-lfs prune operation
+python -m habitat_sim.utils.datasets_download --uids replica_cad_dataset --data-path data/ --no-prune
 # Download the rearrange dataset as well
-python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path data/
+python -m habitat_sim.utils.datasets_download --uids rearrange_task_assets --data-path data/ --no-prune
 
 # Install habitat-lab
 git clone https://github.com/facebookresearch/habitat-lab.git
