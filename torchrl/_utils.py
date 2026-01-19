@@ -38,11 +38,19 @@ except ImportError:
 
 
 def _get_default_mp_start_method() -> str:
-    """Returns TorchRL's preferred multiprocessing start method for this torch version.
+    """Returns TorchRL's preferred multiprocessing start method.
 
-    On newer PyTorch versions we default to ``"spawn"`` for improved safety across
-    backends and to avoid known issues with ``fork`` in multi-threaded programs.
+    If the user has explicitly set a global start method via ``mp.set_start_method()``,
+    that method is returned. Otherwise, defaults to ``"spawn"`` for improved safety
+    across backends and to avoid known issues with ``fork`` in multi-threaded programs.
     """
+    # Check if user has explicitly set a global start method
+    try:
+        current = mp.get_start_method(allow_none=True)
+        if current is not None:
+            return current
+    except (TypeError, RuntimeError):
+        pass
     return "spawn"
 
 

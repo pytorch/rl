@@ -22,6 +22,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
+from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.gym_like import GymLikeEnv
 from torchrl.envs.utils import _classproperty
 
@@ -113,6 +114,50 @@ def _robust_to_tensor(array: float | np.ndarray) -> torch.Tensor:
         return torch.as_tensor(array.copy())
     else:
         return torch.as_tensor(array)
+
+
+class _DMControlMeta(_EnvPostInit):
+    """Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_envs > 1.
+
+    When `DMControlEnv(..., num_envs=4)` is called, this metaclass intercepts the
+    call and returns a `ParallelEnv` instead. The ParallelEnv is lazy - workers
+    are not started until the environment is actually used (e.g., via reset/step
+    or accessing specs).
+
+    Users can call `env.configure_parallel(...)` to set ParallelEnv parameters
+    before the environment starts.
+    """
+
+    def __call__(cls, *args, num_envs: int | None = None, **kwargs):
+        # Extract num_envs from explicit kwarg or kwargs dict
+        if num_envs is None:
+            num_envs = kwargs.pop("num_envs", 1)
+        else:
+            kwargs.pop("num_envs", None)
+
+        num_envs = int(num_envs) if num_envs is not None else 1
+
+        if cls.__name__ == "DMControlEnv" and num_envs > 1:
+            from torchrl.envs import ParallelEnv
+
+            # Extract env_name and task_name from args
+            env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
+            task_name = args[1] if len(args) >= 2 else kwargs.get("task_name")
+
+            # Remove env_name and task_name from kwargs if they were there
+            # (they'll be passed positionally to the env creator)
+            env_kwargs = {
+                k: v for k, v in kwargs.items() if k not in ("env_name", "task_name")
+            }
+
+            # Create factory function that builds single DMControlEnv instances
+            def make_env(_env_name=env_name, _task_name=task_name, _kwargs=env_kwargs):
+                return cls(_env_name, _task_name, num_envs=1, **_kwargs)
+
+            # Return lazy ParallelEnv (workers not started yet)
+            return ParallelEnv(num_envs, make_env)
+
+        return super().__call__(*args, **kwargs)
 
 
 class DMControlWrapper(GymLikeEnv):
@@ -342,7 +387,7 @@ class DMControlWrapper(GymLikeEnv):
         )
 
 
-class DMControlEnv(DMControlWrapper):
+class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
     """DeepMind Control lab environment wrapper.
 
     The DeepMind control library can be found here: https://github.com/deepmind/dm_control.
@@ -352,6 +397,12 @@ class DMControlEnv(DMControlWrapper):
     Args:
         env_name (str): name of the environment.
         task_name (str): name of the task.
+        num_envs (int, optional): number of parallel environments. Defaults to 1.
+            When ``num_envs > 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is
+            returned instead of a single environment. The parallel environment
+            is not started until it is actually used (e.g., via reset/step or
+            accessing specs). Use :meth:`~torchrl.envs.BatchedEnvBase.configure_parallel`
+            to set parallel execution parameters before the environment starts.
 
     Keyword Args:
         from_pixels (bool, optional): if ``True``, an attempt to return the pixel
@@ -406,8 +457,13 @@ class DMControlEnv(DMControlWrapper):
             device=cpu,
             is_shared=False)
         >>> print(env.available_envs)
-        [('acrobot', ['swingup', 'swingup_sparse']), ('ball_in_cup', ['catch']), ('cartpole', ['balance', 'balance_sparse', 'swingup', 'swingup_sparse', 'three_poles', 'two_poles']), ('cheetah', ['run']), ('finger', ['spin', 'turn_easy', 'turn_hard']), ('fish', ['upright', 'swim']), ('hopper', ['stand', 'hop']), ('humanoid', ['stand', 'walk', 'run', 'run_pure_state']), ('manipulator', ['bring_ball', 'bring_peg', 'insert_ball', 'insert_peg']), ('pendulum', ['swingup']), ('point_mass', ['easy', 'hard']), ('reacher', ['easy', 'hard']), ('swimmer', ['swimmer6', 'swimmer15']), ('walker', ['stand', 'walk', 'run']), ('dog', ['fetch', 'run', 'stand', 'trot', 'walk']), ('humanoid_CMU', ['run', 'stand', 'walk']), ('lqr', ['lqr_2_1', 'lqr_6_2']), ('quadruped', ['escape', 'fetch', 'run', 'walk']), ('stacker', ['stack_2', 'stack_4'])]
-
+        [('acrobot', ['swingup', 'swingup_sparse']), ...]
+        >>> # For running multiple envs in parallel (returns a lazy ParallelEnv)
+        >>> env = DMControlEnv("cheetah", "run", num_envs=4)
+        >>> # Configure parallel parameters before the env starts
+        >>> env.configure_parallel(use_buffers=True, num_threads=2)
+        >>> # Environment starts when first used
+        >>> env.reset()
     """
 
     def __init__(self, env_name, task_name, **kwargs):
@@ -415,8 +471,10 @@ class DMControlEnv(DMControlWrapper):
             raise ImportError(
                 "dm_control python package was not found. Please install this dependency."
             )
+
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
+
         super().__init__(**kwargs)
 
     def _build_env(
@@ -445,13 +503,14 @@ class DMControlEnv(DMControlWrapper):
                 f"dm_control from {self.git_url}"
             )
 
+        camera_id = kwargs.pop("camera_id", 0)
         if _seed is not None:
             random_state = np.random.RandomState(_seed)
-            kwargs = {"random": random_state}
-        camera_id = kwargs.pop("camera_id", 0)
+            kwargs["random"] = random_state
         env = suite.load(env_name, task_name, task_kwargs=kwargs)
         return super()._build_env(
             env,
+            _seed=_seed,
             from_pixels=from_pixels,
             pixels_only=pixels_only,
             camera_id=camera_id,

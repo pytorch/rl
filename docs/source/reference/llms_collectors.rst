@@ -1,3 +1,5 @@
+:orphan:
+
 .. currentmodule:: torchrl.collectors.llm
 
 LLM Collectors

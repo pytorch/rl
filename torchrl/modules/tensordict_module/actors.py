@@ -180,7 +180,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
                 the keys will be inferred from the ``distribution_map`` / ``name_map`` keyword arguments of that
                 distribution. If this distribution is used with another constructor (e.g.,  partial or lambda function)
                 then the out_keys will need to be provided explicitly.
-                Note also that actions will __not__ be prefixed with an ``"action"`` key, see the example below
+                Note also that actions will **not** be prefixed with an ``"action"`` key, see the example below
                 on how this can be  achieved with a ``ProbabilisticActor``.
 
         distribution_kwargs (dict, optional): keyword-only argument.
