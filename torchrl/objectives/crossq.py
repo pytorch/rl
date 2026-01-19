@@ -10,13 +10,12 @@ from functools import wraps
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -49,7 +48,7 @@ class CrossQLoss(LossModule):
     be called by the user that order.
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
@@ -57,7 +56,7 @@ class CrossQLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
     Keyword Args:
@@ -246,7 +245,7 @@ class CrossQLoss(LossModule):
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
 
-    actor_network: ProbabilisticActor
+    actor_network: ProbabilisticTensorDictSequential
     actor_network_params: TensorDictParams
     qvalue_network: TensorDictModule
     qvalue_network_params: TensorDictParams
@@ -255,7 +254,7 @@ class CrossQLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 2,

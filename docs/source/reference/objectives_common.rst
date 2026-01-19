@@ -12,6 +12,8 @@ Base classes and common utilities for all loss modules.
     LossModule
     add_random_module
 
+.. _ref_returns:
+
 Value Estimators
 ----------------
 

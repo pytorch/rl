@@ -78,7 +78,7 @@ extensions = [
 
 intersphinx_mapping = {
     "torch": ("https://pytorch.org/docs/stable/", None),
-    "tensordict": ("https://pytorch.github.io/tensordict/", None),
+    "tensordict": ("https://docs.pytorch.org/tensordict/stable/", None),
     # "torchrl": ("https://pytorch.org/rl/", None),
     "torchaudio": ("https://pytorch.org/audio/stable/", None),
     "torchtext": ("https://pytorch.org/text/stable/", None),
@@ -87,17 +87,51 @@ intersphinx_mapping = {
 
 
 def kill_procs(gallery_conf, fname):
+    import gc
     import os
+    import signal
+    import sys
 
     import psutil
 
+    # Ignore SIGPIPE to prevent "Broken pipe" crashes during cleanup
+    # This is safe because we're cleaning up child processes anyway
+    if sys.platform != "win32":
+        signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+
+    # Force garbage collection to clean up any lingering references
+    # before we start killing processes
+    gc.collect()
+
     # Get the current process
     current_proc = psutil.Process(os.getpid())
-    # Iterate over all child processes
-    for child in current_proc.children(recursive=True):
-        # Kill the child process
-        child.terminate()
-        print(f"Killed child process with PID {child.pid}")  # noqa: T201
+    children = current_proc.children(recursive=True)
+
+    if not children:
+        return
+
+    # First, try graceful termination with SIGTERM
+    for child in children:
+        try:
+            child.terminate()
+        except psutil.NoSuchProcess:
+            pass
+
+    # Give processes time to clean up gracefully
+    gone, alive = psutil.wait_procs(children, timeout=2)
+
+    # Force kill any remaining processes
+    for child in alive:
+        try:
+            child.kill()
+        except psutil.NoSuchProcess:
+            pass
+
+    # Final wait to reap zombies
+    psutil.wait_procs(alive, timeout=1)
+
+    # Force another gc to clean up shared memory references
+    gc.collect()
 
 
 sphinx_gallery_conf = {
@@ -110,11 +144,15 @@ sphinx_gallery_conf = {
     "download_all_examples": True,
     "abort_on_example_error": True,
     # "show_memory": True,
-    "plot_gallery": "False",
+    "plot_gallery": True,
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
     "write_computation_times": True,
     # "compress_images": ("images", "thumbnails"),
     "reset_modules": (kill_procs, "matplotlib", "seaborn"),
+    # Exclude tutorials that require external services or heavily use shared memory
+    # - llm_browser.py: Requires Playwright browser
+    # - torchrl_demo.py: Uses share_memory_() demos that fail when mp subsystem is corrupted
+    "ignore_pattern": r"llm_browser\.py|torchrl_demo\.py",
 }
 
 napoleon_use_ivar = True
@@ -153,6 +191,11 @@ html_theme_options = {
     "display_version": True,
     "logo_only": False,
     "analytics_id": "UA-117752657-2",
+}
+# Workaround for pytorch_sphinx_theme compatibility with newer Sphinx versions
+# The theme's layout.html references 'style' which was removed in Sphinx 7.0
+html_context = {
+    "style": "pytorch.css",
 }
 html_css_files = [
     "https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css",
