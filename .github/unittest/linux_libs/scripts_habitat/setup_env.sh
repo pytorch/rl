@@ -49,15 +49,17 @@ conda deactivate && conda activate "${env_dir}"
 pip3 install "cython<3"
 conda install -c anaconda cython="<3.0.0" -y
 
-# 3. Install git LFS
-mkdir git_lfs
-wget https://github.com/git-lfs/git-lfs/releases/download/v2.9.0/git-lfs-linux-amd64-v2.9.0.tar.gz --directory-prefix git_lfs
+# 3. Install git LFS (newer version that supports git lfs prune -f)
+mkdir -p git_lfs
 cd git_lfs
-tar -xf git-lfs-linux-amd64-v2.9.0.tar.gz
-chmod 755 install.sh
-./install.sh
+wget https://github.com/git-lfs/git-lfs/releases/download/v3.4.0/git-lfs-linux-amd64-v3.4.0.tar.gz
+tar -xf git-lfs-linux-amd64-v3.4.0.tar.gz
+chmod 755 git-lfs
+# Install to /usr/local/bin so it's available system-wide
+cp git-lfs /usr/local/bin/
 cd ..
 git lfs install
+rm -rf git_lfs
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
