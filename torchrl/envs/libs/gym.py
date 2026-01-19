@@ -438,7 +438,10 @@ def convert_multidiscrete_spec(
     remap_state_to_observation=None,
     batch_size=None,
 ):
-    if len(spec.nvec.shape) == 1:
+    # Only use MultiCategorical/MultiOneHot for heterogeneous nvec (e.g., [3, 5, 7]).
+    # Homogeneous nvec like [2, 2] typically represents independent actions
+    # (e.g., vectorized envs with same Discrete(n) per env) and should use stacking.
+    if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
         dtype = (
             numpy_to_torch_dtype_dict[spec.dtype]
             if categorical_action_encoding
@@ -1408,18 +1411,20 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
                         if self._categorical_action_encoding
                         else torch.long
                     )
-                    # Flattened categorical: n = product(nvec), shape = mask shape
+                    # Flattened action: single choice from prod(nvec) options.
+                    # The mask (which has shape matching nvec) will be reshaped
+                    # by Categorical/OneHot.update_mask when applied.
                     if self._categorical_action_encoding:
                         action_spec = Categorical(
                             prod_n,
-                            shape=mask_spec.shape,
+                            shape=(),
                             device=self.device,
                             dtype=dtype,
                         )
                     else:
                         action_spec = OneHot(
                             prod_n,
-                            shape=(*mask_spec.shape, prod_n),
+                            shape=(prod_n,),
                             device=self.device,
                             dtype=torch.bool,
                         )
