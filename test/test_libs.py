@@ -863,21 +863,6 @@ class TestGym:
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
             )
 
-        # Skip from_pixels tests for MuJoCo with gym 0.25.x due to EGL rendering issues
-        # gym 0.25 requires both mujoco-py and mujoco which causes EGL conflicts
-        if (
-            env_name == HALFCHEETAH_VERSIONED()
-            and from_pixels
-            and _has_gym_regular
-            and not _has_gymnasium
-        ):
-            gym = gym_backend()
-            gym_version = version.parse(gym.__version__)
-            if version.parse("0.25.0") <= gym_version < version.parse("0.26.0"):
-                pytest.skip(
-                    "Skipping from_pixels test for MuJoCo with gym 0.25.x due to EGL rendering issues"
-                )
-
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")
             # we don't skip because that would raise an exception
@@ -1003,20 +988,6 @@ class TestGym:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
             )
-
-        # Skip from_pixels tests for MuJoCo with gym 0.25.x due to EGL rendering issues
-        if (
-            env_name == HALFCHEETAH_VERSIONED()
-            and from_pixels
-            and _has_gym_regular
-            and not _has_gymnasium
-        ):
-            gym = gym_backend()
-            gym_version = version.parse(gym.__version__)
-            if version.parse("0.25.0") <= gym_version < version.parse("0.26.0"):
-                pytest.skip(
-                    "Skipping from_pixels test for MuJoCo with gym 0.25.x due to EGL rendering issues"
-                )
 
         if env_name == PONG_VERSIONED() and not from_pixels:
             # raise pytest.skip("already pixel")

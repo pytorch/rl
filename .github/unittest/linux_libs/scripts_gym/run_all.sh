@@ -14,7 +14,7 @@ declare -a FAILED_ERRORS=()
 printf "* Installing system dependencies\n"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update && apt-get install -y --no-install-recommends git wget gcc g++ curl software-properties-common
-apt-get install -y --no-install-recommends libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
+apt-get install -y --no-install-recommends libglfw3 libgl1-mesa-glx libosmesa6 libosmesa6-dev libglew-dev libsdl2-dev libsdl2-2.0-0
 apt-get install -y --no-install-recommends libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 apt-get install -y --no-install-recommends librhash0 x11proto-dev cmake
 
@@ -238,7 +238,13 @@ uv pip install 'pyopengl>=3.1.6'
 uv pip install 'numpy>=1.21,<1.24'  # gym 0.25 needs numpy<1.24 for AsyncVectorEnv deepcopy compatibility
 # gym 0.25 was released mid-2022 and requires mujoco>=2.1.3,<2.3 (API changes in 2.3+, breaking changes in 3.0)
 uv pip install 'gym[atari]==0.25' 'mujoco>=2.1.3,<2.3'
+# Use OSMesa (software rendering) instead of EGL for gym 0.25 to avoid EGL device issues
+# EGL requires proper NVIDIA EGL setup which may not be available in all CI environments
+# mujoco-py and new mujoco package have conflicting EGL requirements
+export MUJOCO_GL_OLD=$MUJOCO_GL
+export MUJOCO_GL=osmesa
 run_tests "gym==0.25" || true
+export MUJOCO_GL=$MUJOCO_GL_OLD
 uv pip uninstall gym mujoco || true
 
 # Test gym 0.26 (uses new mujoco bindings for HalfCheetah-v4)
