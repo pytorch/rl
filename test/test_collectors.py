@@ -4033,8 +4033,8 @@ class TestCollectorRB:
             if extend_buffer:
                 # Each batch should have consecutive step counts (with resets)
                 steps_counts = rb["step_count"].squeeze()
-                # Just verify we have valid step counts
-                assert steps_counts.min() >= 1
+                # Just verify we have valid step counts (StepCounter starts at 0)
+                assert steps_counts.min() >= 0
                 assert steps_counts.numel() >= 256
 
         finally:
