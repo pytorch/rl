@@ -5,6 +5,8 @@
 """Tests for torch.compile compatibility of value estimation functions."""
 from __future__ import annotations
 
+import sys
+
 import pytest
 import torch
 
@@ -15,7 +17,10 @@ from torchrl.objectives.value.functional import (
     vec_td_lambda_return_estimate,
 )
 
+IS_WINDOWS = sys.platform == "win32"
 
+
+@pytest.mark.skipif(IS_WINDOWS, reason="windows tests do not support compile")
 class TestValueFunctionCompile:
     """Test compilation of value estimation functions."""
 

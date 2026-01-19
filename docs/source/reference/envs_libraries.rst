@@ -103,6 +103,7 @@ Available wrappers
     OpenSpielEnv
     PettingZooEnv
     PettingZooWrapper
+    ProcgenWrapper
     RoboHiveEnv
     SMACv2Env
     SMACv2Wrapper

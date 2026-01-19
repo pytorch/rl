@@ -4610,6 +4610,9 @@ class TestRBLazyInit:
         assert rb._init_writer is None
 
 
+@pytest.mark.skipif(
+    _os_is_windows, reason="Windows file locking prevents cleanup tests"
+)
 class TestLazyMemmapStorageCleanup:
     """Tests for LazyMemmapStorage automatic cleanup functionality."""
 
