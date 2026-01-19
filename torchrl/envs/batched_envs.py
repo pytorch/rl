@@ -468,6 +468,73 @@ class BatchedEnvBase(EnvBase):
 
     is_spec_locked = EnvBase.is_spec_locked
 
+    def configure_parallel(
+        self,
+        *,
+        use_buffers: bool | None = None,
+        shared_memory: bool | None = None,
+        memmap: bool | None = None,
+        mp_start_method: str | None = None,
+        num_threads: int | None = None,
+        num_sub_threads: int | None = None,
+        non_blocking: bool | None = None,
+        daemon: bool | None = None,
+    ) -> BatchedEnvBase:
+        """Configure parallel execution parameters before the environment starts.
+
+        This method allows configuring parameters for parallel environment
+        execution. It must be called before the environment is started
+        (i.e., before accessing specs or calling reset/step).
+
+        Args:
+            use_buffers (bool, optional): whether communication between workers should
+                occur via circular preallocated memory buffers.
+            shared_memory (bool, optional): whether the returned tensordict will be
+                placed in shared memory.
+            memmap (bool, optional): whether the returned tensordict will be placed
+                in memory map.
+            mp_start_method (str, optional): the multiprocessing start method.
+            num_threads (int, optional): number of threads for this process.
+            num_sub_threads (int, optional): number of threads of the subprocesses.
+            non_blocking (bool, optional): if ``True``, device moves will be done using
+                the ``non_blocking=True`` option.
+            daemon (bool, optional): whether the processes should be daemonized.
+
+        Returns:
+            self: Returns self for method chaining.
+
+        Raises:
+            RuntimeError: If called after the environment has already started.
+
+        Example:
+            >>> env = ParallelEnv(4, lambda: GymEnv("Pendulum-v1"))
+            >>> env.configure_parallel(use_buffers=True, num_threads=2)
+            >>> env.reset()  # Environment starts here
+
+        """
+        if not self.is_closed:
+            raise RuntimeError(
+                "configure_parallel() cannot be called after the environment has started. "
+                "Call configure_parallel() before accessing specs or calling reset/step."
+            )
+        if use_buffers is not None:
+            self._use_buffers = use_buffers
+        if shared_memory is not None:
+            self._share_memory = shared_memory
+        if memmap is not None:
+            self._memmap = memmap
+        if mp_start_method is not None:
+            self._mp_start_method = mp_start_method
+        if num_threads is not None:
+            self.num_threads = num_threads
+        if num_sub_threads is not None:
+            self.num_sub_threads = num_sub_threads
+        if non_blocking is not None:
+            self._non_blocking = non_blocking
+        if daemon is not None:
+            self.daemon = daemon
+        return self
+
     def select_and_clone(self, name, tensor, selected_keys=None):
         if selected_keys is None:
             selected_keys = self._selected_step_keys
@@ -2463,6 +2530,23 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             )
             self.set_seed(self._seeds[0])
         return self
+
+    @classmethod
+    def make_parallel(cls, *args, num_envs: int = 1, **parallel_kwargs) -> EnvBase:
+        """Backward-compatible factory matching EnvBase.make_parallel signature.
+
+        Supports calls like:
+          ParallelEnv.make_parallel(create_env_fn, num_envs=4, ...)
+        or the constructor form:
+          ParallelEnv.make_parallel(num_workers, create_env_fn, ...)
+        """
+        if len(args) >= 1 and isinstance(args[0], int):
+            return cls(*args, **parallel_kwargs)
+        if len(args) >= 1:
+            create_env_fn = args[0]
+            other_args = args[1:]
+            return cls(int(num_envs), create_env_fn, *other_args, **parallel_kwargs)
+        return cls(int(num_envs), **parallel_kwargs)
 
 
 def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
