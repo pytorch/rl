@@ -129,7 +129,14 @@ class ProcgenWrapper(_EnvWrapper):
         )
 
     def _init_env(self) -> None:
-        n = getattr(self._env, "num", None) or getattr(self._env, "nenvs", None)
+        # procgen.ProcgenEnv returns a ToGymEnv wrapper; the num attribute
+        # may be on the wrapper, the inner env (.env), or as num_envs
+        n = (
+            getattr(self._env, "num", None)
+            or getattr(self._env, "nenvs", None)
+            or getattr(self._env, "num_envs", None)
+            or getattr(getattr(self._env, "env", None), "num", None)
+        )
         if n is not None:
             self.batch_size = torch.Size([n])
         try:
