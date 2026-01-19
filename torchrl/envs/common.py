@@ -2847,8 +2847,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             reward_threshold=reward_threshold,
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
-            order_enforce=order_enforce,
-            disable_env_checker=disable_env_checker,
         )
 
     @implement_for("gymnasium", None, "1.0.0", class_method=True)
