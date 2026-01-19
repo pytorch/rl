@@ -7,6 +7,9 @@ unset PYTORCH_VERSION
 
 set -e
 
+# Ensure uv is in PATH
+export PATH="$HOME/.local/bin:$PATH"
+
 # Activate the virtual environment
 source ./env/bin/activate
 
@@ -43,6 +46,13 @@ else
   exit 1
 fi
 
+# Ensure tensordict and torchrl dependencies are installed
+# (since we use --no-deps for tensordict and torchrl)
+uv pip install numpy pyvers packaging cloudpickle
+
+# Install build dependencies for torchrl (needed with --no-build-isolation)
+uv pip install setuptools wheel setuptools_scm ninja "pybind11[global]"
+
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
@@ -54,7 +64,7 @@ fi
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-uv pip install -e . --no-build-isolation --no-deps
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"
