@@ -3972,6 +3972,77 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    @pytest.mark.skipif(not _has_gym, reason="requires gym.")
+    @pytest.mark.parametrize(
+        "collector_class", [MultiSyncCollector, MultiAsyncCollector]
+    )
+    @pytest.mark.parametrize("extend_buffer", [True, False])
+    def test_parallel_env_with_multi_collector_and_replay_buffer(
+        self, collector_class, extend_buffer
+    ):
+        """Test that ParallelEnv works with multi-collectors when replay_buffer is given.
+
+        Regression test for issue #3240 / PR #3341.
+        The bug was that `_main_async_collector` hardcoded `extend_buffer=False`
+        instead of forwarding the user's setting, causing dimension mismatches
+        when using ParallelEnv with multi-collectors and replay buffers.
+        """
+
+        # Create a ParallelEnv - this is the key component that was failing
+        def make_parallel_env():
+            return ParallelEnv(
+                num_workers=2,
+                create_env_fn=lambda cp=CARTPOLE_VERSIONED(): GymEnv(
+                    cp
+                ).append_transform(StepCounter()),
+            )
+
+        # Get action spec from a temporary env
+        temp_env = make_parallel_env()
+        action_spec = temp_env.action_spec
+        temp_env.close()
+        del temp_env
+
+        # Create replay buffer with ndim=2 to handle the batch dimension from ParallelEnv
+        rb = ReplayBuffer(storage=LazyTensorStorage(512, ndim=2), batch_size=5)
+
+        # Create the multi-collector with ParallelEnv and replay_buffer
+        # This combination was failing before the fix
+        collector = collector_class(
+            [
+                make_parallel_env,
+                make_parallel_env,
+            ],  # 2 workers, each with ParallelEnv(2)
+            RandomPolicy(action_spec),
+            replay_buffer=rb,
+            total_frames=256,
+            frames_per_batch=32,
+            extend_buffer=extend_buffer,
+        )
+
+        try:
+            # Collect data - this should not raise dimension mismatch errors
+            collected = 0
+            for c in collector:
+                # When replay_buffer is used, iterator yields None
+                assert c is None
+                collected += 32
+
+            # Verify buffer was populated correctly
+            assert len(rb) >= 256, f"Expected at least 256 frames, got {len(rb)}"
+
+            # If extend_buffer=True, verify trajectory structure is preserved
+            if extend_buffer:
+                # Each batch should have consecutive step counts (with resets)
+                steps_counts = rb["step_count"].squeeze()
+                # Just verify we have valid step counts
+                assert steps_counts.min() >= 1
+                assert steps_counts.numel() >= 256
+
+        finally:
+            collector.shutdown()
+            del collector
+
     @staticmethod
     def _zero_postproc(td):
         # Apply zero to all tensor values in the tensordict
