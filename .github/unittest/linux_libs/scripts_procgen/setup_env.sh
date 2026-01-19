@@ -26,7 +26,8 @@ apt-get install -y wget \
     libgl1 \
     libglx0 \
     libegl1 \
-    libgles2
+    libgles2 \
+    libglib2.0-0
 
 # Upgrade specific package
 apt-get upgrade -y libstdc++6
