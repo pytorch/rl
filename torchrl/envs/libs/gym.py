@@ -1385,8 +1385,15 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         # When the action space is MultiDiscrete and an action_mask is present in the
         # observation with shape matching nvec, we convert to a flattened Categorical/OneHot
         # so that the mask can be applied directly to all possible action combinations.
+        # This is useful for grid-based games where the mask indicates valid (row, col) positions.
         gym_spaces = gym_backend("spaces")
-        if isinstance(env.action_space, gym_spaces.multi_discrete.MultiDiscrete):
+        MultiDiscrete = getattr(gym_spaces, "MultiDiscrete", None)
+        if MultiDiscrete is None:
+            # Fallback for gym versions where MultiDiscrete is in a submodule
+            multi_discrete_module = getattr(gym_spaces, "multi_discrete", None)
+            if multi_discrete_module is not None:
+                MultiDiscrete = getattr(multi_discrete_module, "MultiDiscrete", None)
+        if MultiDiscrete is not None and isinstance(env.action_space, MultiDiscrete):
             nvec = np.asarray(env.action_space.nvec)
             if (
                 nvec.ndim == 1
