@@ -1,0 +1,23 @@
+# Core dependencies for tensordict/torchrl (installed with --no-deps)
+numpy
+pyvers
+packaging
+cloudpickle
+
+# Test dependencies
+pytest
+pytest-xdist
+pytest-instafail
+coverage
+
+# Procgen and related
+procgen
+gymnasium
+ale-py
+pygame
+imageio
+matplotlib
+setuptools
+pyglet
+pillow
+opencv-python-headless
