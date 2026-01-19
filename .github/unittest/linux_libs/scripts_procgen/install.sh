@@ -46,6 +46,9 @@ else
   exit 1
 fi
 
+# Ensure numpy is installed (may be removed during torch installation)
+uv pip install numpy
+
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
