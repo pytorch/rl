@@ -70,7 +70,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 # 5. Install habitat-sim from source (conda packages don't support Python 3.10+)
 # Install build dependencies
-pip3 install cmake ninja numpy
+pip3 install ninja numpy
 
 # Clone and build habitat-sim from source
 cd "${root_dir}"
@@ -78,6 +78,11 @@ git clone --branch stable https://github.com/facebookresearch/habitat-sim.git --
 cd habitat-sim
 
 # Build with headless (EGL) and bullet physics support
+# Ensure system cmake is used (pip cmake 4.x is incompatible with habitat-sim's CMake files)
+# Put /usr/bin at the front of PATH to prefer system cmake over any pip-installed cmake
+export PATH="/usr/bin:$PATH"
+# Also set CMAKE_EXECUTABLE to explicitly use system cmake
+export CMAKE_EXECUTABLE=/usr/bin/cmake
 pip3 install . --no-build-isolation
 
 cd "${root_dir}"
